@@ -118,11 +118,19 @@ describe("T753 complete checked snapshots", () => {
             fc.constantFrom(...group.declarations.map((d) => d.path)),
             fc.constantFrom("values", "origins"),
             fc.constantFrom("delete", "add", "rename"),
+            fc.boolean(),
           );
         }),
-        async ([v, key, field, move]) => {
+        async ([v, key, field, move, atDefaults]) => {
           const flow = save(v);
-          const made = await digest(Snapshot.make(flow.group, flow));
+          const values = atDefaults
+            ? {
+                record: flow.settings.record.default,
+                port: flow.settings.port.default,
+                word: flow.settings.word.default,
+              }
+            : flow.values;
+          const made = await digest(Snapshot.make(flow.group, { ...flow, values }));
           const bad = structuredClone(made);
 
           if (move !== "delete") {
@@ -405,7 +413,11 @@ it("T753 L9 [secrets] malformed snapshots keep rejected values out of public dia
         );
         const ran = await Effect.runPromise(
           Effect.gen(function* () {
-            const exit = yield* Snapshot.read(flow.group, input).pipe(Effect.withTracer(traced.tracer), Effect.exit);
+            const exit = yield* Snapshot.read(flow.group, input).pipe(
+              Effect.withSpan("settings.snapshot.read"),
+              Effect.withTracer(traced.tracer),
+              Effect.exit,
+            );
             return { exit, stdout: yield* TestConsole.logLines, stderr: yield* TestConsole.errorLines };
           }).pipe(
             Effect.provideService(References.MinimumLogLevel, "All"),
@@ -413,6 +425,7 @@ it("T753 L9 [secrets] malformed snapshots keep rejected values out of public dia
           ),
         );
         expect(Exit.isFailure(ran.exit)).toBe(true);
+        expect(traced.text()).not.toBe("");
         const outputs = [
           ...ran.stdout.flatMap((value) => [String(value), Formatter.formatJson(value)]),
           ...ran.stderr.flatMap((value) => [String(value), Formatter.formatJson(value)]),

@@ -18,10 +18,13 @@
 //   declaration refuses every key: Effect's empty `Schema.Struct({})` would accept any object.
 import { describe, expect, it } from "@effect/vitest";
 import { ByteSize, Effect, Exit, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Files from "./Files.ts";
+import * as Reference from "./Reference.ts";
 import * as Setting from "./Setting.ts";
+import * as Snapshot from "./Snapshot.ts";
 import * as Sources from "./Sources.ts";
 import { Toml } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
@@ -139,7 +142,7 @@ describe("L7, every file is strict and whole, and a key outside its file's scope
   });
 });
 
-it("T753 L3 file bytes resolve through their declaration and preserve the file origin", async () => {
+it("T753 L3 file bytes keep exact values and origins through checked snapshots and reports", async () => {
   await fc.assert(
     fc.asyncProperty(
       fc.record({
@@ -184,13 +187,17 @@ it("T753 L3 file bytes resolve through their declaration and preserve the file o
               person: { file: PERSON, document: v.file === "person" ? document : { value: {}, spans: [] } },
             };
             yield* Files.validate(group, files, { version: "1.2.3" });
-            return yield* Sources.resolve(group, {
+            const resolved = yield* Sources.resolve(group, {
               flags: Sources.flags({}),
               env: Sources.env({}),
               repo: Sources.file(REPO, files.repo.document),
               person: Sources.file(PERSON, files.person.document),
             });
-          }).pipe(Effect.provide(TomlParser.layer)),
+            const saved = yield* Snapshot.make(group, resolved);
+            const transported = Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(JSON.stringify(saved));
+            const checked = yield* Snapshot.read(group, transported);
+            return { ...resolved, saved, checked, rows: Reference.rows(group, checked.snapshot) };
+          }).pipe(Effect.provide([TomlParser.layer, Digest.layerWebCrypto])),
         );
         expect(Exit.isSuccess(exit)).toBe(true);
 
@@ -201,6 +208,21 @@ it("T753 L3 file bytes resolve through their declaration and preserve the file o
             file: v.file === "repo" ? REPO : PERSON,
             line: 2,
           });
+          expect(exit.value.saved.values).toEqual({ [d.path]: String(expected) });
+          expect(exit.value.checked.values).toEqual(exit.value.values);
+          expect(exit.value.checked.snapshot).toEqual(exit.value.saved);
+          expect(exit.value.rows).toEqual([
+            {
+              path: d.path,
+              value: String(expected),
+              origin: exit.value.origins[d.path],
+              default: String(d.default),
+              doc: d.doc,
+              scope: d.scope,
+              reload: d.reload,
+              since: d.since,
+            },
+          ]);
         }
       },
     ),
