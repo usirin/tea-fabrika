@@ -218,6 +218,49 @@ describe("codex-exec: the typed answer", () => {
       options,
     ));
 
+  // Plant: keep only the last message. Codex sent the report and the answer as two messages, and
+  // the saved report was the answer alone (tickets 869 and 871, 2026-11-12).
+  it("property: an answer sent alone, right after the report's message, is saved under that report", () =>
+    fc.assert(
+      fc.asyncProperty(
+        fc.stringMatching(/^[a-z][a-z ;:0-9]{0,60}$/),
+        fc.stringMatching(/^[a-z][a-z ]{0,40}$/),
+        fc.boolean(),
+        (prose, earlier, toolBetween) =>
+          ran(
+            Effect.gen(function* () {
+              const answer = JSON.stringify(ANSWER);
+              const said = (id: string, text: string) => ({
+                type: "item.completed",
+                item: { id, type: "agent_message", text },
+              });
+              const [start, tool, toolDone] = answered("").lines;
+              const tools = [start, tool, toolDone].filter((l) => l !== undefined);
+              const w = yield* world([
+                {
+                  lines: [
+                    ...tools,
+                    said("m0", earlier),
+                    ...tools.slice(1),
+                    said("m1", prose),
+                    ...(toolBetween ? tools.slice(1) : []),
+                    said("m2", answer),
+                    { type: "turn.completed", usage },
+                  ],
+                  last: answer,
+                },
+              ]);
+              const t = yield* w.turn();
+              expect(yield* w.calls).toHaveLength(1);
+              expect(answerIn(t)).toEqual(ANSWER);
+              // What it said before its last tool call is progress, never the report.
+              expect(yield* w.read(`${w.dir}/report.md`)).toBe(toolBetween ? answer : `${prose}\n\n${answer}`);
+            }),
+          ),
+      ),
+      options,
+    ));
+
   it("scenario: a report with no answer asks once more on the same thread, and takes the answer it gives", () =>
     ran(
       Effect.gen(function* () {
