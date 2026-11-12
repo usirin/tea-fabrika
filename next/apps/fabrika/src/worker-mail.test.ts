@@ -7,8 +7,9 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Effect, Schema, Scope } from "effect";
+import { Effect, FileSystem, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
+import { rolldown } from "rolldown";
 import { expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
 
@@ -95,17 +96,159 @@ export const program = Program.make({name: "p41/${role}-${pair}", machine, state
 
 type Instance = any;
 
+// Private control only. Reading these rows must not load the runner or deliver mail.
+const instrumentMailBrain = async (brain: string, home: string) => {
+  const entry = join(home, "mail-diagnostics.mjs");
+  writeFileSync(
+    entry,
+    `
+import * as Brain from ${JSON.stringify(brain)};
+export default Brain.default;
+export const Connection = Brain.Connection;
+export const Project = Brain.Project;
+export const RecordPart = Brain.RecordPart;
+export class Process extends Brain.Process {
+  async testState() {
+    const at = Date.now();
+    const tables = Array.from(this.ctx.storage.sql.exec("SELECT name FROM sqlite_master WHERE type='table'")).map(row => row.name);
+    const rows = table => tables.includes(table) ? Array.from(this.ctx.storage.sql.exec('SELECT * FROM "'+table+'" ORDER BY rowid')) : null;
+    const snapshot = {
+      name: this.ctx.id.name, at, tables,
+      wake: await this.ctx.storage.get("wake") ?? null,
+      armed: await this.ctx.storage.getAlarm(),
+      activity: await this.ctx.storage.get("activity") ?? null,
+      checkpoint: rows("process_state"), recovery: rows("process_recovery"),
+      receipts: rows("process_receipts"), letters: rows("process_letters"),
+      unsent: rows("unsent"), parts: rows("parts")
+    };
+    return {...snapshot, end: Date.now()};
+  }
+}
+export class Control extends Brain.Control {
+  async fetch(request) {
+    if (request.headers.get("authorization") !== "Bearer "+this.ctx.props.token) return super.fetch(request);
+    const q = await request.clone().json();
+    if (q.target !== "process" || q.method !== "testState") return super.fetch(request);
+    try {
+      const name = await this.env.PROJECT.getByName(q.project).processObject(q.name);
+      const stub = this.env.PROCESS.getByName(JSON.stringify([q.project, name]));
+      return Response.json({value: await stub.testState()});
+    } catch { return Response.json({error:{reason:"unreachable"}}, {status:500}); }
+  }
+}`,
+  );
+  await Effect.runPromise(
+    Effect.acquireRelease(
+      Effect.promise(() => rolldown({ input: entry, platform: "browser", external: ["cloudflare:workers"] })),
+      (bundle) => Effect.promise(() => bundle.close()),
+    ).pipe(
+      Effect.flatMap((bundle) => Effect.promise(() => bundle.generate({ format: "esm", codeSplitting: false }))),
+      Effect.tap((out) =>
+        Effect.sync(() =>
+          writeFileSync(
+            brain,
+            out.output
+              .filter((item) => item.type === "chunk")
+              .map((item) => item.code)
+              .join("\n"),
+          ),
+        ),
+      ),
+      Effect.scoped,
+    ),
+  );
+};
+
+const mailDiagnostics = (path: string) => {
+  const frames: Array<{ at: number; elapsed: number; raw: string }> = [];
+  const events: Array<{ at: number; elapsed: number; event: string; value: unknown }> = [];
+  const observations: Array<unknown> = [];
+  let frozen: ReadonlyArray<(typeof frames)[number]> | undefined;
+  const stamp = () => ({ at: Date.now(), elapsed: performance.now() });
+  const save = () =>
+    writeFileSync(path, JSON.stringify({ version: "next", frames, frozen, events, observations }, null, 2));
+  const note = (event: string, value: unknown = null) => events.push({ ...stamp(), event, value });
+  note("start");
+  console.log(`T880 diagnostics: ${path}`);
+  const read = async (label: string, call: () => Promise<unknown>) => {
+    const start = stamp();
+    let value: unknown = null;
+
+    try {
+      value = await call();
+      observations.push({ label, start, end: stamp(), value });
+    } catch (error) {
+      observations.push({ label, start, end: stamp(), error: error instanceof Error ? error.name : "unknown" });
+    }
+
+    save();
+    return value;
+  };
+  return {
+    note,
+    save,
+    frame: (raw: string) => frames.push({ ...stamp(), raw }),
+    capture: async (instance: Instance, requester: string, responder: string) => {
+      frozen = frames.slice();
+      note("failure", { requester, responder });
+      save();
+
+      for (const name of ["requester:1", "responder:1"]) {
+        for (const stream of [`${name}/inbox`, `${name}/outbox`, `processes/${name}`]) {
+          await read(stream, () => instance.project(PROJECT).read(stream, 0, "audit"));
+        }
+      }
+
+      for (const pid of [requester, responder]) {
+        await read(`state/${pid}`, () => instance.process(pid).testState());
+      }
+
+      for (const pid of [requester, responder]) {
+        await read(`runtime/${pid}`, () => instance.project(PROJECT).read(pid, 0, "audit"));
+        let part = 0;
+        let after = 0;
+
+        for (;;) {
+          const page = await read(`spans/${pid}/${part}/${after}`, () =>
+            instance.record(PROJECT, `job/${pid}/${part}`).read({ _tag: "job", process: pid }, part, after),
+          );
+          const decoded = Schema.decodeUnknownSync(
+            Schema.NullOr(
+              Schema.Struct({ after: Schema.Int, rolled: Schema.Boolean, spans: Schema.Array(Schema.Json) }),
+            ),
+          )(page);
+
+          if (decoded === null) {
+            break;
+          }
+
+          if (decoded.spans.length > 0) {
+            after = decoded.after;
+          } else if (decoded.rolled) {
+            part++;
+            after = 0;
+          } else {
+            break;
+          }
+        }
+      }
+    },
+  };
+};
+
 type Fixture = {
   readonly from: From;
   readonly hash: string;
   readonly start: (name: string) => Promise<string>;
   readonly connect: (tab: string) => ReturnType<typeof wire>;
+  readonly diagnostics?: ReturnType<typeof mailDiagnostics> | undefined;
 };
 
 const world = async (
   test: (instance: Instance, key: Key, fixture: Fixture) => Promise<void>,
   granted = true,
   braked = false,
+  diagnose = false,
 ) => {
   process.env.DO_NOT_TRACK = "1";
   const { localState } = await import("alchemy/State/LocalState");
@@ -146,6 +289,15 @@ const world = async (
       }
 
       const built = yield* build({ out: join(home, "dist"), programs: selections });
+      let diagnostics: ReturnType<typeof mailDiagnostics> | undefined;
+
+      if (diagnose) {
+        const fs = yield* FileSystem.FileSystem;
+        yield* fs.makeDirectory("runs/t880/diagnostics", { recursive: true });
+        diagnostics = mailDiagnostics(`runs/t880/diagnostics/${Date.now()}-${crypto.randomUUID()}.json`);
+        yield* Effect.promise(() => instrumentMailBrain(built.brain, home));
+      }
+
       yield* Effect.gen(function* () {
         // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
         const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
@@ -181,6 +333,7 @@ const world = async (
           test(instance, key, {
             from,
             hash: built.build,
+            diagnostics,
             connect: (tab) =>
               Effect.runPromise(
                 Effect.gen(function* () {
@@ -193,7 +346,7 @@ const world = async (
                     ),
                     (socket) => Effect.sync(() => socket.close()),
                   );
-                  return yield* Effect.promise(() => wire(instance, key, tab, socket));
+                  return yield* Effect.promise(() => wire(instance, key, tab, socket, diagnostics));
                 }).pipe(Effect.provideService(Scope.Scope, scope)),
               ),
             start: async (name) => {
@@ -254,11 +407,30 @@ const until = async <A>(
 };
 
 /** A real WebSocket client at the door, initialized with a signed hello. */
-const wire = async (instance: Instance, key: Key, tab: string, socket: WebSocket) => {
+const wire = async (
+  instance: Instance,
+  key: Key,
+  tab: string,
+  socket: WebSocket,
+  diagnostics?: ReturnType<typeof mailDiagnostics>,
+) => {
   const frames: any[] = [];
+  let initialized = false;
   let closeCode: number | undefined,
     serial = 0;
   socket.addEventListener("message", (event) => {
+    if (diagnostics !== undefined) {
+      const raw = String(event.data);
+      // Only incoming frames are recorded. The handshake's public key and nonce stay out too.
+      diagnostics.frame(
+        initialized || raw === "pong"
+          ? raw
+          : JSON.stringify(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(raw), (name, value) =>
+              ["key", "nonce", "signed", "token"].includes(name) ? "[redacted]" : value,
+            ),
+      );
+    }
+
     if (event.data !== "pong") {
       frames.push(JSON.parse(String(event.data)));
     }
@@ -271,11 +443,13 @@ const wire = async (instance: Instance, key: Key, tab: string, socket: WebSocket
   });
   const next = async (match: (frame: any) => boolean) => {
     const end = Date.now() + WAIT;
+    diagnostics?.note("wait.start", { end });
 
     while (Date.now() < end) {
       const index = frames.findIndex(match);
 
       if (index >= 0) {
+        diagnostics?.note("consumed", { id: frames[index].id, method: frames[index].method });
         return frames.splice(index, 1)[0];
       }
 
@@ -310,6 +484,7 @@ const wire = async (instance: Instance, key: Key, tab: string, socket: WebSocket
       })
     ).error,
   ).toBeUndefined();
+  initialized = true;
   return { call, next };
 };
 
@@ -365,35 +540,74 @@ it("scenario: W1 and W6, the door receives waiting then answered 8 and both obje
 
 // scenario: abort is workerd's real eviction. Either alarm/abort order must keep exactly one exchange.
 it("scenario: W2, aborting the target after its wake preserves one request and one answer", async () => {
-  await world(async (instance, _key, fixture) => {
-    const requester = await fixture.start("requester:1");
-    const responder = await fixture.start("responder:1");
-    const client = await fixture.connect("evict-target");
-    await client.call("view.open", { pid: requester });
-    expect(await client.call("process.send", request(requester, "eviction"))).toMatchObject({
-      result: { _tag: "accepted" },
-    });
-    // The accepted Send has awaited the target's mailed RPC. No target call precedes the abort.
-    await instance
-      .process(responder)
-      .abort()
-      .catch(() => undefined);
-    await changed(client, "answered");
-    await answer(instance, "requester:1", "eviction");
-    expect((await facts(instance, "requester:1/outbox")).filter((r) => r.ref === "eviction")).toHaveLength(1);
-    const inbox = await facts(instance, "responder:1/inbox");
-    expect(inbox.filter((r) => r.m?.type === "request" && r.m.ref === "eviction")).toHaveLength(1);
-    const answers = await facts(instance, "requester:1/inbox");
-    expect(answers.filter((r) => r.m?.type === "answer" && r.m.ref === "eviction")).toHaveLength(1);
-    await until(
-      "the requester has drained its answer",
-      () => instance.process(requester).savedAlarm(),
-      (at) => at == null,
-    );
-    expect(await client.call("view.open", { pid: requester })).toMatchObject({
-      result: { view: { phase: "answered", ref: "eviction", value: 8 } },
-    });
-  });
+  await world(
+    async (instance, _key, fixture) => {
+      const requester = await fixture.start("requester:1");
+      const responder = await fixture.start("responder:1");
+      const client = await fixture.connect("evict-target");
+
+      try {
+        await client.call("view.open", { pid: requester });
+        fixture.diagnostics?.note("send.start", { requester, responder });
+        expect(await client.call("process.send", request(requester, "eviction"))).toMatchObject({
+          result: { _tag: "accepted" },
+        });
+        fixture.diagnostics?.note("accepted");
+
+        // The accepted Send has awaited the target's mailed RPC. No target call precedes the abort.
+        if (fixture.diagnostics === undefined) {
+          await instance
+            .process(responder)
+            .abort()
+            .catch(() => undefined);
+        } else {
+          fixture.diagnostics.note("abort.start");
+          await instance
+            .process(responder)
+            .abort()
+            .then((value: unknown) => {
+              fixture.diagnostics?.note("abort.result", { status: "fulfilled", value: value ?? null });
+            })
+            .catch((error: unknown) => {
+              fixture.diagnostics?.note("abort.result", {
+                status: "rejected",
+                error: error instanceof Error ? error.name : "unknown",
+              });
+            });
+          fixture.diagnostics.note("abort.end");
+        }
+
+        await changed(client, "answered");
+        await answer(instance, "requester:1", "eviction");
+        expect((await facts(instance, "requester:1/outbox")).filter((r) => r.ref === "eviction")).toHaveLength(1);
+        const inbox = await facts(instance, "responder:1/inbox");
+        expect(inbox.filter((r) => r.m?.type === "request" && r.m.ref === "eviction")).toHaveLength(1);
+        const answers = await facts(instance, "requester:1/inbox");
+        expect(answers.filter((r) => r.m?.type === "answer" && r.m.ref === "eviction")).toHaveLength(1);
+        await until(
+          "the requester has drained its answer",
+          () => instance.process(requester).savedAlarm(),
+          (at) => at == null,
+        );
+        expect(await client.call("view.open", { pid: requester })).toMatchObject({
+          result: { view: { phase: "answered", ref: "eviction", value: 8 } },
+        });
+        fixture.diagnostics?.note("complete");
+        fixture.diagnostics?.save();
+      } catch (error) {
+        if (fixture.diagnostics !== undefined) {
+          await fixture.diagnostics.capture(instance, requester, responder).catch(() => {
+            console.error("T880 diagnostic capture failed; rethrowing the original W2 failure");
+          });
+        }
+
+        throw error;
+      }
+    },
+    true,
+    false,
+    process.env.T880_DIAGNOSTICS === "1",
+  );
 }, 180_000);
 
 // scenario: the host's instance composition supplies grants to the actual Project object.
