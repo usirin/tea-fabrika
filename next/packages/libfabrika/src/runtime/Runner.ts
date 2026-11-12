@@ -38,6 +38,7 @@ import {
   ProcessStore,
   ProcessManager,
   type ProcessError,
+  Recipient,
   RecoveryStore,
   Start,
   RuntimeRecord,
@@ -51,6 +52,7 @@ import {
   type Writer,
 } from "../coordination/index.ts";
 import { InputId } from "../Id.ts";
+import { Children, Started } from "../processes/Children.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { MailRefusal } from "../processes/ProgramMail.ts";
 import {
@@ -73,6 +75,7 @@ import { ProgramDown, Refusal, Step, Write } from "./Program.ts";
 import { Replies, type RepliesError } from "./Replies.ts";
 import * as RepliesSql from "./RepliesSql.ts";
 import { Queued, SendInput } from "./Send.ts";
+import { ExitInput, StartChildInput } from "./StartChild.ts";
 
 export { defaultPolicy } from "./internal/supervisor.ts";
 
@@ -105,7 +108,8 @@ const Dispatched = Schema.Struct({
   parent: Schema.NullOr(ParentText),
   traceId: Schema.String,
   build: Schema.String,
-  /** A Send this life owes until it is answered; a replayed letter's Send was the life before's. */
+  /** A host Cmd this life owes until it is answered, kept under its first name from when only Send
+   *  was one; a replayed letter's was the life before's. */
   mail: Schema.optionalKey(Schema.Literal(true)),
 });
 type Dispatched = typeof Dispatched.Type;
@@ -130,6 +134,31 @@ const decodeWriteCmd = Schema.decodeUnknownResult(WriteCmd);
 const SEND = "send";
 const decodeSendInput = Schema.decodeUnknownResult(SendInput);
 const isRefusal = Schema.is(MailRefusal);
+
+/** The Cmds a program asks its supervisor for (P42): a child by name, and the end of its own life. */
+const START_CHILD = "start_child";
+const EXIT = "exit";
+
+/** The Cmds the runner performs as the host: each is owed by this life until it is answered. */
+const HOST = new Set([SEND, START_CHILD, EXIT]);
+
+/**
+ * A Cmd's operands, without the `type` its maker adds, when its input schema names every one. The
+ * names are checked before the strict decode, since an empty struct takes any field.
+ */
+const operands = (cmd: unknown, fields: object): Option.Option<Record<string, unknown>> => {
+  if (typeof cmd !== "object" || cmd === null || Array.isArray(cmd)) {
+    return Option.none();
+  }
+
+  const { type: _type, ...rest } = cmd as Record<string, unknown>;
+  return Object.keys(rest).every((key) => Object.hasOwn(fields, key)) ? Option.some(rest) : Option.none();
+};
+
+const strictStartChild = Schema.decodeUnknownOption(StartChildInput, { onExcessProperty: "error" });
+const strictExit = Schema.decodeUnknownOption(ExitInput, { onExcessProperty: "error" });
+const decodeStartChild = (cmd: unknown) => Option.flatMap(operands(cmd, StartChildInput.fields), strictStartChild);
+const decodeExit = (cmd: unknown) => Option.flatMap(operands(cmd, ExitInput.fields), strictExit);
 
 /** Pending deliveries keep their original parent, including one saved before input TypeIDs. */
 const Delivery = Schema.Struct({
@@ -228,6 +257,10 @@ export class ProgramRunner extends Context.Service<
         const recording = yield* Recording;
         const sessions = yield* Effect.serviceOption(SessionManager);
         const delivery = yield* Effect.serviceOption(MailDelivery);
+        const children = yield* Effect.serviceOption(Children);
+        /** A life the process table holds ended while its supervision is still live: it exited with
+         *  `exit`. Read again on every call; it steps nothing more and runs no Cmd after its exit. */
+        let ended: string | null = null;
         /** Sends running now, sends a drain of ordinary mail made, and when a failed send is retried. */
         const sending = new Set<string>();
         let drained: ReadonlyArray<Dispatched> = [];
@@ -712,6 +745,15 @@ export class ProgramRunner extends Context.Service<
           if (latest.recovery._tag !== "live") {
             yield* setAlarm();
           }
+
+          // Only a throw reaches P34's restart; a life that ended itself stays ended.
+          if (
+            latest.recovery._tag === "live" &&
+            status.state._tag === "ended" &&
+            status.state.process === latest.recovery.process
+          ) {
+            ended = status.state.process;
+          }
         });
 
         const step = Effect.fnUntraced(function* (
@@ -1006,7 +1048,7 @@ export class ProgramRunner extends Context.Service<
               parent: letter.parent,
               traceId: letter.traceId,
               build: process.build,
-              ...(owed && Option.exists(decodeTyped(cmd), (c) => c.type === SEND) ? { mail: true as const } : {}),
+              ...(owed && Option.exists(decodeTyped(cmd), (c) => HOST.has(c.type)) ? { mail: true as const } : {}),
             }));
             cmds = [...cmds, ...dispatched];
 
@@ -1236,6 +1278,60 @@ export class ProgramRunner extends Context.Service<
           });
         });
 
+        /** The built-in start_child (P42): the loader names the program and its hash, this life is the
+         *  requester and this Cmd's id is the start's. A refusal is its answer; storage is not, so the
+         *  Cmd stays dispatched, and its failure carries the reason only. */
+        const startChild = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
+          const input = decodeStartChild(job.cmd);
+
+          if (Option.isNone(input) || !state.loaded.declaration.cmds.includes(START_CHILD) || Option.isNone(children)) {
+            return yield* err(job, "bad_cmd");
+          }
+
+          const { program, name, input: first } = input.value;
+          const code = yield* loader.load(program, process.build).pipe(Effect.result);
+
+          if (Result.isFailure(code)) {
+            return code.failure.reason === "no_program"
+              ? yield* err(job, "no_program")
+              : yield* new LedgerError({ reason: "unreachable" });
+          }
+
+          // The Worker's loader names its build's hash; the Node loader runs this runner's build.
+          const hash =
+            "hash" in code.success && typeof code.success.hash === "string" ? code.success.hash : process.build;
+          const started = yield* children.value
+            .start(
+              {
+                id: job.id,
+                name,
+                code: { program, hash },
+                requester: Recipient.cases.process.make({ process: process.id }),
+                ...(first === undefined ? {} : { input: first }),
+              },
+              yield* from(job.parent, job.traceId),
+            )
+            .pipe(Effect.result);
+
+          if (Result.isSuccess(started)) {
+            return yield* ok(job, Schema.encodeSync(Started)(started.success));
+          }
+
+          const { reason } = started.failure;
+          return reason === "storage" ? yield* new LedgerError({ reason: "storage" }) : yield* err(job, reason);
+        });
+
+        /** The built-in exit (P42): this life ends with `normal`, as OTP's `{stop, normal, State}`, and
+         *  answers nothing. `null` is the ended life; a malformed exit is answered `bad_cmd`. */
+        const stop = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
+          if (Option.isNone(decodeExit(job.cmd)) || !state.loaded.declaration.cmds.includes(EXIT)) {
+            return yield* err(job, "bad_cmd");
+          }
+
+          yield* manager.exit(process.id, ExitReason.cases.normal.make({}), yield* from(job.parent, job.traceId));
+          return null;
+        });
+
         /** A handler's Cmd. Only a declared Cmd with a handler runs; its answer is checked. */
         const handle = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
           const type = cmdType(job);
@@ -1280,7 +1376,11 @@ export class ProgramRunner extends Context.Service<
         const dispatch = Effect.fnUntraced(function* (
           job: Dispatched,
         ): Effect.fn.Return<ReadonlyArray<Dispatched>, RunnerFailure> {
-          if (!job.id.startsWith(`${process.id}/`) || (supervision !== null && supervision.recovery._tag !== "live")) {
+          if (
+            !job.id.startsWith(`${process.id}/`) ||
+            ended === process.id ||
+            (supervision !== null && supervision.recovery._tag !== "live")
+          ) {
             return [];
           }
 
@@ -1297,7 +1397,28 @@ export class ProgramRunner extends Context.Service<
             ? cmdSpan(job, write(state, job))
             : type === SEND
               ? cmdSpan(job, mail(state, job))
-              : handle(state, job);
+              : type === START_CHILD
+                ? cmdSpan(job, startChild(state, job))
+                : type === EXIT
+                  ? cmdSpan(job, stop(state, job))
+                  : handle(state, job);
+
+          if (m === null) {
+            // The life ended: what it still owed, the Cmds listed after its exit included, never runs.
+            return yield* permit.withPermit(
+              Effect.gen(function* () {
+                ended = origin.id;
+
+                if (origin.id === process.id && live !== null) {
+                  live = { ...live, cmds: [] };
+                  yield* store.save(checkpoint(live, null));
+                }
+
+                return [];
+              }),
+            );
+          }
+
           return yield* permit.withPermit(
             Effect.gen(function* () {
               const answer = `${job.id}/answer`;
@@ -1347,7 +1468,7 @@ export class ProgramRunner extends Context.Service<
           yield* setAlarm();
         });
 
-        /** A Send runs once at a time, and only while still dispatched. A failure that is not its
+        /** A host Cmd runs once at a time, and only while still dispatched. A failure that is not its
          *  answer sets the alarm that tries it again. */
         const sendOnce = (job: Dispatched): Effect.Effect<ReadonlyArray<Dispatched>, RunnerFailure> =>
           Effect.suspend(() => {
@@ -1368,7 +1489,7 @@ export class ProgramRunner extends Context.Service<
         ): Effect.fn.Return<void, RunnerFailure> {
           yield* Effect.forEach(
             jobs,
-            (job) => Effect.flatMap(cmdType(job) === SEND ? sendOnce(job) : dispatch(job), runAll),
+            (job) => Effect.flatMap(HOST.has(cmdType(job)) ? sendOnce(job) : dispatch(job), runAll),
             {
               concurrency: 1,
               discard: true,
@@ -1467,6 +1588,11 @@ export class ProgramRunner extends Context.Service<
                   return yield* accept(yield* ready(), input);
                 }
 
+                // A life that ended itself steps no later letter.
+                if (ended === process.id) {
+                  return { answer: Sent.cases.refused.make({ reason: "ended" }), jobs: [] };
+                }
+
                 const receipt = supervision?.receipts.find((r) => r.letter === input.id);
 
                 if (receipt !== undefined) {
@@ -1505,11 +1631,11 @@ export class ProgramRunner extends Context.Service<
           due: (time: number) =>
             due(
               Effect.gen(function* () {
-                if (supervision !== null && supervision.recovery._tag !== "live") {
+                if (ended === process.id || (supervision !== null && supervision.recovery._tag !== "live")) {
                   return { answer: undefined, jobs: [] };
                 }
 
-                // Any alarm tries again every Send a failure left dispatched.
+                // Any alarm tries again every host Cmd a failure left dispatched.
                 mailRetry = null;
                 const state = yield* ready();
                 const sends = state.cmds.filter((cmd) => cmd.mail === true);

@@ -1,3 +1,4 @@
+import { StartGrant } from "@kampus/libfabrika/processes/Children";
 import { Schema } from "effect";
 
 export const Settings = Schema.Struct({
@@ -8,5 +9,7 @@ export const Settings = Schema.Struct({
   port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })),
   build: Schema.NonEmptyString,
   limits: Schema.optionalKey(Schema.Struct({ recordBytes: Schema.Int.check(Schema.isGreaterThan(0)) })),
+  /** Which program may start which (P42): a right the host hands in, never a declared setting. */
+  starts: Schema.optionalKey(Schema.Array(StartGrant)),
 });
 export type Settings = typeof Settings.Type;

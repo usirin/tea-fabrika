@@ -27,6 +27,8 @@ import { type Appended, fromHere, lineFor } from "../ledger/Log.ts";
 import { Referee } from "../ledger/Referee.ts";
 import * as RefereeSql from "../ledger/RefereeSql.ts";
 import { Connections } from "../presence/Connections.ts";
+import { type Child, Children, ChildrenError, type StartGrant, type Started } from "../processes/Children.ts";
+import * as ChildrenLedger from "../processes/ChildrenLedger.ts";
 import { decodeExitReason, type ExitReason } from "../processes/ExitReason.ts";
 import { Mailbox, type From } from "../processes/Mailbox.ts";
 import { Owner, ProcessError, Recipient, recoverActivity, Start } from "../processes/Process.ts";
@@ -43,6 +45,7 @@ import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { SinkError } from "../telemetry/Trace.ts";
 import {
+  ChildReplies,
   CommitReply,
   ProcessReplies,
   SigningReply,
@@ -109,6 +112,8 @@ export interface ProjectOptions {
   readonly config: BrainOptions;
   readonly programs: Readonly<Record<string, ProgramSource>>;
   readonly bootstrap: { readonly name: string; readonly id: string; readonly program: string };
+  /** Which program may start which (P42), a host right. None when absent. */
+  readonly starts?: ReadonlyArray<typeof StartGrant.Type>;
   readonly door: (
     options: ProjectDoorOptions,
   ) => Effect.Effect<
@@ -163,6 +168,20 @@ export const processReply = <A, E>(work: Effect.Effect<A, E | ProcessError>): Ef
       error instanceof ProcessError
         ? Effect.succeed(ProcessReplies.cases.ProcessError.make({ reason: error.reason }))
         : Effect.fail(error),
+    ),
+  );
+
+/** A child start's refusal becomes reply data. Storage still fails the call, by its reason only, so
+ *  the caller asks again and no cause crosses the RPC. */
+const childReply = <E>(work: Effect.Effect<Started, ChildrenError | E>) =>
+  work.pipe(
+    Effect.map((value) => ChildReplies.cases.ok.make({ value })),
+    Effect.catch((error) =>
+      !(error instanceof ChildrenError)
+        ? Effect.fail(error)
+        : error.reason === "storage"
+          ? Effect.fail(new LedgerError({ reason: "storage" }))
+          : Effect.succeed(ChildReplies.cases.ChildrenError.make({ reason: error.reason })),
     ),
   );
 
@@ -343,22 +362,25 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     RefereeSql.layer(sql),
   ).pipe(Layer.provide(bell));
   const base = Layer.mergeAll(ledgerLayer, recordingLayer(sql, env, name, `project:${name}`));
+  const processManager = ProcessManager.layer(
+    {
+      by,
+      owner: Owner.cases.brain.make({}),
+      recipient: Recipient.cases.client.make({ client: "brain", session: yield* ids.next }),
+    },
+    ids.next,
+  );
   const managers = Layer.mergeAll(
     ClientManagerLedger.layer(founder),
-    ProcessManager.layer(
-      {
-        by,
-        owner: Owner.cases.brain.make({}),
-        recipient: Recipient.cases.client.make({ client: "brain", session: yield* ids.next }),
-      },
-      ids.next,
-    ),
+    // P42: a child start decides in the turns of the manager that writes it.
+    ChildrenLedger.layer({ grants: options.starts ?? [] }).pipe(Layer.provideMerge(processManager)),
   ).pipe(Layer.provideMerge(base));
   const services = yield* Layer.build(managers);
   const ledger = Context.get(services, Ledger),
     referee = Context.get(services, Referee),
     members = Context.get(services, ClientManager),
-    processes = Context.get(services, ProcessManager);
+    processes = Context.get(services, ProcessManager),
+    children = Context.get(services, Children);
   const loader = workerLoader(env.LOADER, programs);
   const loaded = yield* loader.load(bootstrap.program, `project:${name}`);
   sql.exec(
@@ -534,6 +556,43 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
 
     return result;
   });
+  /** A child start (P42): one write turn starts it and saves its descriptor, then its name's object is
+   *  configured. A retry of a saved start configures only what is still pending. */
+  const child = Effect.fnUntraced(function* (input: Child, origin: From) {
+    const answer = yield* write(
+      Effect.gen(function* () {
+        const answer = yield* children.start(input, origin);
+
+        if (answer._tag === "started") {
+          // The child acts for the person its requester acts for, as the boot's child does.
+          const [requester] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", input.requester.process);
+          const { owner } = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ owner: Writer })))(
+            requester?.value,
+          ).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
+          const descriptor = {
+            id: answer.process,
+            name: answer.name,
+            program: input.code.program,
+            build: input.code.hash,
+            owner,
+          };
+          sql.exec(
+            "INSERT OR IGNORE INTO dev_descriptors (process,value,pending) VALUES (?,?,1)",
+            answer.process,
+            JSON.stringify(descriptor),
+          );
+        }
+
+        return answer;
+      }),
+    );
+
+    if (answer._tag === "started") {
+      yield* configure(answer.process);
+    }
+
+    return answer;
+  });
   // Project RPC input is untrusted: the reason is decoded before the turn or the retirement.
   const exit = Effect.fnUntraced(function* (pid: string, input: ExitReason, origin: From) {
     const reason = yield* Effect.fromResult(decodeExitReason(input)).pipe(
@@ -708,6 +767,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
       wrapped(processReply(write(processes.down(pid, policy, origin)))),
     processReceive: (pid: string, after: number) =>
       wrapped(processReply(Stream.runCollect(processes.receive(pid, after)))),
+    processChild: (input: Child, origin: From) => wrapped(childReply(child(input, origin))),
     boot,
   };
 });
@@ -790,6 +850,17 @@ const processLogic = Effect.fnUntraced(function* (
     down: (process, policy, from) =>
       asked(rpc(p.processDown(process, policy, from))).pipe(Effect.flatMap(processValue)),
   };
+  // A child start is decided in the project, in its ledger's turns; this side asks, as for a start.
+  const children = Children.of({
+    start: (input, from) =>
+      asked(rpc(p.processChild(input, from))).pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(ChildReplies)),
+        Effect.mapError((cause) => new ChildrenError({ reason: "storage", cause })),
+        Effect.flatMap((reply) =>
+          reply._tag === "ok" ? Effect.succeed(reply.value) : Effect.fail(new ChildrenError({ reason: reply.reason })),
+        ),
+      ),
+  });
   const publish = Effect.fn("process.publish")(function* (client: string, update: unknown) {
     yield* rpc(p.publish(client, update));
   });
@@ -828,7 +899,9 @@ const processLogic = Effect.fnUntraced(function* (
     }),
     // Recording captures its sink's services itself (main's P11); the runner no longer provides them.
     Layer.succeed(Recording, { flush: sink.flush.pipe(Effect.provideContext(services)) }),
-    remoteProcessManager(manager),
+    // The project's brain writes as `brain:<project>`, the one writer its process table trusts.
+    remoteProcessManager(manager, `brain:${project}`),
+    Layer.succeed(Children, children),
   );
   // P34 on the Worker: receipts and pending recovery live in this object's own SQLite, beside
   // ProcessStore, under the registered name every successor shares.
