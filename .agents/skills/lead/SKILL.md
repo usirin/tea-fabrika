@@ -154,6 +154,7 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `gcloop.ts sweep [--trigger timer\|merge\|hand]` / `kick --trigger merge` / `status [--keeps]` / `plist` | the box cleanup's loop ([0101](../../../.decisions/0101-box-cleanup-runs-on-a-timer.md)): `sweep` runs `box.sh gc` under `nice` for at most one period, unless another sweep holds `state/gc.lock` (then it records `skipped` and exits 0), and appends one line to `state/gc.jsonl` either way: start, end, outcome (`ok`, `failed` with its reason, `skipped`), what it removed and kept, MB freed, free space before and after. `kick` starts a sweep in the background and returns; `catchup.sh` kicks one after each merge. `status` prints one line, `LATE` when the newest sweep that ran started more than two periods ago; drive puts it in a `low_disk` refusal. `plist` prints the timer's unit. The period is `GC_MINUTES`, default 30 |
 | `drive.ts <lane> <step> <brief>` | one Codex step end to end, with no agent waiting: box, run, fetch, checks, backup push, field row, state; one JSON line (below) |
 | `chain.ts <lane> <lane-brief.md>` | the whole lane end to end, with no lead agent holding it: tests, build, review through `drive.ts`, then the PR, `loosening.sh` and `catchup.sh`; a short judgment agent only on an ask or a stuck ([below](#run-a-whole-lane-with-chaints)) |
+| `lanes.ts [<lane>...] [--all]` | what each lane is doing now, one JSON line a lane, read-only: `running`, `waits` (it stopped on an `ask` or a `stuck` and waits on you, with the reason and since when), `stuck` (the chain's beat or its agent went quiet for 10 minutes), `landed` or `unknown`, with the step, its box and the seconds since the last beat ([below](#run-a-whole-lane-with-chaints)) |
 | `flow/run.ts <flow-file> [--resume] [--lead] [--state <file>]` | run one flow, a list of typed steps saved to `BOXES/state/flow-<name>.json` before it starts, with no agent holding the loop ([0064](../../../.decisions/0064-the-lead-drives-with-flows.md)); one JSON line, exit 0 done, 20 parked on an ask, 30 stuck, 2 usage. A step marked `lead` runs only with `--lead`, so a run started by anyone else parks there. `flow/flows/land-decision.ts` lands a docs-only decision PR |
 | `mutbox.ts run --checkout <repo> --ticket <n> --build <sha> --related <paths> --out <dir> --lock <file> [--base <sha>]` | the hourly mutation run's Stryker sample in a container (0066; also a lane's mutation step started before it): `--network none`, no capability, 4 CPUs, 4 GB, the commit copied in read-only, nothing from the home folder; one JSON line and `<out>/mutbox.json`; `stuck` when Docker is missing, never the host instead. `mutbox.ts gc --lock <file>` removes a dead run's container and images over a week old; `box.sh gc` calls it |
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
@@ -385,7 +386,11 @@ scripts, stop the lane and start it again with `--start <step>`; it prints the c
   unchanged. The chain holds every right (the bot's push, the PR, catch-up); a box and the judgment
   agent hold only their model login ([0028](../../../.decisions/0028-the-parent-holds-every-right.md)),
   and the steps run the unmodified harness through `drive.ts`.
-- **Watching:** `tail -f BOXES/state/<lane>.md`. To stop a lane, stop the chain process: the
+- **Watching:** `node .agents/skills/lead/scripts/lanes.ts` prints one JSON line for each lane that
+  has not landed (name lanes to see only those, `--all` for the landed ones too). It reads the
+  chain's heartbeat, the lane's lock and the last outcome line in `BOXES/<lane>-chain.out`, so send
+  the chain's output there. A `stuck` line means look at the lane now; a `waits` line is yours to
+  answer. For one lane's moves, `tail -f BOXES/state/<lane>.md`. To stop a lane, stop the chain process: the
   running step's process group goes with it, and drive records that step as stuck. Start the chain
   again with `--start <step>` to go on from there: its rounds count on from the ones the chain
   record holds, so no earlier round's record, brief or judgment file is written over. Read the
