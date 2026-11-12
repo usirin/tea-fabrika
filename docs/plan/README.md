@@ -77,6 +77,15 @@ letter, and the target's `mailed` sets its one alarm. It finishes no Tier 1 row,
 20. P41's slice 3, the example a person sees from a pack, waits on P40's pack path, P34c's walls
 and how a pack asks for its grant. *It said, below: slice 2 is at its tests step, draft PR 993.*
 
+*2026-11-12:* P43's slice 1 (ticket 765) is [PR 1030](https://github.com/usirin/tea-fabrika/pull/1030): the merger,
+alone, in `next/`. Mailed `land`, it reads the change, brings it up to date with main, waits for
+its kind's named checks on that head, merges pinned to it and mails back one reply. The `CodeHost`
+and `Ci` contracts join libfabrika, each with an in-memory Layer; no GitHub Layer yet, so it lands
+nothing real, and today's lead scripts keep landing every pull request. P43 is planned in 5 slices:
+the queue program (slice 2) waits on P42's start piece, both in Durable Objects (slice 3) build on
+P41's slice 2, then GitHub behind the contracts and the switch. It finishes no Tier 1 row, so the count stays
+20. *It said, above: P43 joined Tier 1, not planned or sized.*
+
 *2026-11-11, later:* slices landed in seven Tier 1 rows. P13's slice 1
 ([PR 887](https://github.com/usirin/tea-fabrika/pull/887)), P34c's slices 1 and 2
 ([PR 896](https://github.com/usirin/tea-fabrika/pull/896),
