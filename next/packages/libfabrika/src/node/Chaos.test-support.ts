@@ -1,7 +1,7 @@
 // P17b slice 2, next/. Real runner storage. Each session opens new scoped connections.
 import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous SQLite transaction handle
 import { NodeServices } from "@effect/platform-node";
-import { Context, Effect, FileSystem, Layer, Path, Schema, type Scope, Stream } from "effect";
+import { Context, Effect, FileSystem, Layer, Path, Schema, type Scope, Stream, Tracer } from "effect";
 import { Writer } from "../access/SessionManager.ts";
 import * as Id from "../Id.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
@@ -23,9 +23,13 @@ import {
 } from "../runtime/Entry.ts";
 import { Nemesis } from "../runtime/Nemesis.ts";
 import * as NemesisLedger from "../runtime/NemesisLedger.ts";
-import { Checkpoint, ProcessStore } from "../runtime/ProcessStore.ts";
+import { ProcessStore } from "../runtime/ProcessStore.ts";
 import { ProgramRunner } from "../runtime/Runner.ts";
 import type { Sql } from "../Sql.ts";
+import { Archive } from "../telemetry/Archive.ts";
+import { RecordManager } from "../telemetry/Records.ts";
+import { SpanSink } from "../telemetry/Sink.ts";
+import { Chain } from "../telemetry/Trace.ts";
 
 const brain = "SHA256:test-brain";
 const trace = { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" };
@@ -106,6 +110,13 @@ export const open = Effect.gen(function* () {
       );
     const status = yield* processes.status(name);
     const process = status.state.process;
+    const spans = yield* files(`spans-${name}`);
+    const records = yield* files(`records-${name}`);
+    const telemetry = yield* Layer.build(SpanSink.layer(spans, { object: name }));
+    const sink = Context.get(telemetry, SpanSink);
+    const tracer = Context.get(telemetry, Tracer.Tracer);
+    const recordLayer = RecordManager.sql(() => records, 1024 ** 3);
+    const flush = sink.flush.pipe(Effect.provide(Layer.merge(recordLayer, Archive.memory)));
     const alarms: Array<number | null> = [];
     const watches: Array<Update> = [];
     const checked = Layer.effect(
@@ -141,7 +152,7 @@ export const open = Effect.gen(function* () {
           }),
       }),
       Layer.succeed(Alarm, { set: (at) => Effect.sync(() => void alarms.push(at)) }),
-      Layer.succeed(Recording, { flush: Effect.void }),
+      Layer.succeed(Recording, { flush }),
     ).pipe(Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(ledgerLayer(ledger)))));
     const context = yield* Layer.build(
       ProgramRunner.layer(
@@ -149,15 +160,45 @@ export const open = Effect.gen(function* () {
         { recovery: { sql: store, name, capacity: 1024 ** 3 } },
       ).pipe(Layer.provide(services)),
     );
-    return { runner: Context.get(context, ProgramRunner), process, alarms, watches };
+    const live = Context.get(context, ProgramRunner);
+    const runner = ProgramRunner.of({
+      open: (client) => live.open(client).pipe(Effect.withTracer(tracer)),
+      msg: (input) => live.msg(input).pipe(Effect.withTracer(tracer)),
+      due: (at) => live.due(at).pipe(Effect.withTracer(tracer)),
+      restart: (request) => live.restart(request).pipe(Effect.withTracer(tracer)),
+      mailed: live.mailed.pipe(Effect.withTracer(tracer)),
+    });
+    const recorded = Effect.gen(function* () {
+      yield* flush;
+      const rows = yield* RecordManager.use((manager) =>
+        Stream.runCollect(manager.read(Chain.cases.job.make({ process }))),
+      ).pipe(Effect.provide(recordLayer));
+      const health = spans.exec("SELECT * FROM measurements");
+      return { rows, health };
+    }).pipe(Effect.orDie);
+    return { runner, process, alarms, watches, recorded };
   }, Effect.orDie);
 
   const snapshot = (name: string) =>
     Effect.scoped(
       Effect.gen(function* () {
         const sql = yield* files(`store-${name}`);
-        const row = sql.exec("SELECT checkpoint FROM process_state")[0];
-        const checkpoint = Schema.decodeUnknownSync(Schema.fromJsonString(Checkpoint))(row?.checkpoint);
+        const ledger = yield* files("ledger");
+        const manager = yield* files("manager");
+        const status = yield* ProcessManager.use((processes) => processes.status(name)).pipe(
+          Effect.provide(managerLayer(manager)),
+          Effect.orDie,
+        );
+        const checkpoint = yield* ProcessStore.use((store) => store.load).pipe(
+          Effect.provide(ProcessStore.layer(sql, { process: status.state.process })),
+          Effect.provide(ledgerLayer(ledger)),
+          Effect.orDie,
+        );
+
+        if (checkpoint === null) {
+          return yield* Effect.die(new Error("runner has no saved checkpoint"));
+        }
+
         return { model: checkpoint.saved.model, after: checkpoint.saved.after, cmds: checkpoint.cmds };
       }),
     );

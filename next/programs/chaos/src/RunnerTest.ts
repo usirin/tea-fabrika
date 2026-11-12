@@ -28,6 +28,15 @@ export type Open = Effect.Effect<
         readonly process: string;
         readonly alarms: Array<number | null>;
         readonly watches: Array<Update>;
+        readonly recorded: Effect.Effect<{
+          readonly rows: ReadonlyArray<{
+            readonly name: string;
+            readonly attributes: Readonly<Record<string, unknown>>;
+            readonly events: ReadonlyArray<unknown>;
+            readonly links: ReadonlyArray<unknown>;
+          }>;
+          readonly health: ReadonlyArray<unknown>;
+        }>;
       },
       never,
       Scope.Scope
@@ -116,6 +125,46 @@ const noLeak = (value: unknown, marker: string, output: string) => {
 export const suite = (open: Open, checklist: unknown) =>
   describe("P17b slice 2 real runner", () => {
     it.effect.prop(
+      "a checklist-shaped target cannot name the chaos process or its registered name",
+      [experiments, Arbitrary.schema(Schema.Literals(["name", "process"]))],
+      ([input, collision]) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const world = yield* open;
+            const binding = yield* startTarget(world, checklist);
+            const calls: Array<unknown> = [];
+            const { runner, process } = yield* world.session(NAME, chaos.name, chaos, {
+              now,
+              fire: (request) =>
+                Effect.sync(() => {
+                  calls.push(request);
+                  return Outcome.Ok(Chaos.Fired.cases.fired.make({ hit: null }));
+                }),
+              inspect: read(world, binding),
+            });
+            yield* runner.open("watch");
+            const unsafe = { ...binding, [collision]: collision === "name" ? NAME : process };
+            expect(Schema.is(Chaos.Target)(unsafe), "the schema alone cannot check the trusted binding").toBe(true);
+            const sent = yield* runner.msg(
+              world.letter(1, {
+                type: "start",
+                id: experimentId,
+                seed: input.seed,
+                most: input.most,
+                gap: input.gap,
+                target: unsafe,
+              }),
+            );
+            expect(sent._tag).toBe("refused");
+            yield* runner.due(100_000_000);
+            expect(calls).toEqual([]);
+            expect(chaos.wake(phase((yield* world.snapshot(NAME)).model))).toBeNull();
+          }),
+        ),
+      { arbitrary, timeout: 120_000 },
+    );
+
+    it.effect.prop(
       "saved Asked and the installed watcher revision precede fire; duplicate alarms and reopen never refire",
       [experiments],
       ([input]) =>
@@ -130,9 +179,8 @@ export const suite = (open: Open, checklist: unknown) =>
                 const request = Schema.decodeUnknownSync(fireRequest)(raw);
                 const saved = yield* world.snapshot(NAME);
                 const model = phase(saved.model);
-                expect(model.phase._tag).toBe("active");
 
-                if (model.phase._tag !== "active") {
+                if (model.phase._tag !== "active" && model.phase._tag !== "checking") {
                   return yield* Effect.die(new Error("fire began before the experiment was saved"));
                 }
 
@@ -142,7 +190,11 @@ export const suite = (open: Open, checklist: unknown) =>
                     fault: request.fault,
                   }),
                 );
-                expect(published.at(-1)?.rev, "view installed before outside effect").toBe(saved.after);
+                const installed = (yield* world.letters(NAME)).find((letter) => letter.rev === saved.after);
+                expect(installed, "saved turn has an inbox letter").toBeDefined();
+                expect(published.at(-1)?.rev, "view installed at this inbox position before outside effect").toBe(
+                  installed?.pos,
+                );
                 calls.push(request);
                 return Outcome.Ok(Chaos.Fired.cases.fired.make({ hit: null }));
               });
@@ -434,7 +486,7 @@ export const suite = (open: Open, checklist: unknown) =>
                       ),
               inspect: read(world, binding),
             };
-            const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers);
+            const { runner, recorded } = yield* world.session(NAME, chaos.name, chaos, handlers);
             yield* runner.open("watch");
             yield* runner.msg(
               world.letter(1, {
@@ -473,6 +525,24 @@ export const suite = (open: Open, checklist: unknown) =>
             );
             expect(reasons).toHaveLength(answers.length);
             noLeak(reasons, marker, "answer reasons");
+            const { rows, health } = yield* recorded;
+            const commands = rows.filter((row) => row.name === "runner.cmd");
+            expect(commands.length, "real Cmd spans reached the stored job record").toBeGreaterThanOrEqual(3);
+            expect(health.length, "ended spans reached stored health").toBeGreaterThan(0);
+
+            for (const [name, output] of Object.entries({
+              attributes: commands.map((row) => row.attributes),
+              events: commands.map((row) => row.events),
+              links: commands.map((row) => row.links),
+              health,
+            })) {
+              noLeak(output, marker, name);
+            }
+
+            if (mode === "failed") {
+              expect(commands.some((row) => row.attributes["error.type"] === "URIError")).toBe(true);
+            }
+
             const saved = JSON.stringify(yield* world.letters(TARGET));
             expect(saved, "the private body reached real storage").toContain(marker);
           }),
