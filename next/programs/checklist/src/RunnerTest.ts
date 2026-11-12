@@ -1,142 +1,44 @@
-// Ticket 806, slice 1, next/: the checklist at the runner (L9, L10), a suite the module that owns a
-// real SQLite driver runs (0062, plan amendment A2): `RunnerTest.suite(open)`. It names the shared
-// `Sql` type and libfabrika's services, and no driver. Each run opens three database files in a
-// fresh folder (the inbox's ledger, the process store, the brain's process table), and a reopen
-// closes all three and opens them again.
+// Ticket 806, slice 1, next/: the checklist at the runner (L9, L10), a suite the part that owns a
+// real SQLite driver runs (0062, plan amendment A2): `RunnerTest.suite(open, fresh)`. A program may
+// import only the library's front, so the runner's wiring over the library's inner pieces is the
+// app's (`checklist-runner.laws.test.ts`); this file holds the laws. Each run opens three database
+// files in a fresh folder, and a reopen closes all three and opens them again.
 import { describe, expect, it } from "@effect/vitest";
-import { Alarm, CheckedWriter, Id, ProgramLoader, ProgramRunner, Recording, WatcherManager } from "@kampus/libfabrika";
-import { Writer } from "@kampus/libfabrika/access/SessionManager";
-import { Doorbell } from "@kampus/libfabrika/ledger/Ledger";
-import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
-import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
-import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
-import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
-import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
-import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
-import type { Sql } from "@kampus/libfabrika/Sql";
-import { Arbitrary, Effect, Layer, Schema, type Scope } from "effect";
+import type { ProgramRunner } from "@kampus/libfabrika";
+import { Arbitrary, Effect, Schema, type Scope } from "effect";
 import { checklist } from "./program.ts";
 
 const SEED = 119120;
-const NAME = "checklist:1";
-const BUILD = "checklist-build";
-const BRAIN = "SHA256:brain";
 const TRACE = { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" };
 /** The plan's one day, written out here so the law does not read it from the code it checks. */
 const DAY = 86_400_000;
 
-/** What the module owning the driver supplies: a fresh folder, and in it, each call opens the
- *  named database file again over a new connection, closed with its scope. */
-export type Open = Effect.Effect<(name: string) => Effect.Effect<Sql, never, Scope.Scope>, never, Scope.Scope>;
+type Runner = ProgramRunner["Service"];
+
+/** A writer as the door stamps it on a letter, made by the part that supplies it: the suite only
+ *  carries it, and knows a person's from an agent's by which one it was given. */
+export type Writer = unknown;
+
+/** What the part owning the driver and the library's inner pieces supplies, in a fresh folder of
+ *  three database files: `start` runs one session of the runner over them, each time on new
+ *  connections closed with its scope, with `program` loaded and every alarm it sets pushed to
+ *  `alarms`; and the two writers it stamps. */
+export type Open = Effect.Effect<
+  {
+    readonly start: (
+      program: typeof checklist,
+      alarms: Array<number | null>,
+    ) => Effect.Effect<Runner, never, Scope.Scope>;
+    readonly person: Writer;
+    readonly agent: Writer;
+  },
+  never,
+  Scope.Scope
+>;
 
 /** What the module owning the process supplies: the program loaded again from its module, as a
  *  restarted process loads it, so a reopen keeps only what the program saved. */
 export type Fresh = Effect.Effect<typeof checklist>;
-
-const person = Writer.cases.person.make({ key: "SHA256:person", for: "person" });
-const agent = Writer.cases.agent.make({ key: "SHA256:agent", for: "agent" });
-
-const brainFrom = {
-  by: BRAIN,
-  for: "brain",
-  sentAt: "2026-11-11T00:00:00Z",
-  seen: 0,
-  parent: null,
-  traceId: TRACE.traceId,
-  build: BUILD,
-};
-
-const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
-
-const nextProcess = Id.Generator.use((ids) => ids.next(Id.Process)).pipe(
-  Effect.provide(Id.Generator.layer),
-  Effect.orDie,
-);
-
-const managerLayer = (sql: Sql) =>
-  ProcessManager.layer(
-    {
-      by: BRAIN,
-      owner: Owner.cases.brain.make({}),
-      recipient: Recipient.cases.client.make({ client: "brain", session: "process_0000000000e008000000000003" }),
-    },
-    nextProcess,
-  ).pipe(Layer.provide(LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet))));
-
-/** One session of the runner over the folder's three files. `alarms` keeps every time it sets. */
-const session = (
-  files: (name: string) => Effect.Effect<Sql, never, Scope.Scope>,
-  alarms: Array<number | null>,
-  program: typeof checklist = checklist,
-) =>
-  Effect.gen(function* () {
-    const ledger = yield* files("ledger");
-    const store = yield* files("process");
-    const manager = yield* files("manager");
-    const started = Layer.effectDiscard(
-      ProcessManager.use((m) =>
-        m.status(NAME).pipe(
-          Effect.catch(() =>
-            m.start(
-              Start.cases.first.make({
-                id: `boot:${NAME}`,
-                name: NAME,
-                code: { program: program.name, hash: BUILD },
-              }),
-              brainFrom,
-            ),
-          ),
-        ),
-      ).pipe(Effect.orDie),
-    ).pipe(Layer.provideMerge(managerLayer(manager)));
-    const process = yield* ProcessManager.use((m) => m.status(NAME)).pipe(
-      Effect.map((s) => s.state.process),
-      Effect.provide(started),
-      Effect.orDie,
-    );
-    const checked = Layer.effect(
-      CheckedWriter,
-      Effect.gen(function* () {
-        const mailbox = yield* Mailbox;
-        return CheckedWriter.of({
-          append: (i) =>
-            mailbox.send(NAME, i.id, i.envelope.input, {
-              by: i.envelope.by.key,
-              for: i.envelope.by.for,
-              sentAt: i.sentAt,
-              seen: i.seen,
-              parent: i.envelope.id,
-              traceId: i.span.traceId,
-              build: BUILD,
-            }),
-          commit: () => Effect.die("the checklist declares no write"),
-          own: () => Effect.die("the checklist declares no write"),
-        });
-      }),
-    );
-    return ProgramRunner.layer(
-      { id: process, name: NAME, program: program.name, build: BUILD, owner: person },
-      { recovery: { sql: store, name: NAME, capacity: 1024 ** 3 } },
-    ).pipe(
-      Layer.provideMerge(
-        Layer.mergeAll(
-          managerLayer(manager),
-          ProgramLoader.layer({ [program.name]: program }, {}),
-          ProcessStore.layer(store, { process }),
-          checked,
-          Layer.succeed(WatcherManager, { publish: () => Effect.void }),
-          Layer.succeed(Alarm, { set: (at: number | null) => Effect.sync(() => void alarms.push(at)) }),
-          Layer.succeed(Recording, { flush: Effect.void }),
-        ).pipe(
-          Layer.provideMerge(
-            Mailbox.layer.pipe(
-              Layer.provideMerge(LedgerSql.layer(ledger, { reader: "checklist-law" }).pipe(Layer.provide(quiet))),
-            ),
-          ),
-        ),
-      ),
-    );
-  });
 
 const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
 
@@ -237,8 +139,8 @@ export const suite = (open: Open, fresh: Fresh) =>
       ([steps]) =>
         Effect.scoped(
           Effect.gen(function* () {
-            const files = yield* open;
-            const r = yield* ProgramRunner.pipe(Effect.provide(yield* session(files, [])));
+            const { start, person, agent } = yield* open;
+            const r = yield* start(checklist, []);
             const items = new Map<string, boolean>();
             let n = 0;
 
@@ -258,9 +160,9 @@ export const suite = (open: Open, fresh: Fresh) =>
               const before = shown((yield* r.open("before")).view);
               const sent = yield* r.msg(letter(++n, by, input));
               const refusable = items.has(input["name"] ?? "") && input["type"] === "add";
-              const walled = by._tag === "agent" && PERSON_ONLY.has(input["type"] ?? "");
+              const walled = step.by === "agent" && PERSON_ONLY.has(input["type"] ?? "");
               // Until the 0125 code batch names its reason, a walled input is `refused` (bad_msg today).
-              expect(sent._tag, `${by._tag} ${JSON.stringify(input)}`).toBe(
+              expect(sent._tag, `${step.by} ${JSON.stringify(input)}`).toBe(
                 walled || refusable ? "refused" : "accepted",
               );
 
@@ -285,17 +187,16 @@ export const suite = (open: Open, fresh: Fresh) =>
         // runs a fresh load of the program, as a new process would, so nothing it kept in memory stays.
         Effect.scoped(
           Effect.gen(function* () {
-            const files = yield* open;
+            const { start, person } = yield* open;
             const alarms: Array<number | null> = [];
-            const reopen = <A, E>(f: (r: ProgramRunner["Service"]) => Effect.Effect<A, E>) =>
+            const reopen = <A, E>(f: (r: Runner) => Effect.Effect<A, E>) =>
               Effect.scoped(
                 Effect.gen(function* () {
-                  const program = yield* fresh;
-                  const r = yield* ProgramRunner.pipe(Effect.provide(yield* session(files, alarms, program)));
+                  const r = yield* start(yield* fresh, alarms);
                   return yield* f(r);
                 }),
               );
-            const view = (r: ProgramRunner["Service"]) => r.open("watch").pipe(Effect.map((o) => shown(o.view)));
+            const view = (r: Runner) => r.open("watch").pipe(Effect.map((o) => shown(o.view)));
             const both = (git: string) => ({
               items: [
                 { name: "git", state: git },
