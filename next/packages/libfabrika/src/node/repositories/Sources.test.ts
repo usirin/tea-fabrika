@@ -117,13 +117,85 @@ const personBases = Effect.fnUntraced(function* (root: string) {
   };
 });
 
+const directorySuffixes = ["/.", "/..", "/child", "/", "/./entry.txt", "/../entry.txt"] as const;
+
+const Traversal = Schema.Struct({
+  suffix: Schema.Literals(directorySuffixes),
+  inTarget: Schema.Boolean,
+});
+
+const regularFileLinks = Effect.fnUntraced(function* (root: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const blobs = new Map<string, string>([["traversal/entry.txt", "regular file"]]);
+  const entries = new Map<string, { mode: string; type: string; id: string }>([
+    ["traversal", { mode: "040000", type: "tree", id: "b".repeat(40) }],
+    ["traversal/entry.txt", { mode: "100644", type: "blob", id: "c".repeat(40) }],
+  ]);
+  const links = [
+    { name: "file-link", target: "entry.txt" },
+    ...directorySuffixes.map((suffix, index) => ({ name: `target-${index}`, target: `entry.txt${suffix}` })),
+  ];
+
+  for (const folder of [path.join(root, "repo/traversal"), path.join(root, "disk traversal")]) {
+    yield* fs.makeDirectory(folder, { recursive: true });
+    yield* fs.writeFileString(path.join(folder, "entry.txt"), "regular file");
+
+    for (const link of links) {
+      yield* fs.symlink(link.target, path.join(folder, link.name));
+      blobs.set(`traversal/${link.name}`, link.target);
+      entries.set(`traversal/${link.name}`, { mode: "120000", type: "blob", id: "d".repeat(40) });
+    }
+  }
+
+  return {
+    blobs,
+    entries,
+    check: Effect.fnUntraced(function* (resolve: Repository["resolve"], traversal: typeof Traversal.Type) {
+      const file = traversal.inTarget
+        ? `target-${directorySuffixes.indexOf(traversal.suffix)}`
+        : `file-link${traversal.suffix}`;
+      const actual = [],
+        expected = [];
+
+      for (const document of ["repo", "person"] as const) {
+        const from = document === "repo" ? "../traversal" : "../disk traversal";
+        const source = yield* resolve(from, document);
+        // A plain file link remains readable. Only directory traversal must fail.
+        expect(string(yield* source.read("file-link"))).toBe("regular file");
+
+        for (const operation of ["resolve", "read"] as const) {
+          const result = yield* (
+            operation === "resolve" ? resolve(`${from}/${file}`, document) : source.read(file)
+          ).pipe(
+            Effect.match({
+              onFailure: (error) => error.reason._tag,
+              onSuccess: (value) => (value === null ? "missing" : "success"),
+            }),
+          );
+          actual.push({ document, operation, file, result });
+          expected.push({ document, operation, file, result: "ReadFailed" });
+        }
+
+        // A refused source must leave the valid source usable.
+        expect(string(yield* source.read("entry.txt"))).toBe("regular file");
+      }
+
+      expect(actual, JSON.stringify(actual)).toEqual(expected);
+    }),
+  };
+});
+
 it.effect.prop(
   "L7: injected committed trees keep their base and symlinks while outside disk changes independently",
   {
-    tape: Arbitrary.array(Arbitrary.schema(Schema.Struct({ move: Schema.Natural, pick: Schema.Natural })), {
-      minLength: 1,
-      maxLength: 8,
-    }),
+    tape: Arbitrary.array(
+      Arbitrary.schema(Schema.Struct({ move: Schema.Natural, pick: Schema.Natural, traversal: Traversal })),
+      {
+        minLength: 1,
+        maxLength: 8,
+      },
+    ),
   },
   ({ tape }) =>
     Effect.scoped(
@@ -160,6 +232,16 @@ it.effect.prop(
           ["inside space/absolute-local", path.join(repo, "inside space/entry.txt")],
           ["inside space/absolute-outside", path.join(outside, "entry.txt")],
         ]);
+        const traversal = yield* regularFileLinks(root);
+
+        for (const [file, entry] of traversal.entries) {
+          entries.set(file, entry);
+        }
+
+        for (const [file, text] of traversal.blobs) {
+          blobs.set(file, text);
+        }
+
         const resolve = yield* Sources.resolver({
           root: repo,
           person,
@@ -249,6 +331,7 @@ it.effect.prop(
           );
           expect(baseReads.map((read) => read.actual)).toEqual(baseReads.map((read) => read.expected));
           checkRead(yield* (yield* resolve("./local", "repo")).read("entry.txt"), true, commit, "committed", root);
+          yield* traversal.check(resolve, cell.traversal);
         }
       }),
     ).pipe(Effect.provide(NodeServices.layer)),
@@ -263,7 +346,10 @@ const string = (value: unknown) => {
 it("L7: each prefix resolves from the winning file's base, pins committed bytes and follows outside targets", async () => {
   await fc.assert(
     fc.asyncProperty(
-      fc.array(fc.record({ move: fc.nat(), pick: fc.nat() }), { minLength: 1, maxLength: 8 }),
+      fc.array(fc.record({ move: fc.nat(), pick: fc.nat(), traversal: Arbitrary.schema(Traversal) }), {
+        minLength: 1,
+        maxLength: 8,
+      }),
       async (tape) =>
         Effect.runPromise(
           Effect.scoped(
@@ -298,6 +384,7 @@ it("L7: each prefix resolves from the winning file's base, pins committed bytes 
               yield* fs.symlink(path.join(outside, "entry.txt"), path.join(repo, "inside space/absolute-outside"));
               yield* fs.symlink("cycle-b", path.join(repo, ".fabrika/cycle-a"));
               yield* fs.symlink("cycle-a", path.join(repo, ".fabrika/cycle-b"));
+              const traversal = yield* regularFileLinks(root);
               yield* git(repo, ["add", "."]);
               yield* git(repo, ["commit", "-m", "fixture"]);
               yield* git(repo, ["push", "origin", "stable"]);
@@ -408,6 +495,7 @@ it("L7: each prefix resolves from the winning file's base, pins committed bytes 
                   expect(baseReads.map((read) => read.actual)).toEqual(baseReads.map((read) => read.expected));
                   checkRead(yield* stillGood.read("entry.txt"), true, pinned, "commit 0", root);
                   expect(selected.snapshot.commit).toBe(pinned);
+                  yield* traversal.check(selected.resolve, cell.traversal);
                 }
               }).pipe(Effect.provide(RepositoriesGit.layer({ person })));
             }),
