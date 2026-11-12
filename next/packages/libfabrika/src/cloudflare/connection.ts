@@ -176,9 +176,12 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
     connections.delete(ws);
   });
   const ring = Effect.fn("connection.ring")(function* (stream: string, rev: number) {
+    const span = yield* Effect.currentSpan;
+    const onRefused = (reason: string) => Effect.sync(() => span.attribute(REFUSED, reason));
+
     for (const ws of ctx.getWebSockets()) {
       if ((yield* attached(ws))._tag === "online") {
-        yield* (yield* connected(ws)).ring(stream, rev);
+        yield* (yield* connected(ws)).ring(stream, rev, onRefused);
       }
     }
   });

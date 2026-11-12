@@ -88,7 +88,10 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
       respond(wait.id, answer);
     }
   });
-  const register = Effect.fnUntraced(function* (wait: typeof Wait.Type) {
+  const register = Effect.fnUntraced(function* (
+    wait: typeof Wait.Type,
+    onRefused: (reason: string) => Effect.Effect<void> = () => Effect.void,
+  ) {
     const answer = yield* Effect.result(options.wait(wait.stream, wait.after, options.reader));
 
     if (Result.isFailure(answer)) {
@@ -96,6 +99,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
 
       if (Schema.is(RateCountFailure)(error)) {
         yield* Effect.annotateCurrentSpan(REFUSED, "rate_limited");
+        yield* onRefused("rate_limited");
         yield* forget(wait);
         return yield* Effect.fail(error);
       }
@@ -107,6 +111,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
 
       if (["reserved", "rate_limited"].includes(reason)) {
         yield* Effect.annotateCurrentSpan(REFUSED, reason);
+        yield* onRefused(reason);
       }
 
       if (reason === "rate_limited" && Predicate.hasProperty(error, "retryAfter")) {
@@ -208,7 +213,11 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
 
       return yield* ordinary(request).pipe(turn.withPermit);
     }),
-    ring: Effect.fn("connection.ring")(function* (stream: string, rev: number) {
+    ring: Effect.fn("connection.ring")(function* (
+      stream: string,
+      rev: number,
+      onRefused: (reason: string) => Effect.Effect<void> = () => Effect.void,
+    ) {
       const now = yield* read;
 
       if (State.online(now)) {
@@ -233,7 +242,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
             undefined,
           );
 
-        if (next === undefined || (yield* register(next))._tag === "parked") {
+        if (next === undefined || (yield* register(next, onRefused))._tag === "parked") {
           return;
         }
       }
