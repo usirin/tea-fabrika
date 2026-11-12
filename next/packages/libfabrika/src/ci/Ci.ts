@@ -121,4 +121,4 @@ export class Ci extends Context.Service<
     readonly start: (commit: string) => Effect.Effect<void, CiError>;
     readonly at: (commit: string) => Effect.Effect<typeof Checks.Type, CiError>;
   }
->()("@kampus/libfabrika/Ci") {}
+>()("@kampus/libfabrika/ci/Ci") {}

@@ -153,4 +153,4 @@ export class CodeHost extends Context.Service<
       head: typeof Commit.Type,
     ) => Effect.Effect<typeof Merged.Type, CodeHostError>;
   }
->()("@kampus/libfabrika/CodeHost") {}
+>()("@kampus/libfabrika/codehost/CodeHost") {}
