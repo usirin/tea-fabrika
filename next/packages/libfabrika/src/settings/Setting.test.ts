@@ -227,3 +227,22 @@ describe("L4, a dotted declaration path reaches the nested value exactly once", 
     );
   });
 });
+
+it("scenario: T753 L1 a group's named declarations keep their decoded types", () => {
+  // scenario: the lead's compiler checks these assertions; no runtime shape check replaces them.
+  const group = Setting.group({
+    count: declare("a.count"),
+    label: Setting.make("a.label", {
+      schema: Schema.String,
+      default: "x",
+      doc: "A label.",
+      scope: ["repo"],
+      reload: "restart",
+      since: "1.2.3",
+    }),
+  });
+  expectTypeOf(group.settings.count.default).toEqualTypeOf<number>();
+  expectTypeOf(group.settings.label.default).toEqualTypeOf<string>();
+  expectTypeOf(group.settings.count.schema.Type).toEqualTypeOf<number>();
+  expectTypeOf(group.settings.label.schema.Type).toEqualTypeOf<string>();
+});

@@ -961,8 +961,8 @@
               "gateway"
             ],
             "folders": ["node", "cloudflare", "coordination"],
-            "files": ["index", "Id", "Testing", "ProcessId", "Sql", "Rev"],
-            "values": ["ProcessId", "Sql", "Rev"]
+            "files": ["index", "Id", "Testing", "ProcessId", "Sql", "Rev", "SpanTag"],
+            "values": ["ProcessId", "Sql", "Rev", "SpanTag"]
           }
         ],
         "eslint/no-restricted-imports": [

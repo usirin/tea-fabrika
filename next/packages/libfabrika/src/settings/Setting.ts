@@ -12,14 +12,22 @@ export type Scope = readonly [File, ...Array<File>];
 /** A live setting reaches a running process; a restart setting waits for the next start. */
 export type Reload = "live" | "restart";
 
-export interface Setting<A, S extends Scope = Scope> extends Config.Config<A> {
+/** Whether a file holds native JSON values or text decoded by Effect's StringTree codec. */
+export type Format = "json" | "text";
+
+export interface Setting<
+  A,
+  S extends Scope = Scope,
+  C extends Schema.Codec<A, unknown> = Schema.Codec<A, unknown>,
+> extends Config.Config<A> {
   /** The dotted path a person writes, as `instance.port`. */
   readonly path: string;
   /** The path's segments, as `["instance", "port"]`: what a provider is asked for. */
   readonly segments: ReadonlyArray<string>;
   /** The environment name, as `FABRIKA_INSTANCE_PORT`. */
   readonly env: string;
-  readonly schema: Schema.Codec<A, unknown>;
+  readonly schema: C;
+  readonly format: Format;
   readonly default: A;
   readonly doc: string;
   readonly scope: S;
@@ -28,17 +36,18 @@ export interface Setting<A, S extends Scope = Scope> extends Config.Config<A> {
   readonly since: string;
 }
 
-export const make = <A, const S extends Scope>(
+export const make = <C extends Schema.Codec<any, unknown>, const S extends Scope>(
   path: string,
   options: {
-    readonly schema: Schema.Codec<A, unknown>;
-    readonly default: NoInfer<A>;
+    readonly schema: C;
+    readonly default: NoInfer<C["Type"]>;
+    readonly format?: Format;
     readonly doc: string;
     readonly scope: S;
     readonly reload: Reload;
     readonly since: string;
   },
-): Setting<A, S> => {
+): Setting<C["Type"], S, C> => {
   // Effect reads a string path as one key, so the dotted path is split here.
   const segments = path.split(".");
   const env = ["FABRIKA", ...segments.map(Str.configCase)].join("_");
@@ -57,12 +66,15 @@ export const make = <A, const S extends Scope>(
       );
     }),
   );
-  return Object.assign(config, { ...options, path, segments, env });
+  return Object.assign(config, { ...options, format: options.format ?? "json", path, segments, env });
 };
 
-export interface Group<A> extends Config.Config<A> {
+export interface Group<
+  A,
+  R extends Record<string, Setting<any>> = Record<string, Setting<any>>,
+> extends Config.Config<A> {
   /** Each declaration by the name its value has in the group's record. */
-  readonly settings: Readonly<Record<string, Setting<unknown>>>;
+  readonly settings: R;
   readonly declarations: ReadonlyArray<Setting<unknown>>;
 }
 
@@ -95,11 +107,11 @@ const conflict = (declarations: ReadonlyArray<Setting<unknown>>) => {
   return undefined;
 };
 
-/** The record a group reads, typed as `Config.all` types it, so the two cannot drift apart. */
-export type Values<R extends Record<string, Setting<any>>> = Config.Success<ReturnType<typeof Config.all<R>>>;
+/** The record a group reads, inferred from Config and readonly like the generated value Struct. */
+export type Values<R extends Record<string, Setting<any>>> = Readonly<Config.Success<ReturnType<typeof Config.all<R>>>>;
 
 /** One Config of the record, with its declarations beside it. Paths are checked as it is made. */
-export const group = <const R extends Record<string, Setting<any>>>(settings: R): Group<Values<R>> => {
+export const group = <const R extends Record<string, Setting<any>>>(settings: R): Group<Values<R>, R> => {
   const declarations = Object.values(settings);
   const refused = conflict(declarations);
 

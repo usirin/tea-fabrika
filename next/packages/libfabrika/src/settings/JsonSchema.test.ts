@@ -17,7 +17,15 @@
 // - The oracle for L2 and L4 is Effect's own reader, `SchemaRepresentation.fromJsonSchemaDocument`
 //   with trusted patterns, never a validator of ours.
 import { describe, expect, it } from "@effect/vitest";
-import { JsonSchema as EffectJsonSchema, Exit, Predicate, Schema, SchemaAST, SchemaRepresentation } from "effect";
+import {
+  ByteSize,
+  JsonSchema as EffectJsonSchema,
+  Exit,
+  Predicate,
+  Schema,
+  SchemaAST,
+  SchemaRepresentation,
+} from "effect";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Files from "./Files.ts";
@@ -252,6 +260,55 @@ describe("L2, the editor schema accepts and refuses exactly what the file's own 
       check,
     );
   });
+});
+
+it("T753 L7 shared byte schemas keep distinct file defaults, descriptions and releases", () => {
+  fc.assert(
+    fc.property(
+      fc.record({
+        count: fc.bigInt({ min: 1n, max: 2n ** 80n }),
+        delta: fc.bigInt({ min: 1n, max: 1000000n }),
+        first: doc,
+        second: doc,
+        file: fc.constantFrom<Setting.File>("repo", "person"),
+      }),
+      (v) => {
+        const shared = Schema.ByteSize;
+        const declare = (path: string, count: bigint, words: string) =>
+          Setting.make(path, {
+            schema: shared,
+            default: ByteSize.bytes(count),
+            doc: words,
+            scope: [v.file],
+            reload: "restart",
+            since: "1.2.3",
+            format: "text",
+          });
+        const group = Setting.group({
+          first: declare("limits.first", v.count, v.first),
+          second: declare("limits.second", v.count + v.delta, v.second),
+        });
+        const document = JsonSchema.make(Files.schema(group, v.file)) as Json;
+        const editor = imported(document);
+
+        for (const d of group.declarations) {
+          const node = leaf(document, d.segments)!;
+          expect(node.description).toBe(d.doc);
+          expect(typeof node.default).toBe("string");
+          expect(node.default).not.toBe(String(d.default));
+          expect(Schema.decodeUnknownSync(Schema.toCodecStringTree(shared))(node.default)).toBe(d.default);
+          const input = { limits: { [d.segments[1]!]: node.default } };
+          expect(Exit.isSuccess(Schema.decodeUnknownExit(editor)(input, { onExcessProperty: "error" }))).toBe(true);
+          expect(Exit.isSuccess(Schema.decodeUnknownExit(Files.schema(group, v.file))(input))).toBe(true);
+          expect(d.since).toBe("1.2.3");
+        }
+
+        // A failed conversion must throw; an unrestricted replacement loses these words and defaults.
+        expect(leaf(document, ["limits", "first"])!.default).not.toEqual(leaf(document, ["limits", "second"])!.default);
+      },
+    ),
+    check,
+  );
 });
 
 describe("L3, every allowed declaration keeps its own words and encoded default in the editor schema", () => {
