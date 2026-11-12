@@ -24,11 +24,15 @@ import {
 import * as MailDeliveryLive from "@kampus/libfabrika/runtime/MailDeliveryLive";
 import { MailWakeups } from "@kampus/libfabrika/runtime/MailWakeups";
 import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
+import { Replies } from "@kampus/libfabrika/runtime/Replies";
+import * as RepliesSql from "@kampus/libfabrika/runtime/RepliesSql";
 import * as RepliesTest from "@kampus/libfabrika/runtime/RepliesTest";
 import { ProgramRunner } from "@kampus/libfabrika/runtime/Runner";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import {
+  Arbitrary,
   Cause,
+  Clock,
   ConfigProvider,
   Context,
   Effect,
@@ -42,7 +46,7 @@ import {
   Scope,
   Stream,
 } from "effect";
-import * as fc from "fast-check";
+import { TestClock } from "effect/testing";
 import { handlers } from "./handlers.ts";
 import * as Mail from "./Mail.ts";
 import { merger } from "./Merger.ts";
@@ -93,7 +97,6 @@ const settings = Effect.runSync(
 );
 
 const program = merger(settings);
-type Model = typeof program.machine.model.Type;
 
 const life = Effect.fnUntraced(function* (
   store: Store,
@@ -179,11 +182,16 @@ const life = Effect.fnUntraced(function* (
     Mailbox.use((m) => Stream.runCollect(m.read(name, 0))).pipe(Effect.provide(context));
   const checkpoint = ProcessStore.use((s) => s.load).pipe(
     Effect.provide(ProcessStore.layer(store.sql("process"), { process: PROCESS })),
+    Effect.provide(context),
   );
   return {
     runner,
     letters,
     checkpoint,
+    reply: (id: string) =>
+      Replies.use((replies) => replies.reply(NAME, id)).pipe(
+        Effect.provide(RepliesSql.layer(store.sql("recovery"), { capacity: 1024 ** 3 })),
+      ),
     model: Effect.map(checkpoint, (saved) =>
       saved === null ? null : Schema.decodeUnknownSync(program.machine.model)(saved.saved.model),
     ),
@@ -231,6 +239,7 @@ const start = Effect.fnUntraced(function* (store: Store, token?: Redacted.Redact
 
     if (alarm !== undefined) {
       yield* store.alarms.take(alarm);
+      yield* TestClock.setTime(Math.max(yield* Clock.currentTimeMillis, alarm.at));
       yield* current.runner.due(alarm.at);
     }
   });
@@ -263,6 +272,13 @@ const start = Effect.fnUntraced(function* (store: Store, token?: Redacted.Redact
     fire,
     green,
     current: () => current,
+    savedReplies: Effect.suspend(() =>
+      Effect.forEach(
+        Array.from({ length: serial }, (_, index) => `incoming-${index + 1}`),
+        (id) => current.reply(id),
+        { concurrency: 1 },
+      ),
+    ),
     land: (ref: string) => deliver(Mail.Land.make({ type: "land", ref, change: 1, head, reply: "queue" })),
   };
 });
@@ -290,13 +306,14 @@ const finish = Effect.fnUntraced(function* (h: Effect.Success<ReturnType<typeof 
   expect((yield* h.current().model)?._tag).toBe("idle");
 });
 
-const secret = fc
-  .tuple(
-    fc.constantFrom("ghp_", "github_pat_"),
-    fc.stringMatching(/^[A-Z0-9]{32}$/),
-    fc.constantFrom("token", "bearer", "url"),
-  )
-  .map(([prefix, body, form]) => {
+const secret = Arbitrary.schema(
+  Schema.Struct({
+    prefix: Schema.Literals(["ghp_", "github_pat_"]),
+    body: Schema.String.check(Schema.isPattern(/^[A-Z0-9]{32}$/)),
+    form: Schema.Literals(["token", "bearer", "url"]),
+  }),
+).pipe(
+  Arbitrary.map(({ prefix, body, form }) => {
     const token = `${prefix}${body}`;
     return {
       token,
@@ -307,7 +324,8 @@ const secret = fc
             ? `Bearer ${token}`
             : `https://invalid.test/auth?access_token=${token}`,
     };
-  });
+  }),
+);
 
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   describe("the merger on the real Node runner", () => {
@@ -366,146 +384,145 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         expect(yield* replies(h)).toHaveLength(1);
       }),
     );
-    it.effect("S1: [secrets] generated service failures stay out of every durable record, span and log", () =>
-      Effect.gen(function* () {
-        type ModelState = { model: Model | null; n: number };
-        type Real = { h: Effect.Success<ReturnType<typeof start>>; inspect: Effect.Effect<void, unknown> };
-        const command = fc
-          .record({ pick: fc.nat(), reason: fc.constantFrom("unavailable", "rate_limited", "refused"), move: fc.nat() })
-          .map((cell): fc.AsyncCommand<ModelState, Real> => ({
-            check: () => true,
-            run: (m, r) =>
-              // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each command's Effect
-              Effect.runPromise(
-                Effect.gen(function* () {
-                  const state = yield* r.h.current().model;
+    type Real = { h: Effect.Success<ReturnType<typeof start>>; inspect: Effect.Effect<void, unknown> };
+    const Cell = Schema.Struct({
+      pick: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      reason: Schema.Literals(["unavailable", "rate_limited", "refused"]),
+      move: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    });
+    const step = Effect.fnUntraced(function* (cell: typeof Cell.Type, m: { n: number }, r: Real) {
+      const state = yield* r.h.current().model;
 
-                  if (state === null || state._tag === "idle") {
-                    yield* r.h.host.fail(
-                      "change",
-                      cell.pick % 2 === 0 ? { kind: "fault", reason: cell.reason } : { kind: "defect" },
-                    );
-                    yield* r.h.land(`job${++m.n}`);
-                  } else {
-                    const possible = [
-                      "fire",
-                      "reopen",
-                      ...(state._tag === "merging" ? [] : ["abandon"]),
-                      "fault",
-                      "green",
-                      "crash",
-                    ];
-                    const move = possible[cell.move % possible.length];
-
-                    if (move === "reopen") {
-                      yield* r.h.reopen;
-                    } else if (move === "abandon") {
-                      yield* r.h.deliver(Mail.Abandon.make({ type: "abandon", ref: state.job.ref }));
-                    } else if (move === "fault") {
-                      if (state._tag === "checking" && cell.pick % 3 !== 0) {
-                        yield* r.h.ci.fail(
-                          "at",
-                          cell.pick % 2 === 0
-                            ? { kind: "fault", reason: cell.reason === "refused" ? "unavailable" : cell.reason }
-                            : { kind: "defect" },
-                        );
-                      } else {
-                        yield* r.h.host.fail(
-                          state._tag === "reading"
-                            ? cell.pick % 3 === 0
-                              ? "update"
-                              : "change"
-                            : state._tag === "updating"
-                              ? "update"
-                              : "merge",
-                          cell.pick % 2 === 0 ? { kind: "fault", reason: cell.reason } : { kind: "defect" },
-                        );
-                      }
-                    } else if (move === "green") {
-                      yield* r.h.green;
-                    } else {
-                      if (move === "crash") {
-                        yield* r.h.green;
-                        yield* r.h.host.crashMerge;
-                      }
-
-                      const result = yield* Fiber.await(yield* Effect.forkChild(r.h.fire));
-
-                      if (Exit.isFailure(result) && Cause.hasInterruptsOnly(result.cause)) {
-                        yield* r.h.reopen;
-                      } else if (Exit.isFailure(result)) {
-                        return yield* Effect.failCause(result.cause);
-                      }
-                    }
-                  }
-
-                  m.model = yield* r.h.current().model;
-                  yield* r.inspect;
-                }),
-              ),
-            toString: () => JSON.stringify(cell),
-          }));
-        const once = Effect.fnUntraced(function* (
-          value: typeof secret extends fc.Arbitrary<infer A> ? A : never,
-          commands: Iterable<fc.AsyncCommand<ModelState, Real>>,
-        ) {
-          const captured = RepliesTest.capture();
-          const logs: Array<string> = [];
-          const logger = Logger.make((options) => {
-            logs.push(JSON.stringify(options.message), Cause.pretty(options.cause));
-          });
-          yield* Effect.gen(function* () {
-            const store = yield* open;
-            const h = yield* start(store, Redacted.make(value.text));
-            yield* h.host.fail("update", { kind: "fault", reason: "unavailable" });
-            yield* h.host.fail("update", { kind: "defect" });
-            yield* h.ci.fail("at", { kind: "fault", reason: "rate_limited" });
-            yield* h.ci.fail("at", { kind: "defect" });
-            yield* h.land("initial");
-            const inspect = Effect.gen(function* () {
-              const letters = [...(yield* h.current().letters(NAME)), ...(yield* h.current().letters("queue"))];
-              const checkpoint = yield* h.current().checkpoint;
-              RepliesTest.unleaked(
-                [JSON.stringify(letters), JSON.stringify(checkpoint), ...captured.text(), ...logs],
-                [value.text, value.token, encodeURIComponent(value.text)],
-              );
-            });
-            // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check owns the asynchronous command scheduler
-            yield* Effect.promise(() =>
-              fc.asyncModelRun(() => ({ model: { model: null, n: 0 }, real: { h, inspect } }), commands),
-            );
-            // Finish a real checked merge so captures cannot be empty even when the random walk abandoned.
-            yield* finish(h);
-            const status = yield* h.host.read(1);
-
-            if (status?.state === "open") {
-              yield* h.host.put({
-                ...Change.cases.found.make({ change: 1, head, state: "open", paths: ["src/a.ts"] }),
-                base: head,
-                tree: checked,
-                conflict: null,
-              });
-              yield* h.land("finish");
-              yield* finish(h);
-            }
-
-            yield* inspect;
-            const spans = captured.text().join("\n");
-            expect(spans).toContain("fab.change");
-            expect(spans).toContain("fab.head");
-            expect((yield* h.current().letters(NAME)).length).toBeGreaterThan(0);
-          }).pipe(Effect.withTracer(captured.tracer), Effect.provide(Logger.layer([logger])));
-        });
-        // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check awaits each complete scoped runner flow
-        yield* Effect.promise(() =>
-          fc.assert(
-            fc.asyncProperty(secret, fc.commands([command], { maxCommands: 24 }), (value, commands) =>
-              // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each scoped runner flow
-              Effect.runPromise(Effect.scoped(once(value, commands))),
-            ),
-            { seed: 119120, numRuns: 40 },
-          ),
+      if (state === null || state._tag === "idle") {
+        yield* r.h.host.fail(
+          "change",
+          cell.pick % 2 === 0 ? { kind: "fault", reason: cell.reason } : { kind: "defect" },
         );
-      }),
+        yield* r.h.land(`job${++m.n}`);
+      } else {
+        const possible = [
+          "fire",
+          "reopen",
+          "busy",
+          ...(state._tag === "merging" ? [] : ["abandon"]),
+          "fault",
+          "green",
+          "crash",
+        ];
+        const move = possible[cell.move % possible.length];
+
+        if (move === "reopen") {
+          yield* r.h.reopen;
+        } else if (move === "busy") {
+          yield* r.h.land(`busy${m.n}`);
+        } else if (move === "abandon") {
+          yield* r.h.deliver(Mail.Abandon.make({ type: "abandon", ref: state.job.ref }));
+        } else if (move === "fault") {
+          if (state._tag === "checking" && cell.pick % 3 !== 0) {
+            yield* r.h.ci.fail(
+              "at",
+              cell.pick % 2 === 0
+                ? { kind: "fault", reason: cell.reason === "refused" ? "unavailable" : cell.reason }
+                : { kind: "defect" },
+            );
+          } else {
+            yield* r.h.host.fail(
+              state._tag === "reading"
+                ? cell.pick % 3 === 0
+                  ? "update"
+                  : "change"
+                : state._tag === "updating"
+                  ? "update"
+                  : "merge",
+              cell.pick % 2 === 0 ? { kind: "fault", reason: cell.reason } : { kind: "defect" },
+            );
+          }
+        } else if (move === "green") {
+          yield* r.h.green;
+        } else {
+          if (move === "crash") {
+            yield* r.h.green;
+            yield* r.h.host.crashMerge;
+          }
+
+          const result = yield* Fiber.await(yield* Effect.forkChild(r.h.fire));
+
+          if (Exit.isFailure(result) && Cause.hasInterruptsOnly(result.cause)) {
+            yield* r.h.reopen;
+          } else if (Exit.isFailure(result)) {
+            return yield* Effect.failCause(result.cause);
+          }
+        }
+      }
+
+      yield* r.inspect;
+    });
+    const once = Effect.fnUntraced(function* (
+      value: typeof secret extends Arbitrary.Arbitrary<infer A> ? A : never,
+      commands: ReadonlyArray<typeof Cell.Type>,
+    ) {
+      const captured = RepliesTest.capture();
+      const logs: Array<string> = [];
+      const logger = Logger.map(Logger.formatSimple, (line) => {
+        logs.push(line);
+      });
+      yield* Effect.gen(function* () {
+        const store = yield* open;
+        const h = yield* start(store, Redacted.make(value.text));
+        yield* h.host.fail("update", { kind: "fault", reason: "unavailable" });
+        yield* h.host.fail("update", { kind: "defect" });
+        yield* h.ci.fail("at", { kind: "fault", reason: "rate_limited" });
+        yield* h.ci.fail("at", { kind: "defect" });
+        yield* h.land("initial");
+        yield* h.land("busy");
+        const inspect = Effect.gen(function* () {
+          const letters = [...(yield* h.current().letters(NAME)), ...(yield* h.current().letters("queue"))];
+          const checkpoint = yield* h.current().checkpoint;
+          const savedReplies = yield* h.savedReplies;
+          RepliesTest.unleaked(
+            [
+              JSON.stringify(letters),
+              JSON.stringify(checkpoint),
+              JSON.stringify(savedReplies),
+              ...captured.text(),
+              ...logs,
+            ],
+            [value.text, value.token, encodeURIComponent(value.text)],
+          );
+        });
+        const model = { n: 0 };
+
+        for (const command of commands) {
+          yield* step(command, model, { h, inspect });
+        }
+
+        // Finish a real checked merge so captures cannot be empty even when the random walk abandoned.
+        yield* finish(h);
+        const status = yield* h.host.read(1);
+
+        if (status?.state === "open") {
+          yield* h.host.put({
+            ...Change.cases.found.make({ change: 1, head, state: "open", paths: ["src/a.ts"] }),
+            base: head,
+            tree: checked,
+            conflict: null,
+          });
+          yield* h.land("finish");
+          yield* finish(h);
+        }
+
+        yield* inspect;
+        const spans = captured.text().join("\n");
+        expect(spans).toContain("fab.change");
+        expect(spans).toContain("fab.head");
+        expect((yield* h.current().letters(NAME)).length).toBeGreaterThan(0);
+        expect((yield* h.savedReplies).some((reply) => reply !== null)).toBe(true);
+      }).pipe(Effect.withTracer(captured.tracer), Effect.provide(Logger.layer([logger])));
+    });
+    it.effect.prop(
+      "S1: [secrets] generated service failures stay out of every durable record, span and log",
+      [secret, Arbitrary.array(Arbitrary.schema(Cell), { maxLength: 24 })],
+      ([value, commands]) => Effect.scoped(once(value, commands)),
+      { arbitrary: { seed: 119120, runs: 40, size: 24 } },
     );
   });

@@ -4,6 +4,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Checks, Status } from "@kampus/libfabrika/ci/Ci";
 import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import { Change, Commit, Merged, Tree, Updated } from "@kampus/libfabrika/codehost/CodeHost";
+import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { ConfigProvider, Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import * as ChangeKind from "./Change.ts";
@@ -139,7 +140,7 @@ const valueFor = (w: World, cmd: Command, pick: number): unknown => {
     return Merged.cases.merged.make({ commit: id(w, "f"), tree: tree(w, pick % 2 === 0 ? "e" : "9") });
   }
 
-  return { id: "queued" };
+  return Queued.make({ id: "queued" });
 };
 
 const answer = (p: Program, w: World, cmd: Command, drawn: number, at: number): Msg => {
