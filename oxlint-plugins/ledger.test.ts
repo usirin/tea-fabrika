@@ -1,7 +1,7 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
-import { type Finding, fingerprint, outside, settle } from "./ledger.ts";
+import { type Finding, fingerprint, LEDGERS, outside, settle } from "./ledger.ts";
 
 const options = { seed: 119120, numRuns: 200 };
 
@@ -14,11 +14,13 @@ const finding = fc.record({
 const count = (xs: readonly Finding[], x: Finding) =>
   xs.filter((y) => y.file === x.file && y.rule === x.rule && y.code === x.code).length;
 
-describe("agents-ledger.json, 0033", () => {
+const root = fc.constantFrom(...LEDGERS.map((ledger) => ledger.root));
+
+describe("agents-ledger.json and next-ledger.json, 0033", () => {
   it("each finding is waived or blocks, never both, and order is kept", () => {
     fc.assert(
-      fc.property(fc.array(finding), fc.array(finding), (entries, findings) => {
-        const { waived, blocks } = settle(entries, findings);
+      fc.property(fc.array(finding), fc.array(finding), root, (entries, findings, at) => {
+        const { waived, blocks } = settle(entries, findings, at);
         expect(waived.length + blocks.length).toBe(findings.length);
         expect(findings.filter((f) => waived.includes(f))).toEqual(waived);
         expect(findings.filter((f) => blocks.includes(f))).toEqual(blocks);
@@ -29,8 +31,8 @@ describe("agents-ledger.json, 0033", () => {
 
   it("one entry covers one finding: a second equal line needs a second entry", () => {
     fc.assert(
-      fc.property(fc.array(finding), fc.array(finding), (entries, findings) => {
-        const { waived } = settle(entries, findings);
+      fc.property(fc.array(finding), fc.array(finding), root, (entries, findings, at) => {
+        const { waived } = settle(entries, findings, at);
 
         for (const f of waived) {
           expect(count(waived, f)).toBeLessThanOrEqual(count(entries, f));
@@ -42,43 +44,51 @@ describe("agents-ledger.json, 0033", () => {
 
   it("the ledger only shrinks: kept entries are ledger entries a finding matched, in order", () => {
     fc.assert(
-      fc.property(fc.array(finding), fc.array(finding), (entries, findings) => {
-        const { kept, waived } = settle(entries, findings);
+      fc.property(fc.array(finding), fc.array(finding), root, (entries, findings, at) => {
+        const { kept, waived } = settle(entries, findings, at);
         expect(entries.filter((e) => kept.includes(e))).toEqual(kept);
         expect(kept.length).toBe(waived.length);
         // Settling again on what was kept changes nothing.
-        expect(settle(kept, findings).kept).toEqual(kept);
+        expect(settle(kept, findings, at).kept).toEqual(kept);
       }),
       options,
     );
   });
 
-  it("only `.agents/` findings can be waived; an entry anywhere else is refused", () => {
+  it("only findings in the ledger's own folder can be waived; an entry anywhere else is refused", () => {
     fc.assert(
-      fc.property(fc.array(finding), fc.array(finding), (entries, findings) => {
-        const { waived, blocks } = settle(entries, findings);
+      fc.property(fc.array(finding), fc.array(finding), root, (entries, findings, at) => {
+        const { waived, blocks } = settle(entries, findings, at);
 
         for (const f of waived) {
-          expect(f.file.startsWith(".agents/")).toBe(true);
+          expect(f.file.startsWith(at)).toBe(true);
         }
 
-        for (const f of findings.filter((f) => !f.file.startsWith(".agents/"))) {
+        for (const f of findings.filter((f) => !f.file.startsWith(at))) {
           expect(blocks).toContain(f);
         }
 
-        expect(outside(entries)).toEqual(entries.filter((e) => !e.file.startsWith(".agents/")));
+        expect(outside(entries, at)).toEqual(entries.filter((e) => !e.file.startsWith(at)));
       }),
       options,
     );
+  });
+
+  // pinned: one ledger per folder, and no folder holds another, so a finding meets at most one.
+  it("pinned: .agents/ and next/ each have one ledger", () => {
+    expect(LEDGERS).toEqual([
+      { file: "agents-ledger.json", root: ".agents/" },
+      { file: "next-ledger.json", root: "next/" },
+    ]);
   });
 
   it("scenario: a line that moves keeps its entry, a line that changes loses it", () => {
     const entry = { file: ".agents/a.ts", rule: "fabrika(no-promises)", code: "await y;" };
     const moved = { ...entry, code: fingerprint("\t\t  await   y;  ") };
     const changed = { ...entry, code: fingerprint("await y2;") };
-    expect(settle([entry], [moved]).blocks).toEqual([]);
-    expect(settle([entry], [changed]).blocks).toEqual([changed]);
-    expect(settle([entry], [changed]).kept).toEqual([]);
+    expect(settle([entry], [moved], ".agents/").blocks).toEqual([]);
+    expect(settle([entry], [changed], ".agents/").blocks).toEqual([changed]);
+    expect(settle([entry], [changed], ".agents/").kept).toEqual([]);
   });
 });
 

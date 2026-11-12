@@ -2,7 +2,7 @@
 // suite takes a fresh `Sql`, and this module owns the driver. The span sink's laws need that
 // driver too, so they sit here: `telemetry/Sink.ts:393`, and C7 on every stored span output.
 import { DatabaseSync } from "node:sqlite";
-import { afterAll, describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import * as fc from "fast-check";
 import * as GatewayCauseTest from "../gateway/GatewayCauseTest.ts";
@@ -31,19 +31,22 @@ const fresh = (): Sql => {
   return nodeSql(db);
 };
 
-afterAll(() => {
-  for (const db of opened.splice(0)) {
-    if (db.isOpen) {
-      db.close();
+/** Gives back every database a case opened when the case's scope closes (0061): `fresh` is sync. */
+const closesOpened = Effect.addFinalizer(() =>
+  Effect.sync(() => {
+    for (const db of opened.splice(0)) {
+      if (db.isOpen) {
+        db.close();
+      }
     }
-  }
-});
+  }),
+);
 
-/** Each suite's properties: seed 119120, 100 runs, each case an Effect on the real code. */
+/** Each suite's properties: seed 119120, 100 runs, each case an Effect on the real code in a scope. */
 const law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effect.Effect<void, unknown, never>) =>
   it(name, () =>
     fc.assert(
-      fc.asyncProperty(input, (value) => Effect.runPromise(check(value))),
+      fc.asyncProperty(input, (value) => Effect.runPromise(Effect.scoped(Effect.andThen(closesOpened, check(value))))),
       { seed: SEED, numRuns: RUNS },
     ),
   );
@@ -64,7 +67,7 @@ RuntimeCauseTest.suite(law, {
   LedgerError,
 });
 
-GatewayCauseTest.suite(law, fresh);
+GatewayCauseTest.suite(law, { fresh, LedgerError });
 
 const failures: fc.Arbitrary<object> = fc.oneof(
   fc.string().map((message) => new Error(message)),

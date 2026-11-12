@@ -1,6 +1,7 @@
 // T695, next/. The door's storage and its SYN-cookie keys keep the failure they translate (decision
-// 0043 rule 12). A suite on any `Sql`, read through its module as `GatewayCauseTest.suite(law, fresh)`;
-// the module that owns the driver runs it (0062).
+// 0043 rule 12). A suite on any `Sql`, read through its module as `GatewayCauseTest.suite(law, harness)`;
+// the module that owns the driver runs it, and gives the ledger's error class, which a gateway file
+// may not import (0062).
 //
 // Audit sites: `GatewayStore.ts:27` (a throw in the atomic step), `GatewayStore.ts:40` (a saved
 // state row that does not decode), `GatewayNonce.ts:26` (a saved key that does not decode, and one
@@ -10,7 +11,6 @@ import { describe, expect } from "@effect/vitest";
 import { Effect, Result, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
 import * as fc from "fast-check";
-import { LedgerError } from "../ledger/Ledger.ts";
 import type { Sql } from "../Sql.ts";
 import { gatewayNonce } from "./GatewayNonce.ts";
 import { gatewayStore } from "./GatewayStore.ts";
@@ -21,6 +21,17 @@ const failures: fc.Arbitrary<object> = fc.oneof(
   fc.string().map((message) => new TypeError(message, { cause: { detail: message } })),
   fc.record({ code: fc.string(), detail: fc.jsonValue() }, { noNullPrototype: true }),
 );
+
+/** The error the door's store fails with, named through its own calls. */
+type StoreError = Effect.Error<ReturnType<ReturnType<typeof gatewayStore>["atomic"]>>;
+
+/** What the module that owns the driver gives: fresh storage, and the stores' error class. */
+export type Harness = {
+  /** A fresh, empty database. */
+  readonly fresh: () => Sql;
+  /** The stores' own error class, which the laws find in a failure's chain. */
+  readonly LedgerError: new (fields: { readonly reason: StoreError["reason"]; readonly cause?: unknown }) => StoreError;
+};
 
 /** Runs one property: generated input, each case an Effect on the real code. The runner gives it. */
 export type Law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effect.Effect<void, unknown>) => void;
@@ -66,7 +77,7 @@ const rejecting = <A, E>(method: "importKey" | "sign" | "verify", failure: unkno
 const TTL = 60_000;
 const CAP = 100;
 
-export const suite = (law: Law, fresh: () => Sql) => {
+export const suite = (law: Law, { fresh, LedgerError }: Harness) => {
   describe("T695, the door's store keeps what failed", () => {
     // C1, GatewayStore.ts:27. Plant: `catch: () => new LedgerError({ reason: "storage" })`.
     law(
@@ -95,7 +106,7 @@ export const suite = (law: Law, fresh: () => Sql) => {
           const links = chain(error);
           const row = links.find((link) => link instanceof LedgerError && link.reason === "bad_row");
           expect(row, "a bad_row LedgerError is in the chain").toBeInstanceOf(LedgerError);
-          expect(Schema.isSchemaError((row as LedgerError).cause), "it holds the decoder's own failure").toBe(true);
+          expect(Schema.isSchemaError((row as StoreError).cause), "it holds the decoder's own failure").toBe(true);
         }),
     );
   });
