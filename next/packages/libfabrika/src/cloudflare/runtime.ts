@@ -5,6 +5,7 @@ import {
   Effect,
   Equal,
   Exit,
+  Fiber,
   Layer,
   ManagedRuntime,
   Option,
@@ -920,16 +921,32 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     return yield* ledger.append("gateway/brain", event.id, lineFor(yield* from(), event));
   });
 
-  // Start each push before returning, but do not await a Process calling back into this service.
-  for (const process of yield* processes.info) {
-    const chosen = selected[process.program];
+  // Boot pushes share install order without holding the Project turn during Process callbacks.
+  yield* Effect.forkScoped(
+    installs.withPermit(
+      Effect.gen(function* () {
+        const pushes: Array<Fiber.Fiber<void>> = [];
 
-    if (chosen !== undefined) {
-      yield* Effect.forkScoped(push(chosen.load, process.program, chosen.hash, process.name).pipe(Effect.ignore), {
-        startImmediately: true,
-      });
-    }
-  }
+        for (const process of yield* processes.info) {
+          const chosen = selected[process.program];
+
+          if (chosen !== undefined) {
+            pushes.push(
+              yield* Effect.forkChild(
+                push(chosen.load, process.program, chosen.hash, process.name).pipe(Effect.ignore),
+                {
+                  startImmediately: true,
+                },
+              ),
+            );
+          }
+        }
+
+        yield* Fiber.joinAll(pushes);
+      }),
+    ),
+    { startImmediately: true },
+  );
 
   yield* flushed.pipe(Effect.provideContext(services));
   return {

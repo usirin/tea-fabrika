@@ -410,6 +410,12 @@ export class ProgramRunner extends Context.Service<
           yield* fault("after_swap_supervisor");
           process = { ...process, build: kept.saved.build };
           live = next;
+
+          if (prepared === undefined) {
+            retry = cmds.filter(
+              (cmd) => cmd.mail === true || Option.exists(decodeTyped(cmd.cmd), (c) => c.type === WRITE),
+            );
+          }
         });
         /** Performs the work the saved journal names, sending each completion after its write. */
         const resume = Effect.fnUntraced(function* () {
