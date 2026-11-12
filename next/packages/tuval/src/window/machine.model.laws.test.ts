@@ -651,6 +651,65 @@ describe("L8: the window parent's connection", () => {
     expect(stale).toBeGreaterThan(0);
   });
 
+  it("invalid recovery-open answers keep the last checked view and ask once until a valid whole arrives", () => {
+    let recovered = 0;
+    fc.assert(
+      fc.property(walks, fc.array(choice, { minLength: 2, maxLength: 8 }), (list, failures) => {
+        let checked = false;
+        fold(list, ({ next }) => {
+          const tile = next.tiles.find((t) => t.reach._tag === "open");
+
+          if (checked || next.link._tag !== "online" || tile?.reach._tag !== "open") {
+            return;
+          }
+
+          checked = true;
+          recovered++;
+          const pid = tile.reach.pid;
+          const dial = next.link.dial;
+          let state = next;
+          let shown = state.client.views[pid]!;
+
+          // A checked whole ends an episode. The next bad view may ask once again.
+          for (let episode = 0; episode < 2; episode++) {
+            let opens = 0;
+
+            for (const c of failures) {
+              const flight = state.flight.find((f) => f.call._tag === "open" && f.call.pid === pid);
+              const view = [
+                { items: null, left: 0 },
+                { ...(shown.view as ListView), left: c.word },
+                { items: [{ name: c.word, state: "invalid" }], left: 1 },
+              ][c.aux % 3];
+              const value = { rev: shown.rev + 1, view };
+              const m: WindowMsg =
+                flight === undefined
+                  ? { type: "view", pid, note: { type: "whole", ...value } }
+                  : { type: "open_ok", id: flight.id, dial: flight.dial, value, ms: c.ms };
+              const [after, cmds] = step(state, m);
+              opens += writes(cmds, "open").filter((c) => c.call["pid"] === pid).length;
+              expect(after.client.views[pid], "an invalid recovery changed the checked view").toEqual(shown);
+              expect(opens, "bad recovery answers must not start replacement opens").toBe(1);
+              state = after;
+            }
+
+            const value = { rev: shown.rev + 1, view: listEdit(shown.view as ListView, episode, "recovered") };
+            const [after] = step(state, { type: "view", pid, note: { type: "whole", ...value } });
+            expect(after.client.views[pid]).toEqual(value);
+            expect(after.link).toEqual(next.link);
+            expect(after.flight.filter((f) => f.dial === dial && f.call._tag === "open" && f.call.pid === pid)).toEqual(
+              [],
+            );
+            state = after;
+            shown = state.client.views[pid]!;
+          }
+        });
+      }),
+      opts,
+    );
+    expect(recovered, "the walks reached checked views before the recovery failures").toBeGreaterThan(0);
+  });
+
   it("A14: a notice that installs a pid's view ends that pid's open, so its late answer is stale", () => {
     let raced = 0;
     fc.assert(
