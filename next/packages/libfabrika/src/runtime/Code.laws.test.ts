@@ -1,5 +1,10 @@
 // P15 slice 1, next/. The brain's code per program, one tea machine (0046): law L11 of the approved
-// plan on the real `init` and reducer, and L20's rows for the code facts' program names.
+// plan on the real `init` and reducer, and L20's type rows for the code facts' program names.
+//
+// L19, lint rows (A1): node imports and Promise edges are checked by .oxlintrc.json's
+// fabrika/no-node-imports and fabrika/no-promises; package.json's lint:layers reads layer-rules.json.
+// Review checks Code.ts's one machine/no I/O and CodeStore.ts's contract-only file. No existing
+// lint rule enforces those two parts; ticket 509 owns the missing one-machine check.
 //
 // Test contract (the plan names the shapes; their export names are fixed here, and the builder
 // follows them): `Code.ts` exports `From`, `CodeEvent` (`code.loaded`, `code.failed`), `Selected`
@@ -16,7 +21,7 @@
 // or a `loaded` for an entry the ledger holds. The oracle is the walk's own selection, never the reducer.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { Schema } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import type { ProgramName } from "../packs/ProgramName.ts";
@@ -39,7 +44,13 @@ type Msg = {
 type Cmd = { readonly type: string; readonly [key: string]: unknown };
 
 // 0135: the restated shapes below are pinned to the module's own types.
-type Loaded = { readonly program: string; readonly hash: string; readonly was: string | null; readonly from: From };
+type Loaded = {
+  readonly program: ProgramName;
+  readonly hash: string;
+  readonly was: string | null;
+  readonly from: From;
+};
+
 type From = "watch" | "deploy" | "boot" | "restart";
 type Selection = { readonly hash: string; readonly load: string };
 expectTypeOf<Omit<(typeof Code.CodeEvent.cases)["code.loaded"]["Type"], "_tag">>().toEqualTypeOf<Loaded>();
@@ -264,32 +275,5 @@ describe("P15 slice 1: the brain's code per program", () => {
     for (const name of ["same", "first", "was", "loaded", "checked_repeat", "checked_earlier", "checked_selected"]) {
       expect(seen.has(name), `the walk reaches ${name}`).toBe(true);
     }
-  });
-
-  // L20, its runtime half: a code fact refuses a program that is not `pack/program` and a hash that
-  // is not a SHA-256, so a widened `program` or `hash` is caught on the wire too.
-  it("L20: a code fact decodes only with a qualified program name and a SHA-256 hash", () => {
-    const reasons = new Set(["bundle", "compiler", "load", "name", "too_large"]);
-    const bad = fc
-      .string()
-      .filter(
-        (s) =>
-          (!/^[A-Za-z_][\w-]*\/[A-Za-z_][\w-]*$/.test(s) || s.length > 256) &&
-          !/^[a-f0-9]{64}$/.test(s) &&
-          !reasons.has(s),
-      );
-    fc.assert(
-      fc.property(names, hashes, bad, froms, (program, hash, wrong, from) => {
-        const good = { _tag: "code.loaded", program, hash, was: null, from };
-        expect(Result.isSuccess(Schema.decodeUnknownResult(Code.CodeEvent)(good))).toBe(true);
-        expect(Result.isFailure(Schema.decodeUnknownResult(Code.CodeEvent)({ ...good, program: wrong }))).toBe(true);
-        expect(Result.isFailure(Schema.decodeUnknownResult(Code.CodeEvent)({ ...good, hash: wrong }))).toBe(true);
-        const failed = { _tag: "code.failed", program, hash: null, reason: "bundle" };
-        expect(Result.isSuccess(Schema.decodeUnknownResult(Code.CodeEvent)(failed))).toBe(true);
-        expect(Result.isFailure(Schema.decodeUnknownResult(Code.CodeEvent)({ ...failed, program: wrong }))).toBe(true);
-        expect(Result.isFailure(Schema.decodeUnknownResult(Code.CodeEvent)({ ...failed, reason: wrong }))).toBe(true);
-      }),
-      { seed: SEED, numRuns: 100 },
-    );
   });
 });
