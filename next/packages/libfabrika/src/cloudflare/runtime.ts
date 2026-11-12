@@ -864,7 +864,7 @@ const processLogic = Effect.fnUntraced(function* (
   ).pipe(Layer.provide(dependencies), Layer.provide(Layer.succeedContext(services)));
   const runner = yield* ProgramRunner.pipe(Effect.provide(runnerLayer));
   yield* sink.flush.pipe(Effect.provideContext(services));
-  const attributed = <A, E>(work: Effect.Effect<A, E>) =>
+  const attributed = <A, E, R>(work: Effect.Effect<A, E, R>) =>
     Effect.suspend(() => work.pipe(Effect.annotateSpans({ "fab.process": active }), Effect.provideContext(services)));
   return {
     msg: (input: unknown) => {

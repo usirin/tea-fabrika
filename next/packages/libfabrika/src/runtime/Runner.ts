@@ -484,9 +484,9 @@ export class ProgramRunner extends Context.Service<
           // every call would fire it again.
           const working = recovering(supervision);
           yield* resume().pipe(
-            Effect.onError(() =>
+            Effect.onExit((exit) =>
               Effect.gen(function* () {
-                if (supervision === null || !recovering(supervision)) {
+                if (exit._tag === "Success" || supervision === null || !recovering(supervision)) {
                   return;
                 }
 
@@ -1450,8 +1450,12 @@ export class ProgramRunner extends Context.Service<
                 return { answer: undefined, jobs: [...sends, ...fresh] };
               }).pipe(
                 // A storage failure while draining leaves the alarm that tries it again.
-                Effect.onError((cause) =>
-                  Cause.squash(cause) instanceof LedgerError && !Cause.hasInterrupts(cause) ? retryLater : Effect.void,
+                Effect.onExit((exit) =>
+                  exit._tag === "Failure" &&
+                  Cause.squash(exit.cause) instanceof LedgerError &&
+                  !Cause.hasInterrupts(exit.cause)
+                    ? retryLater
+                    : Effect.void,
                 ),
               ),
               time,
