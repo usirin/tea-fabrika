@@ -819,11 +819,11 @@ const processLogic = Effect.fnUntraced(function* (
       publish: (client, update) => publish(client, update).pipe(Effect.ignore),
     }),
     Layer.succeed(Alarm, {
-      // The program's wake is saved as it set it; the platform alarm moves a past time to now.
+      // Keep the program's wake; the platform requires a positive alarm time.
       set: (at) =>
         (at === null
           ? rpc(storage.delete("wake")).pipe(Effect.andThen(rpc(storage.deleteAlarm())))
-          : rpc(storage.put("wake", at)).pipe(Effect.andThen(rpc(storage.setAlarm(at))))
+          : rpc(storage.put("wake", at)).pipe(Effect.andThen(rpc(storage.setAlarm(Math.max(at, 1)))))
         ).pipe(Effect.orDie),
     }),
     // Recording captures its sink's services itself (main's P11); the runner no longer provides them.

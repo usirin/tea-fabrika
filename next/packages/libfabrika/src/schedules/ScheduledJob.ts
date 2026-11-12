@@ -1,4 +1,4 @@
-import type { AnyCmdDef, CmdOf } from "@demlik/tea";
+import type { AnyCmdDef, CmdOf, Reducer, Settled } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
 import { Duration, Option, Result, Schema } from "effect";
 
@@ -43,6 +43,7 @@ export const make = <C extends AnyCmdDef>(config: {
     msg: Timer,
     cmds: [config.cmd],
     init: (loaded) => [loaded ?? Model.cases.idle.make({ next: 0, period }), []],
+    // Computed command keys form the settled-message reducer for this command.
     update: {
       timer: (s: Model, m: { readonly at: number }): readonly [Model, readonly CmdOf<C>[]] =>
         s._tag === "idle" && m.at >= s.next
@@ -50,7 +51,7 @@ export const make = <C extends AnyCmdDef>(config: {
           : [s, []],
       [config.cmd.okType]: settle,
       [config.cmd.errType]: settle,
-    },
+    } as Reducer<Model, typeof Timer.Type | Settled<C>, CmdOf<C>>,
   });
 
   return Result.succeed({ machine });
