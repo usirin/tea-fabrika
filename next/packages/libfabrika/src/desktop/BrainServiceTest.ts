@@ -2,6 +2,7 @@
 // L1 bootstrap a loaded job; accept mismatched argv. L2 return at bootout; remove before absence.
 // L3 accept any nonzero print; erase causes. L4 remove semaphore; accept a stale Cmd id.
 // L5 remove deadlines; succeed at timeout; choose another port. L6 replace foreign bytes; skip sync.
+// L5 after build: accept matching replies at the deadline; replace Timeout with an asynchronous delivery error.
 // L7 unconditional KeepAlive; interpolate argv; inherit env. L8 drop a pending absence Cmd when saving.
 // L9 keep records only in memory; delete before acknowledgement.
 // L10 expose stderr/raw causes in errors, Model, URLs, logs, spans, plist and durable content, one output at a time.
@@ -36,18 +37,22 @@ export const timing = Effect.fn("BrainServiceTest.timing")(function* (flags: Rec
   return yield* Snapshot.make(Declarations.all, resolved).pipe(Effect.provide(Digest.layerWebCrypto));
 });
 
-export const layer = (outside: Effect.Success<ReturnType<typeof ControlTest.make>>, settings: Snapshot.Snapshot) =>
+export const layer = (
+  outside: Effect.Success<ReturnType<typeof ControlTest.make>>,
+  settings: Snapshot.Snapshot,
+  sink: SpanSink["Service"] = {
+    batch: (work) => work,
+    flush: Effect.succeed({ sent: 0 }),
+    summaries: () => Effect.succeed([]),
+    sums: () => Effect.succeed([]),
+  },
+) =>
   Managed.layer(ControlTest.spec, settings).pipe(
     Layer.provide(
       Layer.mergeAll(
         outside.control,
         outside.probe,
-        Layer.succeed(SpanSink, {
-          batch: (work) => work,
-          flush: Effect.succeed({ sent: 0 }),
-          summaries: () => Effect.succeed([]),
-          sums: () => Effect.succeed([]),
-        }),
+        Layer.succeed(SpanSink, sink),
         RecordManager.memory(1_000_000),
         Archive.memory,
       ),

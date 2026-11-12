@@ -170,6 +170,74 @@ describe("P19 lifecycle", () => {
     }),
   );
 
+  it.effect("L5 every pending command rejects replies at or after its deadline", () =>
+    Effect.gen(function* () {
+      const machine = BrainLife.machine({ spec: Outside.spec, settings: yield* ServiceTest.timing() });
+      const reached = new Set<BrainLife.Command["type"]>();
+      const acceptedExpired = new Set<string>();
+      propertyTrace(
+        machine,
+        ctx,
+        walks(machine),
+        (steps) => {
+          for (const { prev, msg } of steps) {
+            if (!("pending" in prev) || prev.pending === null || !("cmd" in msg)) {
+              continue;
+            }
+
+            if (msg.cmd.id !== prev.pending.id || msg.cmd.type !== prev.pending.type) {
+              continue;
+            }
+
+            reached.add(prev.pending.type);
+            const replies: ReadonlyArray<BrainLife.Msg> = [
+              msg,
+              {
+                type: `${prev.pending.type}_err`,
+                cmd: prev.pending,
+                error: Failure.cases.Operation.make({}),
+                at: msg.at,
+              } as BrainLife.Msg,
+            ];
+
+            for (const reply of replies) {
+              const [before] = applyCell(machine, prev, { ...reply, at: prev.deadline - 1 });
+              expect("reason" in before && before.reason === "Timeout").toBe(false);
+
+              for (const at of [prev.deadline, prev.deadline + 1]) {
+                const [after, cmds] = applyCell(machine, prev, { ...reply, at });
+                const expected = prev.action === "up" ? "failed_up" : "failed_stop";
+
+                if (
+                  after._tag !== expected ||
+                  !("reason" in after) ||
+                  after.reason !== "Timeout" ||
+                  after.command !== prev.pending.type ||
+                  cmds.length !== 0
+                ) {
+                  acceptedExpired.add(`${prev._tag}:${reply.type}:${at === prev.deadline ? "at" : "after"}`);
+                }
+
+                const [stale, staleCmds] = applyCell(machine, prev, {
+                  ...reply,
+                  cmd: { ...msg.cmd, id: oldId },
+                  at,
+                } as BrainLife.Msg);
+                expect(stale).toEqual(prev);
+                expect(staleCmds).toEqual([]);
+              }
+            }
+          }
+
+          return true;
+        },
+        { ...options, numRuns: 100 },
+      );
+      expect([...reached].sort()).toEqual(["cleanup", "inspect", "install", "ready", "remove", "start", "stop"]);
+      expect([...acceptedExpired].sort(), "expired replies must fail without issuing another command").toEqual([]);
+    }),
+  );
+
   it.effect("L2 stop requires confirmed absence, gone children and successful removal", () =>
     Effect.gen(function* () {
       const machine = BrainLife.machine({ spec: Outside.spec, settings: yield* ServiceTest.timing() });

@@ -303,6 +303,53 @@ it.effect.prop(
 const Secret = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9]{8,20}$/));
 
 it.effect.prop(
+  "L5 asynchronous record delivery cannot replace a lifecycle Timeout",
+  [schedule, Schema.Literals(["up", "stop"]), Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 5 }))],
+  ([v, action, deliveryDelay]) =>
+    Effect.gen(function* () {
+      const outside = yield* Outside.make({
+        job: action === "stop" ? Outside.loaded() : Outside.absent,
+        file: "matching",
+        children: "alive",
+      });
+      const settings = yield* ServiceTest.timing();
+      let flushes = 0;
+      const context = yield* Layer.build(
+        ServiceTest.layer(outside, settings, {
+          batch: (work) => work,
+          flush: Effect.gen(function* () {
+            flushes++;
+            yield* Effect.sleep(`${deliveryDelay} millis`);
+            return { sent: 0 };
+          }),
+          summaries: () => Effect.succeed([]),
+          sums: () => Effect.succeed([]),
+        }),
+      );
+      const brain = Context.get(context, BrainService);
+      const first = yield* Effect.forkScoped(brain[action]);
+
+      // Hold whichever native command this walk reaches, then expire the lifecycle.
+      for (let n = 0; n < (v.steps[0] ?? 0) % 3; n++) {
+        yield* progress(outside, n, action, true);
+      }
+
+      yield* Effect.yieldNow;
+      expect(outside.pending.length).toBeGreaterThan(0);
+      yield* TestClock.adjust("30 millis");
+      expect(first.pollUnsafe(), "record delivery also has a bounded wait").toBeDefined();
+      expect(flushes).toBeGreaterThan(0);
+      expect(reason(yield* Fiber.await(first))).toMatchObject({
+        _tag: "BrainServiceError",
+        reason: { _tag: "Timeout", action },
+      });
+      expect(outside.calls).not.toContain("remove");
+      expect((yield* outside.read).file).toBe("matching");
+    }),
+  checks(100),
+);
+
+it.effect.prop(
   "L10 [secrets] failed flows hide sentinel text and bytes in every public output",
   [schedule, Secret],
   ([v, word]) =>
