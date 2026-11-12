@@ -233,7 +233,7 @@ const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
   desktop: [LIBRARY], // the app layer's names, nothing lower
   window: ["desktop", LIBRARY, ...TRANSPORT, DESIGN, `${DESIGN}/tokens.css`], // a window is a client (the note's T3); P14: and it takes the design's public names
   dom: ["desktop"],
-  browser: ["dom", "desktop", LIBRARY, ...TRANSPORT], // its key signs transport's helloText; P14: its layers meet transport's contracts
+  browser: ["dom", "desktop", ...TRANSPORT], // its key signs transport's helloText; P14: its layers meet transport's contracts
   electron: ["dom", "desktop", ...TRANSPORT, `${LIBRARY}/coordination`], // the menu bar signs what the door takes
   headless: ["desktop"],
   program: [LIBRARY], // `.`, what the box loads: no tuval and no React
@@ -544,6 +544,7 @@ describe("planted breaks", () => {
     ),
     "packages/tuval/src/browser/rows.ts": lines(
       'import {ClientRows} from "@kampus/libfabrika/transport/ClientRows";',
+      'import {Client} from "@kampus/libfabrika";',
       'import {themes} from "@kampus/fabrika-design";',
     ),
     "packages/tuval/src/dom/root.ts": lines('import {layout} from "../desktop/layout.ts";'),
@@ -578,6 +579,7 @@ describe("planted breaks", () => {
   // Everything else in the tree is clean, the named exceptions included: mcp, the window, the
   // browser key and the electron menu reach transport; the menu reaches coordination; a program's
   // window imports its own program; the app imports anything.
+  // scenario: fixed imports probe the strict-layer table's allowed and refused package names.
   it("fires on each planted break, and on nothing else", () => {
     expect([...faults(tree)].sort()).toEqual(
       [
@@ -590,6 +592,7 @@ describe("planted breaks", () => {
         'packages/tuval/src/desktop/fold.ts imports "@kampus/libfabrika/data": desktop may not import it',
         'packages/tuval/src/headless/run.ts imports "../window/main.ts": headless may not import window',
         'packages/tuval/src/window/machine.ts imports "../browser/key.ts": window may not import browser',
+        'packages/tuval/src/browser/rows.ts imports "@kampus/libfabrika": browser may not import it',
         'packages/tuval/src/browser/rows.ts imports "@kampus/fabrika-design": browser may not import it',
         'programs/notes/src/root.ts imports "@kampus/tuval": program may not import it',
         'programs/notes/src/tile.ts imports "@kampus/libfabrika/transport": program-window may not import it',
