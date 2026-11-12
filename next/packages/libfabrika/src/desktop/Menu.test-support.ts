@@ -1,7 +1,7 @@
 import { applyCell } from "@demlik/tea";
 // next/, P21 slice 1. The factory takes checked settings at start; no provider is read by update.
 import { arbGuidedSequence, stubCtxThrowingProxy } from "@demlik/tea/pbt";
-import { Schema } from "effect";
+import { Equal, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Access from "../access/Access.ts";
 import * as Id from "../Id.ts";
@@ -17,7 +17,7 @@ export type Command = ReturnType<typeof machine.init>[1][number];
 export type Row = typeof Menu.Row.Type;
 type Client = typeof Menu.Client.Type;
 
-export const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+export const same = (a: unknown, b: unknown) => Equal.equals(a, b);
 export const cmdId = (n: number) => Id.Cmd.make(`cmd_0000000000e008${n.toString(16).padStart(12, "0")}`);
 export const command = fc.nat({ max: 0xfffffff }).map(cmdId);
 const stale = cmdId(0xffffffffff);
