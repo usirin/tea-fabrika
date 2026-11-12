@@ -2,6 +2,8 @@
 
 Decided 2026-10-11, while sketching what follows a part landing.
 
+Its decided rules are in: [0415](../../.decisions/0415-ask-a-person-for-decisions.md).
+
 ## What was decided
 
 The machine asks a person only for a **decision** or an **act** that is theirs

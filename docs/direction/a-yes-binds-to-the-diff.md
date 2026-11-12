@@ -5,6 +5,9 @@
 - Decided to build 2026-11-02, below, settled when built.
 - Built in today's version: `git patch-id` in `packages/pipeline/src/stages/pipeline/carry.ts`.
 
+Its decided rules are in: [0394](../../.decisions/0394-a-yes-carries-by-one-rule.md),
+[0395](../../.decisions/0395-a-yes-records-its-head-and-base.md).
+
 **Proposed.** Decided by the owner on 2026-11-02 to build, in today's version and in `next/`
 alike. It is settled when it is built. From
 [experiment 165](../../experiments/165-review-binds-to-diff.md), whose lean was never written down

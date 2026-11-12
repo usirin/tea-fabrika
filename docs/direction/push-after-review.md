@@ -2,6 +2,9 @@
 
 Decided 2026-10-24.
 
+Its decided rules are in: [0391](../../.decisions/0391-the-ledger-holds-the-commit-hash.md),
+[0392](../../.decisions/0392-push-is-a-step-after-review.md).
+
 ```ts
 // A sketch of the order. Build ends with a local commit, not a pushed branch.
 {fact: "built", ticket: "demlik-1", task: 1, commit: "a1b2c3…"}             // build, in its box

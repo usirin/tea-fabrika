@@ -4,6 +4,8 @@
 tiles, spaced like the app's tiles, in a layout that happens to spell F. One tile is lit, the way
 one tile has focus.
 
+Its decided rules are in: [0494](../../.decisions/0494-the-icon-is-three-tiles.md).
+
 ```text
 1024 canvas, 824 rounded square centered in it
 

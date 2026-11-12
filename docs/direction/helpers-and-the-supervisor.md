@@ -3,6 +3,12 @@
 Decided 2026-10-12, written down 2026-10-18. The supervisor part was replaced
 2026-10-20; the title is kept so links still work.
 
+Its decided rules are in: [0416](../../.decisions/0416-a-step-calls-a-helper.md),
+[0417](../../.decisions/0417-fabrika-has-no-supervisor-of-its-own.md),
+[0418](../../.decisions/0418-limits-are-counted-by-the-ledger.md),
+[0419](../../.decisions/0419-a-harness-adapter-is-the-official-one.md),
+[0420](../../.decisions/0420-tools-reach-an-agent-over-mcp.md).
+
 ## What was decided
 
 - **A stage that lacks a fact calls a helper; it does not hand work to another

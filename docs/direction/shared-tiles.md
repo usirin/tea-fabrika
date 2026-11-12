@@ -4,6 +4,12 @@
 decided these during the walk of the Design canvas "Shared tile guidelines" on 2026-11-04, and more
 in later walks, each marked decided below:
 
+Its decided rules are in: [0517](../../.decisions/0517-a-tile-holds-you-and-your-agents.md),
+[0518](../../.decisions/0518-you-summon-with-at.md),
+[0519](../../.decisions/0519-presence-is-an-avatar-and-a-label.md),
+[0520](../../.decisions/0520-each-agent-gets-its-own-color.md),
+[0521](../../.decisions/0521-an-agents-message-is-an-inbox-row.md).
+
 - **Decided, one kind of tile.** A tile holds the person and any agent they summon. The "agent's
   own tile" goes as a kind, for good.
 - **Decided, any agent.** `summon` takes any agent that speaks the agent link (`fabrika mcp --as

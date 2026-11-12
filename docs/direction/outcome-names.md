@@ -3,6 +3,8 @@
 Decided 2026-10-11. Built for the ship machine first; the other stages are
 still to be checked against it.
 
+Its decided rules are in: [0396](../../.decisions/0396-every-step-answers-in-five-verbs.md).
+
 *2026-10-22: every stage is built on it now. Each writes its own words with
 `outcomesOf`, in its own `outcome.ts`: sort, plan, catch-up, task, build,
 review, ship, the lane and the operate loop.*

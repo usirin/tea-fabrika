@@ -16,6 +16,10 @@ app and shot next to Linear:
   the physical layout. Colemak-DH and Colemak-DHm are separate picks. Reading a Vial `.vil` file is
   a later idea.
 
+Its decided rules are in: [0496](../../.decisions/0496-the-keys-editor-is-a-tile.md),
+[0497](../../.decisions/0497-a-key-change-says-what-it-took.md),
+[0498](../../.decisions/0498-the-person-picks-the-keyboard-layout.md).
+
 Built from [experiment 233](../../experiments/233-keys-editor-guidelines.md), which read how
 about fifteen makers do a keys editor and shot four designs in today's app, and a private Design
 canvas, "Keys editor guidelines". Neither is a measurement. It builds on
