@@ -7,6 +7,11 @@ note names each part of fabrika's window in one place, so the owner and every ag
 word for the same part. It decides no look and no behavior. Those stay in the notes it links. The
 renames are decided as words; none is in code yet.
 
+Its decided rules are in: [0490](../../.decisions/0490-the-frames-parts-take-one-word.md),
+[0491](../../.decisions/0491-window-view-tile-and-tezgah.md),
+[0492](../../.decisions/0492-the-divider-and-resize-mode.md),
+[0493](../../.decisions/0493-zoom-question-line-words.md).
+
 Gathered from the notes in `docs/direction/` (the desktop layer, tile guidelines, the top bar's
 name, popovers, modes, keybindings, the ask desk, fold not tabs, tracker views), from
 [experiment 196](../../experiments/196-ask-desk.md), from

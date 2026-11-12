@@ -8,6 +8,13 @@ Both versions: the design package is the one thing today's app and `next/` share
 ([one design package](./fabrika-design-package.md)). The owner's calls are at the end, each yes or
 no.
 
+Its decided rules are in: [0450](../../.decisions/0450-design-notes-sit-on-five-levels.md),
+[0451](../../.decisions/0451-tokens-take-four-tiers-one-grammar.md),
+[0452](../../.decisions/0452-a-token-means-one-thing.md),
+[0453](../../.decisions/0453-every-token-is-toml-data.md),
+[0454](../../.decisions/0454-an-aria-snapshot-per-story.md),
+[0455](../../.decisions/0455-the-owner-reads-token-changes.md).
+
 **Changed 2026-11-08:** design foundations PR 1 builds one slate a9 focus token in both looks
 for today's version. `--tile-edge-on` reads `--focus`; pipes keep their own focus steps.
 The examples below follow that choice.

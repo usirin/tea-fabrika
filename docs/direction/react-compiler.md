@@ -4,6 +4,11 @@
 below, after a walk, and set them strict: every compiler finding blocks, and the only exit is an
 owner-approved ledger row. The leans' confidence numbers stay as written.
 
+Its decided rules are in: [0463](../../.decisions/0463-react-compiler-from-day-one.md),
+[0464](../../.decisions/0464-every-compiler-finding-fails-the-build.md),
+[0465](../../.decisions/0465-render-is-pure.md),
+[0466](../../.decisions/0466-one-store-hook-no-hand-memo.md).
+
 Decided before this note, by the owner on 2026-11-02, and not asked again: `next/` is React
 Compiler compatible from day one, with the guidelines and rules that takes; and today's app follows
 the same guidelines too, as a tryout whose lessons go to `next/` rethought. Decided the same day,

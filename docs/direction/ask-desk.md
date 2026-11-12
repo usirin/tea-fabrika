@@ -5,6 +5,17 @@ program with two views, the five rules for opening a tile, the six principles A1
 smaller calls 1 to 5, each with its lean. The leans' confidence numbers stay as written, and each
 doubt names what settles it.
 
+Its decided rules are in: [0480](../../.decisions/0480-the-inbox-is-one-program-two-views.md),
+[0481](../../.decisions/0481-a-tile-opened-with-content.md),
+[0482](../../.decisions/0482-every-ask-sits-in-one-queue.md),
+[0483](../../.decisions/0483-an-ask-is-one-line-with-its-rec.md),
+[0484](../../.decisions/0484-y-takes-the-rec-n-refuses-it.md),
+[0485](../../.decisions/0485-the-rec-is-written-before-the-ask.md),
+[0486](../../.decisions/0486-an-answer-may-say-it-needed-you.md),
+[0487](../../.decisions/0487-a-kind-goes-automatic-by-one-press.md),
+[0488](../../.decisions/0488-a-stop-shows-as-a-stop.md),
+[0489](../../.decisions/0489-the-ask-is-one-quiet-bar.md).
+
 Decided by the owner before this note, and not asked again: asks to the
 owner are fine, even many; the owner's call of 2026-10-30 stands
 ([triage asks when worth is unclear](./triage-asks-when-worth-is-unclear.md): about 130 to 190 asks
