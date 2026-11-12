@@ -5,6 +5,7 @@ import { pullRequestsOf } from "@tea-fabrika/tracker";
 import { Effect, Exit, FileSystem, type Path, Schedule, Scope } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
+import { gridOf } from "../editor/grid.ts";
 import type { Down } from "../link.ts";
 import { readToPage } from "../messages.ts";
 import { go, home, options, plant, repo } from "../project.test-support.ts";
@@ -34,6 +35,35 @@ const live = (sock: string) =>
   );
 
 const pause = Effect.sleep("100 millis");
+
+/** Wait until `ok` holds, 5 s at most. */
+const until = (ok: () => boolean) =>
+  Effect.sync(ok).pipe(
+    Effect.repeat({ until: (held) => held, schedule: Schedule.spaced("10 millis") }),
+    Effect.timeout("5 seconds"),
+  );
+
+/** What a tile's terminal shows, as rows, wide enough that no line wraps. */
+const rows = (got: readonly Down[], port: string) =>
+  gridOf(
+    got
+      .flatMap((m) =>
+        m.type === "to" && m.port === port && typeof m.m === "object" && m.m !== null
+          ? [String(Reflect.get(m.m, "data"))]
+          : [],
+      )
+      .join(""),
+    200,
+    1000,
+  ).rows;
+
+/** How many times a tile's terminal shows `line` typed at the prompt. */
+const typed = (got: readonly Down[], line: string) =>
+  rows(got, "tile:t1").filter((row) => row === `tsh$ ${line}`).length;
+
+/** The tiles a host has opened a port for and drawn in. */
+const drawn = (got: readonly Down[]) =>
+  new Set(got.flatMap((m) => (m.type === "to" && m.port.startsWith("tile:") ? [m.port] : [])));
 
 /**
  * Wait until every host's lines have been quiet for 150 ms, 5 s at most. A host that has just
@@ -105,11 +135,20 @@ it("P2: two real hosts keep equal tile and agent names, ledger files, jobs and p
             yield* quiet(hosts.map((x) => x.got));
             const before = other.got.length;
 
+            // Each op is waited out on its own host before the next one starts: a line until tsh
+            // hands the prompt back after it, a split until the new tile is drawn. A summon prints
+            // its `ready` only once the agent has started, which can take longer than the quiet
+            // above; without this wait that late line of the host's own landed in the next op's
+            // check as if the sibling had sent it (CI on PR 987).
             if (op.action === "split") {
+              const tiles = drawn(h.got).size;
               h.wire.send({ type: "on", port: "desk", m: { type: "run", does: "tezgah.split" } });
+              yield* until(() => drawn(h.got).size > tiles);
             } else {
               const line = op.action === "summon" ? "summon fake as scout" : "counter &";
+              const times = typed(h.got, line);
               h.wire.send({ type: "on", port: "tile:t1", m: { type: "keys", data: `${line}\r` } });
+              yield* until(() => typed(h.got, line) > times && rows(h.got, "tile:t1").at(-1) === "tsh$");
             }
 
             yield* pause;

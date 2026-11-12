@@ -338,7 +338,8 @@ and Codex's own sandbox, in place of Codex through ACP (`scripts/codexexec.ts`).
   when every error is in an exam path, else to build, and the PR stays open for the next push. No
   answer within `CHAIN_TYPECHECK_MINUTES` (20), or a failed job with no type error, lets the lane go
   on, and the chain's last line says `typecheck: no answer: ...`. A red `check` job (lint, build) is
-  not read here: `ci-required` holds the merge for it. Then the chain runs `loosening.sh` from the lane's merge-base with
+  not read here: `ci-required` holds the merge for it. A draft runs only CI's fast jobs; the full set runs when the PR is marked ready, and
+  `catchup.sh` waits for that run's `check`, never the draft's `lint` (0134). Then the chain runs `loosening.sh` from the lane's merge-base with
   `origin/main` to the reviewed head and posts its output on the PR as a comment (0014). Zero hits
   runs `catchup.sh`; any hit parks the lane as `ask` with the hit list, for the lead's hand check;
   an error, or a comment that did not post, ends it `stuck`. The chain passes no mapping table, so

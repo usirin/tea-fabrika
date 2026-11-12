@@ -1498,13 +1498,21 @@ export const agentTail = (ask: Pick<Ask, "step" | "ticket">, electron: boolean) 
   const lock = holdsElectron(ask.step, electron)
     ? "drive.ts holds the laptop's Electron lock (state/electron.lock) for you for this whole step, so do not take it or wait on it. Start at most one Electron app at a time, and close it before you answer.\n"
     : "";
-  return `\n\n---\n${skill}${commit}${lock}${ask.step === "plan" ? "" : FINISH}`;
+  return `\n\n---\n${skill}${commit}${lock}${NO_ESCALATION}${ask.step === "plan" ? "" : FINISH}`;
 };
 
+/** The rule that keeps a refused command from ending a turn (2026-11-11: in the boxes folder,
+ * every Codex ask, 15 of 15, ended its turn `cancelled` within 15 ms. A command the box refused
+ * (`volta run`, `docker info`, `pgrep`) made Codex ask to run it outside, and its only "no" for
+ * that ask is the one that cancels the turn). */
+export const NO_ESCALATION =
+  "Never ask to run a command outside your box (Codex's `require_escalated`): nobody answers, and the ask ends your turn with no answer. A command your box refuses stays refused: go on without it and name it in your report.\n";
+
 /** The rule that lets a boxed step answer done (2026-11-11: a tests step sent itself round after
- * round, listing as unfinished the parts no tests box can do). */
+ * round, listing as unfinished the parts no tests box can do; then two build rounds of p42s1 each
+ * answered `stuck` after a minute or three, with most of the planned code still to write). */
 export const FINISH =
-  'Work until every part this box allows is done. A part that needs another step\'s code, a typecheck or `--changed` is written, named in the report as "after build" or "lead runs it", and does not block `done`.\n';
+  'Work until every part this box allows is done. A part that needs another step\'s code, a typecheck or `--changed` is written, named in the report as "after build" or "lead runs it", and does not block `done`. `stuck` is for a blocker this box cannot get past, never for work still to do: a law that is red because code this step owns is missing is the work.\n';
 
 /**
  * The approved plan, whole, for a step in a box. The harness closes home around the box (Claude's
