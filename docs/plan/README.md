@@ -66,7 +66,29 @@ P35), the spikes and the sheet's design pass (P3 to P5), the design package (P31
 from P6 to P12 and P16, with P33, P34 and P37. *It said, dated 2026-11-09: 19 rows.* *Changed 2026-11-11
 (owner, [0111](../../.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md)): P43, the merge queue's first
 stage, joined Tier 1, so it has 44 rows; it said 43.* No Tier 1
-row merged on 2026-11-11.
+row finished on 2026-11-11, so the count stays 20, but slices of seven rows merged that day (see
+below). *It said: no Tier 1 row merged on 2026-11-11.*
+
+*2026-11-11, later:* slices landed in seven Tier 1 rows. P13's slice 1
+([PR 887](https://github.com/usirin/tea-fabrika/pull/887)), P34c's slices 1 and 2
+([PR 896](https://github.com/usirin/tea-fabrika/pull/896),
+[PR 926](https://github.com/usirin/tea-fabrika/pull/926)), P38's slices 1 and 2
+([PR 901](https://github.com/usirin/tea-fabrika/pull/901),
+[PR 954](https://github.com/usirin/tea-fabrika/pull/954)), P39's slice 1
+([PR 917](https://github.com/usirin/tea-fabrika/pull/917)), P40's slice 1
+([PR 939](https://github.com/usirin/tea-fabrika/pull/939)), P41's slice 1
+([PR 929](https://github.com/usirin/tea-fabrika/pull/929)) and P14's slice 1 of 9
+([PR 912](https://github.com/usirin/tea-fabrika/pull/912)); P14's old
+[PR 810](https://github.com/usirin/tea-fabrika/pull/810) was closed. The checklist program's slice 1
+(ticket 806) merged as [PR 987](https://github.com/usirin/tea-fabrika/pull/987), on
+[0125](../../.decisions/0125-the-example-program-is-a-checklist.md): the checklist replaces the
+counter as the example. In flight: P14's slice 2 (ticket 828) and P42's slice 1 (ticket 770) have
+tests on their branches; P41's slice 2 (ticket 764) is at its tests step, draft
+[PR 993](https://github.com/usirin/tea-fabrika/pull/993); and the scheduled job piece (ticket 762,
+[0108](../../.decisions/0108-a-job-lives-in-a-lane-a-queue-or-a-scheduled-job.md)) has a build on its
+branch, draft [PR 992](https://github.com/usirin/tea-fabrika/pull/992).
+[0132](../../.decisions/0132-a-path-pack-may-sit-anywhere.md) answers P40's question before its
+slice 2. The 2026-11-11 entry below says what was being built earlier that day.
 
 *2026-11-11:* in `next/`, a running copy of fabrika is an instance in code too (ticket 681,
 [0080](../../.decisions/0080-a-running-copy-is-an-instance.md)): `local-instance.ts`,
