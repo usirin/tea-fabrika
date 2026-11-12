@@ -78,6 +78,21 @@ The checklist answers:
   and every one is checked, else `null`. It is declared in `outputs`; the runner does not send
   outputs yet.
 
+## The window
+
+`@kampus/checklist/window` exports `checklistWindow`. Its `data` is `checklistView`, the schema
+that also types the program's view. The package's main entry stays free of React.
+
+The window shows each item's name, a box and its state in words, the count left and a remove
+button. Enter in the add field submits one `add` and clears the field. Its text lives in
+`src/tile.ts`, a child tea machine stepped by the window parent. It stays in that tab and is never
+saved as a record or shared with another tab. Boxes change only when the checked view arrives.
+
+The registration's `refused` function gives the program's words for `taken` and `missing`, naming
+the item. The parent keeps each tile's last refusal until its next press. The field describes that
+line, and the page says it once in its polite region. Unknown word reasons use `Not done (reason).`;
+free text uses `Not done.`. Keys and editing names arrive in a later slice.
+
 ## Its laws
 
 `src/program.laws.test.ts` checks the machine, `refuse`, `wake`, the query and the output over

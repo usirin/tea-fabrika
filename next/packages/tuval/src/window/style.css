@@ -1,0 +1,156 @@
+/* next/: frame and checklist rules. Manti and the shared tokens load before this sheet. */
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--surface);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: var(--fs-body);
+  line-height: 1.5;
+}
+button,
+input {
+  font: inherit;
+}
+.screen {
+  max-width: 48rem;
+  margin-inline: auto;
+  padding: var(--s-6) var(--s-4);
+}
+.screen h1 {
+  font-size: var(--fs-title);
+  line-height: 1.3;
+}
+.screen p {
+  max-width: 65ch;
+}
+.screen-command {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: var(--s-3);
+}
+.screen-command code {
+  flex: 1 1 24rem;
+  min-width: 0;
+  padding: var(--s-3);
+  font-family: var(--mono);
+  background: var(--surface-sunken);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.screen-facts {
+  display: grid;
+  gap: var(--s-2);
+}
+.screen-facts dt {
+  color: var(--text-faint);
+}
+.screen-facts dd {
+  margin: 0;
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+.frame {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--border);
+}
+.desk {
+  flex: 1;
+  min-width: 0;
+  padding: var(--s-3);
+}
+.tile {
+  min-width: 0;
+  min-height: 100%;
+  border: 1px solid var(--border-faint);
+  background: var(--surface-raised);
+}
+.tile.disconnected {
+  opacity: 0.6;
+}
+.titlebar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--border-faint);
+}
+.slot {
+  min-width: 0;
+  padding: var(--s-3);
+}
+.checklist {
+  max-width: 56rem;
+}
+.checklist-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.checklist-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  padding-block: var(--s-2);
+  border-bottom: 1px solid var(--border-faint);
+}
+.checklist-row [data-scope="checkbox"][data-part="root"] {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.checklist-name {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.checklist-state {
+  color: var(--text-faint);
+}
+.checklist-left {
+  margin-block: var(--s-3);
+}
+.checklist form {
+  max-width: 36rem;
+}
+.checklist input {
+  max-width: 100%;
+}
+.checklist-refusal {
+  overflow-wrap: anywhere;
+  margin-block: var(--s-2);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+@media (forced-colors: active) {
+  .tile.disconnected {
+    opacity: 1;
+    border-style: dashed;
+  }
+}

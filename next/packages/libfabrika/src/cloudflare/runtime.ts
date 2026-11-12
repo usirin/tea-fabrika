@@ -105,10 +105,12 @@ export interface ProjectDoorOptions {
   readonly wait: (stream: string, after: number, reader: string) => Effect.Effect<unknown, LedgerError>;
 }
 
+type Boot = { readonly name: string; readonly id: string; readonly program: string };
+
 export interface ProjectOptions {
   readonly config: BrainOptions;
   readonly programs: Readonly<Record<string, ProgramSource>>;
-  readonly bootstrap: { readonly name: string; readonly id: string; readonly program: string };
+  readonly bootstrap: readonly [Boot, ...ReadonlyArray<Boot>];
   readonly door: (
     options: ProjectDoorOptions,
   ) => Effect.Effect<
@@ -360,7 +362,15 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     members = Context.get(services, ClientManager),
     processes = Context.get(services, ProcessManager);
   const loader = workerLoader(env.LOADER, programs);
-  const loaded = yield* loader.load(bootstrap.program, `project:${name}`);
+  // Validate the whole list before starting any entry.
+  const loaded = yield* Effect.forEach(
+    bootstrap,
+    Effect.fnUntraced(function* (entry) {
+      const program = yield* loader.load(entry.program, `project:${name}`);
+      return { entry, program };
+    }),
+    { concurrency: 1 },
+  );
   sql.exec(
     "CREATE TABLE IF NOT EXISTS dev_descriptors (process TEXT PRIMARY KEY, value TEXT NOT NULL, pending INTEGER NOT NULL DEFAULT 0)",
   );
@@ -544,28 +554,39 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
       yield* door.retire(pid);
     }).pipe(write);
   });
-  const original = yield* ledger.read(`processes/${bootstrap.name}`, 0).pipe(
-    Stream.filter((entry) => entry.id === bootstrap.id),
-    Stream.runHead,
-    Effect.map(Option.getOrUndefined),
-  );
   const Bootstrap = Schema.Struct({ process: Schema.String });
-  const boot =
-    original !== undefined
-      ? {
-          process: (yield* Schema.decodeUnknownEffect(Bootstrap)(original.body).pipe(
-            Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-          )).process,
-          rev: original.rev,
-        }
-      : yield* start(
-          Start.cases.first.make({
-            id: bootstrap.id,
-            name: bootstrap.name,
-            code: { program: bootstrap.program, hash: loaded.hash },
-          }),
-          yield* from(),
-        );
+  const boots = yield* Effect.forEach(
+    loaded,
+    Effect.fnUntraced(function* ({ entry, program }) {
+      const original = yield* ledger.read(`processes/${entry.name}`, 0).pipe(
+        Stream.filter((fact) => fact.id === entry.id),
+        Stream.runHead,
+        Effect.map(Option.getOrUndefined),
+      );
+      return original !== undefined
+        ? {
+            process: (yield* Schema.decodeUnknownEffect(Bootstrap)(original.body).pipe(
+              Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+            )).process,
+            rev: original.rev,
+          }
+        : yield* start(
+            Start.cases.first.make({
+              id: entry.id,
+              name: entry.name,
+              code: { program: entry.program, hash: program.hash },
+            }),
+            yield* from(),
+          );
+    }),
+    { concurrency: 1 },
+  );
+  const boot = boots[0];
+
+  if (boot === undefined) {
+    return yield* new LedgerError({ reason: "bad_row" });
+  }
+
   const wrapped = <A, E>(effect: Effect.Effect<A, E>) => complete(effect).pipe(Effect.provideContext(services));
   const own = Effect.fn("project.own")(function* (pid: string, id: string, stream: string, event: unknown) {
     if (!(yield* processes.isLive(pid))) {
@@ -816,7 +837,7 @@ const processLogic = Effect.fnUntraced(function* (
       }),
     }),
     Layer.succeed(WatcherManager, {
-      publish: (client, update) => publish(client, update).pipe(Effect.ignore),
+      publish: (client, update) => publish(client, { ...update, pid: active }).pipe(Effect.ignore),
     }),
     Layer.succeed(Alarm, {
       // The program's wake is saved as it set it; the platform alarm moves a past time to now.

@@ -11,6 +11,18 @@ export const LATE = 86_400_000;
 
 const Name = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(80));
 
+/** The checked wire view, shared by the program and its window. */
+export const checklistView = Schema.Struct({
+  items: Schema.Array(
+    Schema.Struct({
+      name: Name,
+      state: Schema.Literals(["new", "open", "late", "checked"]),
+      note: Schema.NullOr(Schema.String),
+    }),
+  ),
+  left: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+
 /** An item's control state (0037). `since` is ms since 1970, from a timer's `at`. */
 const ItemState = Schema.TaggedUnion({
   new: {},
@@ -121,7 +133,7 @@ export const checklist = Program.make({
   name: "fabrika/checklist",
   machine: checklistMachine,
   state: { v: 1, upgrades: [] },
-  view: (m) => ({ items: m.items.map(shown), left: m.items.filter(open).length }),
+  view: (m): typeof checklistView.Type => ({ items: m.items.map(shown), left: m.items.filter(open).length }),
   refuse,
   inputs: {
     add: { description: "Add an item", personOnly: true },
