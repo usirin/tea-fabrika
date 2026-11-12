@@ -61,7 +61,9 @@ type Move =
   | "reuse"
   | "reopen"
   | "flush"
+  | "activity_save"
   | "admission_save"
+  | "refusal_save"
   | "reply_write"
   | "reply_complete"
   | "check_throw"
@@ -72,6 +74,8 @@ type Move =
   | "update_rpc"
   | "cleanup"
   | "update_cleanup"
+  | "abandon_save"
+  | "update_abandon_save"
   | "restart";
 
 type Answered = { readonly input: Incoming; readonly first: Sent };
@@ -319,6 +323,15 @@ const walk = Effect.fnUntraced(function* (
         const reply = /process_replies/.test(query);
         const cleanup =
           /process_activity/.test(query) && params.some((p) => typeof p === "string" && p.includes('"_tag":"idle"'));
+        const activity =
+          /process_activity/.test(query) &&
+          params.some((p) => typeof p === "string" && p.includes('"_tag":"stepping"'));
+        const refusal =
+          /process_recovery/.test(query) &&
+          params.some((p) => typeof p === "string" && p.includes('"_tag":"writing_reply"'));
+        const abandonment =
+          /process_recovery/.test(query) &&
+          params.some((p) => typeof p === "string" && p.includes('"_tag":"clearing_attempt"'));
         const replyComplete =
           /process_recovery/.test(query) && params.some((p) => typeof p === "string" && p.includes('"_tag":"idle"'));
 
@@ -327,6 +340,9 @@ const walk = Effect.fnUntraced(function* (
           (control.cut === "admission" && admission) ||
           (control.cut === "reply" && reply) ||
           (control.cut === "reply_complete" && replyComplete) ||
+          (control.cut === "activity" && activity) ||
+          (control.cut === "refusal" && refusal) ||
+          (control.cut === "abandonment" && abandonment) ||
           (control.cut === "cleanup" && cleanup)
         ) {
           control.hits++;
@@ -420,7 +436,9 @@ const walk = Effect.fnUntraced(function* (
                       ).toBe("checking");
                     }
 
-                    return yield* control.mode === "rpc" || control.mode === "cleanup"
+                    return yield* control.mode === "rpc" ||
+                    control.mode === "cleanup" ||
+                    control.mode === "abandon_save"
                       ? Effect.fail(new ProgramDown({ reason: "step", source: "rpc" }))
                       : loaded.execution.fresh(s, m);
                   }),
@@ -443,7 +461,11 @@ const walk = Effect.fnUntraced(function* (
                       reached.add("update_after_commit");
                     }
 
-                    if (control.mode === "update_rpc" || control.mode === "update_cleanup") {
+                    if (
+                      control.mode === "update_rpc" ||
+                      control.mode === "update_cleanup" ||
+                      control.mode === "update_abandon_save"
+                    ) {
                       return yield* new ProgramDown({ reason: "step", source: "rpc" });
                     }
 
@@ -599,6 +621,7 @@ const walk = Effect.fnUntraced(function* (
 
     const beforeChecks = control.checks;
     const beforeUpdates = control.updates;
+    const beforeHits = control.hits;
     const before = yield* live.journal.load;
 
     if (move === "legacy_refuse" || move === "invalid") {
@@ -692,22 +715,29 @@ const walk = Effect.fnUntraced(function* (
       continue;
     }
 
-    const refusing = move === "refuse" || move === "reply_write" || move === "reply_complete";
+    const refusing =
+      move === "refuse" || move === "refusal_save" || move === "reply_write" || move === "reply_complete";
     const fresh = yield* input(cell, refusing);
     control.expected = refusing ? null : fresh;
     control.mode = move;
     control.cut =
-      move === "admission_save"
-        ? "admission"
-        : move === "reply_write"
-          ? "reply"
-          : move === "reply_complete"
-            ? "reply_complete"
-            : move === "cleanup" || move === "update_cleanup"
-              ? "cleanup"
-              : move === "flush"
-                ? "flush"
-                : "";
+      move === "activity_save"
+        ? "activity"
+        : move === "admission_save"
+          ? "admission"
+          : move === "refusal_save"
+            ? "refusal"
+            : move === "abandon_save" || move === "update_abandon_save"
+              ? "abandonment"
+              : move === "reply_write"
+                ? "reply"
+                : move === "reply_complete"
+                  ? "reply_complete"
+                  : move === "cleanup" || move === "update_cleanup"
+                    ? "cleanup"
+                    : move === "flush"
+                      ? "flush"
+                      : "";
 
     if (refusing) {
       refusedBodies.push(Schema.decodeUnknownSync(Save)(fresh.envelope.input).body);
@@ -723,6 +753,10 @@ const walk = Effect.fnUntraced(function* (
 
     if (
       move === "admission_save" ||
+      move === "activity_save" ||
+      move === "refusal_save" ||
+      move === "abandon_save" ||
+      move === "update_abandon_save" ||
       move === "reply_write" ||
       move === "reply_complete" ||
       move === "flush" ||
@@ -737,9 +771,17 @@ const walk = Effect.fnUntraced(function* (
       expect(Exit.isFailure(exit), `${move} gives no successful answer`).toBe(true);
       noteError(exit);
 
-      if (move === "admission_save") {
-        expect(control.hits).toBeGreaterThan(0);
-        expect(control.updates).toBe(beforeUpdates);
+      if (
+        move === "admission_save" ||
+        move === "activity_save" ||
+        move === "refusal_save" ||
+        move === "abandon_save" ||
+        move === "update_abandon_save"
+      ) {
+        expect(control.hits, `${move} reaches its write cut`).toBe(beforeHits + 1);
+        expect(control.updates).toBe(beforeUpdates + (move === "update_abandon_save" ? 1 : 0));
+        expect((yield* live.journal.load)?.crashes).toBe(before?.crashes ?? 0);
+        expect(yield* live.journal.input(fresh.id)).toEqual(move === "update_abandon_save" ? fresh : null);
       }
 
       if (move === "rpc" || move === "cleanup" || move === "update_rpc" || move === "update_cleanup") {
@@ -773,18 +815,24 @@ const walk = Effect.fnUntraced(function* (
       control.mode = "";
       control.cut = "";
       control.expected = null;
-      // A new runner finishes reply/cleanup work before interruption handling.
+      // Retry at the reached cut both with the live runner and with a reopened store.
+      const sameRunner = move !== "check_throw" && move !== "update_throw" && cell.pick % 2 === 0;
       const checksBeforeResume = control.checks;
-      yield* reopen();
 
-      if (move === "reply_write" || move === "reply_complete") {
+      if (!sameRunner) {
+        yield* reopen();
+      }
+
+      if (!sameRunner && (move === "reply_write" || move === "reply_complete")) {
         expect(control.checks, "saved reply work resumes without fresh checking").toBe(checksBeforeResume);
       }
 
       if (move === "lost_observation") {
         const saved = yield* live.journal.load;
         expect(saved?.observations.filter((o) => o.letter === fresh.id && o.phase === "fresh")).toHaveLength(0);
-        expect(saved?.observations.filter((o) => o.letter === fresh.id && o.phase === "interrupted")).toHaveLength(1);
+        expect(saved?.observations.filter((o) => o.letter === fresh.id && o.phase === "interrupted")).toHaveLength(
+          sameRunner ? 0 : 1,
+        );
       }
 
       if (
@@ -800,13 +848,39 @@ const walk = Effect.fnUntraced(function* (
       }
 
       // A restart makes a process available after an injected program crash.
-      if (move === "check_throw" || move === "update_throw" || move === "lost_observation") {
+      if (move === "check_throw" || move === "update_throw" || (move === "lost_observation" && !sameRunner)) {
         yield* live.runner.restart({ id: `after-failure-${++serial}`, build: "test" });
+        reached.add(`${move}:reopened`);
       } else {
         // Complete this same binding after its storage/transport cut, including a lost first answer.
         control.expected = refusing ? null : fresh;
-        const answer = yield* live.runner.msg(fresh);
+        const retried = yield* Effect.exit(live.runner.msg(fresh));
+        expect(retried._tag, `${move} must progress on ${sameRunner ? "the same runner" : "reopen"}`).toBe("Success");
+
+        if (Exit.isFailure(retried)) {
+          return yield* Effect.failCause(retried.cause);
+        }
+
+        const answer = retried.value;
         expect(answer._tag).toBe(refusing ? "refused" : "accepted");
+        reached.add(`${move}:${sameRunner ? "same_runner" : "reopened"}`);
+
+        if (sameRunner) {
+          expect((yield* live.journal.load)?.crashes, "a live retry is not a process interruption").toBe(
+            before?.crashes ?? 0,
+          );
+        }
+
+        if (move === "reply_write" || move === "reply_complete") {
+          expect(control.checks, "pending reply work never checks the program again").toBe(checksBeforeResume);
+        }
+
+        if (move === "lost_observation") {
+          const saved = yield* live.journal.load;
+          expect(saved?.observations.filter((o) => o.letter === fresh.id && o.phase === "fresh")).toHaveLength(0);
+          expect(saved?.receipts.find((r) => r.letter === fresh.id)?.errors ?? []).toEqual([]);
+        }
+
         answers.push({ input: fresh, first: answer });
 
         if (!refusing) {
@@ -869,13 +943,28 @@ export const suite = (harness: Harness, register: Register) =>
     );
     law(
       "A3: admission commits the exact delivery before update; a failed commit cannot run update",
-      ["admit", "admission_save", "reopen"],
-      ["admission_save", "update_after_commit", "reopen"],
+      ["admit", "activity_save", "admission_save", "reopen"],
+      [
+        "activity_save:same_runner",
+        "activity_save:reopened",
+        "admission_save:same_runner",
+        "admission_save:reopened",
+        "update_after_commit",
+        "reopen",
+      ],
     );
     law(
       "A4: a cut reply write resumes before interruption capture without charging a refusal",
-      ["refuse", "reply_write", "reply_complete", "retry", "reopen"],
-      ["reply_write", "reply_complete", "resume_without_charge"],
+      ["refuse", "refusal_save", "reply_write", "reply_complete", "retry", "reopen"],
+      [
+        "refusal_save:same_runner",
+        "refusal_save:reopened",
+        "reply_write:same_runner",
+        "reply_write:reopened",
+        "reply_complete:same_runner",
+        "reply_complete:reopened",
+        "resume_without_charge",
+      ],
     );
     law(
       "A6: required recording failure prevents an answer; committed answers survive retry",
@@ -885,12 +974,26 @@ export const suite = (harness: Harness, register: Register) =>
     law(
       "A8: failed checking and update retain exact input and one failure; a failed observation keeps the original failure",
       ["admit", "check_throw", "update_throw", "lost_observation", "reopen", "refuse_failed"],
-      ["check_throw", "update_throw", "lost_observation", "refuse_failed"],
+      ["check_throw", "update_throw", "lost_observation:same_runner", "lost_observation:reopened", "refuse_failed"],
     );
     law(
       "A9: transport loss and failed activity cleanup resume without a program-crash charge",
-      ["admit", "rpc", "cleanup", "update_rpc", "update_cleanup", "reopen"],
-      ["rpc", "cleanup", "update_rpc", "update_cleanup", "resume_without_charge"],
+      ["admit", "rpc", "cleanup", "update_rpc", "update_cleanup", "abandon_save", "update_abandon_save", "reopen"],
+      [
+        "rpc:same_runner",
+        "rpc:reopened",
+        "cleanup:same_runner",
+        "cleanup:reopened",
+        "update_rpc:same_runner",
+        "update_rpc:reopened",
+        "update_cleanup:same_runner",
+        "update_cleanup:reopened",
+        "abandon_save:same_runner",
+        "abandon_save:reopened",
+        "update_abandon_save:same_runner",
+        "update_abandon_save:reopened",
+        "resume_without_charge",
+      ],
       100,
     );
     const cuts = new Set<string>();
