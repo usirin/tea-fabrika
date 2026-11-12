@@ -315,6 +315,7 @@ export class ProgramRunner extends Context.Service<
         let drained: ReadonlyArray<Dispatched> = [];
         let mailRetry: number | null = null;
         const permit = yield* Semaphore.make(1);
+        const commandPermit = yield* Semaphore.make(1);
         let live: Live | null = null;
         let alarmAt: number | null | undefined;
         /** Writes left dispatched by an earlier process life: retried once loaded. */
@@ -1624,7 +1625,7 @@ export class ProgramRunner extends Context.Service<
                 return { answer, jobs: [...takeRetry(), ...jobs] };
               }),
             );
-            yield* runAll(jobs);
+            yield* commandPermit.withPermit(runAll(jobs));
             return answer;
           });
           return Effect.fnUntraced(function* <A>(

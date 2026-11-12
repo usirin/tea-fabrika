@@ -227,10 +227,15 @@ export const configureProcess = Effect.fn("process.configure")(function* (
   const storage = StorageClient.make(ctx.storage);
   yield* rpc(storage.put("descriptor", descriptor));
 
-  if (drain && (yield* rpc(storage.get<number>("wake"))) === undefined) {
-    const now = yield* Clock.currentTimeMillis;
-    yield* rpc(storage.put("wake", now));
-    yield* rpc(storage.setAlarm(now));
+  if (drain) {
+    const saved = yield* rpc(storage.get<number>("wake"));
+    const at = saved ?? (yield* Clock.currentTimeMillis);
+
+    if (saved === undefined) {
+      yield* rpc(storage.put("wake", at));
+    }
+
+    yield* rpc(storage.setAlarm(at));
   }
 });
 
