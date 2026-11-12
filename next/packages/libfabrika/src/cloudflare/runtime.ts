@@ -1,5 +1,6 @@
 import { makeRpcStub } from "@alchemy.run/cloudflare/Bridge";
 import {
+  Clock,
   Context,
   Effect,
   Exit,
@@ -216,11 +217,21 @@ const checkedValue = Effect.fnUntraced(function* <A>(
   return reply.value;
 });
 
+/** A child's first letter waits in its inbox, so `drain` also wakes it (P42): its first alarm steps
+ *  that letter, as a wake schedules a mail drain, with no client call. A saved wake is kept. */
 export const configureProcess = Effect.fn("process.configure")(function* (
   ctx: DurableObjectState,
   descriptor: Descriptor,
+  drain = false,
 ) {
-  yield* rpc(StorageClient.make(ctx.storage).put("descriptor", descriptor));
+  const storage = StorageClient.make(ctx.storage);
+  yield* rpc(storage.put("descriptor", descriptor));
+
+  if (drain && (yield* rpc(storage.get<number>("wake"))) === undefined) {
+    const now = yield* Clock.currentTimeMillis;
+    yield* rpc(storage.put("wake", now));
+    yield* rpc(storage.setAlarm(now));
+  }
 });
 
 export const savedAlarm = Effect.fn("process.savedAlarm")(function* (ctx: DurableObjectState) {
@@ -392,7 +403,8 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   }
 
   const configure = Effect.fnUntraced(function* (pid: string) {
-    const [saved] = sql.exec("SELECT value FROM dev_descriptors WHERE process=? AND pending=1", pid);
+    // Pending 2 is a child's: its configure also wakes it to drain its first letter.
+    const [saved] = sql.exec("SELECT value, pending FROM dev_descriptors WHERE process=? AND pending>0", pid);
 
     if (saved === undefined) {
       return;
@@ -401,7 +413,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     const descriptor = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(saved.value).pipe(
       Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
     );
-    yield* rpc(ProcessClient.make(processStub(env, name, descriptor.name)).configure(descriptor));
+    yield* rpc(ProcessClient.make(processStub(env, name, descriptor.name)).configure(descriptor, saved.pending === 2));
     sql.exec("UPDATE dev_descriptors SET pending=0 WHERE process=?", pid);
   });
   /** A process ID's life from history, first or successor; an unknown ID is refused. */
@@ -577,7 +589,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
             owner,
           };
           sql.exec(
-            "INSERT OR IGNORE INTO dev_descriptors (process,value,pending) VALUES (?,?,1)",
+            "INSERT OR IGNORE INTO dev_descriptors (process,value,pending) VALUES (?,?,2)",
             answer.process,
             JSON.stringify(descriptor),
           );

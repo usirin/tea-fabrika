@@ -112,8 +112,9 @@ const Dispatched = Schema.Struct({
   /** A host Cmd this life owes until it is answered, kept under its first name from when only Send
    *  was one; a replayed letter's was the life before's. */
   mail: Schema.optionalKey(Schema.Literal(true)),
-  /** A start_child whose input can never be a letter, saved without it so its row fits (A6). */
-  oversize: Schema.optionalKey(Schema.Literal(true)),
+  /** A start_child or exit whose operands can never fit a row, saved without them so its row fits
+   *  (A6): the one refusal it can get, after the loader for a program it kept. */
+  oversize: Schema.optionalKey(Schema.Literals(["bad_cmd", "no_program", "bad_name", "bad_input"])),
 });
 type Dispatched = typeof Dispatched.Type;
 const decodeDispatched = Schema.decodeUnknownResult(Schema.Array(Dispatched));
@@ -165,8 +166,8 @@ const decodeExit = (cmd: unknown) => Option.flatMap(operands(cmd, ExitInput.fiel
 const isName = Schema.is(ProcessName);
 const encoder = new TextEncoder();
 
-/** A start_child's operands without its input: what its checkpoint keeps when the input is over the
- *  ledger's row limit, and what every answer echoes, so no row holds the first letter twice. */
+/** A start_child's operands without its input: what every `ok` answer echoes, so no row holds the
+ *  first letter twice. */
 const withoutInput = (cmd: unknown): unknown => {
   if (typeof cmd !== "object" || cmd === null || Array.isArray(cmd) || !Object.hasOwn(cmd, "input")) {
     return cmd;
@@ -176,13 +177,36 @@ const withoutInput = (cmd: unknown): unknown => {
   return rest;
 };
 
-/** Whether a Cmd is a start_child whose input, as JSON, is over the ledger's row limit. */
-const oversize = (cmd: unknown): boolean =>
-  Option.exists(decodeTyped(cmd), (c) => c.type === START_CHILD) &&
-  typeof cmd === "object" &&
-  cmd !== null &&
-  "input" in cmd &&
-  encoder.encode(JSON.stringify(cmd.input) ?? "").length > INPUT_BYTES;
+const fitsText = (value: string): boolean => value.length <= 256;
+const bytes = (value: unknown): number => encoder.encode(JSON.stringify(value) ?? "").length;
+const decodeKept = Schema.decodeUnknownOption(Schema.Struct({ program: Schema.String }));
+
+/**
+ * A start_child or exit whose operands, as JSON, are over the ledger's row limit can never be saved
+ * or echoed whole. It keeps only a program and a name that fit their Text bound, and the refusal
+ * L6's order gives it: `bad_cmd` off its schema, `no_program` for a program no Code can hold, then
+ * `bad_name` or `bad_input`, judged after the loader.
+ */
+const oversized = (cmd: unknown): Option.Option<Pick<Dispatched, "cmd" | "oversize">> => {
+  const type = Option.getOrUndefined(Option.map(decodeTyped(cmd), (c) => c.type));
+
+  if ((type !== START_CHILD && type !== EXIT) || bytes(cmd) <= INPUT_BYTES) {
+    return Option.none();
+  }
+
+  const input = type === START_CHILD ? decodeStartChild(cmd) : Option.none();
+
+  if (Option.isNone(input)) {
+    return Option.some({ cmd: { type }, oversize: "bad_cmd" });
+  }
+
+  const { program, name } = input.value;
+  const kept = { type, ...(fitsText(program) ? { program } : {}), ...(fitsText(name) ? { name } : {}) };
+  return Option.some({
+    cmd: kept,
+    oversize: !fitsText(program) ? "no_program" : fitsText(name) && isName(name) ? "bad_input" : "bad_name",
+  });
+};
 
 /** Pending deliveries keep their original parent, including one saved before input TypeIDs. */
 const Delivery = Schema.Struct({
@@ -1067,13 +1091,13 @@ export class ProgramRunner extends Context.Service<
             const owed = !accepted || letter.id === options.mine;
             const dispatched = folded.cmds.map((cmd, index): Dispatched => ({
               id: `${process.id}/${letter.pos}/${index}`,
-              cmd: oversize(cmd) ? withoutInput(cmd) : cmd,
+              cmd,
               state: "dispatched",
               parent: letter.parent,
               traceId: letter.traceId,
               build: process.build,
               ...(owed && Option.exists(decodeTyped(cmd), (c) => HOST.has(c.type)) ? { mail: true as const } : {}),
-              ...(oversize(cmd) ? { oversize: true as const } : {}),
+              ...Option.getOrElse(oversized(cmd), () => ({})),
             }));
             cmds = [...cmds, ...dispatched];
 
@@ -1153,12 +1177,16 @@ export class ProgramRunner extends Context.Service<
         // --- Cmds ---------------------------------------------------------------------------
 
         const at = Clock.currentTimeMillis;
-        /** The Cmd an answer echoes: a start_child's without its input (A6). */
-        const echo = (job: Dispatched): unknown => (cmdType(job) === START_CHILD ? withoutInput(job.cmd) : job.cmd);
+        /** The Cmd an answer echoes. A start_child's `ok` drops its input (A6); a start_child's or exit's
+         *  `err` keeps only its type, since a refused operand may hold anything its program put there. */
+        const echo = (job: Dispatched, outcome: "ok" | "err"): unknown => {
+          const type = cmdType(job);
+          return type !== START_CHILD && type !== EXIT ? job.cmd : outcome === "err" ? { type } : withoutInput(job.cmd);
+        };
         const ok = Effect.fnUntraced(function* (job: Dispatched, value: unknown) {
           return yield* Effect.map(at, (time) => ({
             type: `${cmdType(job)}_ok`,
-            cmd: echo(job),
+            cmd: echo(job, "ok"),
             value,
             at: time,
           }));
@@ -1166,7 +1194,7 @@ export class ProgramRunner extends Context.Service<
         const err = Effect.fnUntraced(function* (job: Dispatched, reason: string, error: unknown = failure(reason)) {
           return yield* Effect.map(at, (time) => ({
             type: `${cmdType(job)}_err`,
-            cmd: echo(job),
+            cmd: echo(job, "err"),
             error,
             reason,
             at: time,
@@ -1309,14 +1337,24 @@ export class ProgramRunner extends Context.Service<
          *  requester and this Cmd's id is the start's. A refusal is its answer; storage is not, so the
          *  Cmd stays dispatched, and its failure carries the reason only. */
         const startChild = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
-          const input = decodeStartChild(job.cmd);
+          // An oversize start kept only the operands that fit, and its refusal, judged at dispatch.
+          const input = job.oversize === undefined ? decodeStartChild(job.cmd) : Option.none();
+          const program = Option.map(job.oversize === undefined ? input : decodeKept(job.cmd), (c) => c.program);
 
-          if (Option.isNone(input) || !state.loaded.declaration.cmds.includes(START_CHILD) || Option.isNone(children)) {
+          if (
+            !state.loaded.declaration.cmds.includes(START_CHILD) ||
+            Option.isNone(children) ||
+            job.oversize === "bad_cmd" ||
+            (Option.isNone(program) && job.oversize !== "no_program")
+          ) {
             return yield* err(job, "bad_cmd");
           }
 
-          const { program, name, input: first } = input.value;
-          const code = yield* loader.load(program, process.build).pipe(Effect.result);
+          if (Option.isNone(program)) {
+            return yield* err(job, "no_program");
+          }
+
+          const code = yield* loader.load(program.value, process.build).pipe(Effect.result);
 
           if (Result.isFailure(code)) {
             return code.failure.reason === "no_program"
@@ -1324,10 +1362,12 @@ export class ProgramRunner extends Context.Service<
               : yield* new LedgerError({ reason: "unreachable" });
           }
 
-          // An input over the row limit was never saved: L6's order goes on without Children.start.
-          if (job.oversize === true) {
-            return yield* err(job, isName(name) ? "bad_input" : "bad_name");
+          // Operands over the row limit were never saved: L6's order goes on without Children.start.
+          if (Option.isNone(input)) {
+            return yield* err(job, job.oversize ?? "bad_cmd");
           }
+
+          const { name, input: first } = input.value;
 
           // The Worker's loader names its build's hash; the Node loader runs this runner's build.
           const hash =
@@ -1337,7 +1377,7 @@ export class ProgramRunner extends Context.Service<
               {
                 id: job.id,
                 name,
-                code: { program, hash },
+                code: { program: program.value, hash },
                 requester: Recipient.cases.process.make({ process: process.id }),
                 ...(first === undefined ? {} : { input: first }),
               },
@@ -1356,7 +1396,11 @@ export class ProgramRunner extends Context.Service<
         /** The built-in exit (P42): this life ends with `normal`, as OTP's `{stop, normal, State}`, and
          *  answers nothing. `null` is the ended life; a malformed exit is answered `bad_cmd`. */
         const stop = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
-          if (Option.isNone(decodeExit(job.cmd)) || !state.loaded.declaration.cmds.includes(EXIT)) {
+          if (
+            job.oversize !== undefined ||
+            Option.isNone(decodeExit(job.cmd)) ||
+            !state.loaded.declaration.cmds.includes(EXIT)
+          ) {
             return yield* err(job, "bad_cmd");
           }
 
