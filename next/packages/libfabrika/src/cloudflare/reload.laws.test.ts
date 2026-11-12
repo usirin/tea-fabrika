@@ -24,6 +24,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Option, Redacted, Schema, Scope } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf, vi } from "vitest";
+import { lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Start } from "../processes/Process.ts";
 import { hash, type BuiltProgram } from "../runtime/Built.ts";
@@ -127,6 +128,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
   const pushed: Array<Pushed> = [];
   const loadedAtPush: Array<ReadonlyArray<string>> = [];
   const swapGates = new Map<string, Effect.Effect<void>>();
+  const swapReplies = new Map<string, Effect.Effect<void>>();
   const descriptors = new Map<string, Pick<Descriptor, "id" | "name" | "build" | "program">>();
   const running = new Map<string, string>();
   const refusing = new Set<string>();
@@ -205,6 +207,12 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
             }
 
             running.set(pid, request.hash);
+            const reply = swapReplies.get(request.hash);
+
+            if (reply !== undefined) {
+              await Effect.runPromise(reply);
+            }
+
             return { _tag: "swapped", was };
           },
         };
@@ -300,6 +308,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
     pushed,
     loadedAtPush,
     swapGates,
+    swapReplies,
     descriptors,
     running,
     refusing,
@@ -377,6 +386,16 @@ const baseFixture = (): Fixture => ({
   inputPersonOnly: false,
   eventPersonOnly: false,
 });
+
+const origin: Parameters<ProjectService["Service"]["start"]>[1] = {
+  by: "SHA256:brain",
+  for: "brain",
+  sentAt: "2026-11-11T00:00:00Z",
+  seen: 0,
+  parent: null,
+  traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+  build: BRAIN_BUILD,
+};
 
 const law = (body: (g: fc.GeneratorValue) => Effect.Effect<void, unknown, Scope.Scope>, runs: number) =>
   Effect.gen(function* () {
@@ -522,6 +541,142 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
 const json = (response: Response) => Effect.promise(() => response.json());
 
 describe("P15 slice 1: the brain installs and selects code", () => {
+  it.live(
+    "L9/L12: first starts choose the current selection and retries keep their first answer and current policy across installs and reopens",
+    () =>
+      law(
+        (g) =>
+          Effect.gen(function* () {
+            expect.hasAssertions();
+            const i = yield* instance(baseFixture());
+            let selected = i.builtHash;
+            let current = baseFixture();
+            const starts = new Map<
+              string,
+              {
+                request: typeof Start.cases.first.Type;
+                answer: Effect.Success<ReturnType<ProjectService["Service"]["start"]>>;
+              }
+            >();
+            const steps = g(fc.integer, { min: 8, max: 20 });
+
+            for (let n = 0; n < steps; n++) {
+              const moves = ["install", "start", ...(starts.size > 0 ? ["retry", "reused", "reopen"] : [])];
+              const move = moves[g(fc.nat, { max: moves.length - 1 })]!;
+
+              if (move === "install") {
+                current = {
+                  ...current,
+                  k: current.k + g(fc.integer, { min: 1, max: 9 }),
+                  inputPersonOnly: !current.inputPersonOnly,
+                  eventPersonOnly: !current.eventPersonOnly,
+                };
+                selected = (yield* install(i, `start_install_${n}`, current)).digest;
+              } else if (move === "start") {
+                const name = `fresh:${n}`;
+                // A client still knows the built-in hash. The brain chooses the selection in its turn.
+                const request = Start.cases.first.make({
+                  id: `first_${n}`,
+                  name,
+                  code: { program: PROGRAM, hash: i.builtHash },
+                });
+                const answer = yield* i.run(i.p.start(request, origin));
+                starts.set(name, { request, answer });
+                expect(i.descriptors.get(name)?.build).toBe(selected);
+                const entry = i.entries().find((e) => e.rev === answer.rev)!;
+                expect(entry).toMatchObject({ tag: "started", body: { program: PROGRAM, hash: selected } });
+                expect(code(i).some((e) => e.body.hash === selected && e.rev < answer.rev)).toBe(true);
+              } else if (move === "reopen") {
+                yield* i.restart;
+              } else {
+                const { request, answer } = [...starts.values()][g(fc.nat, { max: starts.size - 1 })]!;
+                const before = i.entries();
+
+                if (move === "retry") {
+                  expect(yield* i.run(i.p.start(request, origin))).toEqual(answer);
+                } else {
+                  // Reusing the id with a different valid request must still be refused after selection changes.
+                  const changed = Start.cases.first.make({ ...request, name: `${request.name}-other` });
+                  expect(yield* i.run(i.p.start(changed, origin)).pipe(Effect.flip)).toMatchObject({
+                    reason: "id_reused",
+                  });
+                }
+
+                expect(i.entries()).toEqual(before);
+              }
+
+              yield* checkPolicies(i, n, "after");
+            }
+          }),
+        100,
+      ),
+    300_000,
+  );
+
+  it.live(
+    "L9/L12: a swapped fact publishes the running build and policy before a delayed install reply or a later process write",
+    () =>
+      law(
+        (g) =>
+          Effect.gen(function* () {
+            const i = yield* instance(baseFixture());
+            const pid = i.descriptors.get("counter:1")!.id;
+            let current = baseFixture();
+            const facts: Array<{ id: string; line: Parameters<ProjectService["Service"]["append"]>[2] }> = [];
+            const steps = g(fc.integer, { min: 2, max: 5 });
+
+            for (let n = 0; n < steps; n++) {
+              const was = i.running.get(pid)!;
+              current = {
+                ...current,
+                k: current.k + g(fc.integer, { min: 1, max: 9 }),
+                inputPersonOnly: !current.inputPersonOnly,
+                eventPersonOnly: !current.eventPersonOnly,
+              };
+              const digest = yield* hash(sourceFor(current));
+              const published = yield* Deferred.make<void>();
+              const reply = yield* Deferred.make<void>();
+              const id = `code.swapped:publish_${n}`;
+              const line = lineFor(
+                { ...origin, build: digest },
+                {
+                  _tag: "code.swapped",
+                  program: PROGRAM,
+                  hash: digest,
+                  was,
+                },
+              );
+              i.swapReplies.set(
+                digest,
+                Effect.gen(function* () {
+                  expect(yield* i.run(i.p.append(pid, id, line))).toMatchObject({ _tag: "placed" });
+                  yield* Deferred.succeed(published, undefined);
+                  yield* Deferred.await(reply);
+                }),
+              );
+              const pending = yield* Effect.forkScoped(install(i, `publish_${n}`, current));
+              yield* Deferred.await(published).pipe(Effect.timeout("2 seconds"));
+              // The Process has changed code, but its swap RPC has not answered the Project yet.
+              yield* checkPolicies(i, n, "before");
+
+              if (facts.length > 0 && g(fc.boolean)) {
+                const old = facts[g(fc.nat, { max: facts.length - 1 })]!;
+                yield* i.run(i.p.append(pid, old.id, old.line));
+                yield* checkPolicies(i, n, "after");
+              }
+
+              facts.push({ id, line });
+              yield* Deferred.succeed(reply, undefined);
+              expect((yield* Fiber.join(pending)).answer._tag).toBe("loaded");
+              expect(i.entries().filter((e) => e.id === id)).toHaveLength(1);
+              i.swapReplies.delete(digest);
+            }
+          }),
+        100,
+      ),
+    300_000,
+  );
+
   it.live(
     "L10: installing a program pushes only its live processes, leaving every other program's running hash alone",
     () =>

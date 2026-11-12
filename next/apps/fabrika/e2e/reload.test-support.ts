@@ -6,7 +6,8 @@
 import { execFileSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite"; // edge: inspect the real instance's persisted span output
 import { watchPrograms } from "@kampus/libfabrika/node/watch";
-import { Effect, FileSystem, Path, Queue, Stream } from "effect";
+import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
+import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import { build } from "../src/build.ts";
 import { localInstance } from "../src/local-instance.ts";
@@ -219,3 +220,25 @@ export const spanOutputs = Effect.fnUntraced(function* (home: string) {
 
   return outputs;
 });
+
+/** Decode both the node queue and delivered record rows, deduplicated by span id. */
+export const rebuildSpans = (outputs: ReadonlyArray<unknown>) => {
+  const pending = Schema.Struct({ row: Schema.fromJsonString(SpanRow) });
+  const delivered = Schema.Struct({
+    spanId: SpanRow.fields.spanId,
+    name: SpanRow.fields.name,
+    attributes: Schema.fromJsonString(SpanRow.fields.attributes),
+  });
+  const found = new Map<string, typeof delivered.Type>();
+
+  for (const output of outputs) {
+    const queued = Schema.decodeUnknownOption(pending)(output);
+    const row = Option.isSome(queued) ? Option.some(queued.value.row) : Schema.decodeUnknownOption(delivered)(output);
+
+    if (Option.isSome(row) && row.value.name === "watch.rebuild") {
+      found.set(row.value.spanId, row.value);
+    }
+  }
+
+  return [...found.values()];
+};

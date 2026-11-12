@@ -11,7 +11,7 @@
 // (`node next/apps/fabrika/e2e.ts`), one file at a time, never in a sandbox that refuses them.
 import { execFileSync } from "node:child_process";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, type Layer, type Scope } from "effect";
+import { Effect, FileSystem, type Layer, Schedule, type Scope } from "effect";
 import { Base64Url } from "effect/encoding";
 import * as fc from "fast-check";
 import { chromium, type Page } from "playwright";
@@ -24,6 +24,7 @@ import {
   instance,
   nextAnswer,
   PROGRAM,
+  rebuildSpans,
   ROOT,
   spanOutputs,
 } from "./reload.test-support.ts";
@@ -370,6 +371,12 @@ describe("P15 slice 1: hot reload on the real instance", () => {
             );
             const run = yield* cli(copy, fakeBytes);
             const s = yield* session(run.url, run.founder.key);
+            const initialSpans = yield* spanOutputs(run.home).pipe(
+              Effect.map(rebuildSpans),
+              Effect.repeat({ until: (spans) => spans.length > 0, schedule: Schedule.spaced("50 millis") }),
+              Effect.timeout("60 seconds"),
+            );
+            const recorded = new Set(initialSpans.map((span) => span.spanId));
             let k = 1;
             let count = 0;
             const steps = g(fc.integer, { min: 4, max: 8 });
@@ -421,6 +428,25 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               const facts = [...(yield* s.read("gateway/code")), ...(yield* s.read(s.pid))];
               const spans = yield* spanOutputs(run.home);
               expect(spans.length, "the real span sink wrote output").toBeGreaterThan(0);
+              const rebuilt = rebuildSpans(spans).filter((span) => !recorded.has(span.spanId));
+              expect(
+                rebuilt.length,
+                "dev saves the watcher's completed rebuild, not only control-call spans",
+              ).toBeGreaterThan(0);
+              const expectedOutcome = ["fit", "shape"].includes(move) ? "loaded" : "failed";
+              expect(rebuilt.some((span) => span.attributes.outcome === expectedOutcome)).toBe(true);
+
+              for (const span of rebuilt) {
+                expect(span.attributes.program).toBe(PROGRAM);
+                // A late file event may also rebuild the same bytes (L2).
+                expect([expectedOutcome, "same"]).toContain(span.attributes.outcome);
+                expect(span.attributes.bytes).toEqual(expect.any(Number));
+                expect(Number(span.attributes.bytes)).toBeGreaterThanOrEqual(0);
+                expect(span.attributes.ms).toEqual(expect.any(Number));
+                expect(Number(span.attributes.ms)).toBeGreaterThanOrEqual(0);
+                recorded.add(span.spanId);
+              }
+
               const outputs = [
                 JSON.stringify(denied),
                 JSON.stringify(facts),

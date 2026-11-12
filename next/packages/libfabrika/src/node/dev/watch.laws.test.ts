@@ -14,7 +14,7 @@
 // These start real file watchers. A sandbox that refuses file events (macOS without FSEvents in a
 // box) builds once and never sees a save: L10 and L18's save-driven runs then wait for the lead.
 import { NodeServices } from "@effect/platform-node";
-import { Deferred, Effect, Fiber, FileSystem, Option, Path, Queue, Stream } from "effect";
+import { Deferred, Effect, Fiber, FileSystem, Option, Path, Queue, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { expectTypeOf } from "vitest";
@@ -166,6 +166,100 @@ const drain = (queue: Queue.Queue<Install>, ms: number) =>
   });
 
 describe("P15 slice 1: the watcher", () => {
+  it("L17/L18: every completed rebuild records its program, bytes, duration and outcome, including initial bundle and compiler failures", async () => {
+    const seen = new Set<string>();
+    await fc.assert(
+      fc.asyncProperty(fc.gen(), (g) =>
+        Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const fs = yield* FileSystem.FileSystem;
+              const path = yield* Path.Path;
+              const { home, programs } = yield* fixture;
+              const selected = programs[g(fc.nat, { max: programs.length - 1 })]!;
+              const short = selected.name.split("/")[1]!;
+              const file = path.join(home, "programs", short, "program.ts");
+              const original = yield* fs.readFileString(file);
+              const sentinel = `P15SECRET${g(() => fc.stringMatching(/^[A-Z]{12}$/))}`;
+              const moves = ["fit", "syntax", "compiler"];
+              const move = moves[g(fc.nat, { max: moves.length - 1 })]!;
+              let text = `${original}\nglobalThis.__p15Secret = ${JSON.stringify(sentinel)};\n`;
+
+              if (move === "syntax") {
+                text += `export const broken = ${JSON.stringify(sentinel)} +;\n`;
+              } else if (move === "compiler") {
+                yield* fs.writeFileString(
+                  path.join(home, "programs", short, "view.tsx"),
+                  'export function Bad() { "use no memo"; return <div />; }\nglobalThis.__p15View = Bad;\n',
+                );
+                text += 'import "./view.tsx";\n';
+              }
+
+              yield* fs.writeFileString(file, text);
+              const spans: Array<Tracer.NativeSpan> = [];
+              const tracer = Tracer.make({
+                span(options) {
+                  const span = new Tracer.NativeSpan(options);
+                  spans.push(span);
+                  return span;
+                },
+              });
+              const installs: Array<Install> = [];
+              const failures: Array<Failed> = [];
+              const answers = yield* Stream.runCollect(
+                watchPrograms({
+                  root: home,
+                  entry: path.join(home, "brain.ts"),
+                  programs: [selected],
+                  install: (code) =>
+                    Effect.sync(() => {
+                      installs.push(code);
+                      return { _tag: "loaded" as const, processes: [] };
+                    }),
+                  failed: (fact) =>
+                    Effect.sync(() => {
+                      failures.push(fact);
+                    }),
+                }).pipe(Stream.take(1)),
+              ).pipe(Effect.withTracer(tracer), Effect.timeout("10 seconds"));
+              expect(answers).toHaveLength(1);
+              expect(answers[0]).toMatchObject(
+                move === "fit"
+                  ? { _tag: "loaded", program: selected.name }
+                  : { _tag: "failed", reason: move === "syntax" ? "bundle" : "compiler" },
+              );
+              const rebuilds = spans.filter((span) => span.name === "watch.rebuild");
+              expect(rebuilds).toHaveLength(1);
+              const span = rebuilds[0]!;
+              expect(span.status._tag).toBe("Ended");
+              expect(span.attributes.get("program")).toBe(selected.name);
+              expect(span.attributes.get("outcome")).toBe(answers[0]!._tag);
+              expect(span.attributes.get("bytes")).toBe(
+                installs[0] === undefined ? 0 : new TextEncoder().encode(installs[0].source).byteLength,
+              );
+              expect(span.attributes.get("ms")).toEqual(expect.any(Number));
+              expect(Number(span.attributes.get("ms"))).toBeGreaterThanOrEqual(0);
+
+              for (const output of [
+                JSON.stringify([...span.attributes]),
+                JSON.stringify(answers),
+                JSON.stringify(failures),
+              ]) {
+                for (const forbidden of [sentinel, home]) {
+                  expect(output.includes(forbidden)).toBe(false);
+                }
+              }
+
+              seen.add(move);
+            }),
+          ).pipe(Effect.provide(NodeServices.layer)),
+        ),
+      ),
+      { seed: SEED, numRuns: 20, endOnFailure: true },
+    );
+    expect(seen).toEqual(new Set(["fit", "syntax", "compiler"]));
+  }, 300_000);
+
   // L10, p77. Plant: hash the entry file only; push the swap to every process.
   it("L10: a save changes the hash of exactly the programs whose bundle reaches the file, and only they install", async () => {
     const seen = new Set<string>();
