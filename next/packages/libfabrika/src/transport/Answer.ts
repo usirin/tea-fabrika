@@ -1,4 +1,5 @@
 import { Effect, Exit, Result, Schema } from "effect";
+import { REFUSED } from "../SpanTag.ts";
 import type { Admission, Who } from "./Wire.ts";
 import { Answer, Attached } from "./Wire.ts";
 
@@ -61,13 +62,17 @@ export const answerFrame = Effect.fn("transport.answerFrame")(function* <E, R, E
     return { send: null, attached };
   }
 
+  if (exit.value._tag === "refused" && ["reserved", "rate_limited"].includes(exit.value.reason)) {
+    yield* Effect.annotateCurrentSpan(REFUSED, exit.value.reason);
+  }
+
   return Answer.match(exit.value, {
     ok: ({ result }) => ({ send: JSON.stringify({ jsonrpc: "2.0", id, result }), attached }),
-    refused: ({ reason }) => ({
+    refused: ({ reason, retryAfter }) => ({
       send: JSON.stringify({
         jsonrpc: "2.0",
         id,
-        error: { code: -32000, message: reason, data: { reason } },
+        error: { code: -32000, message: reason, data: { reason, ...(retryAfter === undefined ? {} : { retryAfter }) } },
       }),
       attached,
     }),

@@ -26,8 +26,24 @@ export const Admission = Schema.TaggedUnion({
 
 export const Answer = Schema.TaggedUnion({
   ok: { result: Schema.Json },
-  refused: { reason: Schema.String },
+  refused: {
+    reason: Schema.String,
+    retryAfter: Schema.optionalKey(
+      Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER })),
+    ),
+  },
   parked: { stream: Schema.String, after: Schema.Int },
+});
+
+/**
+ * Schema for a rate refusal with the earliest retry delay in milliseconds.
+ *
+ * @stability unstable
+ * @category models
+ */
+export const RateRefusal = Schema.TaggedStruct("refused", {
+  reason: Schema.Literal("rate_limited"),
+  retryAfter: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER })),
 });
 
 export const Wait = Schema.Struct({

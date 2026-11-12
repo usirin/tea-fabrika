@@ -94,6 +94,7 @@ export interface BrainOptions {
   readonly window: string | null;
   readonly port: number;
   readonly build: string;
+  readonly rateLimit: { readonly limit: number; readonly window: number };
   readonly limits?: { readonly recordBytes: number };
 }
 
@@ -269,7 +270,11 @@ export const complete = Effect.fn(function* <A, E, R>(work: Effect.Effect<A, E, 
     Effect.exit,
     Effect.flatMap((exit) => {
       // Counted refusals have nothing to send. Retrying an old archive here would add a row per refusal.
-      if (Exit.isSuccess(exit) && Schema.is(Answer.cases.refused)(exit.value) && exit.value.reason === "reserved") {
+      if (
+        Exit.isSuccess(exit) &&
+        Schema.is(Answer.cases.refused)(exit.value) &&
+        ["reserved", "rate_limited"].includes(exit.value.reason)
+      ) {
         return exit;
       }
 

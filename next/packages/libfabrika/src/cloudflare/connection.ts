@@ -41,7 +41,17 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
       ping: () => ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? null,
       wait: Effect.fnUntraced(function* (stream, after, reader) {
         const state = yield* attached(ws);
-        const answer = yield* rpc(p.route(state.client as ConnectionId, "ledger.wait", { stream, after }, reader));
+        const answer = yield* rpc(
+          p
+            .route(state.client as ConnectionId, "ledger.wait", { stream, after }, reader)
+            .pipe(
+              Effect.tap((answer) =>
+                answer._tag === "refused" && ["reserved", "rate_limited"].includes(answer.reason)
+                  ? Effect.annotateCurrentSpan(REFUSED, answer.reason)
+                  : Effect.void,
+              ),
+            ),
+        );
 
         if (answer._tag === "parked") {
           return Waited.cases.parked.make({});
@@ -124,8 +134,8 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
               .route(client, method, params)
               .pipe(
                 Effect.tap((answer) =>
-                  answer._tag === "refused" && answer.reason === "reserved"
-                    ? Effect.annotateCurrentSpan(REFUSED, "reserved")
+                  answer._tag === "refused" && ["reserved", "rate_limited"].includes(answer.reason)
+                    ? Effect.annotateCurrentSpan(REFUSED, answer.reason)
                     : Effect.void,
                 ),
               ),

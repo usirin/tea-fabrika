@@ -2,8 +2,9 @@ import { applyCell } from "@demlik/tea";
 import { Effect, Predicate, Result, Schema, Semaphore } from "effect";
 import { REFUSED } from "../SpanTag.ts";
 import * as State from "./internal/connection.ts";
-import { Answer, type Attached, Wait } from "./Wire.ts";
+import { Answer, type Attached, RateRefusal, Wait } from "./Wire.ts";
 const Waited = Schema.TaggedUnion({ ready: { rev: Schema.Number }, parked: {} });
+const Retry = Schema.Struct({ reason: RateRefusal.fields.reason, retryAfter: RateRefusal.fields.retryAfter });
 
 const Request = Schema.Struct({
   jsonrpc: Schema.Literal("2.0"),
@@ -59,7 +60,14 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
           : {
               jsonrpc: "2.0",
               id,
-              error: { code: -32000, message: answer.reason, data: { reason: answer.reason } },
+              error: {
+                code: -32000,
+                message: answer.reason,
+                data: {
+                  reason: answer.reason,
+                  ...(answer.retryAfter === undefined ? {} : { retryAfter: answer.retryAfter }),
+                },
+              },
             },
       ),
     );
@@ -80,16 +88,36 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
 
     if (Result.isFailure(answer)) {
       const error = answer.failure;
+
       const reason =
         Predicate.isObjectOrArray(error) && Predicate.hasProperty(error, "reason") && Predicate.isString(error.reason)
           ? error.reason
           : "unreachable";
-      yield* remove(wait, Answer.cases.refused.make({ reason }));
+
+      if (["reserved", "rate_limited"].includes(reason)) {
+        yield* Effect.annotateCurrentSpan(REFUSED, reason);
+      }
+
+      if (reason === "rate_limited" && Predicate.hasProperty(error, "retryAfter")) {
+        const rate = Schema.decodeUnknownResult(Retry)({ reason, retryAfter: error.retryAfter });
+
+        if (Result.isSuccess(rate)) {
+          const reply = RateRefusal.make(rate.success);
+          yield* remove(wait, reply);
+          return reply;
+        }
+      }
+
+      const reply = Answer.cases.refused.make({ reason });
+      yield* remove(wait, reply);
+      return reply;
     } else if (answer.success._tag === "ready") {
-      yield* remove(wait, Answer.cases.ok.make({ result: { rev: answer.success.rev } }));
+      const reply = Answer.cases.ok.make({ result: { rev: answer.success.rev } });
+      yield* remove(wait, reply);
+      return reply;
     }
 
-    return Result.isSuccess(answer) && answer.success._tag === "parked";
+    return Answer.cases.parked.make({ stream: wait.stream, after: wait.after });
   });
   const parked = Effect.fnUntraced(function* (id: string | number, params: unknown) {
     const now = yield* read;
@@ -113,7 +141,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
 
     // Saved before registration, outside the turn, so a ring during registration finds it.
     save(next);
-    yield* register(wait);
+    return yield* register(wait);
   });
   const ordinary = Effect.fnUntraced(function* (request: typeof Request.Type) {
     const now = yield* read;
@@ -130,8 +158,8 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
 
     const answer = yield* options.call(request.method, request.params);
 
-    if (answer._tag === "refused" && answer.reason === "reserved") {
-      yield* Effect.annotateCurrentSpan(REFUSED, "reserved");
+    if (answer._tag === "refused" && ["reserved", "rate_limited"].includes(answer.reason)) {
+      yield* Effect.annotateCurrentSpan(REFUSED, answer.reason);
     }
 
     respond(request.id, answer);
@@ -185,7 +213,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
             undefined,
           );
 
-        if (next === undefined || (yield* register(next))) {
+        if (next === undefined || (yield* register(next))._tag === "parked") {
           return;
         }
       }
