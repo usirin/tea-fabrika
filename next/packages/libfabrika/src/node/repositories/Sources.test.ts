@@ -2,13 +2,14 @@
 // The lead runs this file in the isolated Git container after build.
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { Effect, Exit, FileSystem, Layer, Path } from "effect";
+import { Arbitrary, Effect, Exit, FileSystem, Layer, Path, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
-import { Repositories } from "../../repositories/Repositories.ts";
+import { ObjectId, Repositories } from "../../repositories/Repositories.ts";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";
+import * as Sources from "./Sources.ts";
 
 const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
   return yield* (yield* ChildProcessSpawner.ChildProcessSpawner).string(
@@ -27,6 +28,93 @@ const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string
     }),
   );
 });
+
+it.effect.prop(
+  "L7: injected committed trees keep their base and symlinks while outside disk changes independently",
+  {
+    tape: Arbitrary.array(Arbitrary.schema(Schema.Struct({ move: Schema.Natural, pick: Schema.Natural })), {
+      minLength: 1,
+      maxLength: 8,
+    }),
+  },
+  ({ tape }) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "t878-source-read-" });
+        const repo = path.join(root, "repo"),
+          person = path.join(root, "person"),
+          outside = path.join(root, "outside space");
+        yield* fs.makeDirectory(path.join(repo, ".fabrika"), { recursive: true });
+        yield* fs.makeDirectory(path.join(repo, "inside space"));
+        yield* fs.makeDirectory(person);
+        const commit = Schema.decodeUnknownSync(ObjectId)("a".repeat(40));
+        const entries = new Map<string, { mode: string; type: string; id: string }>([
+          [".fabrika", { mode: "040000", type: "tree", id: "b".repeat(40) }],
+          ["inside space", { mode: "040000", type: "tree", id: "c".repeat(40) }],
+          ["inside space/entry.txt", { mode: "100644", type: "blob", id: "e".repeat(40) }],
+          ...["local", "outside", "absolute", "cycle"].map(
+            (name) => [`.fabrika/${name}`, { mode: "120000", type: "blob", id: "d".repeat(40) }] as const,
+          ),
+        ]);
+        const blobs = new Map([
+          [".fabrika/local", "../inside space"],
+          [".fabrika/outside", "../../outside space"],
+          [".fabrika/absolute", path.join(repo, "inside space")],
+          [".fabrika/cycle", "cycle"],
+          ["inside space/entry.txt", "committed"],
+        ]);
+        const resolve = yield* Sources.resolver({
+          root: repo,
+          person,
+          commit,
+          entry: (file) => Effect.succeed(entries.get(file) ?? null),
+          read: (file) => Effect.succeed(blobs.has(file) ? new TextEncoder().encode(blobs.get(file)!) : null),
+        });
+        const sources = ["../inside space", "./local", "./absolute", "../../outside space", "./outside"];
+        let present = false,
+          disk = "";
+
+        for (const [index, cell] of tape.entries()) {
+          if (cell.move % 2 === 0) {
+            present = true;
+            disk = `outside ${index}`;
+            yield* fs.makeDirectory(outside, { recursive: true });
+            yield* fs.writeFileString(path.join(outside, "entry.txt"), disk);
+          } else {
+            present = false;
+            yield* fs.remove(outside, { recursive: true, force: true });
+          }
+
+          yield* fs.writeFileString(path.join(repo, "inside space/entry.txt"), `dirty ${index}`);
+          // Dirty link bytes always disagree with the immutable committed link.
+          yield* fs.remove(path.join(repo, ".fabrika/local"), { force: true });
+          yield* fs.symlink(outside, path.join(repo, ".fabrika/local"));
+          const pick = cell.pick % sources.length;
+          const source = yield* resolve(sources[pick]!, "repo").pipe(Effect.exit);
+          expect(Exit.isSuccess(source)).toBe(pick < 3 || present);
+
+          if (Exit.isSuccess(source)) {
+            expect(source.value._tag).toBe(pick < 3 ? "committed" : "disk");
+            expect(string(yield* source.value.read("entry.txt"))).toBe(pick < 3 ? "committed" : disk);
+            expect(JSON.stringify(source.value)).not.toContain(root);
+          } else {
+            const fail = source.cause.reasons.find((reason) => reason._tag === "Fail");
+            expect(fail?._tag === "Fail" && fail.error.reason._tag).toBe("MissingPath");
+          }
+
+          for (const bad of ["./missing", "./cycle"]) {
+            expect(Exit.isFailure(yield* resolve(bad, "repo").pipe(Effect.exit))).toBe(true);
+          }
+
+          expect(string(yield* (yield* resolve("./local", "repo")).read("entry.txt"))).toBe("committed");
+          expect((yield* resolve("../repo/inside space", "person"))._tag).toBe("disk");
+        }
+      }),
+    ).pipe(Effect.provide(NodeServices.layer)),
+  { arbitrary: { seed: 119120, runs: 200 } },
+);
 
 const string = (bytes: Uint8Array | null) => (bytes === null ? null : new TextDecoder().decode(bytes));
 

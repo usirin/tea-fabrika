@@ -339,6 +339,72 @@ const forms = (word: string) => [
   Buffer.from(word).toString("base64url"),
 ];
 
+it.effect.prop(
+  "L8: injected opening traces leave import, build and start tripwires untouched",
+  {
+    cells: Arbitrary.array(Arbitrary.schema(Schema.Struct({ move: Schema.Natural, pick: Schema.Natural })), {
+      minLength: 1,
+      maxLength: 8,
+    }),
+    selection: Id.InputId,
+    request: Id.InputId,
+    actor: Id.Person,
+  },
+  ({ cells, selection, request, actor }) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "t878-open-code-" });
+        const marker = path.join(root, "executed");
+        const touches: Array<string> = [];
+        const tripwire = `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, 'executed');`;
+
+        for (const name of ["settings.mjs", "program.mjs", "build.mjs", "start.mjs"]) {
+          yield* fs.writeFileString(path.join(root, name), tripwire);
+        }
+
+        yield* fs.writeFileString(
+          path.join(root, "package.json"),
+          JSON.stringify({
+            type: "module",
+            scripts: { build: "node build.mjs", start: "node start.mjs" },
+          }),
+        );
+        const db = yield* Effect.acquireRelease(
+          Effect.sync(() => new DatabaseSync(":memory:")),
+          (value) => Effect.sync(() => value.close()),
+        );
+        const trust = RepositoryTrustLedger.layer.pipe(
+          Layer.provide(LedgerSql.layer(nodeSql(db), { reader: "brain" })),
+          Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
+        );
+
+        for (const cell of cells) {
+          const prepared = yield* OpenRepository.prepare(root, {
+            person: { path: path.join(root, "person.toml"), name: personName },
+            flags: {},
+            env: {},
+            version: "0.0.0",
+          }).pipe(Effect.provide(reader('fabrika-version = "0.0.0"\n', touches)));
+          const result = yield* OpenRepository.open(prepared, {
+            selection,
+            request,
+            actor,
+            by: "brain",
+            build: "fixture",
+            interactive: cell.move % 3 !== 0,
+            confirm: () => Effect.succeed(cell.move % 2 === 0),
+          }).pipe(Effect.provide(trust), Effect.exit);
+          expect(Exit.isSuccess(result)).toBe(true);
+          expect(touches).toEqual([]);
+          expect(yield* fs.exists(marker)).toBe(false);
+        }
+      }),
+    ).pipe(Effect.provide(services)),
+  { arbitrary: { seed: 119120, runs: 200 } },
+);
+
 it("L9 [secrets]: generated opening flows redact every report, pending state, error, span, ledger envelope and snapshot", async () => {
   await fc.assert(
     fc.asyncProperty(

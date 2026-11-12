@@ -2,7 +2,7 @@
 // Lead runs the real-Git laws in the isolated, network-disabled container after build.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Fiber, FileSystem, Layer, Path, Sink, Stream } from "effect";
+import { Arbitrary, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Path, Schema, Sink, Stream } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
@@ -475,3 +475,183 @@ describe("T878 pinned repository reads", () => {
     );
   });
 });
+
+// In-process Git replies exercise the adapter in a box. The real-Git laws above still run on the lead.
+it.effect.prop(
+  "L1/L2/L10: injected reader prefixes pin objects, refuse failed reads and release scoped handles",
+  {
+    width: Schema.Literals([40, 64]),
+    tape: Arbitrary.array(Arbitrary.schema(Schema.Natural), { minLength: 1, maxLength: 8 }),
+  },
+  ({ width, tape }) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "t878-reader-" });
+        const repo = path.join(root, "selected");
+        const common = path.join(root, "common");
+        yield* fs.makeDirectory(common);
+        yield* fs.makeDirectory(path.join(repo, ".fabrika"), { recursive: true });
+        const first = "a".repeat(width),
+          second = "b".repeat(width);
+        const documentId = "c".repeat(width),
+          firstBlob = "d".repeat(width),
+          secondBlob = "e".repeat(width);
+        let head = first;
+        let fault: "fetch" | "tree" | "blob" | "type" | "absent" | null = null;
+        let held = 0;
+        let stopped = false;
+        const interrupted = yield* Deferred.make<void>();
+        const directories: Array<string> = [];
+        const temporary = new Set<string>();
+        const isolatedBase = path.join(root, "isolated");
+        let serial = 0;
+        const trackedFs: FileSystem.FileSystem = {
+          ...fs,
+          // Git never runs here, so its private folders can be scoped handles instead of disk writes.
+          makeTempDirectoryScoped: () =>
+            Effect.acquireRelease(
+              Effect.sync(() => {
+                const directory = path.join(isolatedBase, String(serial++));
+                directories.push(directory);
+                temporary.add(directory);
+                return directory;
+              }),
+              (directory) =>
+                Effect.sync(() => {
+                  temporary.delete(directory);
+                }),
+            ),
+          makeDirectory: (directory, options) =>
+            directory.startsWith(isolatedBase) ? Effect.void : fs.makeDirectory(directory, options),
+          writeFileString: (file, value, options) =>
+            file.startsWith(isolatedBase) ? Effect.void : fs.writeFileString(file, value, options),
+          exists: (file) => (file.startsWith(isolatedBase) ? Effect.sync(() => temporary.has(file)) : fs.exists(file)),
+        };
+        const spawner = ChildProcessSpawner.make((command) =>
+          Effect.gen(function* () {
+            expect(command._tag).toBe("StandardCommand");
+
+            if (command._tag !== "StandardCommand") {
+              return yield* Effect.die("unexpected pipeline");
+            }
+
+            yield* Effect.acquireRelease(
+              Effect.sync(() => {
+                held++;
+              }),
+              () =>
+                Effect.sync(() => {
+                  held--;
+                }),
+            );
+
+            if (stopped) {
+              yield* Deferred.succeed(interrupted, undefined);
+              return yield* Effect.never;
+            }
+
+            const args = command.args;
+            let output = "",
+              code = 0;
+
+            if (args.includes("--show-toplevel")) {
+              output = repo;
+            } else if (args.includes("--git-common-dir")) {
+              output = common;
+            } else if (args.includes("--show-object-format")) {
+              output = width === 40 ? "sha1" : "sha256";
+            } else if (args.includes("config")) {
+              output = "https://example.invalid/repository.git";
+            } else if (args.includes("--get-url")) {
+              output = "https://example.invalid/repository.git";
+            } else if (args.includes("--symref")) {
+              output = `ref: refs/heads/release\tHEAD\n${head}\tHEAD\n`;
+            } else if (args.includes("fetch")) {
+              code = fault === "fetch" ? 1 : 0;
+            } else if (args.includes("--verify")) {
+              output = head;
+            } else if (args.includes("ls-tree")) {
+              const file = args.at(-1);
+              const commit = args[args.indexOf("ls-tree") + 2];
+
+              if (file === ".fabrika/fabrika.toml" && fault !== "absent") {
+                code = fault === "tree" ? 1 : 0;
+                output =
+                  fault === "type" ? `040000 tree ${documentId}\t${file}\0` : `100644 blob ${documentId}\t${file}\0`;
+              } else if (file === "source.txt") {
+                output = `100644 blob ${commit === first ? firstBlob : secondBlob}\t${file}\0`;
+              }
+            } else if (args.includes("cat-file")) {
+              code = fault === "blob" ? 1 : 0;
+              output = args.at(-1) === documentId ? "" : args.at(-1) === firstBlob ? "first source" : "later source";
+            } else {
+              return yield* Effect.die("unexpected Git operation");
+            }
+
+            const bytes = new TextEncoder().encode(output);
+            return ChildProcessSpawner.makeHandle({
+              pid: ChildProcessSpawner.ProcessId(1),
+              exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(code)),
+              isRunning: Effect.sync(() => held !== 0),
+              kill: () => Effect.void,
+              stdin: Sink.drain,
+              stdout: Stream.make(bytes),
+              stderr: Stream.empty,
+              all: Stream.make(bytes),
+              getInputFd: () => Sink.drain,
+              getOutputFd: () => Stream.empty,
+              unref: Effect.succeed(Effect.void),
+            });
+          }),
+        );
+        yield* withReader(
+          root,
+          Effect.gen(function* () {
+            const service = yield* Repositories;
+            const pinned = yield* service.open(repo);
+            const hash = pinned.snapshot.hash;
+            expect(held).toBe(0);
+
+            for (const cell of tape) {
+              // Both commits exist in this folded world; dirty bytes and HEAD move independently.
+              head = cell % 2 === 0 ? second : first;
+              yield* fs.writeFileString(path.join(repo, "source.txt"), `dirty ${cell}`);
+              expect(text(yield* pinned.read("source.txt"))).toBe("first source");
+              expect(pinned.snapshot.commit).toBe(first);
+              expect(pinned.snapshot.hash).toBe(hash);
+              const faults = ["fetch", "tree", "blob", "type", "absent"] as const;
+              fault = faults[cell % faults.length]!;
+              const result = yield* service.open(repo).pipe(Effect.exit);
+              expect(Exit.isSuccess(result)).toBe(fault === "absent");
+
+              if (Exit.isSuccess(result)) {
+                expect(result.value.snapshot.text).toBeNull();
+              } else {
+                const reason = result.cause.reasons.find((reason) => reason._tag === "Fail");
+                expect(reason?._tag === "Fail" && reason.error._tag).toBe("RepositoriesError");
+              }
+
+              fault = null;
+              expect(held).toBe(0);
+
+              for (const directory of directories) {
+                expect(yield* trackedFs.exists(directory)).toBe(false);
+              }
+            }
+
+            stopped = true;
+            const fiber = yield* service.open(repo).pipe(Effect.forkScoped);
+            yield* Deferred.await(interrupted);
+            yield* Fiber.interrupt(fiber);
+            expect(held).toBe(0);
+          }),
+        ).pipe(
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+          Effect.provideService(FileSystem.FileSystem, trackedFs),
+        );
+      }),
+    ).pipe(Effect.provide(services)),
+  { arbitrary: { seed: 119120, runs: 200 } },
+);
