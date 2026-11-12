@@ -5,11 +5,11 @@
 // acquired in a scope and given back by it (0061).
 import { execFileSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite"; // edge: inspect the real instance's persisted span output
+import { build } from "@kampus/libfabrika/build";
 import { watchPrograms } from "@kampus/libfabrika/node/watch";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
-import { build } from "../src/build.ts";
 import { localInstance } from "../src/local-instance.ts";
 import { heldPort } from "../src/port.test-support.ts";
 
@@ -49,6 +49,20 @@ export const fixture = Effect.gen(function* () {
   return { home, file, write, relative: "counter/src/program.ts" };
 });
 
+/** Start and watch use the same root, entry and selection, so unchanged bytes have one hash. */
+export const fixtureBuild = Effect.fnUntraced(function* (
+  copy: Pick<Effect.Success<typeof fixture>, "home" | "file">,
+  out: string,
+) {
+  const watch = {
+    root: copy.home,
+    entry: `${APP}/src/brain.ts`,
+    programs: [{ name: PROGRAM, package: copy.file, export: "program" }],
+  };
+  const built = yield* build({ ...watch, out, files: [], ledger: [], chaos: false });
+  return { ...built, watch };
+});
+
 /** A key pair for the founder, made by ssh-keygen in the scoped home; only its public line is read. */
 const founderKey = (home: string) =>
   Effect.gen(function* () {
@@ -67,8 +81,7 @@ export const instance = (copy: Effect.Success<typeof fixture>) =>
     const founder = yield* founderKey(home);
     // The pair stays held until the instance that used its port is gone.
     const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
-    const programs = { [PROGRAM]: copy.file };
-    const built = yield* build({ out: `${home}/build`, programs });
+    const built = yield* fixtureBuild(copy, `${home}/build`);
     const handle = yield* localInstance(built, {
       name: "p15-reload",
       person: PERSON,
@@ -82,9 +95,7 @@ export const instance = (copy: Effect.Success<typeof fixture>) =>
     yield* Effect.forkScoped(
       Stream.runForEach(
         watchPrograms({
-          root: copy.home,
-          entry: `${APP}/src/brain.ts`,
-          programs: [{ name: PROGRAM, package: copy.file, export: "program" }],
+          ...built.watch,
           install: handle.install,
           failed: handle.failed,
         }),
@@ -100,7 +111,7 @@ export const nextAnswer = (answers: Queue.Queue<unknown>, ms = 60_000) =>
     Effect.timeoutOrElse({ duration: ms, orElse: () => Effect.die("the watcher gave no answer") }),
   );
 
-/** Runs dev.ts's real CLI and printer. Only its selected build is replaced, to edit the copy. */
+/** Runs dev.ts's real CLI and printer, with the fixture's build and watch configuration. */
 export const cli = Effect.fnUntraced(function* (
   copy: Effect.Success<typeof fixture>,
   fakeBytes: ReadonlyArray<number>,
@@ -112,10 +123,8 @@ export const cli = Effect.fnUntraced(function* (
   const wrapper = `${copy.home}/build.ts`;
   yield* fs.writeFileString(
     wrapper,
-    `import { build as real } from ${JSON.stringify(`${APP}/src/build.ts`)};
-import { Effect } from "effect";
-export const build = (options) => real({...options, programs: {${JSON.stringify(PROGRAM)}: ${JSON.stringify(copy.file)}}}).pipe(
-  Effect.map(built => ({...built, watch: {...built.watch, root: ${JSON.stringify(copy.home)}}})));
+    `import { fixtureBuild } from ${JSON.stringify(import.meta.url)};
+export const build = (options) => fixtureBuild(${JSON.stringify({ home: copy.home, file: copy.file })}, options.out);
 `,
   );
   const original = yield* fs.readFileString(`${APP}/dev.ts`);
