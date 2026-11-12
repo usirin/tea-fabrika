@@ -1,0 +1,23 @@
+{
+  "id": "2026-11-12-main-red-two-green-prs",
+  "date": "2026-11-12",
+  "lanes": [
+    "usirin/tea-fabrika#287",
+    "usirin/tea-fabrika#852",
+    "usirin/tea-fabrika#880"
+  ],
+  "stage": "ship",
+  "kind": "failure",
+  "what": "next/ version. Main was red for 47 minutes. PR 1058 (P17b slice 3) added the e2e scenario chaos-revoke.test.ts with its own worker fixture, and PR 1031 (P34c slice 3) made every process load bind an IsolateTail entry. Each was green on its own head. Neither head held the other, and the catch-up script landed a green head without merging main first (0097). Together the fixture answered unreachable and the p90 scenario failed on main. The lead first blamed a third pull request (PR 1011) and wrote a plan amendment for it, then withdrew it. PR 1073 added the missing export to the fixture and main went green.",
+  "cause": "The merge script trusted checks that ran on a head without current main, with only a lint on the true merge as the guard. A lint cannot see that a new test fixture lacks an export another pull request made required. The wrong first guess came from reading the failure on a branch that had merged main, not on main itself.",
+  "person": true,
+  "primitive": "Check",
+  "fix": "A pull request lands only when every check ran on a head that holds the main just fetched (0146). The catch-up script merges main in, waits for the checks on that head, looks at main again and goes around when it moved. When a test is red on a branch after a merge of main, the lead runs it on main first.",
+  "test": "Replay: with two pull requests that pass alone and fail together, the second catch-up must merge main in, see the red check on the merged head and exit 1 with nothing landed. The script's own tests carry this case.",
+  "links": [
+    "https://github.com/usirin/tea-fabrika/pull/1058",
+    "https://github.com/usirin/tea-fabrika/pull/1031",
+    "https://github.com/usirin/tea-fabrika/pull/1073",
+    "https://github.com/usirin/tea-fabrika/pull/1075"
+  ]
+}

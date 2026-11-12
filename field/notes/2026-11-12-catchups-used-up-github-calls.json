@@ -1,0 +1,19 @@
+{
+  "id": "2026-11-12-catchups-used-up-github-calls",
+  "date": "2026-11-12",
+  "lanes": [
+    "usirin/tea-fabrika#876"
+  ],
+  "stage": "harness",
+  "kind": "friction",
+  "what": "Lead tooling, the catch-up script. With three or four catch-ups waiting on checks at once, each asking GitHub twice every 30 seconds, the account's 5,000 REST calls for the hour ran out and every read failed for some minutes. One catch-up stopped with 'failed after 3 attempts' and its pull request had to be queued again. Merges that day also took several rounds each, because every round waited for a full CI run and main had moved by the end of it.",
+  "cause": "The wait loop polled every 30 seconds per pull request with no shared budget. Two catch-ups use about 65 calls a minute; four pass the hourly limit.",
+  "person": false,
+  "primitive": "Listen",
+  "fix": "The wait asks once a minute, and the lead runs two catch-ups at a time. Better later: one reader of check states that every waiting catch-up shares, or a wait on GitHub's own event in place of a poll (the merge queue's later stages, P43).",
+  "test": "Measure: count gh calls per minute with two catch-ups waiting; it must stay under 40. Replay a rate-limit answer: the wait must back off and carry on, never end the run.",
+  "links": [
+    "https://github.com/usirin/tea-fabrika/pull/1011",
+    "https://github.com/usirin/tea-fabrika/pull/1076"
+  ]
+}
