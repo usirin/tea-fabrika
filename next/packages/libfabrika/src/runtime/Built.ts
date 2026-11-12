@@ -9,6 +9,8 @@ import { ProgramName } from "../packs/ProgramName.ts";
 export class BuildError extends Schema.TaggedError<BuildError>()("BuildError", {
   reason: Schema.String,
   message: Schema.optionalKey(Schema.String),
+  /** The failure this error translates, kept in memory for diagnosis. */
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 /** The SHA-256 of a text's UTF-8 bytes, as lowercase hex. */
@@ -69,5 +71,7 @@ export type Built = typeof Built.Type;
 
 /** Built tables from outside (disk, a generated module): a bad value is BuildError `table`. */
 export const decodeBuilt = Effect.fn("build.decode")(function* (raw: unknown) {
-  return yield* Schema.decodeUnknownEffect(Built)(raw).pipe(Effect.mapError(() => new BuildError({ reason: "table" })));
+  return yield* Schema.decodeUnknownEffect(Built)(raw).pipe(
+    Effect.mapError((cause) => new BuildError({ reason: "table", cause })),
+  );
 });

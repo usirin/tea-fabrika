@@ -13,7 +13,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
   const p = ProjectClient.make(projectStub(env, config.name)),
     ids = yield* ProcessIdGenerator;
   const gateway = yield* Schema.decodeUnknownEffect(Schema.String)(ctx.id.name).pipe(
-    Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+    Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
   );
   const recording = yield* Layer.build(
     recordingLayer(cloudflareSql(ctx.storage), env, config.name, `connection:${gateway}`),
@@ -23,13 +23,13 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
   const connections = new Map<WebSocket, ReturnType<typeof connection>>();
   const attached = Effect.fnUntraced(function* (ws: WebSocket) {
     return yield* Schema.decodeUnknownEffect(Attached)(ws.deserializeAttachment()).pipe(
-      Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
     );
   });
   const make = Effect.fnUntraced(function* (ws: WebSocket) {
     const [session, tab, key] = yield* Schema.decodeUnknownEffect(
       Schema.Tuple([Schema.String, Schema.String, Schema.String]),
-    )(ctx.getTags(ws)).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
+    )(ctx.getTags(ws)).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
     const c = connection({
       reader: gateway,
       session,
@@ -51,7 +51,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
         }
 
         const ready = yield* Schema.decodeUnknownEffect(Schema.Struct({ rev: Schema.Int }))(answer.result).pipe(
-          Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+          Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
         );
         return Waited.cases.ready.make(ready);
       }),
@@ -102,14 +102,14 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 
           if (method === "gateway.knock") {
             const input = yield* Schema.decodeUnknownEffect(Schema.Struct({ label: Schema.String }))(params).pipe(
-              Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+              Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
             );
             const result = yield* rpc(p.knock(client, input));
 
             if (result._tag === "ok") {
               const waiting = yield* Schema.decodeUnknownEffect(
                 Schema.Struct({ code: Schema.String, until: Schema.Number }),
-              )(result.result).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
+              )(result.result).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
               yield* rpc(p.publish(client, { method: "gateway.waiting", params: waiting }));
               return Answer.cases.ok.make({ result: waiting });
             }
@@ -133,7 +133,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
     const state = yield* attached(ws),
       [session] = yield* Schema.decodeUnknownEffect(Schema.Tuple([Schema.String, Schema.String, Schema.String]))(
         ctx.getTags(ws),
-      ).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
+      ).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
     yield* rpc(p.leave(state.client, session));
     yield* rpc(p.disconnect(state.client as ConnectionId));
     connections.delete(ws);
@@ -170,7 +170,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
               );
             }
           },
-          catch: () => new LedgerError({ reason: "unreachable" }),
+          catch: (cause) => new LedgerError({ reason: "unreachable", cause }),
         });
       }
     }
@@ -191,10 +191,10 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 
       const segments = yield* Schema.decodeUnknownEffect(Schema.Tuple([Schema.String, Schema.String]))(
         path.slice(2, 4),
-      ).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
+      ).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
       const [key, tab] = yield* Effect.try({
         try: () => [decodeURIComponent(segments[0]), decodeURIComponent(segments[1])] as const,
-        catch: () => new LedgerError({ reason: "bad_row" }),
+        catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
       });
       const client = yield* rpc(p.clientConnect()),
         nonce = yield* rpc(p.challenge(client)),
@@ -235,7 +235,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 export class ConnectionService extends Context.Service<
   ConnectionService,
   Effect.Success<ReturnType<typeof gatewayLogic>>
->()("fabrika/Connection") {}
+>()("@kampus/libfabrika/cloudflare/connection.ConnectionService") {}
 
 export const connectionLayer = (ctx: DurableObjectState, env: Env, config: BrainOptions) =>
   Layer.effect(ConnectionService, gatewayLogic(ctx, env, config)).pipe(Layer.provide(ProcessIdGenerator.layer));

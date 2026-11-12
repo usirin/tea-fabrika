@@ -23,4 +23,4 @@ export class Replies extends Context.Service<
     /** Stores the reply unless its key holds one, and answers the first stored row. */
     readonly rememberReply: (reply: Reply) => Effect.Effect<Reply, RepliesError>;
   }
->()("@kampus/libfabrika/Replies") {}
+>()("@kampus/libfabrika/runtime/Replies") {}

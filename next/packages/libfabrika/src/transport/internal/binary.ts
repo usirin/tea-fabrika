@@ -63,7 +63,10 @@ export const armor = (blob: Uint8Array): string => {
   return `-----BEGIN SSH SIGNATURE-----\n${rows.join("\n")}\n-----END SSH SIGNATURE-----\n`;
 };
 
-class WebCryptoError extends Schema.TaggedError<WebCryptoError>()("WebCryptoError", {}) {}
+class WebCryptoError extends Schema.TaggedError<WebCryptoError>()("WebCryptoError", {
+  cause: Schema.optional(Schema.Defect()),
+}) {}
+
 type CryptoMethod = "digest" | "importKey" | "verify";
 type CryptoArgs = { [M in CryptoMethod]: Parameters<SubtleCrypto[M]> };
 type CryptoResult = { [M in CryptoMethod]: Awaited<ReturnType<SubtleCrypto[M]>> };
@@ -78,7 +81,7 @@ export const subtle = Effect.fn("transport.crypto")(function* <M extends CryptoM
   ...args: CryptoArgs[M]
 ): Effect.fn.Return<CryptoResult[M], WebCryptoError> {
   const api: CryptoApi = crypto.subtle;
-  const fail = () => new WebCryptoError({});
+  const fail = (cause: unknown) => new WebCryptoError({ cause });
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto answers only with a Promise
   return yield* Effect.tryPromise({ try: () => api[method](...args), catch: fail });
 });

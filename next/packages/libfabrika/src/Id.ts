@@ -11,6 +11,8 @@ export type IdSchema<P extends string> = S.Codec<IdValue<P>, string>;
 
 export class IdError extends S.TaggedError<IdError>()("IdError", {
   reason: S.Literals(["prefix", "clock", "entropy", "exhausted"]),
+  /** The failure this error translates, kept in memory for diagnosis. */
+  cause: S.optional(S.Defect()),
 }) {}
 
 const prefixes = new WeakMap<S.Top, string>();
@@ -180,7 +182,7 @@ export class Generator extends Context.Service<
         random = nextRandom;
         return Result.getOrThrowWith(
           S.decodeUnknownResult(schema)(`${prefix}_${encode(at, random)}`),
-          () => new IdError({ reason: "prefix" }),
+          (cause) => new IdError({ reason: "prefix", cause }),
         );
       };
       return {
@@ -195,7 +197,7 @@ export class Generator extends Context.Service<
           const now = yield* Clock.currentTimeMillis;
           return yield* Effect.try({
             try: () => allocate(schema, prefix, now),
-            catch: (error) => (error instanceof IdError ? error : new IdError({ reason: "entropy" })),
+            catch: (error) => (error instanceof IdError ? error : new IdError({ reason: "entropy", cause: error })),
           });
         }),
       };
