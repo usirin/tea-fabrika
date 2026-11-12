@@ -1,6 +1,7 @@
 // Ticket 806, slice 1, next/: runs the checklist's runner laws (L9, L10) on real SQLite files
 // (0062, plan amendment A2). A library test may not import a program, so the app runs it. Each run
-// gets a fresh temporary folder; each open is a new connection to the same file, closed with its scope.
+// gets a fresh temporary folder; each open is a new connection to the same file, closed with its scope,
+// and each restart loads the program module again.
 import { DatabaseSync } from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for the referee's transactions
 import { NodeServices } from "@effect/platform-node";
 import * as RunnerTest from "@kampus/checklist/RunnerTest";
@@ -23,4 +24,15 @@ const open = Effect.gen(function* () {
   return (name: string) => connection(path.join(folder, `${name}.sqlite`));
 }).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 
-RunnerTest.suite(open);
+let restarts = 0;
+
+/** The program loaded again from its module, under a new name each time, as a restarted process
+ *  loads it: whatever its module kept in memory is gone. */
+const fresh = Effect.promise(
+  () =>
+    import(/* @vite-ignore */ `${import.meta.resolve("@kampus/checklist")}?restart=${++restarts}`) as Promise<
+      typeof import("@kampus/checklist")
+    >,
+).pipe(Effect.map((m) => m.checklist));
+
+RunnerTest.suite(open, fresh);

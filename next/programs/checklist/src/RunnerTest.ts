@@ -29,6 +29,10 @@ const DAY = 86_400_000;
  *  named database file again over a new connection, closed with its scope. */
 export type Open = Effect.Effect<(name: string) => Effect.Effect<Sql, never, Scope.Scope>, never, Scope.Scope>;
 
+/** What the module owning the process supplies: the program loaded again from its module, as a
+ *  restarted process loads it, so a reopen keeps only what the program saved. */
+export type Fresh = Effect.Effect<typeof checklist>;
+
 const person = Writer.cases.person.make({ key: "SHA256:person", for: "person" });
 const agent = Writer.cases.agent.make({ key: "SHA256:agent", for: "agent" });
 
@@ -60,7 +64,11 @@ const managerLayer = (sql: Sql) =>
   ).pipe(Layer.provide(LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet))));
 
 /** One session of the runner over the folder's three files. `alarms` keeps every time it sets. */
-const session = (files: (name: string) => Effect.Effect<Sql, never, Scope.Scope>, alarms: Array<number | null>) =>
+const session = (
+  files: (name: string) => Effect.Effect<Sql, never, Scope.Scope>,
+  alarms: Array<number | null>,
+  program: typeof checklist = checklist,
+) =>
   Effect.gen(function* () {
     const ledger = yield* files("ledger");
     const store = yield* files("process");
@@ -73,7 +81,7 @@ const session = (files: (name: string) => Effect.Effect<Sql, never, Scope.Scope>
               Start.cases.first.make({
                 id: `boot:${NAME}`,
                 name: NAME,
-                code: { program: checklist.name, hash: BUILD },
+                code: { program: program.name, hash: BUILD },
               }),
               brainFrom,
             ),
@@ -107,13 +115,13 @@ const session = (files: (name: string) => Effect.Effect<Sql, never, Scope.Scope>
       }),
     );
     return ProgramRunner.layer(
-      { id: process, name: NAME, program: checklist.name, build: BUILD, owner: person },
+      { id: process, name: NAME, program: program.name, build: BUILD, owner: person },
       { recovery: { sql: store, name: NAME, capacity: 1024 ** 3 } },
     ).pipe(
       Layer.provideMerge(
         Layer.mergeAll(
           managerLayer(manager),
-          ProgramLoader.layer({ [checklist.name]: checklist }, {}),
+          ProgramLoader.layer({ [program.name]: program }, {}),
           ProcessStore.layer(store, { process }),
           checked,
           Layer.succeed(WatcherManager, { publish: () => Effect.void }),
@@ -221,7 +229,7 @@ const apply = (items: Map<string, boolean>, input: Record<string, string>) => {
   }
 };
 
-export const suite = (open: Open) =>
+export const suite = (open: Open, fresh: Fresh) =>
   describe("ticket 806 the checklist at the runner", () => {
     it.live.prop(
       "L9: an agent's add, rename and remove are refused, its check and uncheck accepted, a person's five all accepted",
@@ -273,7 +281,8 @@ export const suite = (open: Open) =>
       "L10 scenario: a restart between an add and its timer keeps the items and states, and a fired alarm after it still stamps",
       () =>
         // The plan's scenario: close the three files mid-list and reopen, at each point where the
-        // saved stamp matters: before the stamp, after it, and after the item goes late.
+        // saved stamp matters: before the stamp, after it, and after the item goes late. Each reopen
+        // runs a fresh load of the program, as a new process would, so nothing it kept in memory stays.
         Effect.scoped(
           Effect.gen(function* () {
             const files = yield* open;
@@ -281,7 +290,8 @@ export const suite = (open: Open) =>
             const reopen = <A, E>(f: (r: ProgramRunner["Service"]) => Effect.Effect<A, E>) =>
               Effect.scoped(
                 Effect.gen(function* () {
-                  const r = yield* ProgramRunner.pipe(Effect.provide(yield* session(files, alarms)));
+                  const program = yield* fresh;
+                  const r = yield* ProgramRunner.pipe(Effect.provide(yield* session(files, alarms, program)));
                   return yield* f(r);
                 }),
               );
