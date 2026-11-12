@@ -1438,7 +1438,7 @@ export class ProgramRunner extends Context.Service<
                   return { answer: undefined, jobs: sends };
                 }
 
-                const id = `${process.id}/due/${time}`;
+                const id = `${process.id}/due/${time}/${state.pos}`;
                 const placed = yield* store.placed(id);
                 const saved = yield* Stream.runHead(
                   mailbox
