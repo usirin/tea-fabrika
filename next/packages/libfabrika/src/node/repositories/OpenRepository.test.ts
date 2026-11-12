@@ -107,8 +107,9 @@ describe("T878 composed repository opening", () => {
                 "[instance]\nport = 1234\n",
                 '[pack.x]\nfrom = "../../outside"\n',
                 "[instance\n",
+                '[review]\ngoverned = ["src/"]\n',
               ];
-              const reasons = [null, null, null, "version", "scope", "unknown", "syntax"];
+              const reasons = [null, null, null, "version", "scope", "unknown", "syntax", "unknown"];
 
               for (const c of cells) {
                 personReads = 0;

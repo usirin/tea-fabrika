@@ -83,20 +83,22 @@ describe("T878 pinned repository reads", () => {
                     const hash = pinned.snapshot.hash;
 
                     for (const cell of tape) {
-                      const move = cell % 3;
+                      const move = cell % 4;
 
                       if (move === 0) {
                         yield* f.fs.writeFileString(f.path.join(f.repo, ".fabrika/fabrika.toml"), "dirty = true\n");
                         yield* f.fs.writeFileString(f.path.join(f.repo, "source.txt"), `dirty ${cell}`);
                         yield* f.fs.writeFileString(f.path.join(f.repo, "fabrika.toml"), "checkout-only legacy file");
                       } else if (move === 1) {
-                        yield* git(f.repo, ["checkout", "--detach", f.commit]);
-                      } else {
-                        yield* git(f.repo, ["checkout", "-B", branch]);
+                        yield* git(f.repo, ["checkout", "--force", "--detach", f.commit]);
+                      } else if (move === 2) {
+                        yield* git(f.repo, ["checkout", "--force", "-B", branch]);
                         yield* f.fs.writeFileString(f.path.join(f.repo, "source.txt"), `new ${cell}`);
                         yield* git(f.repo, ["add", "-u"]);
                         yield* git(f.repo, ["commit", "--allow-empty", "-m", "move"]);
                         yield* git(f.repo, ["push", "--force", "origin", branch]);
+                      } else {
+                        yield* f.fs.remove(f.path.join(f.repo, ".fabrika/fabrika.toml"), { force: true });
                       }
 
                       expect(text(yield* pinned.read("source.txt"))).toBe("committed source");
@@ -195,6 +197,66 @@ describe("T878 pinned repository reads", () => {
                 }),
               ).pipe(Effect.exit);
               expect(Exit.isFailure(refused)).toBe(true);
+            }),
+          ).pipe(Effect.provide(services)),
+        ),
+      ),
+      runs,
+    );
+  });
+
+  it("L2: each committed legacy-file combination keeps its refusal rule despite opposite checkout files", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (tape) =>
+        Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const f = yield* fixture("sha1", "release");
+              const names = ["fabrika.toml", ".fabrika.jsonc", ".fabrika/fabrika.toml"];
+
+              for (const cell of tape) {
+                const world = cell % 4;
+
+                for (const name of names) {
+                  yield* f.fs.remove(f.path.join(f.repo, name), { force: true });
+                }
+
+                yield* f.fs.writeFileString(
+                  f.path.join(f.repo, world < 2 ? "fabrika.toml" : ".fabrika.jsonc"),
+                  world < 2 ? "" : "{}",
+                );
+
+                if (world % 2 === 1) {
+                  yield* f.fs.writeFileString(f.path.join(f.repo, ".fabrika/fabrika.toml"), "");
+                }
+
+                yield* git(f.repo, ["add", "-A"]);
+                yield* git(f.repo, ["commit", "--allow-empty", "-m", "legacy combination"]);
+                yield* git(f.repo, ["push", "origin", f.branch]);
+
+                // The checkout claims the opposite of the committed refusal or allowance.
+                for (const name of names) {
+                  yield* f.fs.remove(f.path.join(f.repo, name), { force: true });
+                }
+
+                if (world === 3) {
+                  yield* f.fs.writeFileString(f.path.join(f.repo, "fabrika.toml"), "");
+                } else {
+                  yield* f.fs.writeFileString(f.path.join(f.repo, ".fabrika/fabrika.toml"), "");
+                }
+
+                const result = yield* withReader(
+                  f.person,
+                  Effect.gen(function* () {
+                    return yield* (yield* Repositories).open(f.repo);
+                  }),
+                ).pipe(Effect.exit);
+                expect(Exit.isSuccess(result)).toBe(world === 3);
+
+                if (Exit.isSuccess(result)) {
+                  expect(result.value.snapshot.text).toBe("");
+                }
+              }
             }),
           ).pipe(Effect.provide(services)),
         ),
