@@ -1,5 +1,6 @@
 import { applyCell } from "@demlik/tea";
 import { Effect, Predicate, Result, Schema, Semaphore } from "effect";
+import { REFUSED } from "../telemetry/Trace.ts";
 import * as State from "./internal/connection.ts";
 import { Answer, type Attached, Wait } from "./Wire.ts";
 const Waited = Schema.TaggedUnion({ ready: { rev: Schema.Number }, parked: {} });
@@ -128,6 +129,11 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
     }
 
     const answer = yield* options.call(request.method, request.params);
+
+    if (answer._tag === "refused" && answer.reason === "reserved") {
+      yield* Effect.annotateCurrentSpan(REFUSED, "reserved");
+    }
+
     respond(request.id, answer);
     // The call may have replaced the attachment: finish from a fresh read.
     const idle = step(yield* read, { type: "finished" });

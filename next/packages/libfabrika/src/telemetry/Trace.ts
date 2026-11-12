@@ -96,6 +96,21 @@ export const MetricPoint = Schema.TaggedStruct("metric", {
 });
 export type MetricPoint = typeof MetricPoint.Type;
 
+/** A refusal counted instead of keeping the span or its measurement. */
+export const REFUSED = "fab.gateway.refused";
+
+export const Refused = Schema.Literals(["reserved", "other"]);
+export type Refused = typeof Refused.Type;
+
+/** One piece's hourly count, split by a closed refusal value. */
+export const SumPoint = Schema.TaggedStruct("sum", {
+  piece: Schema.String,
+  hour: Schema.Int,
+  refused: Refused,
+  count: Schema.Int,
+});
+export type SumPoint = typeof SumPoint.Type;
+
 /** The object's own size, at most once an hour while it is awake, forever. */
 export const Size = Schema.TaggedStruct("size", { at: Schema.Int, bytes: Schema.Int });
 
