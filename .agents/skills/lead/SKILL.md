@@ -31,8 +31,9 @@ and say where it is set; never echo its value. `pnpm config list` and `env` stay
 An agent's own worktree gets its own install, as `catchup.sh` does: `pnpm install --offline
 --frozen-lockfile` in it, about 3 s from the warm store, with no network and no lockfile change.
 Never link `node_modules` to the main checkout's: pnpm 12 refuses a linked one in `pnpm -r`
-(`ERR_PNPM_UNSAFE_TASK_RUN_STATE_PATH`), so `pnpm typecheck` fails, and a pnpm run in the
-worktree rewrites the main checkout's install state through the link.
+(`ERR_PNPM_UNSAFE_TASK_RUN_STATE_PATH`), and a pnpm run in the worktree, an install included,
+rewrites the main checkout's install state through the link. `pnpm typecheck` removes such a link
+and runs that install itself before it checks; every other command still needs the real install.
 
 For a stacked lane, put the parent and landing facts in the state file and the brief before the
 first step:
