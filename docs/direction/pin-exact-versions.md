@@ -4,6 +4,8 @@ Decided 2026-10-31 by the owner. This covers the whole repo, today's version and
 `package.json` and `pnpm-workspace.yaml` git tracks, `experiments/`, `fixtures/` and `video/` too.
 Every version we name is exact, and `pnpm lint` fails on anything else.
 
+Its decided rules are in: [0255](../../.decisions/0255-every-npm-version-is-exact.md).
+
 ```yaml
 # pnpm-workspace.yaml
 savePrefix: ''      # `pnpm add` writes 7.0.2, not ^7.0.2

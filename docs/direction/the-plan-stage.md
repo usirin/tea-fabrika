@@ -4,6 +4,13 @@ Decided 2026-10-24. Who picks a property's tool was decided 2026-10-25, from
 experiment 139: the planner, with `"tla"` only for a design with no code yet.
 Nothing here is built yet.
 
+Its decided rules are in: [0380](../../.decisions/0380-a-property-lasts-a-criterion-ends.md),
+[0381](../../.decisions/0381-each-task-has-one-main-scenario.md),
+[0382](../../.decisions/0382-the-plan-step-has-no-ask.md),
+[0383](../../.decisions/0383-the-plan-step-runs-in-a-box.md),
+[0384](../../.decisions/0384-a-plan-approval-hashes-the-ticket.md),
+[0385](../../.decisions/0385-tla-only-for-a-design-with-no-code.md).
+
 Keys renamed 2026-11-03 (short words keep one meaning): a pointer's `at` became `path`. Today's
 code still says `at`.
 

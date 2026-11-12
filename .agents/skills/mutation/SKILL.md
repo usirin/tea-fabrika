@@ -11,7 +11,7 @@ main, on the changed lines of what merged since the last run, in the container, 
 beside the changed files. No new merge, no run. A merge never waits on it.
 
 - **The hourly run** changes nothing in the repo. It sorts each survivor (step 3 below), files a
-  real gap as one tracker ticket per file, at most three a day, with its category
+  real gap as one tracker ticket per file, every one of them (0117: no daily cap), with its category
   ([below](#a-gaps-category)), and counts noise without filing it.
   A narrowing (arm a kills, arm b lets live) is filed as a ticket marked loosening. It logs its
   counts: sampled, killed, survived, real, noise, tickets, minutes, and each real gap's category.
@@ -175,7 +175,7 @@ record: keep no other file. No script holds this yet, so do these steps by hand.
    Otherwise file one ticket, `tests step: catch <category> gaps`, naming the gaps. It asks, in
    order, for a code check that would have caught the category (a lint rule, a plancheck rule, a
    test helper), else a row the plan's laws table must carry, and skill prose only if neither can
-   hold it. It is not one of the three gap tickets a day.
+   hold it.
 5. **One gap alone** changes nothing but its own test.
 
 ## Outside your task

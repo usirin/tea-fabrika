@@ -6,6 +6,8 @@ The desktop is layer 5, on top of the app. It places tiles, owns focus and
 routes keys: the part KDE or GNOME plays on Linux. Its codename is Tuval;
 users only ever see "fabrika".
 
+Its decided rules are in: [0274](../../.decisions/0274-the-desktop-is-a-platform-free-core.md), [0275](../../.decisions/0275-the-shell-is-a-regular-program.md), [0276](../../.decisions/0276-a-tile-shows-one-process.md), [0277](../../.decisions/0277-size-belongs-to-the-viewer.md), [0278](../../.decisions/0278-each-window-runs-its-own-prefix.md), [0279](../../.decisions/0279-tuval-is-a-package-desk-in-tier-2.md), [0280](../../.decisions/0280-the-app-starts-a-launchd-brain.md).
+
 *Changed 2026-11-01, for `next/`, from [Tier 1's plan](../plan/tier-1.md), approved the same
 day and not built. Tuval is a package, `@kampus/tuval`: fabrika is the logic, and Tuval is what is
 drawn from it. The new version's shell is `fabsh`, so below, `tsh` means `fabsh`. The desk is

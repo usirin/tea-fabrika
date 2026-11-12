@@ -3,6 +3,8 @@
 Decided 2026-11-01, with all its leans. Tier 1 goes this way once, with its last step by hand. The
 whole flow is built in `next/`.
 
+Its decided rules are in: [0222](../../.decisions/0222-free-form-plan-to-planner.md).
+
 **The answer:** a person and an agent talk a plan through in free form. It goes in the
 tracker as a ticket. The plan step turns that text into the real plan, and the owner
 approves it. A tier is still a project. For Tier 1, after ticket 117, an agent then files

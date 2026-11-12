@@ -56,7 +56,8 @@ if step == "lead" and not only:
         other = pr["headRefName"].removesuffix("-wip")
         if other != lane and any(ticket_of(c["commit"]["oid"]) == ticket for c in pr["commits"]["nodes"]):
             refuse(f"stale_link: ticket {ticket}'s open PR {pr['number']} is on {pr['headRefName']}; a lead link here would make that PR's lead links stale. Sign under a lead ticket of your own instead.", 5)
-boxes = pathlib.Path(os.environ.get("BOXES", str(root.parent)))
+# A box tree sits in BOXES/box (lead/scripts/lane.ts boxTree); a sign worktree, and an older tree, in BOXES.
+boxes = pathlib.Path(os.environ.get("BOXES", str(root.parent.parent if root.parent.name == "box" else root.parent)))
 def facts(path):
     return dict(l.split(": ", 1) for l in path.read_text().splitlines() if ": " in l)
 # The box this runs in: STEPCOMMIT_BOX (drive's detached sign worktree), else the checkout's own
@@ -71,7 +72,7 @@ if own.exists():
 else:
     for path in sorted((boxes / "state").glob("*.box")):
         found = facts(path)
-        if found.get("branch") == branch and (boxes / path.stem).is_dir(): state = found; break
+        if found.get("branch") == branch and any((d / path.stem).is_dir() for d in (boxes / "box", boxes)): state = found; break
 owners = None
 if state:
     if state.get("ticket") != ticket: refuse("not_owner: ticket differs from box")

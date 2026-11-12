@@ -2,6 +2,9 @@
 
 Decided 2026-10-18.
 
+Its decided rules are in: [0220](../../.decisions/0220-plan-is-the-one-shape.md),
+[0221](../../.decisions/0221-criteria-serve-stories.md).
+
 ## What was decided
 
 - **Plan is its own stage, for every ticket.** Triage only sorts (duplicate?

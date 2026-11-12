@@ -7,6 +7,8 @@ by invite and approval ([a key per client](./a-key-per-client-and-no-github-trus
 the owner 2026-11-05; this said GitHub as a keys source came in Tier 3). Tier 1 has one person: a new client comes in by the menu bar's
 Approve, and real notes live on the Cloudflare copy, with chaos on a throwaway ledger.*
 
+Its decided rules are in: [0283](../../.decisions/0283-two-people-share-one-fabrika.md), [0284](../../.decisions/0284-sign-in-asks-a-keys-service.md), [0285](../../.decisions/0285-one-ledger-server-per-project.md), [0286](../../.decisions/0286-one-worker-per-project-via-alchemy.md), [0287](../../.decisions/0287-a-fence-holds-until-a-newer-claim.md), [0288](../../.decisions/0288-sharing-copies-tickets-once.md), [0289](../../.decisions/0289-talk-to-an-agent-never-start-it.md), [0290](../../.decisions/0290-one-owner-admins-and-members.md).
+
 *Renamed 2026-11-10 for `next/`: the door is the gateway, and one client's object is a connection ([0051](../../.decisions/0051-gateway-connection-and-node-by-job.md)).*
 
 **Decided 2026-10-25: two people share one fabrika.** They work the same

@@ -1,5 +1,7 @@
 # Inputs carry their sender, and every write carries its cause
 
+Its decided rules are in: [0261](../../.decisions/0261-inputs-carry-their-sender.md), [0262](../../.decisions/0262-a-write-carries-parent-and-traceid.md), [0263](../../.decisions/0263-a-writes-signer-is-its-causes-sender.md).
+
 **Proposed 2026-11-04.** Walked when Tier 1 starts (owner, 2026-11-08): P11's test-kit law in question 17, approved by the owner 2026-11-08. The owner set the direction on 2026-11-04, and each decided point is
 marked decided below:
 
