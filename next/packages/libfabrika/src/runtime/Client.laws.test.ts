@@ -24,11 +24,11 @@
 // move that state allows; stale and malformed input is built from what the walk delivered.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Result, Schema } from "effect";
 import * as fc from "fast-check";
 import type { Client } from "./Client.ts";
 import { clientMachineFor, sendable } from "./Client.ts";
-import { diff } from "./Patch.ts";
+import { apply, diff } from "./Patch.ts";
 
 const SEED = 119120;
 const opts = { seed: SEED, numRuns: 300 };
@@ -405,29 +405,51 @@ const corrupt = (b: Brain, c: ViewChoice): unknown => {
   ][c.bad % 6];
 };
 
-type Notice = { readonly pid: string; readonly note: unknown };
-type ViewWalk = { c: Model; brains: Map<string, Brain>; log: Array<string>; delivered: Array<Notice> };
+type Notice = {
+  readonly pid: string;
+  readonly note: unknown;
+  readonly foreign?: "whole" | "malformed";
+};
+
+type ViewWalk = {
+  c: Model;
+  accepted: Model["views"];
+  brains: Map<string, Brain>;
+  log: Array<string>;
+  delivered: Array<Notice>;
+};
 
 /** The moves the walk's state allows, each made only when it is picked, since a step moves a brain. */
 const viewMoves = (w: ViewWalk, c: ViewChoice): ReadonlyArray<() => Notice> => {
   const pids = [...w.brains.keys()];
   const pid = pids[c.pick % pids.length]!;
   const b = w.brains.get(pid)!;
-  const other = pids[(c.pick + 1) % pids.length]!;
   const out: Array<() => Notice> = [
     // The pid's value changes and its patch arrives in order.
     () => ({ pid, note: brainStep(b, c) }),
     // A whole view of now, as an open's answer or a fresh watch gives it.
     () => ({ pid, note: { type: "whole", rev: b.rev, view: b.views[b.rev] } }),
     () => ({ pid, note: corrupt(b, c) }),
-    // Another pid's current view sent on this pid: its decoder, not the other's, decides.
-    () => ({ pid, note: { type: "whole", rev: b.rev, view: w.brains.get(other)!.views.at(-1) } }),
     // A gap: the value changes twice and only the second patch arrives.
     () => {
       brainStep(b, c);
       return { pid, note: brainStep(b, c) };
     },
   ];
+
+  const others = pids.filter((p) => p !== pid);
+
+  if (others.length > 0) {
+    const other = w.brains.get(others[c.at % others.length]!)!;
+    const view = other.views.at(-1);
+    // Equal schemas can accept a foreign value. A malformed foreign value must still be refused.
+    out.push(() => ({ pid, note: { type: "whole", rev: b.rev, view }, foreign: "whole" }));
+    out.push(() => ({
+      pid,
+      note: { type: "whole", rev: b.rev, view: b.kind === "tags" ? { foreign: view } : [view] },
+      foreign: "malformed",
+    }));
+  }
 
   if (w.delivered.length > 0) {
     // A repeat or a reordering of a notice already delivered, to the pid it was for.
@@ -447,6 +469,7 @@ const viewWalk = (
   const machine = machineWith(pids, log);
   const w: ViewWalk = {
     c: machine.init(null, {})[0],
+    accepted: {},
     brains: new Map([...pids].map(([pid, kind]) => [pid, { kind, rev: 0, views: [START[kind]], made: [] }])),
     log,
     delivered: [],
@@ -459,7 +482,8 @@ const viewWalk = (
     const before = structuredClone(w.c);
     const prev: ViewWalk = { ...w, c: w.c, log: [...log] };
     log.length = 0;
-    const [next, out] = step(machine, w.c, { type: "notice", ...notice });
+    w.accepted = acceptNotice(w.accepted, notice);
+    const [next, out] = step(machine, w.c, { type: "notice", pid: notice.pid, note: notice.note });
     expect(notice.note, "a notice was changed").toEqual(snapshot);
     expect(w.c, "the old Model was changed").toEqual(before);
     each(prev, notice, next, out, w);
@@ -482,15 +506,57 @@ const noteType = (note: unknown): unknown =>
 const noteRev = (note: unknown): unknown =>
   typeof note === "object" && note !== null ? Reflect.get(note, "rev") : null;
 
+// L6 checks apply independently. Here the oracle owns revision and decoder checks, starting from
+// notices it accepted, since a valid foreign whole can replace the brain's historical value.
+const acceptNotice = (views: Model["views"], { pid, note }: Notice): Model["views"] => {
+  const body = Object(note);
+  const shown = views[pid];
+  let view: unknown;
+
+  if (noteType(note) === "whole") {
+    view = body.view;
+  } else if (noteType(note) === "patch" && shown && body.base === shown.rev && body.rev === shown.rev + 1) {
+    const result = apply(shown.view, body.patch);
+
+    if (Result.isFailure(result)) {
+      return views;
+    }
+
+    view = result.success;
+  } else {
+    return views;
+  }
+
+  return decodes(pid, view) ? { ...views, [pid]: { rev: body.rev, view: view as Schema.Json } } : views;
+};
+
 describe("L5: client views (p3)", () => {
-  it("every view shown decodes by its own pid's decoder and is that pid's value at its rev", () => {
+  it("every view shown decodes by its own pid's decoder and follows the notices accepted for that pid", () => {
     let arrays = 0;
+    const foreign = { accepted: 0, refused: 0, different: 0 };
     fc.assert(
       fc.property(viewWalks, ([kinds, list]) => {
-        viewWalk(kinds, list, (_prev, _n, next, _out, w) => {
+        viewWalk(kinds, list, (prev, notice, next, out, w) => {
+          expect(next.views).toEqual(w.accepted);
+
+          if (notice.foreign === "whole" && decodes(notice.pid, Object(notice.note).view)) {
+            foreign.accepted++;
+            foreign.different +=
+              JSON.stringify(Object(notice.note).view) !==
+              JSON.stringify(w.brains.get(notice.pid)!.views[noteRev(notice.note) as number])
+                ? 1
+                : 0;
+          }
+
+          if (notice.foreign === "malformed") {
+            foreign.refused++;
+            expect(decodes(notice.pid, Object(notice.note).view)).toBe(false);
+            expect(next.views).toEqual(prev.c.views);
+            expect(out).toEqual([{ type: "ask", pid: notice.pid }]);
+          }
+
           for (const [pid, shown] of Object.entries(next.views)) {
             expect(decodes(pid, shown.view), `${pid} shows ${JSON.stringify(shown.view)}`).toBe(true);
-            expect(shown.view).toEqual(w.brains.get(pid)!.views[shown.rev]);
             arrays += JSON.stringify(shown.view).includes("[") && shown.rev > 0 ? 1 : 0;
           }
         });
@@ -498,6 +564,9 @@ describe("L5: client views (p3)", () => {
       opts,
     );
     expect(arrays, "the walks installed views holding arrays").toBeGreaterThan(0);
+    expect(foreign.accepted, "equal schemas accepted a foreign whole").toBeGreaterThan(0);
+    expect(foreign.different, "a foreign whole differed from the target brain's history").toBeGreaterThan(0);
+    expect(foreign.refused, "malformed foreign wholes were refused").toBeGreaterThan(0);
   });
 
   it("a whole installs exactly when its pid's decoder passes, else keeps the last view and asks once", () => {
@@ -556,7 +625,7 @@ describe("L5: client views (p3)", () => {
             expect(shown).toBeDefined();
             expect(note.base).toBe(shown!.rev);
             expect(note.rev).toBe(shown!.rev + 1);
-            expect(next.views[notice.pid]!.view).toEqual(w.brains.get(notice.pid)!.views[note.rev]);
+            expect(next.views[notice.pid]).toEqual(w.accepted[notice.pid]);
             return;
           }
 
