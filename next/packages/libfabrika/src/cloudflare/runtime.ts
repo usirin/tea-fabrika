@@ -178,20 +178,23 @@ export const processReply = <A, E>(work: Effect.Effect<A, E | ProcessError>): Ef
     ),
   );
 
-/** A child start's refusal becomes reply data. Storage still fails the call, by its reason only, so
- *  the caller asks again and no cause crosses the RPC. */
-const childReply = <E>(
-  work: Effect.Effect<Started, ChildrenError | E>,
-): Effect.Effect<typeof ChildReplies.Type, E | LedgerError> =>
+// Child RPC failures cross the platform as rendered errors, so keep only their storage reason.
+const childStorage = <A, E, R>(work: Effect.Effect<A, E, R>): Effect.Effect<A, LedgerError, R> =>
+  work.pipe(
+    Effect.mapError(() => new LedgerError({ reason: "storage" })),
+    Effect.catchDefect(() => Effect.fail(new LedgerError({ reason: "storage" }))),
+  );
+
+/** Checked refusals are replies; storage and descriptor failures remain retryable rejections. */
+const childReply = (work: Effect.Effect<Started, unknown>): Effect.Effect<typeof ChildReplies.Type, LedgerError> =>
   work.pipe(
     Effect.map((value) => ChildReplies.cases.ok.make({ value })),
-    Effect.catch((error): Effect.Effect<typeof ChildReplies.Type, E | LedgerError> =>
-      !(error instanceof ChildrenError)
-        ? Effect.fail(error)
-        : error.reason === "storage"
-          ? Effect.fail(new LedgerError({ reason: "storage" }))
-          : Effect.succeed(ChildReplies.cases.ChildrenError.make({ reason: error.reason })),
+    Effect.catch((error): Effect.Effect<typeof ChildReplies.Type, LedgerError> =>
+      error instanceof ChildrenError && error.reason !== "storage"
+        ? Effect.succeed(ChildReplies.cases.ChildrenError.make({ reason: error.reason }))
+        : Effect.fail(new LedgerError({ reason: "storage" })),
     ),
+    childStorage,
   );
 
 const processValue = Effect.fnUntraced(function* <A>(reply: ProcessReply<A>) {
@@ -462,32 +465,42 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     const program = yield* loader.load(process.program, process.process);
     remember(process.name, program.declaration);
 
-    if (sql.exec("SELECT process FROM dev_descriptors WHERE process=?", process.process).length === 0) {
-      const life = yield* Context.get(services, LedgerTransaction).transact((turn) =>
-        processes.table(turn).life(process.process),
-      );
-      const requester =
-        Option.isSome(life) && life.value.request._tag === "first" ? life.value.request.requester : undefined;
-      // A child's start may have committed before its descriptor. Its object has never been
-      // configured, so rebuild from the saved life and its requester's recorded owner.
-      const descriptor = yield* requester?._tag === "process"
-        ? Effect.gen(function* () {
-            const [saved] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", requester.process);
-            const { owner } = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(
-              saved?.value,
-            ).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
-            return { id: process.process, name: process.name, program: process.program, build: process.build, owner };
-          })
-        : rpc(ProcessClient.make(processStub(env, name, process.name)).descriptor());
-      sql.exec(
-        "INSERT INTO dev_descriptors (process,value,pending) VALUES (?,?,?)",
-        process.process,
-        JSON.stringify({ ...descriptor, id: process.process, build: process.build }),
-        requester?._tag === "process" ? 2 : 0,
-      );
-    }
+    yield* childStorage(
+      Effect.gen(function* () {
+        if (sql.exec("SELECT process FROM dev_descriptors WHERE process=?", process.process).length === 0) {
+          const life = yield* Context.get(services, LedgerTransaction).transact((turn) =>
+            processes.table(turn).life(process.process),
+          );
+          const requester =
+            Option.isSome(life) && life.value.request._tag === "first" ? life.value.request.requester : undefined;
+          // A child's start may have committed before its descriptor. Its object has never been
+          // configured, so rebuild from the saved life and its requester's recorded owner.
+          const descriptor = yield* requester?._tag === "process"
+            ? Effect.gen(function* () {
+                const [saved] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", requester.process);
+                const { owner } = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(
+                  saved?.value,
+                ).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
+                return {
+                  id: process.process,
+                  name: process.name,
+                  program: process.program,
+                  build: process.build,
+                  owner,
+                };
+              })
+            : rpc(ProcessClient.make(processStub(env, name, process.name)).descriptor());
+          sql.exec(
+            "INSERT INTO dev_descriptors (process,value,pending) VALUES (?,?,?)",
+            process.process,
+            JSON.stringify({ ...descriptor, id: process.process, build: process.build }),
+            requester?._tag === "process" ? 2 : 0,
+          );
+        }
 
-    yield* configure(process.process);
+        yield* configure(process.process);
+      }),
+    );
   }
 
   // Routing follows history: an earlier ID of a name takes its name's policy.
