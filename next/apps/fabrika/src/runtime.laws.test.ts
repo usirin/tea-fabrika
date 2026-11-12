@@ -719,19 +719,23 @@ describe("P12 WebCrypto failures", () => {
   }
 });
 
+// A window's socket, attached online with the world's key, as the gateway stores it.
+const online = (w: Awaited<ReturnType<typeof world>>, client: string): typeof Attached.Type =>
+  Attached.cases.online.make({
+    client,
+    identity: { key: w.key.fingerprint, person: PERSON, as: "window" },
+    version: 1,
+    waits: [],
+    watching: false,
+    busy: false,
+  });
+
 describe("P12 Connection recording", () => {
   for (const operation of ["ring", "probe", "close", "notify"] as const) {
     law(`an authenticated ${operation} records through the project's sink`, async ({ letter, rev }) => {
       const w = await world(),
         db = new DatabaseSync(":memory:");
-      let attached: typeof Attached.Type = Attached.cases.online.make({
-        client: letter,
-        identity: { key: w.key.fingerprint, person: PERSON, as: "window" },
-        version: 1,
-        waits: [],
-        watching: false,
-        busy: false,
-      });
+      let attached = online(w, letter);
       const ws = {
         deserializeAttachment: () => attached,
         serializeAttachment: (a: typeof Attached.Type) => {
@@ -807,14 +811,7 @@ describe("P12 Connection recording", () => {
     const w = await world(),
       db = new DatabaseSync(":memory:"),
       sent: string[] = [];
-    let attached: typeof Attached.Type = Attached.cases.online.make({
-      client: "client-test",
-      identity: { key: w.key.fingerprint, person: PERSON, as: "window" },
-      version: 1,
-      waits: [],
-      watching: false,
-      busy: false,
-    });
+    let attached = online(w, "client-test");
     const ws = {
       deserializeAttachment: () => attached,
       serializeAttachment: (a: typeof Attached.Type) => {

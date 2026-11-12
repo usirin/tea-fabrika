@@ -30,6 +30,7 @@ import { noSecretEnv } from "./no-secret-env.ts";
 import { noStageWord } from "./no-stage-word.ts";
 import { noThrowInEffectGen } from "./no-throw-in-effect-gen.ts";
 import { noTypeAssertions } from "./no-type-assertions.ts";
+import { noWallClock } from "./no-wall-clock.ts";
 import { oneIdModule } from "./one-id-module.ts";
 import { oneStoreHook } from "./one-store-hook.ts";
 import { outsideInputConstructor } from "./outside-input-constructor.ts";
@@ -71,6 +72,7 @@ const plugin: Plugin = {
     "no-stage-word": noStageWord,
     "no-throw-in-effect-gen": noThrowInEffectGen,
     "no-type-assertions": noTypeAssertions,
+    "no-wall-clock": noWallClock,
     "one-store-hook": oneStoreHook,
     "program-package-layout": programPackageLayout,
     "one-id-module": oneIdModule,

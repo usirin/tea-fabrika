@@ -390,8 +390,10 @@ describe("each rule refuses what it is there to refuse", () => {
       // P16's rule reads the program package, so generated packages plant it in its own test file.
       "program-package-layout",
       // Generated no-question-word-key.test.ts plants run at next/ and .agents/ paths with the real
-      // lint config, beside oxlint's own id-denylist.
+      // lint config, beside oxlint's own id-denylist. Generated no-wall-clock.test.ts plants run at
+      // next/ paths with the real lint config.
       "no-question-word-key",
+      "no-wall-clock",
       // Generated no-stage-word.test.ts plants run at next/ paths with the real lint config.
       "no-stage-word",
     ];

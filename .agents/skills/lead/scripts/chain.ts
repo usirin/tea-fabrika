@@ -76,6 +76,10 @@
 // While the lane runs, the record also holds its heartbeat (./flow/Beat.ts, ticket 685): the phase
 // the chain is in, since when, and when an agent last wrote, written on each phase change and every
 // 30 seconds, so a status page tells a lane at work from one blocked in a hung call.
+// The lane's pull request is a draft from its first commit (0134): drive's pushing phase pushes each
+// step's commit to the branch and opens the draft when the branch has none (./pr/Publish.ts). The
+// `opening` phase pushes the reviewed head, gives the pull request the brief's `## pr` words and
+// marks it ready (`Publish.ready`), through the typed PullRequests service.
 // The chain holds every right (the bot's push, the PR, catch-up, the commit and its signature); a
 // box or the judgment agent holds only its model login
 // (.decisions/0028-the-parent-holds-every-right.md). The steps run the unmodified harness
@@ -127,6 +131,9 @@ import * as Beat from "./flow/Beat.ts";
 import * as Host from "./flow/host.ts";
 import * as Outcome from "./flow/Outcome.ts";
 import { stepOf, wipOf } from "./lane.ts";
+import * as Publish from "./pr/Publish.ts";
+import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
+import * as PushesProcess from "./pr/PushesProcess.ts";
 import * as RunId from "./runid.ts";
 
 const HERE = import.meta.dirname;
@@ -1422,33 +1429,6 @@ const handlers = (s: Setup) => {
           return { pr: null, detail: "the lane brief has no `## pr` section with a title line" };
         }
 
-        note(`review said merge-ready at ${cmd.head.slice(0, 8)}; pushing ${s.branch} and opening the PR`);
-        const push = yield* spawnEffect("node", [join(HERE, "botpush.mjs"), env.MAIN, s.branch, cmd.head], { errFile });
-
-        if (push.code !== 0) {
-          return { pr: null, detail: `botpush ${s.branch} failed; see ${errFile}` };
-        }
-
-        const listed = sh("gh", [
-          "pr",
-          "list",
-          "-R",
-          env.GH_REPO,
-          "--head",
-          s.branch,
-          "--json",
-          "number",
-          "-q",
-          ".[0].number",
-        ]);
-        const existing = Number(listed.out.trim());
-
-        if (listed.code === 0 && Number.isInteger(existing) && existing > 0) {
-          note(`PR ${existing} already open on ${s.branch}`);
-          writeRecord({ ...readRecord(), pr: existing });
-          return { pr: existing, detail: "existing" };
-        }
-
         const body = [
           (s.brief.sections.pr ?? "").split("\n").slice(1).join("\n").trim(),
           "",
@@ -1462,32 +1442,28 @@ const handlers = (s: Setup) => {
           "",
           ...stepsTable(join(env.BOXES, `${s.lane}-rows.jsonl`), saved().steps),
         ].join("\n");
-        const bodyFile = join(env.BOXES, `${s.lane}-pr-body.md`);
-        writeFileSync(bodyFile, `${body}\n`);
-        const made = sh("gh", [
-          "pr",
-          "create",
-          "-R",
-          env.GH_REPO,
-          "--head",
-          s.branch,
-          "--title",
-          title,
-          "--body-file",
-          bodyFile,
-        ]);
-        const pr = Number(/\/pull\/(\d+)/.exec(made.out)?.[1]);
+        // The draft opened at the lane's first commit (drive's pushing phase, 0134) takes the brief's
+        // words and is marked ready; a lane started before that gets its pull request here.
+        note(`review said merge-ready at ${cmd.head.slice(0, 8)}; pushing ${s.branch} and marking its PR ready`);
+        const services = Layer.mergeAll(PushesProcess.layer(HERE), PullRequestsGh.layer(env.GH_REPO, env.MAIN));
+        const readied = yield* Publish.ready({
+          dir: env.MAIN,
+          branch: s.branch,
+          head: cmd.head,
+          text: { title, body },
+        }).pipe(
+          Effect.map((p) => ({ pr: p.pr, detail: p.opened ? "opened" : "existing" })),
+          Effect.catch((e) => Effect.succeed({ pr: null, detail: `${s.branch} not marked ready: ${e.reason}` })),
+          Effect.provide(Layer.provide(services, NodeServices.layer)),
+        );
 
-        if (made.code !== 0 || !Number.isInteger(pr)) {
-          return {
-            pr: null,
-            detail: `gh pr create failed: ${made.out.trim().split("\n").at(-1) ?? ""}`,
-          };
+        if (readied.pr === null) {
+          return readied;
         }
 
-        note(`opened https://github.com/${env.GH_REPO}/pull/${pr}`);
-        writeRecord({ ...readRecord(), pr });
-        return { pr, detail: "opened" };
+        note(`ready: https://github.com/${env.GH_REPO}/pull/${readied.pr}`);
+        writeRecord({ ...readRecord(), pr: readied.pr });
+        return readied;
       }),
     // loosening.sh on the exam diff from where the lane leaves main to the reviewed head, run in
     // the main checkout, which holds every step's commits. Its output, hits or not, goes on the PR
