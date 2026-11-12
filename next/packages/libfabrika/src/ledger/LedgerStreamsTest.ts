@@ -1,5 +1,5 @@
 // T714, next/. A5 uses the real ledger and discovery layer, with the driver's scope owned above us.
-// After build: skip a discovery page, interpret a wildcard prefix, or drop a translated cause.
+// Page, wildcard-prefix and error-cause plant trials are recorded in the tests-step report.
 import { expect, it } from "@effect/vitest";
 import { Arbitrary, Effect, Layer, Schema, type Scope, Stream } from "effect";
 import type { Sql } from "../Sql.ts";

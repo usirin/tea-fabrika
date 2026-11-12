@@ -1,6 +1,6 @@
 // T714, next/. A6/A7's pure entry points. The gateway suite exercises these rules on saved histories.
 // select(jobs, {process,key}) returns Result<Job|null,"ambiguous">; owns checks all named resource facts.
-// After build: select one ambiguous candidate or admit a different live key with a known execution.
+// Ambiguity, finished-work and wrong-key plant trials are recorded in the tests-step report.
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import * as Id from "../Id.ts";

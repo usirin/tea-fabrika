@@ -903,11 +903,18 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
 
         if (table === "entries") {
           outputs.ledger = rows;
+
+          for (const row of rows.filter((row) => row._tag === "initialized")) {
+            const { url } = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ url: Schema.String })))(
+              row.body,
+            );
+            outputs.urls = [outputs.urls, url, encodeURIComponent(url), decodeURIComponent(url)];
+          }
         } else if (table === "gateway_state") {
           outputs.attachments = [w.attachments, rows];
         } else if (/measure|refusal|sums|summary/.test(table)) {
           outputs.measurements = [outputs.measurements, rows];
-        } else if (/span|content/.test(table)) {
+        } else if (table === "unsent" || /span|content/.test(table)) {
           outputs.spans = [outputs.spans, rows];
         }
       }
