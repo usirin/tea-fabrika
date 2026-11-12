@@ -6,7 +6,8 @@ description: Commit and sign one pipeline step's work in tea-fabrika in one comm
 # Commit and sign a step
 
 One command stages the paths you name, refuses a build commit that holds an exam path, commits as
-the bot with the person as co-author, and signs the link as your step. Run it from the repo root.
+the bot with the person as co-author, signs the link as your step, and pushes it. Run it from the
+repo root.
 
 ```sh
 sh .agents/skills/step-commit/scripts/stepcommit.sh <step> <ticket> "T<ticket> <step>: <subject>" <path>...
@@ -41,7 +42,10 @@ field note 2026-11-08-20).
 - **Never rewrite history.** No `reset`, `rebase`, `commit --amend` or force-push. A takeover is a
   new commit on top. A rewrite leaves signed links that no longer match (`stale_link`).
 - **Never read, print or copy a key file.** The script reads `~/.fabrika/step-keys/<step>` itself.
-- **Never push.** The lead pushes.
+- **It pushes for you.** A signed commit is pushed at once, after the leak grep, and the branch gets
+  a draft pull request when it has none (0134). If the push cannot run, it exits 6 with the commit
+  made and signed: tell the lead. `--commit-only` and a box's commit push nothing here; the lane's
+  host part pushes them.
 - The co-author comes from `FABRIKA_COAUTHOR` (`Name <email>`), or your global git config. It never
   reads a box's own git config.
 
