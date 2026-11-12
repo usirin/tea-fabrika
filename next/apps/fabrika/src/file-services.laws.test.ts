@@ -368,6 +368,14 @@ for (const failed of [false, true]) {
             source,
             join(root, "compiler-ledger.json"),
           ]);
+          expect(w.calls[0]).toEqual(["read", source]);
+          const ledgerRead = w.calls.findIndex(
+            ([call, file]) => call === "read" && file === join(root, "compiler-ledger.json"),
+          );
+          expect(
+            w.calls.slice(0, ledgerRead).every(([call]) => call === "read"),
+            "only reads come before the compiler ledger read",
+          ).toBe(true);
           const styles = reads.filter((file) => file.endsWith(".css"));
           expect(new Set(styles).size, "the tab's stylesheets are read through FileSystem").toBe(3);
           const lastRead = w.calls.findLastIndex(([call]) => call === "read");

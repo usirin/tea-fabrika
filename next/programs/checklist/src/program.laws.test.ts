@@ -74,7 +74,14 @@ const Gap = fc.oneof(
   { arbitrary: fc.integer({ min: 0, max: 3 * DAY }), weight: 1 },
 );
 
-const Move = fc.record({ kind: fc.nat({ max: 10 }), pick: fc.nat(), other: fc.nat(), gap: Gap, note: Note });
+const Move = fc.record({
+  kind: fc.nat({ max: 10 }),
+  pick: fc.nat(),
+  other: fc.nat(),
+  gap: Gap,
+  onTime: fc.boolean(),
+  note: Note,
+});
 type Move = typeof Move extends fc.Arbitrary<infer A> ? A : never;
 
 const at = <A>(items: ReadonlyArray<A>, i: number): A | undefined => items[i % Math.max(items.length, 1)];
@@ -87,7 +94,11 @@ const choose = (m: Model, names: ReadonlyArray<string>, move: Move, clock: numbe
   const checked = m.items.filter((i) => i.state._tag === "checked").map((i) => i.name);
   const wakes = m.items.flatMap((i) => (i.state._tag === "open" ? [i.state.since + DAY] : []));
   const wake = m.items.some((i) => i.state._tag === "new") ? 0 : wakes.length > 0 ? Math.min(...wakes) : clock;
-  const timer: Msg = { type: "timer", at: wake, arrivedAt: Math.max(wake, clock + move.gap) };
+  const timer: Msg = {
+    type: "timer",
+    at: wake,
+    arrivedAt: move.onTime ? Math.max(wake, clock + move.gap) : clock + move.gap,
+  };
   const name = at(here, move.pick);
   const fresh = at(free, move.other);
   const check = (one: string | undefined): Msg =>
