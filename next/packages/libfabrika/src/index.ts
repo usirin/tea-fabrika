@@ -18,6 +18,14 @@ export * as NemesisLedger from "./runtime/NemesisLedger.ts";
  * @stability unstable
  */
 export * as NemesisNone from "./runtime/NemesisNone.ts";
+/**
+ * @stability unstable
+ */
+export * as ProcessHistory from "./processes/ProcessHistory.ts";
+/**
+ * @stability unstable
+ */
+export * as ProcessHistoryLedger from "./processes/ProcessHistoryLedger.ts";
 export {
   Alarm,
   CheckedWriter,
