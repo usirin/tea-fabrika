@@ -31,7 +31,7 @@ export class Control extends Context.Service<
     readonly fail: (method: "start" | "at", fault: Fault) => Effect.Effect<void>;
     readonly starts: () => ReadonlyArray<string>;
   }
->()("@kampus/libfabrika/ci/CiTest/Control") {}
+>()("@kampus/libfabrika/ci/CiTest.Control") {}
 
 const rank = (run: typeof CheckRun.Type) => {
   if (run.status._tag !== "done") {

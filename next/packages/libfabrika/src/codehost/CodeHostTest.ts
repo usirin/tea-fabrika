@@ -45,7 +45,7 @@ export class Control extends Context.Service<
     readonly calls: () => ReadonlyArray<Call>;
     readonly read: (change: number) => Effect.Effect<ChangeData | undefined>;
   }
->()("@kampus/libfabrika/codehost/CodeHostTest/Control") {}
+>()("@kampus/libfabrika/codehost/CodeHostTest.Control") {}
 
 export const commit = (hex: string) => Schema.decodeUnknownSync(Commit)(hex);
 export const tree = (hex: string) => Schema.decodeUnknownSync(Tree)(hex);
