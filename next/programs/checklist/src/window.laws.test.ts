@@ -98,15 +98,17 @@ const choice = fc.record({ move: fc.nat(), pick: fc.nat(), name, later: fc.integ
 type Choice = typeof choice extends fc.Arbitrary<infer C> ? C : never;
 
 /** Folds the real machine through Msgs legal in its model, as the brain would accept them. */
-const fold = (list: ReadonlyArray<Choice>): View => {
+const fold = (list: ReadonlyArray<Choice>): ReadonlyArray<View> => {
   let model: Model = checklistMachine.init(null, {})[0];
   let now = 1_000_000;
+  const views = [checklist.view.select(model)];
 
   for (const c of list) {
     const held = model.items.length === 0 ? null : model.items[c.pick % model.items.length]!.name;
     const options: Array<Msg> = [
       { type: "add", name: c.name },
-      { type: "timer", at: now + c.later },
+      // Once an item is stamped, its real wake time makes the late state reachable.
+      { type: "timer", at: Math.max(now, checklist.wake(model) ?? now) + c.later },
       ...(held === null
         ? []
         : ([
@@ -120,10 +122,11 @@ const fold = (list: ReadonlyArray<Choice>): View => {
     if (checklist.refuse(model, msg) === null) {
       model = applyCell(checklistMachine, model, msg)[0];
       now = msg.type === "timer" ? msg.at : now;
+      views.push(checklist.view.select(model));
     }
   }
 
-  return checklist.view.select(model);
+  return views;
 };
 
 const refused = checklistWindow.refused!;
@@ -148,44 +151,47 @@ const render = (view: View, refusal: string | null, draft: string) =>
     }),
   );
 
-const views = fc.array(choice, { maxLength: 14 }).map(fold);
+const walks = fc.array(choice, { minLength: 20, maxLength: 60 }).map(fold);
+const views = walks.chain((walk) => fc.constantFrom(...walk));
 
 describe("L24: the checklist window's markup", () => {
   it("one named box per item, checked as the view says, its state as a word, a remove per item and the count left", () => {
     const seen = { empty: 0, checked: 0, late: 0 };
     fc.assert(
-      fc.property(views, fc.string({ maxLength: 80 }), (view, draft) => {
-        const html = render(view, null, draft);
-        const boxes = tags(html, /<input[^>]*type="checkbox"[^>]*>/g);
-        expect(boxes, "one box per item").toHaveLength(view.items.length);
-        expect(boxes.map((b) => named(html, b)).sort()).toEqual(view.items.map((i) => i.name).sort());
-        expect(
-          boxes.filter((b) => /\schecked=""/.test(b)).map((b) => named(html, b)),
-          "a box is checked exactly when its item is",
-        ).toEqual(view.items.filter((i) => i.state === "checked").map((i) => i.name));
+      fc.property(walks, fc.string({ maxLength: 80 }), (walk, draft) => {
+        for (const view of walk) {
+          const html = render(view, null, draft);
+          const boxes = tags(html, /<input[^>]*type="checkbox"[^>]*>/g);
+          expect(boxes, "one box per item").toHaveLength(view.items.length);
+          expect(boxes.map((b) => named(html, b)).sort()).toEqual(view.items.map((i) => i.name).sort());
+          expect(
+            boxes.filter((b) => /\schecked=""/.test(b)).map((b) => named(html, b)),
+            "a box is checked exactly when its item is",
+          ).toEqual(view.items.filter((i) => i.state === "checked").map((i) => i.name));
 
-        const read = text(html);
+          const read = text(html);
 
-        for (const word of new Set(Object.values(WORDS))) {
-          const count = view.items.filter((i) => WORDS[i.state] === word).length;
-          expect(read.match(new RegExp(`\\b${word}\\b`, "g"))?.length ?? 0, `${word} words`).toBe(count);
+          for (const word of new Set(Object.values(WORDS))) {
+            const count = view.items.filter((i) => WORDS[i.state] === word).length;
+            expect(read.match(new RegExp(`\\b${word}\\b`, "g"))?.length ?? 0, `${word} words`).toBe(count);
+          }
+
+          const buttons = tags(html, /<button[^>]*>[\s\S]*?<\/button>/g).map(
+            (b) => attr(b, "aria-label") ?? text(b).trim(),
+          );
+
+          for (const item of view.items) {
+            expect(buttons, `a remove for ${item.name}`).toContain(`Remove ${item.name}`);
+          }
+
+          expect(read).toContain(`${view.left} left`);
+          expect(read.includes("Nothing on the list yet."), "the empty line shows exactly when there is none").toBe(
+            view.items.length === 0,
+          );
+          seen.empty += view.items.length === 0 ? 1 : 0;
+          seen.checked += view.items.some((i) => i.state === "checked") ? 1 : 0;
+          seen.late += view.items.some((i) => i.state === "late") ? 1 : 0;
         }
-
-        const buttons = tags(html, /<button[^>]*>[\s\S]*?<\/button>/g).map(
-          (b) => attr(b, "aria-label") ?? text(b).trim(),
-        );
-
-        for (const item of view.items) {
-          expect(buttons, `a remove for ${item.name}`).toContain(`Remove ${item.name}`);
-        }
-
-        expect(read).toContain(`${view.left} left`);
-        expect(read.includes("Nothing on the list yet."), "the empty line shows exactly when there is none").toBe(
-          view.items.length === 0,
-        );
-        seen.empty += view.items.length === 0 ? 1 : 0;
-        seen.checked += view.items.some((i) => i.state === "checked") ? 1 : 0;
-        seen.late += view.items.some((i) => i.state === "late") ? 1 : 0;
       }),
       { seed: SEED, numRuns: 50 },
     );

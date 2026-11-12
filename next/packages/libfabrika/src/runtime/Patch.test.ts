@@ -266,7 +266,7 @@ describe("L7: pointers and operations as the RFCs give them", () => {
     }
 
     expect(Result.getOrThrow(apply(RFC6901, [{ op: "replace", path: "", value: "X" }]))).toBe("X");
-    // `~01` is the key `~1`: `~1` is decoded first only by a wrong reader, which would read `/`.
+    // `~01` is the key `~1`: decoding `~0` first would turn it into `/`.
     expect(Result.getOrThrow(apply({ "~1": 0, "/": 0 }, [{ op: "replace", path: "/~01", value: 1 }]))).toEqual({
       "~1": 1,
       "/": 0,

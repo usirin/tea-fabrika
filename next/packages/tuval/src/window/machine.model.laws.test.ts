@@ -144,7 +144,7 @@ const choice = fc.record({
 });
 
 type Choice = typeof choice extends fc.Arbitrary<infer C> ? C : never;
-const walks = fc.array(choice, { minLength: 1, maxLength: 80 });
+const walks = fc.array(choice, { minLength: 1, maxLength: 240, size: "max" });
 
 /** What the walk knows beside the model: what is really waiting, and what it already delivered. */
 type World = {
@@ -194,6 +194,11 @@ const moves = (w: World, c: Choice): ReadonlyArray<() => WindowMsg> => {
       () => ({ type: "admitted", dial: d, ping: 30_000, ms: c.ms }),
       () => ({ type: "not_granted", dial: d, fingerprint, code: c.word.slice(0, 4), until: c.ms, ms: c.ms }),
     );
+
+    // Favor admission enough to finish several letters before a generated drop.
+    for (let n = 0; n < 8; n++) {
+      out.push(() => ({ type: "admitted", dial: d, ping: 30_000, ms: c.ms }));
+    }
   }
 
   if (s.link._tag === "waiting_grant") {
@@ -221,6 +226,19 @@ const moves = (w: World, c: Choice): ReadonlyArray<() => WindowMsg> => {
     tile: tile.id,
     m: { type: ["check", "uncheck", "remove"][c.aux % 3]!, name: POOL[c.ms % POOL.length]! },
   }));
+  const openedTiles = s.tiles.filter((t) => t.reach._tag === "open");
+
+  if (openedTiles.length > 0) {
+    const opened = openedTiles[c.pick % openedTiles.length]!;
+    out.push(() => ({ type: "press", tile: opened.id, m: { type: "add", name: c.word } }));
+  }
+
+  const refusedTiles = openedTiles.filter((t) => t.refusal !== null);
+
+  if (refusedTiles.length > 0) {
+    const refused = refusedTiles[c.pick % refusedTiles.length]!;
+    out.push(() => ({ type: "press", tile: refused.id, m: { type: "add", name: c.word } }));
+  }
 
   // A tile's own Msg, legal for its machine's Model now.
   const own = s.tiles.filter((t) => tileFor(t.name) !== undefined);
@@ -273,7 +291,10 @@ const moves = (w: World, c: Choice): ReadonlyArray<() => WindowMsg> => {
 
   // Answers to the writes the brain has, on their own id and dial.
   if (w.flights.length > 0) {
-    const f = w.flights[c.pick % w.flights.length]!;
+    const unsettled = w.flights.filter((f) => s.flight.some((live) => live.id === f.id && live.dial === f.dial));
+    const letters = unsettled.filter((f) => f.call._tag === "send");
+    const available = c.aux % 4 !== 0 && letters.length > 0 ? letters : w.flights;
+    const f = available[c.pick % available.length]!;
     const on = { id: f.id, dial: f.dial };
 
     if (f.call._tag === "read") {
@@ -324,11 +345,26 @@ const moves = (w: World, c: Choice): ReadonlyArray<() => WindowMsg> => {
           ? { type: "send_ok", ...on, value: { _tag: "accepted", rev: 1, pos: 1 }, ms: c.ms }
           : { type: "read_ok", ...on, value: [], ms: c.ms },
     );
+    const current = w.flights[c.aux % Math.max(1, w.flights.length)];
+    const oldDial = w.old.find((old) => old.dial !== current?.dial)?.dial;
+
+    if (current !== undefined && oldDial !== undefined) {
+      // A current id on an ended dial must not match. Ids alone are insufficient.
+      out.push(() =>
+        current.call._tag === "open"
+          ? { type: "open_ok", id: current.id, dial: oldDial, value: { rev: 0, view: EMPTY }, ms: c.ms }
+          : current.call._tag === "send"
+            ? { type: "send_ok", id: current.id, dial: oldDial, value: { _tag: "accepted", rev: 1, pos: 1 }, ms: c.ms }
+            : { type: "read_ok", id: current.id, dial: oldDial, value: [], ms: c.ms },
+      );
+    }
   }
 
   // tea's answers to the Cmds handed out and not answered yet.
   if (w.waiting.length > 0) {
-    const cmd = w.waiting[c.pick % w.waiting.length]!;
+    const due = w.waiting.filter((cmd) => ["key", "now", "persist"].includes(cmd.type));
+    const available = c.aux % 4 !== 0 && due.length > 0 ? due : w.waiting;
+    const cmd = available[c.pick % available.length]!;
     const ok = c.aux % 5 !== 0;
     const answer = (value: unknown, error: unknown) => (): WindowMsg =>
       (ok ? { type: `${cmd.type}_ok`, cmd, value } : { type: `${cmd.type}_err`, cmd, error }) as WindowMsg;

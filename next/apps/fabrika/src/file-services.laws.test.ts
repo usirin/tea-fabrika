@@ -197,7 +197,15 @@ vi.mock("@kampus/libfabrika/node/build", async (original) => ({
     Effect.succeed({
       "fabrika/counter": { hash: createHash("sha256").update("counter").digest("hex"), source: "counter" },
     }),
-  bundle: () => Effect.succeed({ output: [{ type: "chunk", code: "export default {};" }] }),
+  bundle: (_input: unknown, _plugins: unknown, options: { readonly phase?: string }) =>
+    Effect.succeed({
+      output: [
+        { type: "chunk", code: "export default {};" },
+        ...(options.phase === "tab"
+          ? [{ type: "asset", fileName: "index.html", source: '<!doctype html><script src="/window.js"></script>' }]
+          : []),
+      ],
+    }),
 }));
 
 vi.mock("./exam/compiler.ts", async (original) => ({
@@ -236,6 +244,11 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
     [join(root, "compiler-ledger.json"), "[]"],
     [join(out, "brain.mjs"), "last good"],
   ]);
+
+  for (const module of ["@manti-ui/styles/index.css", "@kampus/fabrika-design/tokens.css", "@kampus/tuval/style.css"]) {
+    files.set(decodeURIComponent(new URL(import.meta.resolve(module)).pathname), ":root { --test-color: red; }");
+  }
+
   const modes: Array<ReadonlyArray<unknown>> = [];
   const calls: Array<ReadonlyArray<unknown>> = [],
     paths: Array<ReadonlyArray<string>> = [];
@@ -256,6 +269,7 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
       files.set(path, text);
     });
   const fs = FileSystem.layerNoop({
+    realPath: (path) => Effect.succeed(path),
     glob: () => Effect.succeed([relative(root, source)]),
     exists: (path) =>
       Effect.sync(() => files.has(path) || [...files.keys()].some((file) => file.startsWith(`${path}/`))),
@@ -355,7 +369,7 @@ for (const failed of [false, true]) {
             join(root, "compiler-ledger.json"),
           ]);
           const styles = reads.filter((file) => file.endsWith(".css"));
-          expect(styles, "the tab's stylesheets are read through FileSystem").toHaveLength(3);
+          expect(new Set(styles).size, "the tab's stylesheets are read through FileSystem").toBe(3);
           const lastRead = w.calls.findLastIndex(([call]) => call === "read");
           const firstWrite = w.calls.findIndex(([call]) => call === "write");
           expect(firstWrite === -1 || lastRead < firstWrite, "a read came after a write").toBe(true);

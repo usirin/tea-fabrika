@@ -342,6 +342,7 @@ const placings = (w: World) =>
 const admit = (w: World) =>
   Effect.gen(function* () {
     const client = yield* call(w, (p) => p.connect());
+    yield* call(w, (p) => p.register(client, "test-connection", "test-session"));
     const nonce = yield* call(w, (p) => p.challenge(client));
     const tab = "checklist-instance";
     const admitted = yield* call(w, (p) =>
@@ -402,6 +403,7 @@ describe("L21: the boot list", () => {
                     expect(Exit.isSuccess(reopened), "a reopen failed").toBe(true);
                     expect(w.configured.length, "a reopen started an entry again").toBe(before);
                     expect(yield* placings(w), "a reopen changed a first placing").toEqual(first);
+                    yield* call(w, (p) => p.register(client, "test-connection", "test-session"));
                   } else if (move === "exit") {
                     seen.exit++;
                     yield* call(w, (p) => p.exit(pid!, m.reason, w.from));

@@ -26,8 +26,8 @@ import { ClientRows } from "@kampus/libfabrika/transport/ClientRows";
 import { ClientSocket } from "@kampus/libfabrika/transport/ClientSocket";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
 import { Effect, Exit, Fiber, Layer, Option, Queue, Schema, Scope, Stream } from "effect";
+import * as Clock from "effect/Clock";
 import { TestClock } from "effect/testing";
-import * as fc from "fast-check";
 import { windowMachineFor } from "./machine.ts";
 import { startWindow } from "./main.tsx";
 
@@ -71,15 +71,17 @@ type Script = {
   pong: boolean;
   open: boolean;
   send: boolean;
+  waiting?: boolean;
   /** The malformed frames L12 sends once the page is online, in order. */
   junk: ReadonlyArray<(ids: ReadonlyMap<string, number | string>) => string>;
 };
 
 /** The door as a script on one in-memory socket per dial, and every frame the page sent. */
-const peer = (script: Script) => {
+const peer = (script: Script, pong: () => void = () => {}) => {
   const sent: Array<string> = [];
   const dials: Array<string> = [];
   const ids = new Map<string, number | string>(); // the last id of each method the page called
+  let knocks = 0;
   let open: Queue.Queue<SocketEvent> | null = null;
   const message = (frame: unknown) => Queue.offerUnsafe(open!, { event: "message", data: JSON.stringify(frame) });
 
@@ -88,6 +90,7 @@ const peer = (script: Script) => {
 
     if (text === "ping") {
       if (script.pong) {
+        pong();
         Queue.offerUnsafe(open!, { event: "message", data: "pong" });
       }
 
@@ -106,11 +109,20 @@ const peer = (script: Script) => {
     const result = (value: unknown) => message({ jsonrpc: "2.0", id: frame.id, result: value });
 
     if (frame.method === "initialize") {
+      if (script.waiting) {
+        message({ jsonrpc: "2.0", id: frame.id, error: { data: { reason: "not_granted" } } });
+        return true;
+      }
+
       // The door's admission as it answers `initialize`: the version, the beat and the checked identity.
       result({ version: 1, ping: 5_000, identity: { key: "SHA256:test", person: "person_test", as: "window" } });
 
       for (const junk of script.junk) {
         Queue.offerUnsafe(open!, { event: "message", data: junk(ids) });
+      }
+    } else if (frame.method === "gateway.knock") {
+      if (++knocks === 1) {
+        result({ code: "TEST", until: 300_000 });
       }
     } else if (frame.method === "ledger.read") {
       result({
@@ -148,7 +160,7 @@ const peer = (script: Script) => {
         () => Effect.sync(() => (open = null)),
       ),
   });
-  return { socket, sent, dials, message: (frame: unknown) => open !== null && message(frame) };
+  return { socket, sent, dials, knocks: () => knocks, message: (frame: unknown) => open !== null && message(frame) };
 };
 
 /** A real Ed25519 key in WebCrypto, as the browser layer makes one, with its ssh key line. */
@@ -195,62 +207,93 @@ const press = { type: "press", tile: "tile_1", m: { type: "check", name: "item 0
 
 describe("L10: real runtime progress", () => {
   it.effect.prop(
-    "with a peer that never answers a send or an open, every Cmd finishes and the tab leaves online within 10 s of its last pong",
+    "with unanswered sends, opens and knocks, every Cmd finishes and the tab leaves online within 10 s of its last pong",
     {
-      plan: fc.record({
-        open: fc.boolean(),
-        send: fc.boolean(),
-        silentAt: fc.integer({ min: 0, max: 40 }), // in half seconds after online: the peer stops ponging
-        presses: fc.array(fc.integer({ min: 0, max: 40 }), { maxLength: 4 }),
+      plan: Schema.Struct({
+        open: Schema.Boolean,
+        waiting: Schema.Boolean,
+        moves: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1000 }))).check(
+          Schema.isMinLength(20),
+          Schema.isMaxLength(60),
+        ),
       }),
     },
     ({ plan }) =>
       Effect.gen(function* () {
-        const script: Script = { pong: true, open: plan.open, send: plan.send, junk: [] };
-        const door = peer(script);
+        const script: Script = { pong: true, open: plan.open, waiting: plan.waiting, send: false, junk: [] };
+        const clock = yield* Clock.Clock;
+        let lastPong = clock.currentTimeMillisUnsafe();
+        const door = peer(script, () => {
+          lastPong = clock.currentTimeMillisUnsafe();
+        });
         const rows: Array<unknown> = [];
-        const scope = yield* Scope.make();
+        const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void));
         const booting = yield* startWindow({ tiles, window, build: BUILD, origin: ORIGIN }).pipe(
           Effect.provide(services(door.socket, rows)),
           Scope.provide(scope),
         );
         const run = yield* booting.ready;
-        let lastPong = 0,
-          now = 0,
-          online = false;
+        const idleNow = Effect.gen(function* () {
+          const idle = yield* Effect.forkChild(run.idle());
+          yield* tick(1);
+          expect(idle.pollUnsafe() !== undefined, "a Cmd is still running").toBe(true);
+          yield* Fiber.interrupt(idle);
+        });
 
-        for (let half = 0; half < 120; half++) {
-          if (online && plan.presses.includes(half)) {
-            yield* run.dispatch(press);
-          }
+        for (const pick of plan.moves) {
+          const state = run.getState();
 
-          if (online && half === plan.silentAt) {
-            script.pong = false;
-          }
+          if (state.link._tag === "waiting_grant") {
+            if (door.knocks() < 2 || pick % 3 === 0) {
+              yield* tick(30_000);
+              yield* idleNow;
+            } else {
+              script.waiting = false;
+              door.message({ jsonrpc: "2.0", method: "client.granted", params: { nonce: "grant_nonce" } });
+              yield* tick(500);
+            }
+          } else if (state.link._tag === "online") {
+            const open = state.tiles.find((t) => t.reach._tag === "open");
+            const opening = state.flight.find((f) => f.call._tag === "open");
 
-          yield* tick(500);
-          now += 500;
-          const link = run.getState().link;
+            if (open !== undefined && pick % 3 !== 0) {
+              yield* run.dispatch({ ...press, tile: open.id });
+            } else if (opening?.call._tag === "open") {
+              // A notice may beat an unanswered open. It also enables sends in that walk.
+              door.message({
+                jsonrpc: "2.0",
+                method: "view.whole",
+                params: {
+                  pid: opening.call.pid,
+                  type: "whole",
+                  rev: 1,
+                  view: list(pick % 4),
+                },
+              });
+            }
 
-          if (!online && link._tag === "online") {
-            online = true;
-            plan.silentAt += half;
-            plan.presses = plan.presses.map((p) => p + half);
-          }
-
-          if (script.pong && link._tag === "online") {
-            lastPong = now;
-          }
-
-          if (online && !script.pong) {
-            expect(
-              link._tag !== "online" || now <= lastPong + 10_000,
-              `still online ${now - lastPong} ms after the last pong`,
-            ).toBe(true);
+            yield* tick(500);
+            yield* idleNow;
+          } else {
+            yield* tick(500);
           }
         }
 
-        expect(online, "the page went online").toBe(true);
+        expect(run.getState().link._tag, "the page went online").toBe("online");
+
+        if (plan.waiting) {
+          expect(door.knocks(), "a renewal went unanswered").toBeGreaterThan(1);
+        }
+
+        // Stop answering pings on the current dial. A later successful dial is allowed.
+        script.pong = false;
+        const link = run.getState().link;
+
+        while (clock.currentTimeMillisUnsafe() < lastPong + 10_000 && run.getState().link._tag === "online") {
+          yield* tick(500);
+        }
+
+        expect(run.getState().link, "the silent dial left online within 10 s").not.toEqual(link);
         expect(run.getState().link._tag).not.toBe("online");
         // Every Cmd finished: the run goes idle once its Cmds settle, unanswered calls and all.
         const idle = yield* Effect.forkChild(run.idle());
@@ -267,8 +310,8 @@ describe("L10: real runtime progress", () => {
 
         expect(new Set(rows.filter(Schema.is(ClientRow)).map((r) => r.tab)).size).toBe(1);
         yield* Scope.close(scope, Exit.void);
-      }).pipe(Effect.provide(TestClock.layer())),
-    { fastCheck: { seed: SEED, numRuns: 50 } },
+      }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+    { arbitrary: { seed: SEED, runs: 50 } },
   );
 });
 
@@ -306,7 +349,7 @@ describe("L12: wire formats are refused as typed values", () => {
           ],
         };
         const door = peer(script);
-        const scope = yield* Scope.make();
+        const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void));
         const booting = yield* startWindow({ tiles, window, build: BUILD, origin: ORIGIN }).pipe(
           Effect.provide(services(door.socket, [])),
           Scope.provide(scope),
@@ -320,8 +363,11 @@ describe("L12: wire formats are refused as typed values", () => {
         expect(run.getState().link._tag).toBe("online");
         const opened = door.sent.flatMap((t) => Option.toArray(decodeFrame(t))).find((f) => f.method === "view.open");
         expect(opened, "the page opened its tile").toBeDefined();
+        const beforeMalformed = run.getState();
         // The open's answer arrives malformed: an empty struct, then a view of the wrong type.
         door.message({ jsonrpc: "2.0", id: opened?.id, result: {} });
+        yield* tick(500);
+        expect(run.getState().flight, "a malformed open answer settled a flight").toEqual(beforeMalformed.flight);
         door.message({ jsonrpc: "2.0", id: opened?.id, result: { rev: 1, view: { items: "one", left: 1 } } });
         yield* tick(500);
         expect(run.getState().client.views, "nothing malformed was installed").toEqual({});
@@ -351,6 +397,6 @@ describe("L12: wire formats are refused as typed values", () => {
         expect(run.getState().tiles.map((t) => t.refusal)).toEqual([null]);
         expect(run.getState().link._tag).toBe("online");
         yield* Scope.close(scope, Exit.void);
-      }).pipe(Effect.provide(TestClock.layer())),
+      }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
   );
 });
