@@ -1,7 +1,16 @@
 // next/: the window parent steps Link, Client and the tiles by sending each its own Msgs.
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { type AnyTile, clientMachineFor, ClientRecord, ProgramClient as C, Sent } from "@kampus/libfabrika";
+import {
+  type AnyTile,
+  clientMachineFor,
+  ClientRecord,
+  type Program,
+  ProgramClient as C,
+  Sent,
+  type WindowData,
+  type WindowMsg as ProgramMsg,
+} from "@kampus/libfabrika";
 import { ClientKeyError } from "@kampus/libfabrika/transport/ClientKey";
 import { Link, linkMachine, LinkMsg, ping, socketDial, timerDeps } from "@kampus/libfabrika/transport/Link";
 import { Predicate, Result, Schema } from "effect";
@@ -130,7 +139,22 @@ type Out = ReadonlyArray<
 type Step = readonly [WindowModel, Out];
 type ClientStep = (client: C.Client, msg: C.ClientMsg) => readonly [C.Client, ReadonlyArray<string>];
 
-type WindowChecks = C.ClientChecks & { readonly tile?: (name: string) => AnyTile | undefined };
+type AnyProgram = Program<any, any, any, any, any>;
+
+type ProgramTile<P extends AnyProgram> = Machine<
+  any,
+  any,
+  { readonly type: "press"; readonly m: ProgramMsg<P> },
+  any,
+  any
+> &
+  Pick<AnyTile, "model" | "msg">;
+
+type WindowChecks<P extends AnyProgram> = {
+  readonly decode?: (pid: string) => (view: unknown) => WindowData<P>;
+  readonly tile?: (name: string) => ProgramTile<P> | undefined;
+};
+
 type WindowCtx = { readonly tiles: ReadonlyArray<{ readonly id: string; readonly name: string }> };
 type SocketSub = Sub<"socket", { readonly dial: number; readonly rejected: string | null; readonly tries: number }>;
 
@@ -399,7 +423,7 @@ const linkUpdate = Object.fromEntries(
 ) as { readonly [K in LinkMsg["type"]]: (s: WindowModel, m: Extract<LinkMsg, { readonly type: K }>) => Step };
 
 /** One parent per run. Decoder functions and child machines stay outside saved data. */
-export const windowMachineFor = (checks: WindowChecks) => {
+export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: WindowChecks<P>) => {
   const client = clientMachineFor(checks);
   const step: ClientStep = (s, m) => {
     const [next, cmds] = applyCell(client, s, m);
