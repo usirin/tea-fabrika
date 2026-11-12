@@ -414,17 +414,14 @@ const client = (s: Launched, tab: string) =>
     (c) => Effect.sync(() => c.close()),
   );
 
-it.live.prop(
-  "T843 instance: the real settings gate survives reconnect and recovers the same letter after its delay (50 runs)",
-  {
-    limit: Schema.Int.check(Schema.isBetween({ minimum: 3, maximum: 8 })),
-    word: Schema.NonEmptyString.check(Schema.isMaxLength(20)),
-    source: Schema.Literals(["flags", "env", "file"]),
-  },
-  ({ limit, word, source }) =>
+// Only a real instance proves each settings source reaches the gateway across a reconnect.
+// The module properties carry the generated limit and window behavior with 50 runs each.
+it.live.each(["flags", "env", "file"] as const)(
+  "scenario: T843 instance settings from %s survive reconnect and recover the same letter after its delay",
+  (source) =>
     Effect.gen(function* () {
       const held: Held = { children: [], homes: [], ports: [] };
-      const policy = { limit, window: 5000 };
+      const policy = { limit: 4, window: 1000 };
       const s = yield* Effect.acquireRelease(
         Effect.promise(() => launch(held, undefined, policy, source)),
         () => Effect.promise(() => giveBack(held)),
@@ -432,16 +429,16 @@ it.live.prop(
       const c = yield* client(s, "budget-one");
       const remaining = policy.window - ((yield* Clock.currentTimeMillis) % policy.window);
 
-      if (remaining < policy.window / 2) {
+      if (remaining < (3 * policy.window) / 4) {
         yield* Effect.sleep(remaining + 5);
       }
 
       const pid = yield* Effect.promise(() => counter(c));
-      const letter = `t843-${word}`;
+      const letter = `t843-${source}`;
       const accepted = yield* Effect.promise(() => send(c, pid, letter));
       expect(accepted.error).toBeUndefined();
 
-      for (let n = 2; n < limit; n++) {
+      for (let n = 2; n < policy.limit; n++) {
         expect((yield* Effect.promise(() => send(c, pid, letter))).result).toEqual(accepted.result);
       }
 
@@ -459,7 +456,6 @@ it.live.prop(
       const inbox = yield* Effect.promise(() => read(again, "counter:1/inbox"));
       expect(inbox).toHaveLength(1);
     }),
-  { arbitrary: { seed: 119120, runs: 50 }, timeout: 600_000 },
 );
 
 /** The same, once workerd is back: tries a new socket until the hello is answered. No hello in WAIT
