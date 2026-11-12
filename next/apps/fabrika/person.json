@@ -10,7 +10,7 @@
           "maximum": 9007199254740991,
           "exclusiveMinimum": 0,
           "title": "a positive whole number",
-          "description": "Milliseconds between brain readiness and stop checks.",
+          "description": "The interval in milliseconds between brain readiness and shutdown checks.",
           "default": 100
         },
         "brain-start-timeout": {
@@ -18,7 +18,7 @@
           "maximum": 9007199254740991,
           "exclusiveMinimum": 0,
           "title": "a positive whole number",
-          "description": "Milliseconds to wait for the local brain to become ready.",
+          "description": "The maximum time in milliseconds to start or reuse a ready local brain.",
           "default": 60000
         },
         "brain-stop-timeout": {
@@ -26,7 +26,7 @@
           "maximum": 9007199254740991,
           "exclusiveMinimum": 0,
           "title": "a positive whole number",
-          "description": "Milliseconds to confirm the brain and its children have stopped.",
+          "description": "The maximum time in milliseconds to confirm the local brain and its children have stopped.",
           "default": 5000
         },
         "brain-throttle": {
@@ -34,7 +34,7 @@
           "maximum": 9007199254740991,
           "exclusiveMinimum": 0,
           "title": "a positive whole number",
-          "description": "Seconds launchd waits between failed brain starts.",
+          "description": "The delay in whole seconds between crash restarts of the local brain.",
           "default": 2
         }
       },

@@ -148,7 +148,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
   });
   const settings = yield* ServiceTest.timing();
   const context = yield* Layer.build(
-    Launchd.layer(spec, settings).pipe(Effect.provide(Layer.mergeAll(disk, spawner, Digest.layerWebCrypto))),
+    Launchd.layer(spec, settings).pipe(Layer.provide(Layer.mergeAll(disk, spawner, Digest.layerWebCrypto))),
   );
   return {
     control: Context.get(context, BrainControl),

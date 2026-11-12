@@ -131,6 +131,7 @@ it.effect.prop(
   ([status, ready, cleanup, word]) =>
     Effect.gen(function* () {
       const secret = `sentinel-${word}/+&`;
+      const encoded = encodeURIComponent(secret.toWellFormed());
       const machine = BrainLife.machine({ spec: Outside.spec, settings: yield* ServiceTest.timing() });
       propertyInvariant(
         machine,
@@ -142,14 +143,12 @@ it.effect.prop(
             ...msg,
             cause: secret,
             stderr: secret,
-            url: `${Outside.spec.url}?secret=${encodeURIComponent(secret)}`,
+            url: `${Outside.spec.url}?secret=${encoded}`,
           };
           const [next] = applyCell(machine, prev, poisoned);
           const outputs = [JSON.stringify(next), JSON.stringify(Schema.encodeSync(BrainLife.Model)(next))];
           return outputs.every((output) =>
-            [secret, encodeURIComponent(secret), JSON.stringify(secret).slice(1, -1)].every(
-              (form) => !output.includes(form),
-            ),
+            [secret, encoded, JSON.stringify(secret).slice(1, -1)].every((form) => !output.includes(form)),
           );
         },
         { seed: 119120, numRuns: 1 },

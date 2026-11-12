@@ -258,7 +258,18 @@ it.effect.prop(
         const call = yield* outside.take;
         expect(call).toBeDefined();
         yield* call?.fail(secret) ?? Effect.die("no held command to fail");
-        yield* Effect.yieldNow;
+
+        // A failed bootstrap re-inspects ownership before settling the operation.
+        for (let n = 0; n < 100 && fiber.pollUnsafe() === undefined; n++) {
+          yield* Effect.yieldNow;
+          const retry = yield* outside.take;
+
+          if (retry !== undefined) {
+            yield* retry.fail(secret);
+          }
+        }
+
+        expect(fiber.pollUnsafe(), "failed native replies settle the operation").toBeDefined();
         const exit = yield* Fiber.await(fiber);
         expect(Exit.isFailure(exit)).toBe(true);
         const outputs = [

@@ -26,8 +26,9 @@ export const suite = (open: Open) =>
       ([fault, tail]) =>
         Effect.gen(function* () {
           const disk = yield* open(fault);
-          const original = `foreign-job-${tail}`;
-          yield* disk.seed(original);
+          yield* disk.seed(`foreign-job-${tail}`);
+          const original = yield* disk.read;
+          expect(original).not.toBeNull();
           const exit = yield* disk.control.install.pipe(Effect.exit);
           expect(Exit.isFailure(exit)).toBe(true);
           expect(yield* disk.read).toBe(original);

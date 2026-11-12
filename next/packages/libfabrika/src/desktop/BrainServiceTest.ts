@@ -38,7 +38,7 @@ export const timing = Effect.fn("BrainServiceTest.timing")(function* (flags: Rec
 
 export const layer = (outside: Effect.Success<ReturnType<typeof ControlTest.make>>, settings: Snapshot.Snapshot) =>
   Managed.layer(ControlTest.spec, settings).pipe(
-    Effect.provide(
+    Layer.provide(
       Layer.mergeAll(
         outside.control,
         outside.probe,

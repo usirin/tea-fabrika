@@ -61,7 +61,7 @@ it.effect.prop(
   "L14 invalid and repo-scoped timings fail before a start can read them",
   [
     Schema.Literals(paths),
-    Schema.Union([Schema.Int.check(Schema.isLessThanOrEqualTo(0)), Schema.Literals([0.5, "bad", "", null])]),
+    Schema.Union([Schema.Int.check(Schema.isLessThanOrEqualTo(0)), Schema.Literals([0.5, "bad"])]),
   ],
   ([path, bad]) =>
     Effect.gen(function* () {

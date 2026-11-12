@@ -135,7 +135,7 @@ it.effect.prop(
       });
       const reopen = Effect.fnUntraced(function* (action: "up" | "stop" = "up") {
         const context = yield* Layer.build(
-          ServiceLaunchd.layer(disk.spec, disk.settings, probe, forward).pipe(Effect.provide(disk.native)),
+          ServiceLaunchd.layer(disk.spec, disk.settings, probe, forward).pipe(Layer.provide(disk.native)),
         );
         return yield* Context.get(context, BrainService)[action].pipe(Effect.exit);
       });
@@ -194,7 +194,7 @@ it.effect.prop(
               sent.push(args);
               return { _tag: "written" };
             }),
-        ).pipe(Effect.provide(disk.native)),
+        ).pipe(Layer.provide(disk.native)),
       );
       const failed = yield* Context.get(context, BrainService).up.pipe(Effect.exit);
       expect(Exit.isFailure(failed)).toBe(true);
