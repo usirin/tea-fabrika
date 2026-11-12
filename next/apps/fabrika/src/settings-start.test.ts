@@ -17,7 +17,7 @@ import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { Effect, Exit, FileSystem, Layer, Path, Ref, Schema, Stream } from "effect";
-import { Digest } from "effect/crypto";
+import { Digest, SecureRandom } from "effect/crypto";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
@@ -376,7 +376,9 @@ it.live("scenario: T753 L13 real Worker retries the same HTTP owner, shares warm
     const reopened = yield* probe;
     expect(reopened.rows).toEqual(cold.rows);
     expect(reopened.calls).toBeGreaterThan(recordCold.calls);
-  }).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto, FetchHttpClient.layer])),
+  }).pipe(
+    Effect.provide([NodeServices.layer, Digest.layerWebCrypto, SecureRandom.layerWebCrypto, FetchHttpClient.layer]),
+  ),
 );
 
 /** One dev.ts in its own scoped home, its output collected as it comes. Scope close kills it. */
