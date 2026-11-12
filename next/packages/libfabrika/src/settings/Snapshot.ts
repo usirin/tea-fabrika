@@ -1,7 +1,7 @@
 // What one process start used: each declared value as its schema encodes it, keyed by path, where
 // each came from, and a hash of the values alone. Paths are sorted before hashing, and origins stay
 // out of it, so equal settings have one hash whatever source gave them.
-import { Effect, Predicate, Redacted, Schema } from "effect";
+import { Effect, Option, Predicate, Record as Rec, Redacted, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as Codec from "./Codec.ts";
 import type * as Setting from "./Setting.ts";
@@ -36,7 +36,9 @@ export const make = Effect.fnUntraced(function* <A, R extends Record<string, Set
   const encoded: Snapshot["values"] = yield* Schema.encodeUnknownEffect(Codec.values(group))(resolved.values).pipe(
     Effect.orDie,
   );
-  const values = Object.fromEntries(Object.entries(group.settings).map(([name, d]) => [d.path, encoded[name]]));
+  const values = Object.fromEntries(
+    Object.entries(group.settings).map(([name, d]) => [d.path, Option.getOrThrow(Rec.get(encoded, name))]),
+  );
   const snapshot: Snapshot = {
     values,
     origins: Schema.decodeUnknownSync(Schema.Record(Schema.String, Origin))(resolved.origins),
@@ -67,7 +69,9 @@ export const read = Effect.fnUntraced(function* <A, R extends Record<string, Set
   const named = Object.fromEntries(Object.entries(group.settings).map(([name, d]) => [name, saved.values[d.path]]));
   const values = yield* Schema.decodeUnknownEffect(codec)(named, strict).pipe(Effect.mapError(refused));
   const encoded: Snapshot["values"] = yield* Schema.encodeEffect(codec)(values).pipe(Effect.mapError(refused));
-  const canonical = Object.fromEntries(Object.entries(group.settings).map(([name, d]) => [d.path, encoded[name]]));
+  const canonical = Object.fromEntries(
+    Object.entries(group.settings).map(([name, d]) => [d.path, Option.getOrThrow(Rec.get(encoded, name))]),
+  );
   const hash = yield* hashValues(canonical);
 
   if (saved.hash !== hash) {
