@@ -32,8 +32,8 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
 }) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
-  const within = (location: string) => {
-    const relative = path.relative(options.root, location);
+  const contains = (base: string, location: string) => {
+    const relative = path.relative(base, location);
     return (
       relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
     );
@@ -71,26 +71,44 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
 
       const next = path.join(location, part);
 
-      if (!committed || !within(next)) {
-        const disk = path.join(next, ...pending);
-        return {
-          location: yield* fs
-            .realPath(disk)
-            .pipe(Effect.mapError((cause) => (cause.reason._tag === "NotFound" ? missing(cause) : failed(cause)))),
-          committed: false,
-        };
+      // Absolute committed links cross the canonical root's ancestors before tree lookup starts.
+      if (committed && contains(next, options.root)) {
+        location = next;
+        continue;
       }
 
-      const relative = path.relative(options.root, next).split(path.sep).join("/");
-      const entry = yield* options.entry(relative);
+      let link: string;
 
-      if (entry === null) {
-        return yield* missing("absent committed path");
-      }
+      if (!committed || !contains(options.root, next)) {
+        const stat = yield* fs
+          .lstat(next)
+          .pipe(Effect.mapError((cause) => (cause.reason._tag === "NotFound" ? missing(cause) : failed(cause))));
 
-      if (entry.mode === "120000") {
-        if (active.has(next)) {
-          return yield* failed("symlink cycle");
+        if (stat.type !== "SymbolicLink") {
+          if (pending.length > 0 && stat.type !== "Directory") {
+            return yield* failed("source parent is not a folder");
+          }
+
+          location = next;
+          continue;
+        }
+
+        link = yield* fs.readLink(next).pipe(Effect.mapError(failed));
+      } else {
+        const relative = path.relative(options.root, next).split(path.sep).join("/");
+        const entry = yield* options.entry(relative);
+
+        if (entry === null) {
+          return yield* missing("absent committed path");
+        }
+
+        if (entry.mode !== "120000") {
+          if (pending.length > 0 && entry.type !== "tree") {
+            return yield* failed("source parent is not a folder");
+          }
+
+          location = next;
+          continue;
         }
 
         const bytes = yield* options.read(relative);
@@ -99,36 +117,25 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
           return yield* failed("missing symlink blob");
         }
 
-        const link = yield* Effect.try({
+        link = yield* Effect.try({
           try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
           catch: failed,
         });
-
-        if (link === "" || link.includes("\0")) {
-          return yield* failed("invalid symlink");
-        }
-
-        const linked = yield* target(location, link, true, new Set([...active, next]));
-        location = linked.location;
-
-        if (!linked.committed) {
-          return {
-            location: yield* fs
-              .realPath(path.join(location, ...pending))
-              .pipe(Effect.mapError((cause) => (cause.reason._tag === "NotFound" ? missing(cause) : failed(cause)))),
-            committed: false,
-          };
-        }
-      } else {
-        if (pending.length > 0 && entry.type !== "tree") {
-          return yield* failed("source parent is not a folder");
-        }
-
-        location = next;
       }
+
+      if (active.has(next)) {
+        return yield* failed("symlink cycle");
+      }
+
+      if (link === "" || link.includes("\0")) {
+        return yield* failed("invalid symlink");
+      }
+
+      const linked = yield* target(location, link, committed, new Set([...active, next]));
+      location = linked.location;
     }
 
-    return { location, committed: committed && within(location) };
+    return { location, committed: committed && contains(options.root, location) };
   });
   const readAt = Effect.fnUntraced(function* (base: string, file: string, committed: boolean) {
     const located = yield* target(base, file, committed).pipe(

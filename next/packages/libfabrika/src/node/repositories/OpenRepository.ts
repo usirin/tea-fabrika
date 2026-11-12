@@ -4,6 +4,8 @@ import * as Log from "../../ledger/Log.ts";
 import * as Open from "../../packs/Open.ts";
 import { Event, RepositoryId, RepositoryTrust, TrustDecision } from "../../packs/RepositoryTrust.ts";
 import { Repositories } from "../../repositories/Repositories.ts";
+import * as Declarations from "../../settings/Declarations.ts";
+import * as Files from "../../settings/Files.ts";
 import * as Load from "../settings/Load.ts";
 
 class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
@@ -15,18 +17,55 @@ class OpenRepositoryError extends Schema.TaggedError<OpenRepositoryError>()("Ope
   message: Schema.String,
 }) {}
 
-const failed = (reason: "storage" | "document" | "read", cause: unknown) =>
+const failed = (reason: "storage" | "document" | "read", cause: unknown, message?: string) =>
   new OpenRepositoryError({
     reason: new (reason === "storage" ? Storage : reason === "document" ? InvalidDocument : ReadFailed)({
       cause: Redacted.make(cause),
     }),
     message:
-      reason === "document"
+      message ??
+      (reason === "document"
         ? "Selected repository: settings document is invalid."
         : reason === "read"
           ? "Selected repository: read failed."
-          : "Selected repository: trust could not be saved.",
+          : "Selected repository: trust could not be saved."),
   });
+
+// P38's messages can include rejected values and parser input. Keep only known labels and keys.
+const documentFailed = (cause: Files.SettingsError) => {
+  const labels = [
+    ".fabrika/fabrika.toml",
+    "~/.fabrika/fabrika.toml",
+    "$FABRIKA_HOME/fabrika.toml",
+    ...Declarations.all.declarations.flatMap((d) => [`--${d.path}`, d.env]),
+  ];
+  const label = labels.find((name) =>
+    [":", ", line ", " could not be read."].some((suffix) => cause.message.startsWith(`${name}${suffix}`)),
+  );
+  const line = label === undefined ? undefined : /^, line ([0-9]+):/.exec(cause.message.slice(label.length))?.[1];
+  const location = label === undefined ? "Settings" : `${label}${line === undefined ? "" : `, line ${line}`}`;
+  const detail = label === undefined ? "" : cause.message.slice(location.length + 2);
+  const keys = Declarations.all.declarations.flatMap((d) =>
+    d.segments.map((_, n) => d.segments.slice(0, n + 1).join(".")),
+  );
+  const key =
+    cause.reason === "version"
+      ? Declarations.version.path
+      : keys.find((name) => detail.startsWith(`${name} =`) || detail.startsWith(`${name} is `));
+  const explanation = {
+    syntax: "Invalid TOML.",
+    unknown: "Unknown setting. Run fabrika settings to list the allowed keys.",
+    scope: "This setting is not allowed in this file.",
+    invalid: "Invalid setting value. Run fabrika settings to see the allowed values.",
+    version: "This repository requires a newer fabrika version.",
+    read: "Settings could not be read.",
+  }[cause.reason];
+  return failed(
+    "document",
+    cause,
+    `${location}${key === undefined ? "" : `: ${key}`}: ${explanation}\n  ${Files.STOP}`,
+  );
+};
 
 /** Validate before starting the shipped instance. No source resolution or code loading happens here. */
 export const prepare = Effect.fn("repositoryOpen.prepare")(function* (
@@ -39,7 +78,7 @@ export const prepare = Effect.fn("repositoryOpen.prepare")(function* (
   const loaded = yield* Load.load({
     ...options,
     repo: { name: repository.snapshot.file, text: repository.snapshot.text },
-  }).pipe(Effect.mapError((cause) => failed("document", cause)));
+  }).pipe(Effect.mapError(documentFailed));
   const { text, ...snapshot } = repository.snapshot;
   return { snapshot: { ...snapshot, present: text !== null }, settings: loaded.snapshot, values: loaded.values };
 });
