@@ -13,7 +13,8 @@ review, ship, the lane and the operate loop.*
 `next/` and in every doc from now on, the grammar reads `verb : who : reason`, and the data key is
 `reason`: `{ _tag: "send", to: "builder", reason: "checks_red" }`. Today's code, and this note's
 examples of it, keep `why` (and `kind`) until that code goes. Ticket 337's sweep renames `next/`'s code, and
-the lint rule `fabrika/no-why-key` keeps a `why` key from coming back there.*
+the lint rules `eslint/id-denylist` and `fabrika/no-question-word-key` keep a `why` name from coming
+back there ([0081](../.decisions/0081-no-question-word-names.md)).*
 
 ```text
 passing it on:   verb : who : why        send:builder:checks_red

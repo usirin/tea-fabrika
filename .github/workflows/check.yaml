@@ -126,6 +126,9 @@ jobs:
       # pruned ledger was not committed, so the ledger only shrinks.
       - name: agents ledger committed
         run: git diff --exit-code -- agents-ledger.json
+      # The same for `next/`: what a rule met the day it joined, which only shrinks (ledger.ts).
+      - name: next ledger committed
+        run: git diff --exit-code -- next-ledger.json
       # Experiment 117: each formal check is tied to the code it covers (promises/).
       # It fails when covered code changed and its record was not confirmed again, when
       # a check is red at this head, or when a planted break is not caught. A change to a
