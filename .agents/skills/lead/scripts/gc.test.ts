@@ -8,6 +8,7 @@ import {
   backupsOf,
   deadFacts,
   decide,
+  decidePin,
   decideWorktree,
   dirtyIn,
   keepFiles,
@@ -18,6 +19,7 @@ import {
   worktreePrs,
 } from "./gc.ts";
 import { IDLE } from "./lane.ts";
+import { PgrepAnswer } from "./pgrep.ts";
 
 // Today's tooling. The decision is pure; the world (lsof, git, gh, botpush) is not run here.
 const sha = fc.stringMatching(/^[0-9a-f]{40}$/);
@@ -319,4 +321,29 @@ describe("dirtyIn reads a real box, today's tooling", () => {
     utimesSync(join(data, "logs", "HEAD"), new Date(), new Date());
     expect(lastTouched(box, data)).toBe(before);
   });
+});
+
+describe("decidePin", () => {
+  const idle = fc.integer({ min: 0, max: 10 * IDLE });
+
+  it("a process list pgrep cannot read always keeps the pin", () =>
+    fc.assert(
+      fc.property(idle, (i) => {
+        expect(decidePin(PgrepAnswer.cases.refused.make({}), i)._tag).toBe("keep");
+      }),
+    ));
+
+  it("a pin a running process names is always kept, however old", () =>
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 50 }), idle, (count, i) => {
+        expect(decidePin(PgrepAnswer.cases.listed.make({ count }), i)._tag).toBe("keep");
+      }),
+    ));
+
+  it("a pin no process names goes exactly when it is IDLE old or older", () =>
+    fc.assert(
+      fc.property(idle, (i) => {
+        expect(decidePin(PgrepAnswer.cases.listed.make({ count: 0 }), i)._tag).toBe(i < IDLE ? "keep" : "remove");
+      }),
+    ));
 });

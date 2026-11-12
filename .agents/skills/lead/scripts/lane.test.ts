@@ -1,6 +1,16 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { checkHolds, laneRoot, laneStuck, lockfileBehind, startHead, wipOf, workspaceGlobs } from "./lane.ts";
+import {
+  checkHolds,
+  laneRoot,
+  laneStuck,
+  lockfileBehind,
+  pinFolder,
+  pinsFolder,
+  startHead,
+  wipOf,
+  workspaceGlobs,
+} from "./lane.ts";
 
 // Today's tooling. Pure rules drive.ts and gc.ts share.
 const options = { seed: 119120, numRuns: 300 };
@@ -198,5 +208,31 @@ describe("the lockfile follows the manifests, today's tooling", () => {
     ].join("\n");
     expect(workspaceGlobs(yaml)).toEqual(["apps/*", "next/packages/*", "!next/old", ".github/ci"]);
     expect(workspaceGlobs("catalog:\n  a: 1\n")).toEqual([]);
+  });
+});
+
+describe("pin folders", () => {
+  const lane = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,20}$/);
+  const pid = fc.integer({ min: 1, max: 99_999 });
+
+  it("every launch's pin is in the pins folder, named for its lane and process", () =>
+    fc.assert(
+      fc.property(fc.string({ minLength: 1 }), lane, pid, (boxes, l, p) => {
+        const at = pinFolder(boxes, l, p);
+        expect(at.startsWith(`${pinsFolder(boxes)}/`)).toBe(true);
+        expect(at.slice(pinsFolder(boxes).length + 1)).toBe(`${l}.${p}`);
+      }),
+    ));
+
+  it("two launches never share a pin", () =>
+    fc.assert(
+      fc.property(lane, pid, lane, pid, (l1, p1, l2, p2) => {
+        fc.pre(l1 !== l2 || p1 !== p2);
+        expect(pinFolder("/b", l1, p1)).not.toBe(pinFolder("/b", l2, p2));
+      }),
+    ));
+
+  it("pinned: the pins sit beside the boxes, outside the box trees gc reads as boxes", () => {
+    expect(pinsFolder("/b")).toBe("/b/pins");
   });
 });
