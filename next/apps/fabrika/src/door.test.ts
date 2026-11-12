@@ -2377,19 +2377,51 @@ describe("P10 inputs, retries and signer", () => {
     ({ write }) =>
       Effect.gen(function* () {
         const w = yield* world();
+        const archives: Array<{ name: string; body: string }> = [];
+        const archive = Layer.effect(
+          Archive,
+          Archive.pipe(
+            Effect.map((real) => ({
+              put: (name: string, body: Uint8Array) => {
+                archives.push({ name, body: new TextDecoder().decode(body) });
+                return real.put(name, body);
+              },
+            })),
+          ),
+        ).pipe(Layer.provide(w.env));
         yield* Effect.gen(function* () {
           const d = yield* Gateway;
           const { client } = yield* online(d, w);
           const before = w.usedInputs.length;
-          const params = spoofedParams(write, "spoof");
-          expect(yield* d.route(client, write.method, params)).toEqual({ _tag: "refused", reason: "reserved" });
-          expect(w.deliveries).toEqual([]);
-          expect(w.usedInputs.length).toBe(before);
-          expect(yield* stamped()).toEqual([]);
-          const saved = JSON.stringify([...w.databases()].map(([name, db]) => [name, allObjectRows(db)]));
-          expect(saved).not.toContain(`t844-forged:${write.marker}`);
-          expect(saved).not.toContain(JSON.stringify(`t844-forged:${write.marker}`).slice(1, -1));
-        }).pipe(w.provide);
+          const forged = `t844-forged-value:${write.marker}`;
+
+          // Keep arbitrary values, including undefined, and also mark the forged field itself.
+          for (const value of [write.value, forged]) {
+            const params = spoofedParams({ ...write, value }, "spoof");
+            expect(yield* d.route(client, write.method, params)).toEqual({ _tag: "refused", reason: "reserved" });
+            expect(w.deliveries).toEqual([]);
+            expect(w.usedInputs.length).toBe(before);
+            expect(yield* stamped()).toEqual([]);
+            const saved = JSON.stringify([...w.databases()].map(([name, db]) => [name, allObjectRows(db)]));
+            expect(saved).not.toContain(`t844-forged:${write.marker}`);
+            expect(saved).not.toContain(JSON.stringify(`t844-forged:${write.marker}`).slice(1, -1));
+            expect(saved).not.toContain(forged);
+            expect(saved).not.toContain(JSON.stringify(forged).slice(1, -1));
+          }
+
+          yield* TestClock.adjust("16 days");
+          yield* d.route(client, "ledger.read", { stream: "x", after: 0 });
+          yield* SpanSink.use((sink) => sink.flush);
+          const saved = JSON.stringify({
+            databases: [...w.databases()].map(([name, db]) => [name, allObjectRows(db)]),
+            archives,
+          });
+
+          for (const marker of [`t844-forged:${write.marker}`, forged]) {
+            expect(saved).not.toContain(marker);
+            expect(saved).not.toContain(JSON.stringify(marker).slice(1, -1));
+          }
+        }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, archive)))));
       }),
     { arbitrary: { seed: SEED, runs: 100 } },
   );
