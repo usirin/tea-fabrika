@@ -27,18 +27,18 @@ const translate = (cause: LedgerError): ProcessHistoryError =>
   });
 
 const validate = Effect.fnUntraced(function* (entry: Entry) {
-  yield* Schema.decodeUnknownEffect(Position)(entry.pos).pipe(Effect.mapError(badRow));
+  yield* Schema.decodeUnknownEffect(Position)(entry.pos);
 
   if (entry._tag === "send") {
-    yield* Schema.decodeUnknownEffect(Send)(entry.body).pipe(Effect.mapError(badRow));
+    yield* Schema.decodeUnknownEffect(Send)(entry.body);
   }
 
   if (entry._tag === "restarted") {
-    yield* Schema.decodeUnknownEffect(ProcessEvent.cases.restarted)(valueFor(entry)).pipe(Effect.mapError(badRow));
+    yield* Schema.decodeUnknownEffect(ProcessEvent.cases.restarted)(valueFor(entry));
   }
 
   return entry;
-});
+}, Effect.mapError(badRow));
 
 /**
  * Read through the ledger's paged stream, preserving failures from every page.
