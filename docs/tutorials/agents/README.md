@@ -1,5 +1,7 @@
 # Agents on two hosts
 
+> This tutorial teaches today's version (`@kampus/fabrika-old`), not `next/`. To write a program for `next/`, read [Write a program for `next/`](../../how-to/write-a-next-program.md).
+
 Part two of [two hosts, one ledger](../two-hosts/README.md). The same ledger and the same two
 hosts, now running a program that asks a real agent for its work: a poet that asks Claude (haiku,
 through the Agent SDK) for one line of verse per guest, and a book that keeps each line once. You
