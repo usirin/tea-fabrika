@@ -5,7 +5,20 @@
 // replaced receipts/metadata (A10), permissive parameter decoding/recording (A11), and one private
 // sentinel in each inspected output (A12). Product paths are outside this step's write list.
 import { expect, it } from "@effect/vitest";
-import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Schema, type Scope, Semaphore, Tracer } from "effect";
+import {
+  Arbitrary,
+  Deferred,
+  Effect,
+  Fiber,
+  Layer,
+  Logger,
+  Redacted,
+  Result as R,
+  Schema,
+  type Scope,
+  Semaphore,
+  Tracer,
+} from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { grantText, revokeText } from "../access/Text.ts";
 import * as Id from "../Id.ts";
@@ -58,21 +71,27 @@ const field = (a: string | Uint8Array) => {
   return join(u32(bytes.length), bytes);
 };
 
-const web = <A>(f: () => Promise<A>) => {
-  // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto signs generated test keys
-  return Effect.tryPromise({ try: f, catch: (cause: unknown) => new Error("test crypto failed", { cause }) });
-};
+const fail = (cause: unknown) => new Error("test crypto failed", { cause });
 
 const key = Effect.fnUntraced(function* () {
-  const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]));
-  const bytes = new Uint8Array(yield* web(() => crypto.subtle.exportKey("raw", pair.publicKey)));
+  const s = crypto.subtle;
+  const ed = "Ed25519";
+  const sign: KeyUsage[] = ["sign"];
+  const uses: KeyUsage[] = ["sign", "verify"];
+  // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto generates test keys
+  const pair = yield* Effect.tryPromise({ try: () => s.generateKey(ed, true, uses), catch: fail });
+  // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto exports the generated public key
+  const raw = yield* Effect.tryPromise({ try: () => s.exportKey("raw", pair.publicKey), catch: fail });
+  const bytes = new Uint8Array(raw);
   // WebCrypto exports only these generated test keys, never a key from a file or account.
-  const stored = yield* web(() => crypto.subtle.exportKey("pkcs8", pair.privateKey)).pipe(
-    Effect.map((bytes) => Redacted.make(Base64.encode(new Uint8Array(bytes)))),
-  );
+  // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto exports a generated test key into Redacted
+  const exported = yield* Effect.tryPromise({ try: () => s.exportKey("pkcs8", pair.privateKey), catch: fail });
+  const stored = Redacted.make(Base64.encode(new Uint8Array(exported)));
   const blob = join(field("ssh-ed25519"), field(bytes));
   const fingerprint = Effect.fnUntraced(function* (value: Uint8Array) {
-    const hash = yield* web(() => crypto.subtle.digest("SHA-256", new Uint8Array(value)));
+    const bytes = new Uint8Array(value);
+    // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes a generated public key
+    const hash = yield* Effect.tryPromise({ try: () => s.digest("SHA-256", bytes), catch: fail });
     return `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
   });
   return {
@@ -82,14 +101,17 @@ const key = Effect.fnUntraced(function* () {
     fingerprint: yield* fingerprint(bytes),
     sshFingerprint: yield* fingerprint(blob),
     sign: Effect.fnUntraced(function* (value: string) {
-      const hash = new Uint8Array(yield* web(() => crypto.subtle.digest("SHA-512", text(value))));
+      // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes the signed test message
+      const digest = yield* Effect.tryPromise({ try: () => s.digest("SHA-512", text(value)), catch: fail });
+      const hash = new Uint8Array(digest);
       const body = join(text("SSHSIG"), field("fabrika-client"), field(""), field("sha512"), field(hash));
       // oxlint-disable-next-line fabrika/no-redacted-value -- edge: the generated key-store value goes only to WebCrypto
-      const privateBytes = R.getOrThrow(Base64.decode(Redacted.value(stored)));
-      const signer = yield* web(() =>
-        crypto.subtle.importKey("pkcs8", new Uint8Array(privateBytes), "Ed25519", false, ["sign"]),
-      );
-      const signed = new Uint8Array(yield* web(() => crypto.subtle.sign("Ed25519", signer, body)));
+      const bytes = new Uint8Array(R.getOrThrow(Base64.decode(Redacted.value(stored))));
+      // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto imports the generated signing key
+      const signer = yield* Effect.tryPromise({ try: () => s.importKey("pkcs8", bytes, ed, false, sign), catch: fail });
+      // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto signs the test message
+      const signature = yield* Effect.tryPromise({ try: () => s.sign(ed, signer, body), catch: fail });
+      const signed = new Uint8Array(signature);
       const packed = join(
         text("SSHSIG"),
         u32(1),
@@ -373,7 +395,7 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
         frames.push(f);
       },
       close: () => {},
-      wait: () => Effect.die("no wait expected"),
+      wait: () => (answer._tag === "refused" ? Effect.fail(answer) : Effect.die("hands ledger.wait must be refused")),
       call: () => Effect.succeed(answer),
     });
     yield* trace(transport.frame(JSON.stringify({ jsonrpc: "2.0", id: frames.length, method, params })));
@@ -479,7 +501,11 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
     const snapshot = (s: Saved) => ({ process: s.request.process, job: s.request.id });
     const checkEvent = (s: Saved, c: Client, cell: Cell, seen: number) => {
       const event = last(s.job.events);
-      expect(event).toMatchObject({ by: c.key.fingerprint, for: PERSON, sentAt: cell.sentAt, seen, build: c.build });
+      expect(event.by).toBe(c.key.fingerprint);
+      expect(event.for).toBe(PERSON);
+      expect(event.sentAt).toBe(cell.sentAt);
+      expect(event.seen).toBe(seen);
+      expect(event.build).toBe(c.build);
       expect(s.job.state).toMatchObject({ request: s.request });
       expect(event.traceId).toMatch(/^[0-9a-f]{32}$/);
       expect(event.arrivedAt).toBeGreaterThanOrEqual(0);

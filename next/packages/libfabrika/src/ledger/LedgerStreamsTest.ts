@@ -7,7 +7,7 @@ import { Doorbell, Ledger } from "./Ledger.ts";
 import * as LedgerSql from "./LedgerSql.ts";
 import { LedgerStreams, LedgerStreamsError, Storage } from "./LedgerStreams.ts";
 import * as LedgerStreamsSql from "./LedgerStreamsSql.ts";
-import { Line, PAGE } from "./Log.ts";
+import { Line, lineFor, PAGE } from "./Log.ts";
 
 export type Store = { readonly sql: Sql; readonly reopen: Effect.Effect<void> };
 
@@ -18,7 +18,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
       Effect.gen(function* () {
         const seen = new Set<string>();
         const tape = Schema.Struct({
-          line: Line,
+          body: Line.fields.body,
+          traceId: Line.fields.traceId,
           prefix: Schema.Literals(["job:", "job:%", "job:_", "job:\\", "job:é"]),
           total: Schema.Int.check(Schema.isGreaterThanOrEqualTo(PAGE + 1), Schema.isLessThanOrEqualTo(PAGE * 2 + 3)),
           cells: Schema.Array(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))).check(
@@ -36,10 +37,22 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
             ).pipe(Layer.provide(quiet));
           let life = yield* Layer.build(layers());
           const names = new Set<string>();
+          let sequence = 0;
           const append = Effect.fnUntraced(function* (stream: string, id: string) {
-            const answer = yield* Ledger.use((l) => l.append(stream, id, { ...a.line, seen: 0 })).pipe(
-              Effect.provide(life),
+            // Discovery needs valid entries; parent checks and writer encoding have their own laws.
+            const line = lineFor(
+              {
+                by: "discovery",
+                for: "discovery",
+                sentAt: "",
+                seen: 0,
+                parent: null,
+                traceId: a.traceId,
+                build: "test",
+              },
+              Schema.TaggedStruct("discovery", { value: Line.fields.body }).make({ value: a.body }),
             );
+            const answer = yield* Ledger.use((l) => l.append(stream, id, line)).pipe(Effect.provide(life));
             expect(answer._tag).toBe("placed");
             names.add(stream);
           });
@@ -59,7 +72,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
             } else if (choice % 3 === 1) {
               yield* append(
                 known[choice % known.length] ?? expect.fail("a seeded stream exists"),
-                `duplicate-${choice}`,
+                `duplicate-${sequence++}`,
               );
               seen.add("duplicate");
             }
