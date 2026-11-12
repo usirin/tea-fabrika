@@ -1405,6 +1405,23 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           expect((yield* r.open("reopened")).view).toMatchObject({ count: 1, replies: 1, wake: asked });
           expect(w.workCalls()).toBe(1);
           expect(body(before[0]!).m).toEqual({ type: "timer", at: asked, arrivedAt });
+
+          const nextAsked = asked + lag + 1;
+          const nextArrival = arrivedAt + lag * (repeats + 2);
+          yield* r.msg(w.input(3, { type: "schedule", at: nextAsked }));
+          yield* TestClock.setTime(nextArrival);
+          yield* r.due(nextAsked);
+          const after = yield* timers;
+          expect(after).toHaveLength(2);
+          expect(after[0]).toEqual(before[0]);
+          expect(after[1]!.id).toBe(`${PROCESS}/due/${nextAsked}`);
+          expect(body(after[1]!).m).toEqual({ type: "timer", at: nextAsked, arrivedAt: nextArrival });
+          expect(w.workCalls()).toBe(2);
+          expect((yield* r.open("fresh schedule")).view).toMatchObject({
+            count: 2,
+            replies: 2,
+            wake: nextAsked + 10,
+          });
         }).pipe(Effect.provide(w.layer()));
       }),
     { arbitrary: { seed: SEED, runs: 50 } },

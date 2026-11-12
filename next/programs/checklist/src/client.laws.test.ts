@@ -62,7 +62,7 @@ const moves = (m: Model, now: number, c: Choice): ReadonlyArray<Msg> => {
   const held = names.length === 0 ? null : names[c.pick % names.length]!;
   const out: Array<Msg> = [
     { type: "add", name: c.name },
-    { type: "timer", at: now + c.later },
+    { type: "timer", at: checklist.wake(m) ?? now, arrivedAt: now + c.later },
   ];
 
   if (held !== null) {
@@ -107,7 +107,7 @@ const walk = (list: ReadonlyArray<Choice>, each: (s: Step) => void) => {
     if (!refused) {
       const before = view;
       model = applyCell(checklistMachine, model, msg)[0];
-      now = msg.type === "timer" ? msg.at : now;
+      now = msg.type === "timer" ? msg.arrivedAt : now;
       view = checklist.view.select(model);
       rev += 1;
       const note = c.whole
