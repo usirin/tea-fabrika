@@ -26,7 +26,7 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
         Effect.map((config) =>
           projectLayer(ctx, env, {
             config,
-            mail: config.mail,
+            ...(config.mail === undefined ? {} : { mail: config.mail }),
             programs,
             // The program is the core pack's `fabrika/counter`; its registered name stays `counter:1`.
             bootstrap: { name: "counter:1", id: "counter:1", program: "fabrika/counter" },
