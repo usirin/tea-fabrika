@@ -48,6 +48,9 @@ export const bundle = Effect.fn("build.bundle")(function* (
   plugins: Array<Plugin>,
   options: Options = {},
 ) {
+  const path = yield* Path.Path.pipe(Effect.provide(Path.layer));
+  const root = options.cwd ?? path.resolve();
+  const relative = (file: string) => (path.isAbsolute(file) ? path.relative(root, file) : file);
   // The installed tools' own versions, so a build report says what really ran.
   yield* Effect.annotateCurrentSpan({
     phase: options.phase ?? "bundle",
@@ -61,7 +64,20 @@ export const bundle = Effect.fn("build.bundle")(function* (
     // Rolldown notes each "use client" it drops; a bundle here has no server half.
     onLog: (level: LogLevel, log: RolldownLog, handler: LogOrStringHandler) => {
       if (log.code !== "MODULE_LEVEL_DIRECTIVE") {
-        handler(level, log);
+        let message = log.message;
+
+        // Rolldown has already embedded file names in the message before calling onLog.
+        for (const file of [log.id, log.loc?.file, log.exporter, log.reexporter, ...(log.ids ?? [])]) {
+          if (file !== undefined && path.isAbsolute(file)) {
+            message = message.replaceAll(file, relative(file));
+          }
+        }
+
+        handler(level, {
+          ...log,
+          message,
+          ...(log.loc?.file === undefined ? {} : { loc: { ...log.loc, file: relative(log.loc.file) } }),
+        });
       }
     },
     platform: "browser" as const,
