@@ -5,11 +5,11 @@
 // Why one run and not two: an `oxlint-disable` that names a rule turned off counts as unused. A
 // second run for the advice rules would turn their own disable comments into failures of the first.
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { checkTracked } from "./gitignore.mjs";
 import { type Finding, fingerprint, LEDGERS, outside, settle } from "./ledger.ts";
-import { scriptReads } from "./script-reads.mjs";
+import { load, scriptReads } from "./script-reads.mjs";
 
 const ADVICE = new Set([
   // Ticket 737: bare JSON.parse and service IDs advise until their false alarms are counted.
@@ -30,18 +30,24 @@ interface Diagnostic {
 
 const ROOT = join(import.meta.dirname, "..");
 
-const scripts = readdirSync(join(ROOT, ".agents/skills"), { recursive: true, withFileTypes: true })
-  .filter((entry) => entry.isFile())
-  .map((entry) => join(entry.parentPath, entry.name).slice(ROOT.length + 1))
-  .filter((path) => /^\.agents\/skills\/[^/]+\/scripts\//.test(path));
+// What a lead-script test reads is derived for Vitest (script-reads.mjs). This fails on what the
+// derivation cannot see, and on a test that declares by hand what is derived.
+const { tree, exists, prose } = load(ROOT);
+const { raw, unreached } = scriptReads(tree, exists, prose);
 
-const missing = scriptReads(new Map(scripts.map((path) => [path, readFileSync(join(ROOT, path), "utf8")])));
-
-for (const row of missing) {
-  console.error(`${row.test}: declare ${row.path}?raw, read through ${row.via}`);
+for (const row of raw) {
+  console.error(
+    `${row.test}: delete the bare import of ${row.path}?raw. A script's reads are derived; one it reads through a built path is named in that script, in a comment`,
+  );
 }
 
-if (missing.length) {
+for (const path of unreached) {
+  console.error(
+    `${path}: no test reaches it and its SKILL.md names no such tool. Name it in the script that reads it, give it a test, or delete it`,
+  );
+}
+
+if (raw.length || unreached.length) {
   process.exit(1);
 }
 
