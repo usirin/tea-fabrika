@@ -826,31 +826,6 @@
 			"code": "why: ok ? e.reason : `${e.reason} (${notes.join(\"; \")})`,"
 		},
 		{
-			"file": ".agents/skills/lead/scripts/gc.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "let why: string = verdict._tag === \"remove\" ? verdict.reason : \"\";"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/gc.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "why += `, HEAD kept at refs/keep/box/${name}`;"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/gc.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "why = `would back up to ${verdict.to[0]}`;"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/gc.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "why = `backed up to ${pushed}`;"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/gc.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "console.log(`${dry ? \"would remove\" : \"removed\"} ${name}: ${why}, ${mb} MB`);"
-		},
-		{
 			"file": ".agents/skills/lead/scripts/lane.test.ts",
 			"rule": "eslint(id-denylist)",
 			"code": "who: fc.constant(\"owner\"),"
