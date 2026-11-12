@@ -213,9 +213,9 @@ type ContextProject = (typeof ProjectService)["Service"];
 export class Process extends DurableObject<Env> {
   readonly runtime = processRuntime(this.ctx, this.env, programs);
 
-  configure(descriptor: Descriptor) {
+  configure(descriptor: Descriptor, drain?: boolean) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object configuration returns a Promise
-    return Effect.runPromise(configureProcess(this.ctx, descriptor));
+    return Effect.runPromise(configureProcess(this.ctx, descriptor, drain));
   }
 
   descriptor() {
