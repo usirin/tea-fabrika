@@ -374,6 +374,38 @@ const counter = async (c: Client) => {
 const send = (c: Client, pid: string, letter: string, m: unknown = { type: "inc" }, seen = 0) =>
   c.call("process.send", { pid, letter, m, sentAt: SENT, seen, traceId: TRACE });
 
+const ratePolicy = { limit: 4, window: 1000 };
+type Call = { sent: number; replied: number; reply: Frame };
+
+const timed = Effect.fnUntraced(function* (c: Client, pid: string, letter: string) {
+  const sent = yield* Clock.currentTimeMillis;
+  const reply = yield* Effect.promise(() => send(c, pid, letter));
+  return { sent, replied: yield* Clock.currentTimeMillis, reply };
+});
+
+const spent = Effect.fnUntraced(function* (c: Client, pid: string, letter: string) {
+  const allowed: Array<Call> = [];
+
+  for (let n = 0; n < 10 * ratePolicy.limit; n++) {
+    const call = yield* timed(c, pid, letter);
+
+    if (call.reply.error) {
+      return { allowed, refused: call };
+    }
+
+    allowed.push(call);
+  }
+
+  return yield* Effect.die(new Error(`no refusal in ${10 * ratePolicy.limit} sends`));
+});
+
+const retryAfter = (call: Call) => {
+  const delay = call.reply.error?.data?.retryAfter;
+  expect(delay).toBeGreaterThan(0);
+  expect(delay).toBeLessThanOrEqual(ratePolicy.window);
+  return delay!;
+};
+
 const placing = (r: Frame) => {
   expect(r.error).toBeUndefined();
   expect(r.result).toMatchObject({
@@ -421,39 +453,64 @@ it.live.each(["flags", "env", "file"] as const)(
   (source) =>
     Effect.gen(function* () {
       const held: Held = { children: [], homes: [], ports: [] };
-      const policy = { limit: 4, window: 1000 };
       const s = yield* Effect.acquireRelease(
-        Effect.promise(() => launch(held, undefined, policy, source)),
+        Effect.promise(() => launch(held, undefined, ratePolicy, source)),
         () => Effect.promise(() => giveBack(held)),
       );
       const c = yield* client(s, "budget-one");
-      const remaining = policy.window - ((yield* Clock.currentTimeMillis) % policy.window);
-
-      if (remaining < (3 * policy.window) / 4) {
-        yield* Effect.sleep(remaining + 5);
-      }
-
       const pid = yield* Effect.promise(() => counter(c));
       const letter = `t843-${source}`;
-      const accepted = yield* Effect.promise(() => send(c, pid, letter));
-      expect(accepted.error).toBeUndefined();
+      const settled = yield* spent(c, pid, letter);
+      expect(settled.allowed.length).toBeGreaterThan(0);
+      const accepted = settled.allowed[0]!.reply;
+      placing(accepted);
+      expect(settled.refused.reply.error?.data?.reason).toBe("rate_limited");
+      yield* Effect.sleep(retryAfter(settled.refused) + 5);
+      const rounds: Array<string> = [];
+      const times = ({ sent, replied, reply }: Call) => ({ sent, replied, retryAfter: reply.error?.data?.retryAfter });
+      const round = yield* Effect.gen(function* () {
+        for (;;) {
+          const { allowed, refused } = yield* spent(c, pid, letter);
+          const delay = retryAfter(refused);
+          const second = yield* client(s, "budget-two");
+          const again = yield* timed(second, pid, letter);
+          rounds.push(JSON.stringify({ allowed: allowed.map(times), refused: times(refused), again: times(again) }));
+          expect(allowed.length).toBeGreaterThan(0);
 
-      for (let n = 2; n < policy.limit; n++) {
-        expect((yield* Effect.promise(() => send(c, pid, letter))).result).toEqual(accepted.result);
+          // These bounds use the refusal's window, including the time spent waiting for each reply.
+          if (allowed[0]!.sent >= refused.replied + delay - ratePolicy.window && again.replied < refused.sent + delay) {
+            return { allowed, refused, second, again };
+          }
+
+          const last = again.reply.error?.data?.reason === "rate_limited" ? again : refused;
+          const until = last.replied + retryAfter(last);
+          yield* Effect.sleep(Math.max(0, until - (yield* Clock.currentTimeMillis)) + 5);
+          second.close();
+        }
+      }).pipe(
+        Effect.timeoutOrElse({
+          duration: WAIT,
+          orElse: () => Effect.die(new Error(`no single-window round in ${WAIT} ms; rounds: [${rounds.join(",")}]`)),
+        }),
+      );
+      expect(round.allowed).toHaveLength(ratePolicy.limit);
+
+      for (const call of round.allowed) {
+        expect(call.reply.error).toBeUndefined();
+        expect(call.reply.result).toEqual(accepted.result);
       }
 
-      const denied = yield* Effect.promise(() => send(c, pid, letter));
-      expect(denied.error?.data?.reason).toBe("rate_limited");
-      const delay = denied.error?.data?.retryAfter;
-      expect(delay).toBeGreaterThan(0);
-      expect(delay).toBeLessThanOrEqual(policy.window);
-      const again = yield* client(s, "budget-two");
-      expect((yield* Effect.promise(() => send(again, pid, letter))).error?.data?.reason).toBe("rate_limited");
-      yield* Effect.sleep(delay! + 5);
-      const recovered = yield* Effect.promise(() => send(again, pid, letter));
+      for (const refused of [round.refused, round.again]) {
+        expect(refused.reply.error?.data?.reason).toBe("rate_limited");
+        retryAfter(refused);
+      }
+
+      yield* Effect.logInfo(`T843 ${source}: ${rounds.length} rounds`, { rounds });
+      yield* Effect.sleep(retryAfter(round.again) + 5);
+      const recovered = yield* Effect.promise(() => send(round.second, pid, letter));
       expect(recovered.error).toBeUndefined();
       expect(recovered.result).toEqual(accepted.result);
-      const inbox = yield* Effect.promise(() => read(again, "counter:1/inbox"));
+      const inbox = yield* Effect.promise(() => read(round.second, "counter:1/inbox"));
       expect(inbox).toHaveLength(1);
     }),
 );
