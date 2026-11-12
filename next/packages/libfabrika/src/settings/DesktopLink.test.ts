@@ -77,7 +77,7 @@ it.effect.prop(
       const setting = Declarations.desktopLinkTtl;
       expect(Schema.is(setting.schema)(bad)).toBe(false);
       const result = yield* setting
-        .parse(ConfigProvider.fromUnknown({ desktop: { "link-ttl": bad } }))
+        .parse(ConfigProvider.fromUnknown({ desktop: { "link-ttl": bad } }, { preserveEmptyStrings: true }))
         .pipe(Effect.result);
       expect(result._tag).toBe("Failure");
     }),
