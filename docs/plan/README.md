@@ -75,6 +75,15 @@ ClientManagerLedger layer and migrates its callers. ProcessManager and SpanSink 
 later slices; this changes no Tier 1 row. The final contract bundle measures 259 loaded
 and 79 kept modules, matching the approved plan's sketch.
 
+*2026-11-12:* P38's slice 3 is cut in three on tracker ticket 753. Slice 3a in `next/` is
+[PR 1039](https://github.com/usirin/tea-fabrika/pull/1039): a settings file and the saved snapshot
+take their encodings from the one declaration, and a snapshot is read back strictly, with its hash
+checked ([the pattern](../../.patterns/settings.md)). It adds no setting and starts no Worker read.
+It finishes no Tier 1 row, so the count stays 20. Slice 3b comes next: the Worker handoff, the start
+record and the first byte setting, `limits.record`. Slice 3c adds the remaining declarations. P38
+stays open until its whole settings stack lands
+([its row](./tier-1.md#the-pull-requests-one-at-a-time)).
+
 **Tier 1, dated 2026-11-11.** 20 of [its 43 rows](./tier-1.md#the-pull-requests-one-at-a-time)
 are on main, plus P17a, half of P17, so `next/` is on main now: the exams (P1, P2, P8, P30, P32,
 P35), the spikes and the sheet's design pass (P3 to P5), the design package (P31), and the layers
