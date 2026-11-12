@@ -55,8 +55,8 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
-*2026-11-12:* P19 slice 1, tracker ticket 881, is in build in `next/`: the brain-service
-contracts, lifecycle machine and launchd adapter. The box checks only controlled services;
+*2026-11-12:* P19 slice 1, tracker ticket 881, is built on its branch in `next/`, awaiting
+review: the brain-service contracts, lifecycle machine and launchd adapter. The box checks only controlled services;
 the real launchd and Electron restart and cleanup check remains with the host lead.
 P19 stays open. Slice 2 adds sealed identities and founding storage, then slice 3 builds
 the Electron client and recovery with both windows.

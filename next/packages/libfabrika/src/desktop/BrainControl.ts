@@ -25,13 +25,54 @@ export const Status = Schema.TaggedUnion({
 });
 
 /**
- * Native command failure, including its exit code when one was observed.
+ * Native command failure, including its observed exit code or termination signal.
  *
  * @stability unstable
  * @category errors
  */
 export class Command extends Schema.TaggedError<Command>()("Command", {
   code: Schema.optionalKey(Schema.Int),
+  signal: Schema.optionalKey(
+    Schema.Literals([
+      "SIGABRT",
+      "SIGALRM",
+      "SIGBUS",
+      "SIGCHLD",
+      "SIGCONT",
+      "SIGFPE",
+      "SIGHUP",
+      "SIGILL",
+      "SIGINT",
+      "SIGIO",
+      "SIGIOT",
+      "SIGKILL",
+      "SIGPIPE",
+      "SIGPOLL",
+      "SIGPROF",
+      "SIGPWR",
+      "SIGQUIT",
+      "SIGSEGV",
+      "SIGSTKFLT",
+      "SIGSTOP",
+      "SIGSYS",
+      "SIGTERM",
+      "SIGTRAP",
+      "SIGTSTP",
+      "SIGTTIN",
+      "SIGTTOU",
+      "SIGUNUSED",
+      "SIGURG",
+      "SIGUSR1",
+      "SIGUSR2",
+      "SIGVTALRM",
+      "SIGWINCH",
+      "SIGXCPU",
+      "SIGXFSZ",
+      "SIGBREAK",
+      "SIGLOST",
+      "SIGINFO",
+    ]),
+  ),
   cause: Schema.Defect(),
 }) {}
 

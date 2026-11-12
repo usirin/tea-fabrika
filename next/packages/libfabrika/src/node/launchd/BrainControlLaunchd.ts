@@ -12,6 +12,7 @@ import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import {
@@ -87,12 +88,32 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
               (all, chunk) => Redacted.make(Redacted.value(all) + chunk),
             ),
           );
-        const [code, stdout, stderr] = yield* Effect.all([handle.exitCode, text(handle.stdout), text(handle.stderr)], {
+        const exitCode = handle.exitCode.pipe(
+          Effect.mapError((cause) => {
+            // platform-node 4.1.2 exposes signal termination only through this exact exitCode cause.
+            const native = Schema.decodeUnknownResult(Schema.Struct({ message: Schema.String }))(cause.reason.cause);
+            const signal = Schema.decodeUnknownResult(Command.fields.signal.schema)(
+              cause.reason._tag === "Unknown" &&
+                cause.reason.module === "ChildProcess" &&
+                cause.reason.method === "exitCode" &&
+                Result.isSuccess(native)
+                ? /^Process interrupted due to receipt of signal: '(SIG[A-Z0-9]+)'$/u.exec(native.success.message)?.[1]
+                : undefined,
+            );
+            return new BrainControlError({
+              reason: new Command({
+                ...(Result.isSuccess(signal) ? { signal: signal.success } : {}),
+                cause: Redacted.make(cause),
+              }),
+            });
+          }),
+        );
+        const [code, stdout, stderr] = yield* Effect.all([exitCode, text(handle.stdout), text(handle.stderr)], {
           concurrency: "unbounded",
         });
         return { code: Number(code), stdout, stderr };
       }),
-    ).pipe(Effect.mapError(commandError));
+    ).pipe(Effect.mapError((cause) => (cause._tag === "BrainControlError" ? cause : commandError(cause))));
   });
   const success = Effect.fnUntraced(function* (executable: string, args: ReadonlyArray<string>) {
     const response = yield* run(executable, args);

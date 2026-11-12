@@ -87,6 +87,10 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
         yield* Effect.annotateCurrentSpan("fab.native.code", answer.failure.reason.code);
       }
 
+      if (answer.failure.reason._tag === "Command" && answer.failure.reason.signal !== undefined) {
+        yield* Effect.annotateCurrentSpan("fab.native.signal", answer.failure.reason.signal);
+      }
+
       const error = translate(answer.failure);
       return {
         cause: Redacted.make(answer.failure),
