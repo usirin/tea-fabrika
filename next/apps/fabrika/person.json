@@ -2,6 +2,19 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
+    "desktop": {
+      "type": "object",
+      "properties": {
+        "link-ttl": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "How long a one-time browser link lives in milliseconds.",
+          "default": 60000
+        }
+      },
+      "additionalProperties": false
+    },
     "gateway": {
       "type": "object",
       "properties": {

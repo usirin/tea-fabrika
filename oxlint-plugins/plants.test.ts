@@ -662,3 +662,51 @@ it("pinned: L6 a second machine is planted and lint.ts exits 1", async () => {
   expect(out.stdout).toContain("fabrika(one-machine-per-file)");
   expect(out.status).toBe(1);
 });
+
+// L12: lint inputs stay here. The contract import restriction needs a scoped config rule.
+it("format: P21 L12 a PersonCheck contract cannot carry a Layer implementation", async () => {
+  const file = "next/packages/libfabrika/src/desktop/PersonCheck.ts";
+  const result = await lintCopies({
+    [file]: [
+      'import { Context, Effect, Layer, Schema } from "effect";',
+      'export const Answer = Schema.TaggedUnion({ checked: { check: Schema.Literals(["touch", "click"]) }, declined: {} });',
+      'export class PersonCheck extends Context.Service<PersonCheck, { readonly ask: (reason: string) => Effect.Effect<typeof Answer.Type> }>()("@kampus/libfabrika/desktop/PersonCheck") {',
+      '  static readonly layer = Layer.succeed(PersonCheck, { ask: () => Effect.succeed({ _tag: "checked", check: "touch" }) });',
+      "}",
+    ].join("\n"),
+  });
+  expect(result("eslint(no-restricted-imports)", file)).toContain(1);
+});
+
+// format: the second exported machine is an input to the existing one-machine lint rule.
+it("format: P21 L12 Menu exports only one tea machine", async () => {
+  const file = "next/packages/libfabrika/src/desktop/Menu.ts";
+  const result = await lintCopies({
+    [file]: [
+      'import { Machine } from "@demlik/tea/effect";',
+      'import { Schema } from "effect";',
+      "const Model = Schema.TaggedUnion({ idle: {} });",
+      'const Msg = Schema.Struct({ type: Schema.Literal("enter") });',
+      'export const machine = Machine.make({ model: Model, msg: Msg, cmds: [], init: () => [{ _tag: "idle" }, []], update: { enter: (s) => [s, []] } });',
+      'export const second = Machine.make({ model: Model, msg: Msg, cmds: [], init: () => [{ _tag: "idle" }, []], update: { enter: (s) => [s, []] } });',
+    ].join("\n"),
+  });
+  expect(result("fabrika(one-machine-per-file)", file)).toContain(6);
+});
+
+// format: these are compile-time platform names; lint must catch them even when imports erase.
+it("format: P21 L11 desktop public types cannot name Electron, Node or the DOM", async () => {
+  const imported = "next/packages/libfabrika/src/desktop/Menu.ts";
+  const globals = "next/packages/libfabrika/src/desktop/PersonCheck.ts";
+  const result = await lintCopies({
+    [imported]: 'import type { BrowserWindow } from "electron";\nexport type Handle = BrowserWindow;\n',
+    [globals]: [
+      "export type DomWindow = Window;",
+      "export type DomDocument = Document;",
+      "export type NodeTimer = NodeJS.Timeout;",
+      "export type ElectronWindow = Electron.BrowserWindow;",
+    ].join("\n"),
+  });
+  expect.soft(result("eslint(no-restricted-imports)", imported)).toContain(1);
+  expect.soft(result("typescript(no-restricted-types)", globals)).toEqual([1, 2, 3, 4]);
+});

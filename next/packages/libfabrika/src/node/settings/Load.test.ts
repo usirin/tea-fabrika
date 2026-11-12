@@ -13,7 +13,7 @@
 //   read before any source overrides it. With no repo place there is no `repo` field.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit, FileSystem, Layer, Path, Ref } from "effect";
+import { Effect, Exit, FileSystem, Layer, Path, Ref, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Declarations from "../../settings/Declarations.ts";
@@ -329,3 +329,65 @@ describe("T730, a load keeps the repo file's own minimum, and invents none witho
     );
   });
 });
+
+it.effect.prop(
+  "P21 L10: one load puts desktop lifetime and its source in the startup snapshot",
+  {
+    value: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_000_000 })),
+    source: Schema.Literals(["default", "file", "env", "flag"]),
+  },
+  ({ value, source }) =>
+    Effect.gen(function* () {
+      const d = Declarations.desktopLinkTtl;
+      const reads: Array<string> = [];
+      const fs = FileSystem.layerNoop({
+        readFileString: (path) => {
+          reads.push(path);
+          return Effect.succeed(source === "default" ? "" : `[desktop]\nlink-ttl = ${value}\n`);
+        },
+      });
+      const loaded = yield* Load.load({
+        person: { path: "person.toml", name: "person.toml" },
+        version: "0.0.0",
+        flags: source === "flag" ? { [d.path]: String(value + 2) } : {},
+        env: source === "env" || source === "flag" ? { [d.env]: String(value + 1) } : {},
+      }).pipe(Effect.provide(Layer.mergeAll(fs, TomlParser.layer, Digest.layerWebCrypto)));
+      const want =
+        source === "default" ? d.default : source === "flag" ? value + 2 : source === "env" ? value + 1 : value;
+      expect(loaded.values.desktopLinkTtl).toBe(want);
+      expect(loaded.snapshot.values[d.path]).toBe(want);
+      expect(loaded.snapshot.origins[d.path]?._tag).toBe(source);
+      expect(reads).toEqual(["person.toml"]);
+    }),
+  { arbitrary: { seed: SEED, runs: 100 } },
+);
+
+it.effect.prop(
+  "P21 L10: bad desktop file values stop load even behind a valid override",
+  {
+    bad: Schema.Literals(["0", "-1", "1.5", '"later"', "true"]),
+    value: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_000_000 })),
+  },
+  ({ bad, value }) =>
+    Effect.gen(function* () {
+      let started = false;
+      const fs = FileSystem.layerNoop({ readFileString: () => Effect.succeed(`[desktop]\nlink-ttl = ${bad}\n`) });
+      const exit = yield* Load.load({
+        person: { path: "person.toml", name: "person.toml" },
+        version: "0.0.0",
+        flags: { "desktop.link-ttl": String(value) },
+        env: {},
+      }).pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            started = true;
+          }),
+        ),
+        Effect.exit,
+        Effect.provide(Layer.mergeAll(fs, TomlParser.layer, Digest.layerWebCrypto)),
+      );
+      expect(reason(exit)).toBe("invalid");
+      expect(started).toBe(false);
+    }),
+  { arbitrary: { seed: SEED, runs: 100 } },
+);
