@@ -1,7 +1,7 @@
 ---
 id: 0022
 title: The lead's Codex steps run on gpt-6-astra at medium effort, never gpt-6.1-sol at xhigh by default
-status: accepted
+status: amended-in-part by [0136](0136-codex-steps-run-on-sol-at-high.md)
 date: 2026-11-09
 tags: [codex, model, effort, lead, steps, astra, sol, price]
 ---
