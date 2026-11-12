@@ -1,30 +1,11 @@
 // next/. SQLite laws, with no driver (0062). A decision tape chooses only a move allowed by
 // the calls so far. The oracle reads committed health and span rows, never the sink's model.
 import { describe, expect, it } from "@effect/vitest";
-import {
-  Cause,
-  Context,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  Logger,
-  References,
-  Ref,
-  Result,
-  Schema,
-  Tracer,
-  type Scope,
-} from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Logger, References, Ref, Result, Tracer, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
-import { Archive } from "../telemetry/Archive.ts";
-import { RecordManager } from "../telemetry/Records.ts";
-import { SpanSink } from "../telemetry/Sink.ts";
-import { SpanRow } from "../telemetry/Trace.ts";
-import * as IsolateUsage from "./IsolateUsage.ts";
+import type * as IsolateUsage from "./IsolateUsage.ts";
 
 export type Store = { readonly sql: Sql; readonly reopen: Effect.Effect<void> };
 export type Props = { readonly project: string; readonly name: string; readonly process: string };
@@ -48,11 +29,26 @@ export type World = {
   readonly executions: () => number;
 };
 
+export type Recording = {
+  readonly record: (usage: ReadonlyArray<typeof IsolateUsage.Usage.Type>) => Effect.Effect<void>;
+  readonly flush: Effect.Effect<unknown, unknown>;
+};
+
+export type UsageSpan = {
+  readonly attributes: Readonly<Record<string, unknown>>;
+  readonly startTimeUnixNano: string;
+  readonly endTimeUnixNano: string;
+  readonly resource: { readonly attributes: Readonly<Record<string, unknown>> };
+};
+
 export type Rig = {
   readonly open: Effect.Effect<Store, never, Scope.Scope>;
   readonly deliver: Deliver;
   readonly runner: (usage: Effect.Effect<void, unknown>) => Effect.Effect<World, unknown, Scope.Scope>;
   readonly invoke: (process: string) => Effect.Effect<void, unknown>;
+  readonly telemetry: (sql: Sql, object: string) => Effect.Effect<Recording, never, Scope.Scope>;
+  readonly rows: (sql: Sql) => ReadonlyArray<UsageSpan>;
+  readonly health: (sql: Sql) => ReadonlyArray<unknown>;
 };
 
 const pid = (n: number) => `process_0000000000e00800${String(n).padStart(10, "0")}`;
@@ -76,21 +72,6 @@ const DeliveryCell = fc.record({
 type DeliveryCell = typeof DeliveryCell extends fc.Arbitrary<infer A> ? A : never;
 const DeliveryTape = fc.array(DeliveryCell, { minLength: 1, maxLength: 24 });
 
-const rows = (sql: Sql) =>
-  sql.exec("SELECT name FROM sqlite_master WHERE name='unsent'").length === 0
-    ? []
-    : sql
-        .exec("SELECT row FROM unsent ORDER BY rowid")
-        .map((r) => Schema.decodeUnknownSync(Schema.fromJsonString(SpanRow))(r.row));
-
-const health = (sql: Sql) =>
-  sql.exec("SELECT name FROM sqlite_master WHERE name='measurements'").length === 0
-    ? []
-    : sql.exec("SELECT * FROM measurements WHERE piece='isolate.cpu' ORDER BY rowid");
-
-const sink = (sql: Sql, object: string) =>
-  Layer.mergeAll(SpanSink.layer(sql, { object }), RecordManager.memory(1_000_000_000), Archive.memory);
-
 const sample = (process: string, cpuMs: number): typeof IsolateUsage.Usage.Type => ({
   process,
   cpuMs,
@@ -112,8 +93,9 @@ export const suite = (rig: Rig) =>
               const live = [1, 2];
               const ran: Array<{ name: string; process: string }> = [];
               const expected: Array<Array<typeof IsolateUsage.Usage.Type>> = [[], []];
-              const layers = stores.map((store, n) => sink(store.sql, names[n] ?? ""));
-              const contexts = yield* Effect.forEach(layers, (layer) => Layer.build(layer), { concurrency: 1 });
+              const recordings = yield* Effect.forEach(stores, (store, n) => rig.telemetry(store.sql, names[n] ?? ""), {
+                concurrency: 1,
+              });
               let next = 2;
               const deliver = (called: { name: string; process: string }, cpu: number, count: number) =>
                 Effect.gen(function* () {
@@ -126,17 +108,20 @@ export const suite = (rig: Rig) =>
                   }));
                   yield* rig.deliver({ project: "project-test", ...called }, events, (object, usage) => {
                     expect(object).toBe(JSON.stringify(["project-test", called.name]));
-                    return IsolateUsage.record(usage).pipe(
-                      Effect.annotateSpans({ "fab.process": pid(live[index] ?? 1) }),
-                      Effect.provideContext(contexts[index] ?? Context.empty()),
-                    );
+                    const recording = recordings[index];
+
+                    if (recording === undefined) {
+                      return Effect.die("tail without a receiving object");
+                    }
+
+                    return recording.record(usage).pipe(Effect.annotateSpans({ "fab.process": pid(live[index] ?? 1) }));
                   });
                   expected[index]?.push(...events.map(() => sample(called.process, cpu)));
                 });
               const check = () => {
                 for (const [i, store] of stores.entries()) {
                   expect(
-                    rows(store.sql).map((row) => ({
+                    rig.rows(store.sql).map((row) => ({
                       process: row.attributes["fab.process"],
                       method: row.attributes["fab.isolate.method"],
                       outcome: row.attributes["fab.isolate.outcome"],
@@ -144,8 +129,10 @@ export const suite = (rig: Rig) =>
                       wallMs: row.attributes["fab.isolate.wall_ms"],
                     })),
                   ).toEqual(expected[i]);
-                  expect(rows(store.sql).every((row) => row.resource.attributes["fab.object"] === names[i])).toBe(true);
-                  expect(health(store.sql)).toHaveLength(expected[i]?.length ?? 0);
+                  expect(rig.rows(store.sql).every((row) => row.resource.attributes["fab.object"] === names[i])).toBe(
+                    true,
+                  );
+                  expect(rig.health(store.sql)).toHaveLength(expected[i]?.length ?? 0);
                 }
               };
 
@@ -166,7 +153,7 @@ export const suite = (rig: Rig) =>
                   const store = stores[n];
 
                   if (store !== undefined) {
-                    contexts[n] = yield* Layer.build(sink(store.sql, names[n] ?? ""));
+                    recordings[n] = yield* rig.telemetry(store.sql, names[n] ?? "");
                   }
                 } else {
                   const called = ran[cell.target % ran.length];
@@ -232,10 +219,10 @@ export const suite = (rig: Rig) =>
                 size: () => store.sql.size(),
               };
               yield* Effect.gen(function* () {
-                const service = yield* SpanSink;
+                const service = yield* rig.telemetry(sql, "checklist:1");
 
                 if (warm) {
-                  yield* IsolateUsage.record([sample(pid(1), 0)]);
+                  yield* service.record([sample(pid(1), 0)]);
                 }
 
                 let committed = warm ? 1 : 0;
@@ -260,34 +247,34 @@ export const suite = (rig: Rig) =>
                     // Fail inside a batch, including after earlier rows would have been written.
                     failAt = move === "cut" ? 1 + (cell.pick % count) : null;
                     transactions = 0;
-                    const before = rows(store.sql).length;
-                    yield* IsolateUsage.record(batch);
+                    const before = rig.rows(store.sql).length;
+                    yield* service.record(batch);
                     expect(transactions, "one batch is one atomic sink commit").toBe(1);
 
                     if (move === "cut") {
                       held += count;
                       owed = true;
-                      expect(rows(store.sql)).toHaveLength(before);
+                      expect(rig.rows(store.sql)).toHaveLength(before);
                     } else {
                       committed += count + held;
                       held = 0;
                     }
 
                     failAt = null;
-                    expect(rows(store.sql)).toHaveLength(committed);
-                    expect(health(store.sql)).toHaveLength(committed);
+                    expect(rig.rows(store.sql)).toHaveLength(committed);
+                    expect(rig.health(store.sql)).toHaveLength(committed);
                   }
                 }
 
                 if (held > 0) {
-                  yield* IsolateUsage.record([sample(pid(1), 0)]);
+                  yield* service.record([sample(pid(1), 0)]);
                   committed += held + 1;
                 }
 
                 yield* store.reopen;
-                expect(rows(store.sql)).toHaveLength(committed);
-                expect(health(store.sql)).toHaveLength(committed);
-              }).pipe(Effect.provide(sink(sql, "checklist:1")));
+                expect(rig.rows(store.sql)).toHaveLength(committed);
+                expect(rig.health(store.sql)).toHaveLength(committed);
+              });
             }),
           );
         const replay = (tape: ReadonlyArray<Cell>) =>
@@ -319,13 +306,14 @@ export const suite = (rig: Rig) =>
                 const spans: Array<Tracer.NativeSpan> = [];
                 const logs: Array<{ level: string; message: unknown; cause: string; fields: unknown }> = [];
                 const logger = Logger.layer([
-                  Logger.make((options: Logger.Options<ReadonlyArray<unknown>>) => {
+                  Logger.make((options: Logger.Options<unknown>) => {
                     logs.push({
                       level: options.logLevel,
-                      message: options.message.map((value) =>
-                        value instanceof Error
-                          ? { name: value.name, message: value.message, stack: value.stack }
-                          : value,
+                      message: (Array.isArray(options.message) ? options.message : [options.message]).map(
+                        (value: unknown) =>
+                          value instanceof Error
+                            ? { name: value.name, message: value.message, stack: value.stack }
+                            : value,
                       ),
                       cause: Cause.pretty(options.cause),
                       fields: options.fiber.getRef(References.CurrentLogAnnotations),
@@ -339,19 +327,16 @@ export const suite = (rig: Rig) =>
                     return span;
                   },
                 });
+                const response: Effect.Effect<void, unknown> =
+                  behavior === "hang"
+                    ? Effect.never
+                    : behavior === "fail"
+                      ? Effect.fail(new TypeError(`PRIVATE_DELIVERY_${cell.error}_END`))
+                      : Effect.void;
                 const delivery = rig.deliver(
                   { project: "project-test", name: "checklist:1", process: pid(1) },
                   [{ event: { rpcMethod: "step" }, cpuTime: n, wallTime: n + 1, outcome: "ok" }],
-                  () =>
-                    Deferred.succeed(entered, undefined).pipe(
-                      Effect.andThen(
-                        behavior === "hang"
-                          ? Effect.never
-                          : behavior === "fail"
-                            ? Effect.fail(new TypeError(`PRIVATE_DELIVERY_${cell.error}_END`))
-                            : Effect.void,
-                      ),
-                    ),
+                  () => Deferred.succeed(entered, undefined).pipe(Effect.andThen(response)),
                 );
                 const pending = yield* delivery.pipe(
                   Effect.withTracer(tracer),

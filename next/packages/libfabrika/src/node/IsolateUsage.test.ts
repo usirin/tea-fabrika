@@ -17,10 +17,15 @@ import { Owner, Recipient, Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "../runtime/Entry.ts";
 import { nodeExecution } from "../runtime/Execution.ts";
+import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import * as IsolateUsageTest from "../runtime/IsolateUsageTest.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
 import { ProgramRunner } from "../runtime/Runner.ts";
 import type { Sql } from "../Sql.ts";
+import { Archive } from "../telemetry/Archive.ts";
+import { RecordManager } from "../telemetry/Records.ts";
+import { SpanSink } from "../telemetry/Sink.ts";
+import { SpanRow } from "../telemetry/Trace.ts";
 
 const PID = "process_0000000000e008000000000001";
 const NAME = "checklist:1";
@@ -238,4 +243,28 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
     } satisfies IsolateUsageTest.World;
   });
 
-IsolateUsageTest.suite({ open, deliver, runner, invoke });
+const telemetry: IsolateUsageTest.Rig["telemetry"] = (sql, object) =>
+  Effect.gen(function* () {
+    const context = yield* Layer.build(
+      Layer.mergeAll(SpanSink.layer(sql, { object }), RecordManager.memory(1_000_000_000), Archive.memory),
+    );
+    return {
+      record: (usage) =>
+        SpanSink.use((sink) => sink.batch(IsolateUsage.record(usage))).pipe(Effect.provideContext(context)),
+      flush: SpanSink.use((sink) => sink.flush).pipe(Effect.provideContext(context)),
+    } satisfies IsolateUsageTest.Recording;
+  });
+
+const rows: IsolateUsageTest.Rig["rows"] = (sql) =>
+  sql.exec("SELECT name FROM sqlite_master WHERE name='unsent'").length === 0
+    ? []
+    : sql
+        .exec("SELECT row FROM unsent ORDER BY rowid")
+        .map((r) => Schema.decodeUnknownSync(Schema.fromJsonString(SpanRow))(r.row));
+
+const health: IsolateUsageTest.Rig["health"] = (sql) =>
+  sql.exec("SELECT name FROM sqlite_master WHERE name='measurements'").length === 0
+    ? []
+    : sql.exec("SELECT * FROM measurements WHERE piece='isolate.cpu' ORDER BY rowid");
+
+IsolateUsageTest.suite({ open, deliver, runner, invoke, telemetry, rows, health });
