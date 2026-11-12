@@ -277,6 +277,7 @@ describe("T341 the lane brief is cut into one brief per step, today's tooling", 
           commits: [{ step: "tests", sha: head }],
           note,
           host: s === "review" ? `done at ${head}: 2 host commands passed` : null,
+          plants: s === "review" ? "## Plant records\n\n- L1, at 0123abcd:" : null,
         });
         expect(text).toContain("Shared: ticket 7");
         expect(text).toContain(cut.sections[s] ?? "nothing");
@@ -297,6 +298,8 @@ describe("T341 the lane brief is cut into one brief per step, today's tooling", 
           expect(text).toContain(`: done at ${head}: 2 host commands passed`);
           expect(text).toContain(`Reviewed head: fabrikalfa/x-wip at ${head}`);
           expect(text).toContain(`Parent base: origin/main at ${root}`);
+          // Ticket 850: a review reads the lane's plant records, which its box cannot open.
+          expect(text).toContain("## Plant records\n\n- L1, at 0123abcd:");
         }
 
         if (s === "mutation") {
@@ -325,6 +328,7 @@ describe("T341 the lane brief is cut into one brief per step, today's tooling", 
           commits,
           note: "",
           host: null,
+          plants: null,
         });
         expect(text.includes("No step has committed yet.")).toBe(commits.length === 0);
         expect(text).not.toContain("could not be read");
@@ -347,6 +351,7 @@ describe("T341 the lane brief is cut into one brief per step, today's tooling", 
       commits: null,
       note: "",
       host: null,
+      plants: null,
     });
     expect(unread).toContain("The lane's step commits could not be read");
     expect(unread).not.toContain("No step has committed yet.");
