@@ -1957,3 +1957,21 @@ describe("the Claude row's options", () => {
     expect(claudeOptions("/repo", null)).not.toHaveProperty("maxBudgetUsd");
   });
 });
+
+describe("the ids that end a maker's turn (ticket 837)", () => {
+  // L6. A contained run never refuses with one of these (refusal.ts).
+  it("L6: Codex's rows cancel exactly `cancel`, and Claude's nothing", () => {
+    const home = fakeHome();
+    const folder = join(tmpdir(), "a-scratch-folder");
+
+    // pinned: codex-acp 2.5.0 `ApprovalOptionId.Cancel` and `McpApprovalOptionId.Cancel` are both
+    // "cancel" (dist/index.js:38170, :38182), and it ends Codex's turn where `decline` does not.
+    for (const access of ["write", "read"] as const) {
+      expect(harnessOf({ name: "codex", access }, folder, null, parentOf(home)).cancels).toEqual(["cancel"]);
+    }
+
+    // pinned: claude-agent-acp 0.99.1's one no, `reject`, denies without an interrupt
+    // (permissions/effects.js:127-128), so the turn goes on.
+    expect(harnessOf("claude", folder, null, parentOf(home)).cancels).toEqual([]);
+  });
+});

@@ -1,10 +1,10 @@
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { Effect, Stream } from "effect";
 import { describe, expect, it } from "vitest";
-import { type AdapterTurn, NonBlank, type SystemPrompt } from "../agent/turn.ts";
+import { type AdapterTurn, NonBlank, type Raw, type SystemPrompt } from "../agent/turn.ts";
 import { acpAdapter, claudeMetaOf } from "./adapter.ts";
 import { codexHomeOf, type FolderAccess, harnessOf, withSystem } from "./harness.ts";
 
@@ -127,5 +127,60 @@ describe("the fake row", () => {
       `system ${opened.own} ${JSON.stringify(REPLACE)}`,
       `system ${opened.own} ${JSON.stringify(APPEND)}`,
     ]);
+  }, 20_000);
+});
+
+describe("a permission request through the adapter (ticket 837)", () => {
+  // The fake row's `cancels` is `["cancel"]`: as Codex's, its `cancel` ends its turn and its
+  // `decline` does not (fake-agent.ts). The fake's process lives in the run's scope.
+  const run = (prompt: string) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const folder = yield* Effect.acquireRelease(
+          Effect.sync(() => realpathSync(mkdtempSync(join(tmpdir(), "acp-refuse-")))),
+          (f) => Effect.sync(() => rmSync(f, { recursive: true, force: true })),
+        );
+        const adapter = yield* acpAdapter("fake", { PATH: process.env.PATH ?? "" });
+        const running = yield* adapter.start({
+          folder,
+          prompt,
+          system: APPEND,
+          schema: {},
+          resume: null,
+          session: "s",
+          model: null,
+          effort: null,
+          usd: null,
+        });
+        const seen: Raw[] = [];
+        const end = yield* Stream.runForEach(running.updates, (r) => Effect.sync(() => seen.push(r))).pipe(
+          Effect.result,
+        );
+        return { seen, end };
+      }).pipe(Effect.scoped, Effect.provide(nodeServices)),
+    );
+
+  it("L7: a request whose only no is `cancel` fails the turn cannot_refuse, naming the request", async () => {
+    // scenario: only a real fake process over stdio and our client send a Codex-shaped file
+    // change ask (`yes`, `cancel`); the prompt word `cancelonly` asks it.
+    const { seen, end } = await run("cancelonly");
+
+    if (end._tag !== "Failure") {
+      throw new Error(`the turn did not fail: ${JSON.stringify(seen.at(-1))}`);
+    }
+
+    expect(end.failure.why).toBe("cannot_refuse");
+    expect(end.failure.message).toContain("Write written.txt");
+    expect(seen.some((r) => r._tag === "asked")).toBe(true);
+    expect(seen.some((r) => r._tag === "ended")).toBe(false);
+  }, 20_000);
+
+  it("L8: a request offering `cancel` before `decline` gets `decline`, and the turn ends end_turn", async () => {
+    // scenario: the fake process offers `yes`, `cancel`, `decline` in that order, as a Codex
+    // command may (prompt word `declinelast`); its `cancel` would end the turn `cancelled`.
+    const { seen, end } = await run("declinelast");
+    expect(end._tag).toBe("Success");
+    expect(seen.find((r) => r._tag === "asked")).toMatchObject({ option: "decline" });
+    expect(seen.find((r) => r._tag === "ended")).toMatchObject({ stop: "end_turn" });
   }, 20_000);
 });
