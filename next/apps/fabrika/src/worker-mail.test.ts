@@ -515,6 +515,7 @@ const checklistWorld = async (
         founder: key.line,
         window: key.raw,
         port: held.port,
+        rateLimit: { limit: 100_000, window: 60_000 },
       });
       const scope = yield* Effect.scope;
       const from: From = {
