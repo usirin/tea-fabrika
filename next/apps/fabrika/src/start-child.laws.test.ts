@@ -11,7 +11,7 @@ import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { configureProcess, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
 import { Effect, Exit, Logger, Result, Schema, Scope } from "effect";
 import * as fc from "fast-check";
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 import {
   childProject,
   childInstance,
@@ -434,9 +434,12 @@ const projectSecrets = Effect.fnUntraced(function* (
   );
   expect(recorded.length, "L11: real stored spans were inspected").toBeGreaterThan(0);
 
+  // Each string leaf gets every check, without Vitest matcher bookkeeping in this hot loop.
+  const secretForms = forms(secret);
+
   for (const text of outputs[output]) {
-    for (const form of forms(secret)) {
-      expect(text.includes(form), `L11: ${path} leaked storage text or metadata into ${output}`).toBe(false);
+    for (const form of secretForms) {
+      assert(!text.includes(form), `L11: ${path} leaked storage text or metadata into ${output}`);
     }
   }
 });
