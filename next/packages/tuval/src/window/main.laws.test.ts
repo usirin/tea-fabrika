@@ -1,5 +1,5 @@
-// P14 slice 2, next/ (ticket 828): the page's run, laws L2 (retry timing), L10 (real runtime progress)
-// and L12 (wire formats) of the approved plan. Written before `window/main.tsx`.
+// P14 slice 2, next/ (ticket 828): the page's run, laws L2 (retry timing), L10 (real runtime progress),
+// L11 (scope cleanup) and L12 (wire formats) of the approved plan. Written before `window/main.tsx`.
 //
 // The shape these laws hold `main.tsx` to, from the plan (the build may add more):
 // - `startWindow({ tiles, window, build, origin })`: boots the window machine (`window`, from
@@ -82,6 +82,7 @@ type Script = {
 const peer = (script: Script, pong: () => void = () => {}) => {
   const sent: Array<string> = [];
   const dials: Array<string> = [];
+  const resources = { sockets: 0, released: 0, streams: 0, ended: 0 };
   const ids = new Map<string, number | string>(); // the last id of each method the page called
   let knocks = 0;
   let open: Queue.Queue<SocketEvent> | null = null;
@@ -144,6 +145,7 @@ const peer = (script: Script, pong: () => void = () => {}) => {
       Effect.acquireRelease(
         Effect.gen(function* () {
           dials.push(url);
+          resources.sockets++;
           const events = yield* Queue.unbounded<SocketEvent>();
           open = events;
           Queue.offerUnsafe(events, { event: "open" });
@@ -152,17 +154,31 @@ const peer = (script: Script, pong: () => void = () => {}) => {
             data: JSON.stringify({ jsonrpc: "2.0", method: "challenge", params: { nonce: `nonce_${dials.length}` } }),
           });
           return {
-            events: Stream.fromQueue(events),
+            events: Stream.fromQueue(events).pipe(
+              Stream.onStart(Effect.sync(() => void resources.streams++)),
+              Stream.ensuring(Effect.sync(() => void resources.ended++)),
+            ),
             send: answer,
             close: (code: number) => {
               Queue.offerUnsafe(events, { event: "close", code });
             },
           };
         }),
-        () => Effect.sync(() => (open = null)),
+        () =>
+          Effect.sync(() => {
+            resources.released++;
+            open = null;
+          }),
       ),
   });
-  return { socket, sent, dials, knocks: () => knocks, message: (frame: unknown) => open !== null && message(frame) };
+  return {
+    socket,
+    sent,
+    dials,
+    resources,
+    knocks: () => knocks,
+    message: (frame: unknown) => open !== null && message(frame),
+  };
 };
 
 /** A real Ed25519 key in WebCrypto, as the browser layer makes one, with its ssh key line. */
@@ -431,6 +447,27 @@ describe("L10: real runtime progress", () => {
 
         expect(new Set(rows.filter(Schema.is(ClientRow)).map((r) => r.tab)).size).toBe(1);
         yield* Scope.close(scope, Exit.void);
+        // L11: closing the owner must stop the runtime itself, not just its page.
+        expect(door.resources.sockets, "the real run acquired a socket").toBeGreaterThan(0);
+        expect(door.resources.streams, "the socket Sub consumed its events").toBeGreaterThan(0);
+        expect(door.resources.released, "every acquired socket was released").toBe(door.resources.sockets);
+        expect(door.resources.ended, "every socket event stream ended").toBe(door.resources.streams);
+        const stopped = run.getState();
+        const outputs = { dials: door.dials.length, sent: door.sent.length, rows: rows.length };
+        // Outlive both the beat and the retry cap. A surviving timer or Sub would do work.
+        yield* tick(60_000);
+        expect(run.getState(), "no timer folds after the owner closes").toEqual(stopped);
+        expect({ dials: door.dials.length, sent: door.sent.length, rows: rows.length }).toEqual(outputs);
+        expect(
+          door.message({
+            jsonrpc: "2.0",
+            method: "view.whole",
+            params: { pid: PID, type: "whole", rev: 99, view: list(9) },
+          }),
+          "no socket consumer survives",
+        ).toBe(false);
+        const rejected = yield* run.dispatch(press).pipe(Effect.flip);
+        expect(rejected._tag, "a stopped runtime refuses a new press").toBe("Stopped");
       }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
     { arbitrary: { seed: SEED, runs: 50 } },
   );

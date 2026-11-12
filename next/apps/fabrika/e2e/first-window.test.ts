@@ -16,6 +16,8 @@ import { applyCell } from "@demlik/tea";
 import { checklist, checklistMachine } from "@kampus/checklist";
 import { checklistWindow } from "@kampus/checklist/window";
 import { Sent } from "@kampus/libfabrika";
+import { MemberEvent } from "@kampus/libfabrika/access/Access";
+import { valueFor } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { Effect, Fiber, Schema } from "effect";
@@ -510,11 +512,8 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   h.grants.flatMap((g) => g.signatures).length,
                   "the real grant signature was observed",
                 ).toBeGreaterThan(0);
-                const secrets = [
-                  `tok_${token}`,
-                  `sec_${secret}`,
-                  h.credential,
-                  stranger.credential,
+                const credentials = [`tok_${token}`, `sec_${secret}`, h.credential, stranger.credential];
+                const signatures = [
                   ...[...h.grants, ...stranger.grants]
                     .flatMap((g) => g.signatures)
                     .flatMap((signature) => [
@@ -523,6 +522,35 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                     ]),
                   ...revoked.armored.split("\n").filter((line) => line.length > 20 && !line.startsWith("-----")),
                 ];
+                const access = yield* r.read("gateway/access");
+                const retained = access.filter((entry) => entry._tag === "granted" || entry._tag === "revoked");
+                expect(
+                  retained.some((entry) => entry._tag === "granted"),
+                  "the signed grant stays in its history",
+                ).toBe(true);
+                expect(
+                  retained.some((entry) => entry._tag === "revoked"),
+                  "the signed removal stays in its history",
+                ).toBe(true);
+                const records = access.map((entry): readonly [string, string] => {
+                  if (entry._tag !== "granted" && entry._tag !== "revoked") {
+                    return ["access record", JSON.stringify(entry)];
+                  }
+
+                  const event = Schema.decodeUnknownSync(
+                    Schema.Union([MemberEvent.cases.granted, MemberEvent.cases.revoked]),
+                  )(valueFor(entry));
+
+                  expect(
+                    [...h.grants.flatMap((g) => g.signatures), revoked.armored],
+                    "only the proof actually sent is retained",
+                  ).toContain(event.signed.armored);
+                  // Access.Signed keeps this proof by design. Check every other field for copies.
+                  const object = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Json));
+                  const body = object(entry.body);
+                  const { armored: _proof, ...signed } = object(body.signed);
+                  return ["access record", JSON.stringify({ ...entry, body: { ...body, signed } })];
+                });
                 const outputs: ReadonlyArray<readonly [string, string]> = [
                   ...snapshots,
                   ...(yield* look(t.page, t.seen)),
@@ -534,6 +562,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   ]),
                   ["server console", dev.output()],
                   ["spans", JSON.stringify(spans)],
+                  ...records,
                   ...stored(h.dir),
                 ];
 
@@ -553,9 +582,13 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   }
                 }
 
-                for (const s of secrets) {
+                for (const s of [...credentials, ...signatures]) {
                   for (const form of [s, encodeURIComponent(s), btoa(s)]) {
-                    for (const [output, text] of outputs) {
+                    // Raw database pages also hold Access.Signed.armored. Its logical records
+                    // above check copies outside that one field; credentials still check every byte.
+                    const checked = signatures.includes(s) ? outputs.filter(([o]) => !o.startsWith("home")) : outputs;
+
+                    for (const [output, text] of checked) {
                       expect(text.includes(form), `${output} copies a secret`).toBe(false);
                     }
                   }
