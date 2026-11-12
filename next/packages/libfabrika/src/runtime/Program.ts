@@ -346,7 +346,7 @@ const makeEffect = Effect.fn("program.make")(function* <
 
 export const Program = { schema: Declaration, make, makeEffect };
 
-type PortFields<M> = M extends Typed ? Omit<M, "type"> : never;
+type PortFields<M, K extends string> = M extends Typed ? (K extends M["type"] ? Omit<M, "type"> : never) : never;
 
 type PortSchema<P extends typeof Declaration.Type, K extends string> = string extends K
   ? Declared
@@ -357,7 +357,7 @@ type PortSchema<P extends typeof Declaration.Type, K extends string> = string ex
       ? S
       : unknown extends P["msg"]["Type"]
         ? Declared
-        : Schema.Codec<PortFields<Extract<P["msg"]["Type"], { readonly type: K }>>, unknown>
+        : Schema.Codec<PortFields<P["msg"]["Type"], K>, unknown>
     : Declared;
 
 // Message checks still see their discriminator even though a port's value omits it.
@@ -374,10 +374,30 @@ const portCheck = (check: SchemaAST.Check<unknown>, key: string): SchemaAST.Chec
       );
 
 const writePortSchema = (ast: SchemaAST.AST, key: string): Option.Option<Declared> => {
+  if (SchemaAST.isSuspend(ast)) {
+    return writePortSchema(ast.thunk(), key);
+  }
+
   const checks =
     ast.checks === undefined
       ? undefined
       : ([portCheck(ast.checks[0], key), ...ast.checks.slice(1).map((check) => portCheck(check, key))] as const);
+
+  // A struct codec can rename encoded fields. Project both sides of every link.
+  let encoding: SchemaAST.Encoding | undefined;
+
+  if (ast.encoding !== undefined) {
+    const project = (link: SchemaAST.Link) =>
+      Option.map(writePortSchema(link.to, key), (schema) => new SchemaAST.Link(schema.ast, link.transformation));
+    const [first, ...rest] = ast.encoding;
+    const links = Option.all([project(first), Option.all(rest.map(project))]);
+
+    if (Option.isNone(links)) {
+      return Option.none();
+    }
+
+    encoding = [links.value[0], ...links.value[1]];
+  }
 
   if (SchemaAST.isUnion(ast)) {
     const [first, ...rest] = ast.types.flatMap((member) => Option.toArray(writePortSchema(member, key)));
@@ -386,13 +406,31 @@ const writePortSchema = (ast: SchemaAST.AST, key: string): Option.Option<Declare
       return Option.none();
     }
 
-    const schema = rest.length === 0 ? first : Schema.Union([first, ...rest], ast.options);
-    return Option.some(checks === undefined ? schema : schema.check(...checks));
+    if (rest.length === 0 && encoding === undefined) {
+      const schema = ast.annotations === undefined ? first : first.annotate(ast.annotations);
+      return Option.some(checks === undefined ? schema : schema.check(...checks));
+    }
+
+    return Option.some(
+      Schema.make<Declared>(
+        new SchemaAST.Union(
+          [first.ast, ...rest.map((schema) => schema.ast)],
+          ast.options,
+          ast.annotations,
+          checks,
+          encoding,
+          ast.context,
+          ast.encodingChecks,
+        ),
+      ),
+    );
   }
 
   if (
     !SchemaAST.isObjects(ast) ||
-    !ast.propertySignatures.some((p) => p.name === "type" && SchemaAST.isLiteral(p.type) && p.type.literal === key)
+    !ast.propertySignatures.some(
+      (p) => p.name === "type" && Schema.is(Schema.toType(Schema.make<Declared>(p.type)))(key),
+    )
   ) {
     return Option.none();
   }
@@ -402,9 +440,13 @@ const writePortSchema = (ast: SchemaAST.AST, key: string): Option.Option<Declare
       ast.propertySignatures.filter((p) => p.name !== "type"),
       ast.indexSignatures,
       ast.annotations,
+      checks,
+      encoding,
+      ast.context,
+      ast.encodingChecks,
     ),
   );
-  return Option.some(checks === undefined ? schema : schema.check(...checks));
+  return Option.some(schema);
 };
 
 /**
