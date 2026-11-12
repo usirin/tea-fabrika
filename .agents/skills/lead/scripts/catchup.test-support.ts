@@ -277,6 +277,10 @@ if (cmd === "node" && args[0].endsWith("/freshmain.ts")) {
   if (setup.stale) die("pr 900: merge refused at the lint check: planted");
   process.exit(0);
 }
+if (cmd === "node" && args[0].endsWith("/box.ts")) {
+  // box.sh rm runs box.ts on the real Node, with its own laws in boxrm.test.ts.
+  process.exit(require("node:child_process").spawnSync(process.execPath, args, {stdio: "inherit"}).status ?? 1);
+}
 if (cmd === "node") {
   if (!args[0].endsWith("/botpush.mjs")) die("unhandled node command");
   if (setup.refused === "notes" || setup.refused === "branch" && setup.branch.startsWith("fabrikalfa/")) die("atomic push refused");
