@@ -13,6 +13,7 @@ const schedule = Schema.Struct({
   ),
   repeat: Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 5 })),
   initial: Schema.Literals(["absent", "matching", "foreign", "starting"]),
+  sameArity: Schema.Boolean,
 });
 
 const checks = (runs: number) => ({ arbitrary: { seed: 119120, runs } });
@@ -79,7 +80,10 @@ it.effect.prop(
         v.initial === "absent"
           ? Outside.absent
           : v.initial === "foreign"
-            ? Outside.foreign
+            ? {
+                ...Outside.foreign,
+                args: v.sameArity ? Outside.spec.args.map((arg) => `${arg}.foreign`) : Outside.foreign.args,
+              }
             : Outside.loaded(Outside.spec, v.initial === "starting" ? null : 81);
       const outside = yield* Outside.make({
         job,

@@ -49,6 +49,7 @@ it.effect.prop(
       const compile = disk.seen.find((call) => call.executable.endsWith("plutil"));
       expect(compile?.args).toContain("xml1");
       expect(compile?.options.shell).not.toBe(true);
+      expect(disk.seen.every((call) => call.options.extendEnv === false)).toBe(true);
     }).pipe(Effect.provide(NodeServices.layer)),
   options,
 );
@@ -114,6 +115,7 @@ it.effect.prop(
         stderr: 'Could not find service "test.p19.brain" in domain for user gui: 501\n',
       });
       const delivered: Array<(typeof Rows.Type)[number]> = [];
+      const refused = new Map<string, (typeof Rows.Type)[number]>();
       let available = false;
       const probe = Layer.succeed(BrainProbe, {
         ready: Effect.succeed(Readiness.cases.ready.make({})),
@@ -125,12 +127,17 @@ it.effect.prop(
         method: string,
         args: ReadonlyArray<unknown>,
       ) {
+        expect(method).toBe("write");
+        const rows = yield* Schema.decodeUnknownEffect(Rows)(args[2]);
+
         if (!available) {
+          for (const row of rows) {
+            refused.set(row.span.spanId, row);
+          }
+
           return yield* new SinkError({ reason: "unreachable", held: 0, cause: "offline-test-destination" });
         }
 
-        expect(method).toBe("write");
-        const rows = yield* Schema.decodeUnknownEffect(Rows)(args[2]);
         delivered.push(...rows);
         return { _tag: "written", count: rows.length };
       });
@@ -146,12 +153,19 @@ it.effect.prop(
       }
 
       expect(delivered).toEqual([]);
+      expect(refused.size).toBeGreaterThan(0);
       available = true;
       expect(Exit.isSuccess(yield* Effect.scoped(reopen()))).toBe(true);
       expect(Exit.isSuccess(yield* Effect.scoped(reopen("stop")))).toBe(true);
+
+      for (const [id, row] of refused) {
+        expect(delivered.filter(({ span }) => span.spanId === id)).toEqual([row]);
+      }
+
       expect(delivered.length).toBeGreaterThanOrEqual(attempts);
       const actions = delivered.filter(({ span }) => span.name.startsWith("BrainService."));
       expect(actions.length).toBeGreaterThanOrEqual(attempts);
+      expect(actions.some(({ span }) => span.attributes["fab.result"] === "delivery_failed")).toBe(true);
 
       expect(
         actions.some(
@@ -178,6 +192,21 @@ it.effect.prop(
   ([word]) =>
     Effect.gen(function* () {
       const secret = `sentinel-${word}/+&=`;
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          const previous = process.env.FABRIKA_P19_SENTINEL;
+          process.env.FABRIKA_P19_SENTINEL = secret;
+          return previous;
+        }),
+        (previous) =>
+          Effect.sync(() => {
+            if (previous === undefined) {
+              delete process.env.FABRIKA_P19_SENTINEL;
+            } else {
+              process.env.FABRIKA_P19_SENTINEL = previous;
+            }
+          }),
+      );
       const disk = yield* LaunchdTest.open("none", { code: 5, stdout: secret, stderr: secret });
       yield* disk.control.install;
       const sent: Array<unknown> = [];
