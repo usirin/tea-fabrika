@@ -14,7 +14,7 @@
 // These start real file watchers. A sandbox that refuses file events (macOS without FSEvents in a
 // box) builds once and never sees a save: L10 and L18's save-driven runs then wait for the lead.
 import { NodeServices } from "@effect/platform-node";
-import { Deferred, Effect, Fiber, FileSystem, Path, Queue, Stream } from "effect";
+import { Deferred, Effect, Fiber, FileSystem, Option, Path, Queue, Stream } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { expectTypeOf } from "vitest";
@@ -245,6 +245,7 @@ describe("P15 slice 1: the watcher", () => {
             const broken = g(fc.boolean);
             yield* Effect.scoped(
               Effect.gen(function* () {
+                expect.hasAssertions();
                 const { home, programs } = yield* fixture;
                 const b = yield* brain;
                 const reached = yield* Deferred.make<void>();
@@ -273,7 +274,15 @@ describe("P15 slice 1: the watcher", () => {
                   if (broken) {
                     // A save that does not parse: Rolldown answers ERROR, with a result to close.
                     yield* fs.writeFileString(path.join(home, "shared/shared.ts"), "export const shared = ;\n");
-                    yield* Queue.take(b.failures).pipe(Effect.timeoutOption(3000));
+                    const failure = yield* Queue.take(b.failures).pipe(Effect.timeoutOption(3000));
+                    expect(
+                      Option.isSome(failure),
+                      "the real watcher must reach the syntax failure before interruption",
+                    ).toBe(true);
+                    expect(
+                      opened.results.some((r) => r.code === "ERROR"),
+                      "the run acquired an ERROR result",
+                    ).toBe(true);
                     seen.add("error");
                   } else {
                     yield* fs.writeFileString(path.join(home, "shared/shared.ts"), `export const shared = ${cut};\n`);

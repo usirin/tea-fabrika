@@ -21,14 +21,16 @@
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Context, Effect, Exit, Layer, Redacted, Schema, Scope } from "effect";
+import { Context, Deferred, Effect, Exit, Fiber, Layer, Option, Redacted, Schema, Scope } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf, vi } from "vitest";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Start } from "../processes/Process.ts";
-import { hash } from "../runtime/Built.ts";
+import { hash, type BuiltProgram } from "../runtime/Built.ts";
+import { CodeEvent } from "../runtime/Code.ts";
 import { ProgramLoader } from "../runtime/Entry.ts";
 import { Program } from "../runtime/Program.ts";
+import type { Descriptor } from "../runtime/Runner.ts";
 import type { GatewayCalls, ProcessBinding } from "./bindings.ts";
 import { control } from "./control.ts";
 import { type Env, type ProjectDoorOptions, ProjectService, projectLayer } from "./runtime.ts";
@@ -96,7 +98,7 @@ type Pushed = { readonly name: string; readonly load: string; readonly program: 
 expectTypeOf<Omit<Pushed, "name">>().toEqualTypeOf<Parameters<ProcessBinding["swap"]>[0]>();
 
 /** One booted Project over one SQLite file, with every platform handle recorded. */
-const instance = Effect.fnUntraced(function* (builtIn: Fixture) {
+const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: ReadonlyArray<Fixture> = []) {
   const parent = yield* Scope.Scope;
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => new DatabaseSync(":memory:")),
@@ -121,13 +123,25 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture) {
   const ctx = { id: { name: "project-test" }, storage } as unknown as DurableObjectState;
   const source = sourceFor(builtIn);
   const builtHash = yield* hash(source);
+  let bundled = { hash: builtHash, source };
   const pushed: Array<Pushed> = [];
-  const descriptors = new Map<string, { readonly id: string; readonly name: string; readonly build: string }>();
+  const loadedAtPush: Array<ReadonlyArray<string>> = [];
+  const swapGates = new Map<string, Effect.Effect<void>>();
+  const descriptors = new Map<string, Pick<Descriptor, "id" | "name" | "build" | "program">>();
   const running = new Map<string, string>();
   const refusing = new Set<string>();
   /** Every call on every isolate, by its Worker Loader id. */
   const isolates = new Map<string, Array<string>>();
   const sources = new Map<string, string>([[builtHash, source]]);
+  const otherPrograms: Record<string, BuiltProgram> = {};
+
+  for (const f of others) {
+    const source = sourceFor(f);
+    const digest = yield* hash(source);
+    otherPrograms[f.name] = { hash: digest, source };
+    sources.set(digest, source);
+  }
+
   let project: ProjectService["Service"] | undefined;
   let context: Context.Context<ProjectService>;
   let scope: Scope.Closeable;
@@ -149,7 +163,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture) {
       getByName: (key: string) => {
         const [, name] = JSON.parse(key) as [string, string];
         return {
-          configure: async (d: { id: string; name: string; build: string }) => {
+          configure: async (d: Pick<Descriptor, "id" | "name" | "build" | "program">) => {
             descriptors.set(name, d);
 
             if (!running.has(d.id)) {
@@ -163,6 +177,22 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture) {
           msg: async () => ({ _tag: "accepted", rev: 1, pos: 1 }),
           swap: async (request: Omit<Pushed, "name">) => {
             pushed.push({ name, ...request });
+            loadedAtPush.push(
+              sql
+                .exec("SELECT body FROM entries WHERE stream='gateway/code' AND _tag='code.loaded'")
+                .map(
+                  (row) =>
+                    Schema.decodeUnknownSync(
+                      Schema.fromJsonString(Schema.Struct({ hash: CodeEvent.cases["code.loaded"].fields.hash })),
+                    )(String(row.body)).hash,
+                ),
+            );
+            const gate = swapGates.get(request.hash);
+
+            if (gate !== undefined) {
+              await Effect.runPromise(gate);
+            }
+
             const pid = descriptors.get(name)!.id;
             const was = running.get(pid) ?? builtHash;
 
@@ -251,7 +281,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture) {
           port: 18787,
           build: BRAIN_BUILD,
         },
-        programs: { [PROGRAM]: { hash: builtHash, source } },
+        programs: { [PROGRAM]: bundled, ...otherPrograms },
         bootstrap: { name: "counter:1", id: "counter:1", program: PROGRAM },
         door: (options) => {
           doorPolicy = options.policy;
@@ -268,6 +298,8 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture) {
     env,
     builtHash,
     pushed,
+    loadedAtPush,
+    swapGates,
     descriptors,
     running,
     refusing,
@@ -281,6 +313,13 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture) {
     /** The Project object restarts: its runtime is given back and built again on the same storage. */
     restart: Effect.gen(function* () {
       yield* Scope.close(scope, Exit.void);
+      yield* boot();
+    }),
+    reopen: Effect.fnUntraced(function* (replacement: Fixture) {
+      yield* Scope.close(scope, Exit.void);
+      const source = sourceFor(replacement);
+      bundled = { hash: yield* hash(source), source };
+      sources.set(bundled.hash, source);
       yield* boot();
     }),
     /** `gateway/code` and every other stream, as the ledger holds them, in log order. */
@@ -368,7 +407,7 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
       "name",
       "too_large",
       "restart",
-      ...(presses ? ["start", "start"] : []),
+      ...(presses ? ["start", "start", ...(i.descriptors.size > 0 ? ["own"] : [])] : []),
     ];
     const move = moves[g(fc.nat, { max: moves.length - 1 })]!;
     seen.add(move);
@@ -420,6 +459,11 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
       expect(new Set(i.pushed.slice(pushes).map((p) => p.hash))).toEqual(
         i.descriptors.size === 0 ? new Set() : new Set([selected]),
       );
+    } else if (move === "own") {
+      const live = [...i.descriptors.values()];
+      const descriptor = live[g(fc.nat, { max: live.length - 1 })]!;
+      yield* i.run(i.p.own(descriptor.id, `record_${n}`, `app/${descriptor.id}`, { _tag: "changed", count: n }));
+      expect(i.entries().find((e) => e.id === `record_${n}`)?.build).toBe(i.running.get(descriptor.id));
     } else if (move === "start") {
       const name = `counter:${++names}`;
       yield* i.run(
@@ -478,6 +522,212 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
 const json = (response: Response) => Effect.promise(() => response.json());
 
 describe("P15 slice 1: the brain installs and selects code", () => {
+  it.live(
+    "L10: installing a program pushes only its live processes, leaving every other program's running hash alone",
+    () =>
+      law(
+        (g) =>
+          Effect.gen(function* () {
+            const other = {
+              ...baseFixture(),
+              ...g(() => fixtures),
+              name: `p15/${g(() => fc.stringMatching(/^[a-z]{1,8}$/))}`,
+            };
+            const i = yield* instance(baseFixture(), [other]);
+            const variants = new Map([
+              [PROGRAM, baseFixture()],
+              [other.name, other],
+            ]);
+            const count = g(fc.integer, { min: 2, max: 4 });
+
+            for (let n = 1; n < count; n++) {
+              const program = [...variants.keys()][g(fc.nat, { max: variants.size - 1 })]!;
+              const source = sourceFor(variants.get(program)!);
+              yield* i.run(
+                i.p.start(
+                  Start.cases.first.make({
+                    id: `sibling_${n}`,
+                    name: `sibling:${n}`,
+                    code: { program, hash: yield* hash(source) },
+                  }),
+                  {
+                    by: "SHA256:brain",
+                    for: "brain",
+                    sentAt: "2026-11-11T00:00:00Z",
+                    seen: 0,
+                    parent: null,
+                    traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+                    build: BRAIN_BUILD,
+                  },
+                ),
+              );
+            }
+
+            // Always give the second program a process too. The remaining generated names may use either.
+            yield* i.run(
+              i.p.start(
+                Start.cases.first.make({
+                  id: "other_boot",
+                  name: "other:1",
+                  code: { program: other.name, hash: yield* hash(sourceFor(other)) },
+                }),
+                {
+                  by: "SHA256:brain",
+                  for: "brain",
+                  sentAt: "2026-11-11T00:00:00Z",
+                  seen: 0,
+                  parent: null,
+                  traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+                  build: BRAIN_BUILD,
+                },
+              ),
+            );
+            const steps = g(fc.integer, { min: 1, max: 5 });
+
+            for (let n = 0; n < steps; n++) {
+              const program = [...variants.keys()][g(fc.nat, { max: variants.size - 1 })]!;
+              const previous = variants.get(program)!;
+              const next = { ...previous, k: previous.k + g(fc.integer, { min: 1, max: 9 }) };
+              const source = sourceFor(next);
+              const digest = yield* hash(source);
+              i.sources.set(digest, source);
+              const before = new Map(i.running);
+              const pushes = i.pushed.length;
+              const answer = yield* i.run(
+                i.p.codeInstall({ id: `isolated_${n}`, program, hash: digest, source, from: "watch" }),
+              );
+              expect(answer._tag).toBe("loaded");
+              const matching = [...i.descriptors.values()].filter((d) => d.program === program);
+              expect(
+                i.pushed
+                  .slice(pushes)
+                  .map((p) => p.name)
+                  .toSorted(),
+              ).toEqual(matching.map((d) => d.name).toSorted());
+
+              for (const d of i.descriptors.values()) {
+                expect(i.running.get(d.id)).toBe(d.program === program ? digest : before.get(d.id));
+              }
+
+              variants.set(program, next);
+            }
+          }),
+        20,
+      ),
+    300_000,
+  );
+
+  it.live(
+    "L3/L4: an install waiting for a process turn lets that turn finish its Project write, then both calls answer once",
+    () =>
+      law(
+        (g) =>
+          Effect.gen(function* () {
+            const i = yield* instance(baseFixture());
+            const pid = i.descriptors.get("counter:1")!.id;
+            let current = baseFixture();
+            const steps = g(fc.integer, { min: 1, max: 4 });
+
+            for (let n = 0; n < steps; n++) {
+              const was = i.running.get(pid)!;
+              current = { ...current, k: current.k + g(fc.integer, { min: 1, max: 9 }) };
+              const digest = yield* hash(sourceFor(current));
+              const waiting = yield* Deferred.make<void>();
+              const finished = yield* Deferred.make<void>();
+              // A Process RPC waits for its in-flight turn. That turn must still call Project.own.
+              i.swapGates.set(
+                digest,
+                Deferred.succeed(waiting, undefined).pipe(Effect.andThen(Deferred.await(finished))),
+              );
+              const pending = yield* Effect.forkScoped(install(i, `concurrent_${n}`, current));
+              yield* Deferred.await(waiting).pipe(Effect.timeout("2 seconds"));
+              const id = `turn_finished_${n}`;
+              const result = yield* i
+                .run(i.p.own(pid, id, `app/${pid}`, { _tag: "changed", count: n }))
+                .pipe(
+                  Effect.ensuring(Deferred.succeed(finished, undefined)),
+                  Effect.andThen(Fiber.join(pending)),
+                  Effect.timeoutOption("1 second"),
+                );
+              expect(
+                Option.isSome(result),
+                "install must not hold the Project turn while awaiting a Process turn",
+              ).toBe(true);
+
+              if (Option.isNone(result)) {
+                return;
+              }
+
+              expect(result.value.answer).toEqual({
+                _tag: "loaded",
+                processes: [{ name: "counter:1", outcome: { _tag: "swapped", was } }],
+              });
+              expect(i.entries().filter((e) => e.id === id)).toHaveLength(1);
+              expect(code(i).filter((e) => e.id === `concurrent_${n}`)).toHaveLength(1);
+              expect(i.running.get(pid)).toBe(digest);
+              i.swapGates.delete(digest);
+            }
+          }),
+        100,
+      ),
+    300_000,
+  );
+
+  it.live(
+    "L6/L9: reopening with changed built-ins keeps every recorded hash readable, including an initial bundle a process refused to leave",
+    () =>
+      law(
+        (g) =>
+          Effect.gen(function* () {
+            const i = yield* instance(baseFixture());
+            let selected = i.builtHash;
+            let current = baseFixture();
+            const steps = g(fc.integer, { min: 1, max: 5 });
+
+            for (let n = 0; n < steps; n++) {
+              // Only hashes that this Project has loaded can be selected or kept by a Process.
+              if (g(fc.boolean)) {
+                i.refusing.add("counter:1");
+                current = { ...current, k: current.k + g(fc.integer, { min: 1, max: 9 }) };
+                const next = yield* install(i, `before_reopen_${n}`, current);
+                expect(next.answer._tag).toBe("loaded");
+                selected = next.digest;
+              }
+
+              const replacement = { ...current, k: current.k + g(fc.integer, { min: 10, max: 99 }) };
+              const before = code(i);
+              const pushes = i.pushed.length;
+              // Check persistence before reopening too, so a missing bundle reports its cause.
+              const recorded = new Set(before.filter((e) => e.tag === "code.loaded").map((e) => String(e.body.hash)));
+
+              for (const digest of recorded) {
+                expect(
+                  yield* i.run(i.p.code(digest)),
+                  "every loaded bundle is kept by hash before the built-in table changes",
+                ).toEqual({
+                  hash: digest,
+                  source: i.sources.get(digest),
+                });
+              }
+
+              yield* i.reopen(replacement);
+              expect(code(i)).toEqual(before);
+              expect(i.pushed.slice(pushes).map((p) => p.hash)).toEqual([selected]);
+
+              for (const digest of recorded) {
+                expect(yield* i.run(i.p.code(digest))).toEqual({ hash: digest, source: i.sources.get(digest) });
+              }
+
+              const kept = i.running.get(i.descriptors.get("counter:1")!.id)!;
+              expect(recorded.has(kept)).toBe(true);
+              yield* checkPolicies(i, n, "after");
+            }
+          }),
+        100,
+      ),
+    300_000,
+  );
+
   // L8, p75. Plant: select before describe; call init on the candidate; keep a failed hash after a reopen.
   it.live(
     "L8: each of the five failures writes one code.failed with its closed reason and is never selected, pushed or started on, also after a restart; the check calls only describe()",
@@ -533,14 +783,16 @@ describe("P15 slice 1: the brain installs and selects code", () => {
 
               if (e.stream.startsWith("gateway/")) {
                 expect(e.build, `${e.stream} ${e.id} is the brain's own entry`).toBe(BRAIN_BUILD);
+              } else if (e.stream.startsWith("app/")) {
+                expect(earlier(e.build, e.rev), "a process record's build was loaded first").toBe(true);
               }
             }
 
-            for (const p of i.pushed) {
+            for (const [index, p] of i.pushed.entries()) {
               expect(
-                loaded.some((l) => l.body.hash === p.hash),
-                `pushed ${p.hash} has a code.loaded`,
-              ).toBe(true);
+                i.loadedAtPush[index],
+                `pushed ${p.hash} already has a code.loaded when the Process receives it`,
+              ).toContain(p.hash);
             }
           }),
         50,

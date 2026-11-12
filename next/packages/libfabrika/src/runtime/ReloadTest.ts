@@ -438,14 +438,33 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
       Effect.gen(function* () {
         const mailbox = yield* Mailbox;
         return {
-          append: (i: { id: string; envelope: { input: unknown }; sentAt: string; seen: number }) =>
-            mailbox.send(name, i.id, i.envelope.input, {
+          append: Effect.fnUntraced(function* (i: {
+            id: string;
+            envelope: { input: unknown };
+            sentAt: string;
+            seen: number;
+          }) {
+            const cut = (at: string) =>
+              Effect.suspend(() => {
+                if (w.cuts.armed !== at) {
+                  return Effect.void;
+                }
+
+                w.cuts.armed = null;
+                w.cuts.hits.push(at);
+                return Effect.fail(new LedgerError({ reason: "unreachable" }));
+              });
+            yield* cut("before_acceptance");
+            const appended = yield* mailbox.send(name, i.id, i.envelope.input, {
               ...brainFrom(entry.build),
               by: PERSON.key,
               for: PERSON.for,
               sentAt: i.sentAt,
               seen: i.seen,
-            }),
+            });
+            yield* cut("after_acceptance");
+            return appended;
+          }),
           commit: () => Effect.die("a counter variant has no write Cmd"),
           own: () => Effect.die("a counter variant has no own Cmd"),
         };
@@ -730,6 +749,12 @@ const agrees = Effect.fnUntraced(function* (w: World, a: Account, start: string,
   const view = (yield* (yield* session(w, name)).runner.open(`check-${w.letters}`)).view;
   expect(view, "the process's own view").toEqual(a.model);
   expect(checkpoint?.saved.build ?? start).toBe(a.build);
+
+  if (checkpoint !== null) {
+    expect(checkpoint.saved.model, "the saved model agrees with the stream and the live process").toEqual(a.model);
+    expect(checkpoint.saved.v).toBe(a.v);
+  }
+
   expect((yield* supervision(w, name))?.build, "the supervisor restarts on the running build").toBe(a.build);
 
   for (const fact of facts) {
@@ -1002,11 +1027,40 @@ export const suite = (rig: Rig): void => {
                 const steps = g(fc.integer, { min: 1, max: 12 });
 
                 for (let n = 0; n < steps; n++) {
-                  const move = pick(g, ["press", "press", "swap", "cut_swap", ...(a.swaps > 0 ? ["restart"] : [])]);
+                  const move = pick(g, [
+                    "press",
+                    "press",
+                    "cut_press",
+                    "swap",
+                    "cut_swap",
+                    ...(a.swaps > 0 ? ["restart"] : []),
+                  ]);
                   seen.add(move);
 
                   if (move === "press") {
                     yield* pressOnce(w, a, g);
+                  } else if (move === "cut_press") {
+                    const s = yield* session(w, NAME);
+                    const type = pick(g, ["inc", "dec", "reset"] as const);
+                    const { input } = press(w, type);
+                    const cut = pick(g, ["before_acceptance", "after_acceptance"]);
+                    w.cuts.armed = cut;
+                    expect(Exit.isFailure(yield* Effect.exit(s.runner.msg(input)))).toBe(true);
+                    expect(w.cuts.armed).toBeNull();
+                    seen.add(cut);
+
+                    if (g(fc.boolean)) {
+                      yield* evict(w, NAME);
+                    }
+
+                    expect((yield* (yield* session(w, NAME)).runner.msg(input))._tag).toBe("accepted");
+                    a.model = updateFor(
+                      Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))),
+                      a.model,
+                      { type },
+                    );
+                    a.accepted.push(input.id);
+                    yield* agrees(w, a, base);
                   } else if (move === "swap") {
                     yield* swapFitting(
                       w,
@@ -1095,6 +1149,8 @@ export const suite = (rig: Rig): void => {
 
           for (const move of [
             "restart",
+            "before_acceptance",
+            "after_acceptance",
             "cut_retry",
             "cut_reopen",
             "after_swap_prepared",

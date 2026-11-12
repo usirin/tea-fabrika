@@ -11,11 +11,22 @@
 // (`node next/apps/fabrika/e2e.ts`), one file at a time, never in a sandbox that refuses them.
 import { execFileSync } from "node:child_process";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, type Layer, type Scope } from "effect";
+import { Effect, FileSystem, type Layer, type Scope } from "effect";
+import { Base64Url } from "effect/encoding";
 import * as fc from "fast-check";
 import { chromium, type Page } from "playwright";
 import { describe, expect, it } from "vitest";
-import { APP, counterSource, fixture, instance, nextAnswer, PROGRAM, ROOT } from "./reload.test-support.ts";
+import {
+  APP,
+  cli,
+  counterSource,
+  fixture,
+  instance,
+  nextAnswer,
+  PROGRAM,
+  ROOT,
+  spanOutputs,
+} from "./reload.test-support.ts";
 
 /** What the driver leaves on the page for later calls. */
 declare global {
@@ -153,6 +164,8 @@ const rpc = (p: Page, method: string, params: unknown) =>
 const grant = (p: Page, url: string, fingerprint: string, key: string) =>
   Effect.gen(function* () {
     const knock = yield* rpc(p, "gateway.knock", { label: "Chromium" });
+    const env = { ...process.env };
+    delete env.TYPESAFE_API_KEY;
     yield* Effect.sync(() =>
       execFileSync(
         process.execPath,
@@ -165,7 +178,7 @@ const grant = (p: Page, url: string, fingerprint: string, key: string) =>
           "--label=Chromium",
           `--key=${key}`,
         ],
-        { cwd: APP, env: { ...process.env, TYPESAFE_API_KEY: "" }, encoding: "utf8" },
+        { cwd: APP, env, encoding: "utf8" },
       ),
     );
     yield* Effect.promise(() => p.waitForFunction(() => window.p15.frames.some((f) => f.method === "reinitialized")));
@@ -204,6 +217,7 @@ const session = (url: string, key: string) =>
     let letters = 0;
     return {
       pid,
+      call: (method: string, params: unknown) => rpc(p, method, params),
       press: (type: "inc" | "dec") =>
         rpc(p, "process.send", {
           pid,
@@ -335,5 +349,112 @@ describe("P15 slice 1: hot reload on the real instance", () => {
       ),
       { seed: 119120, numRuns: 10, endOnFailure: true },
     );
+  }, 1_800_000);
+
+  it("L17: generated save flows keep source, made-up bearer and absolute paths out of dev's actual printed lines, errors and persisted spans", async () => {
+    const cliMoves = new Set<string>();
+    await fc.assert(
+      fc.asyncProperty(fc.gen(), (g) =>
+        scoped(
+          Effect.gen(function* () {
+            const word = g(() => fc.stringMatching(/^[A-Z]{12}$/));
+            const sentinel = `P15SECRET${word}"/+`;
+            const fakeBytes = g(() => fc.array(fc.integer({ min: 0, max: 255 }), { minLength: 32, maxLength: 32 }));
+            const fakeBearer = Base64Url.encode(Uint8Array.from(fakeBytes));
+            const source = yield* counterSource;
+            const copy = yield* fixture;
+            const fs = yield* FileSystem.FileSystem;
+            yield* fs.writeFileString(
+              `${copy.home}/counter/src/view.tsx`,
+              `export function Bad() { "use no memo"; return <div>{${JSON.stringify(`${sentinel} ${fakeBearer} ${copy.file}`)}}</div>; }\nglobalThis.__p15View = Bad;\n`,
+            );
+            const run = yield* cli(copy, fakeBytes);
+            const s = yield* session(run.url, run.founder.key);
+            let k = 1;
+            let count = 0;
+            const steps = g(fc.integer, { min: 4, max: 8 });
+            const seen = new Set<string>();
+
+            for (let n = 0; n < steps; n++) {
+              // Each move uses the code and count reached so far. Failures leave both running values alone.
+              const moves = ["fit", "shape", "syntax", "load", "compiler"];
+              const move = moves[g(fc.nat, { max: moves.length - 1 })]!;
+              const next = k + g(fc.integer, { min: 1, max: 5 });
+              const message = `${sentinel} ${fakeBearer} ${copy.file}`;
+              // L12's real door path: even a granted person cannot invoke the control-only calls.
+              const method = g(() => fc.constantFrom("codeInstall", "codeFailed"));
+              const denied = yield* s.call(method, { program: PROGRAM, source: message, hash: null, reason: "load" });
+              expect(denied.error?.data?.reason).toBe("unknown_method");
+              let text = edited(
+                source,
+                next,
+                (t) => `${t}\nglobalThis.__p15 = ${JSON.stringify(message)};\nglobalThis.__p15Edit = ${n};\n`,
+              );
+
+              if (move === "shape") {
+                text = text.replace(
+                  "Schema.Struct({ count: Schema.Int })",
+                  "Schema.Struct({ count: Schema.Int, step: Schema.Int })",
+                );
+              } else if (move === "syntax") {
+                text += `\nexport const broken = ${JSON.stringify(message)} +;\n`;
+              } else if (move === "load") {
+                text += `\nthrow new Error(${JSON.stringify(message)});\n`;
+              } else if (move === "compiler") {
+                text += '\nimport "./view.tsx";\n';
+              }
+
+              yield* copy.write(text);
+              const printed = yield* run.nextLine(
+                (line) => line.startsWith("counter:1 ") || line.startsWith(`${PROGRAM} did not load:`),
+              );
+              expect(printed.length).toBeGreaterThan(0);
+              seen.add(move);
+
+              if (move === "fit") {
+                k = next;
+              }
+
+              yield* s.press("inc");
+              count += k;
+              expect(yield* s.view()).toEqual({ count });
+              const facts = [...(yield* s.read("gateway/code")), ...(yield* s.read(s.pid))];
+              const spans = yield* spanOutputs(run.home);
+              expect(spans.length, "the real span sink wrote output").toBeGreaterThan(0);
+              const outputs = [
+                JSON.stringify(denied),
+                JSON.stringify(facts),
+                JSON.stringify(spans),
+                ...run.stdout,
+                ...run.stderr,
+              ];
+
+              for (const output of outputs) {
+                for (const forbidden of [sentinel, fakeBearer, copy.home, run.home, ROOT, text]) {
+                  for (const form of [
+                    forbidden,
+                    JSON.stringify(forbidden).slice(1, -1),
+                    encodeURIComponent(forbidden),
+                  ]) {
+                    expect(output.includes(form), "a named output copied private input").toBe(false);
+                  }
+                }
+              }
+
+              for (const fact of facts.filter((e) => e._tag === "code.failed" && e.body.path !== undefined)) {
+                expect(fact.body.path).toBe(copy.relative);
+              }
+            }
+
+            // A generated run may omit a failure class; all ten walks together must exercise them.
+            for (const move of seen) {
+              cliMoves.add(move);
+            }
+          }),
+        ),
+      ),
+      { seed: 119120, numRuns: 10, endOnFailure: true },
+    );
+    expect(cliMoves).toEqual(new Set(["fit", "shape", "syntax", "load", "compiler"]));
   }, 1_800_000);
 });
