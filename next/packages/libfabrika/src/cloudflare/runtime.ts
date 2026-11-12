@@ -795,9 +795,9 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     info: wrapped(processes.info),
     start: (request: Start, origin: From) => wrapped(start(request, origin)),
     exit: (pid: string, reason: ExitReason, origin: From) => wrapped(exit(pid, reason, origin)),
-    read: referee.read,
+    read: (stream: string, after: number, reader: string) => wrapped(referee.read(stream, after, reader)),
     wait: referee.wait,
-    append: referee.append,
+    append: (stream: string, id: string, line: unknown) => wrapped(referee.append(stream, id, line)),
     sign: (pid: string, id: string, parent: string, kind: string) => wrapped(door.sign(pid, id, parent, kind)),
     commit: (pid: string, input: Omit<Parameters<typeof door.append>[0], "process">) =>
       wrapped(door.append({ ...input, process: pid })),
