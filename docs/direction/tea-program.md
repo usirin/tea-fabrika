@@ -2,6 +2,16 @@
 
 **Proposed** 2026-10-15, changed 2026-10-16, 2026-10-17 (five times), 2026-10-19 and 2026-10-30. Not settled. Today's version; walked if a tryout is picked (owner, 2026-11-08).
 
+Its decided rules are in: [0433](../../.decisions/0433-a-run-has-one-bounded-mailbox.md),
+[0434](../../.decisions/0434-outputs-are-events-kept-nowhere.md),
+[0435](../../.decisions/0435-storage-writes-are-atomic-and-fenced.md),
+[0436](../../.decisions/0436-ask-and-answer-stay-plain-io.md),
+[0437](../../.decisions/0437-a-host-never-retells-inputs.md),
+[0438](../../.decisions/0438-each-machine-copy-has-a-status-line.md),
+[0439](../../.decisions/0439-a-view-is-the-hosts-reaching-inputs-only.md),
+[0440](../../.decisions/0440-traces-are-kept-on-disk.md),
+[0441](../../.decisions/0441-the-host-enforces-a-runs-limits.md).
+
 ```ts
 // tea: the kernel. A machine is a data structure: a state and the rules that move it.
 const ship = createShip();   // defineMachine({ types, cmds, init, update, subs })
