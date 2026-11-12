@@ -45,6 +45,8 @@ import "./fieldrow.py?raw";
 import "./runplan.sh?raw";
 import "./env.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./boxfiles.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./gc.ts?raw";
 import "./redact.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
@@ -81,6 +83,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { boxTree, boxTrees, oldBoxTree } from "./lane.ts";
 
 // Read with the CI package's installed YAML parser.
 const { parse } = createRequire(new URL("../../../../.github/ci/package.json", import.meta.url))("yaml") as {
@@ -119,9 +122,11 @@ const input = fc.record({
   space: fc.boolean(),
   depth: fc.integer({ min: 1, max: 3 }),
   descendant: fc.boolean(),
+  // Where the tree is: BOXES/box (lane.ts boxTree), or BOXES for a box made before that layout.
+  old: fc.boolean(),
 });
 
-type Input = { name: string; value: string; space: boolean; depth: number; descendant: boolean };
+type Input = { name: string; value: string; space: boolean; depth: number; descendant: boolean; old: boolean };
 type Remote = { branches: string[]; local: number };
 
 const fixture = (v: Input, body: (f: ReturnType<typeof setup>) => void, clone = false, remote?: Remote) => {
@@ -138,11 +143,11 @@ const setup = (v: Input, clone: boolean, dir: string, remote?: Remote) => {
   const main = join(dir, "main"),
     boxes = join(dir, "boxes");
   const name = `${v.name}${v.space ? " with space" : ""}`;
-  const work = join(boxes, name),
-    data = `${work}-gitdata`,
+  const work = v.old ? oldBoxTree(boxes, name) : boxTree(boxes, name),
+    data = join(boxes, `${name}-gitdata`),
     home = join(dir, "home");
 
-  for (const path of [main, boxes, home]) {
+  for (const path of [main, boxes, boxTrees(boxes), home]) {
     mkdirSync(path);
   }
 
@@ -948,7 +953,8 @@ describe("box rm, today's tooling", () => {
     (kind) => {
       fc.assert(
         fc.property(input, (v) =>
-          fixture(kind === "state" ? { ...v, name: "state", space: false } : v, (f) => {
+          // Only an older tree can be BOXES/state itself; one in BOXES/box named state is a box like any other.
+          fixture(kind === "state" ? { ...v, name: "state", space: false, old: true } : v, (f) => {
             let main = f.main;
 
             if (kind.startsWith("main")) {
