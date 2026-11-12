@@ -79,6 +79,12 @@ notes and P44, the checklist, joined, so it has 43 rows; it said 44.* No Tier 1
 row finished on 2026-11-11, so the count stays 20, but slices of seven rows merged that day (see
 below). *It said: no Tier 1 row merged on 2026-11-11.*
 
+*2026-11-12:* P41's slice 2 (ticket 764) is [PR 1029](https://github.com/usirin/tea-fabrika/pull/1029): program mail is delivered
+between two real Process objects in `next/`. The sender's object asks the Project to save the
+letter, and the target's `mailed` sets its one alarm. It finishes no Tier 1 row, so the count stays
+20. P41's slice 3, the example a person sees from a pack, waits on P40's pack path, P34c's walls
+and how a pack asks for its grant. *It said, below: slice 2 is at its tests step, draft PR 993.*
+
 *2026-11-11, later:* slices landed in seven Tier 1 rows. P13's slice 1
 ([PR 887](https://github.com/usirin/tea-fabrika/pull/887)), P34c's slices 1 and 2
 ([PR 896](https://github.com/usirin/tea-fabrika/pull/896),
