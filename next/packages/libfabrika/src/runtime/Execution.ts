@@ -202,15 +202,21 @@ export const nodeExecution = (declared: unknown, build = "node"): Execution => {
   };
 };
 
+class RpcError extends Schema.TaggedError<RpcError>()("RpcError", {
+  method: Schema.String,
+  cause: Schema.optionalKey(Schema.Defect()),
+}) {}
+
 const invoke = (binding: ExecutionCalls, key: keyof ExecutionCalls, args: ReadonlyArray<unknown>) => {
   const method = binding[key];
 
   if (method === undefined) {
-    return Effect.fail(new Error("missing execution method"));
+    return Effect.fail(new RpcError({ method: key }));
   }
 
-  // oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader step RPC enters Effect
-  return Effect.tryPromise({ try: () => Reflect.apply(method, binding, args), catch: (cause) => cause });
+  const rejected = (cause: unknown) => new RpcError({ method: key, cause });
+  // oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader RPC enters Effect
+  return Effect.tryPromise({ try: () => Reflect.apply(method, binding, args), catch: rejected });
 };
 
 export const workerExecution = (binding: ExecutionCalls): Execution => {

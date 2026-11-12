@@ -13,7 +13,7 @@ const checked = Effect.fnUntraced(function* <A>(work: Effect.Effect<A, ProgramDo
   );
 });
 
-const reply = Effect.fnUntraced(function* (execution: Execution, cmd: unknown, outcome: unknown) {
+const reply = Effect.fnUntraced(function* (execution: Pick<Execution, "reply">, cmd: unknown, outcome: unknown) {
   return yield* execution.reply(cmd, outcome).pipe(
     Effect.match({
       onSuccess: (value) => Reply.cases.ok.make({ value }),
@@ -23,7 +23,17 @@ const reply = Effect.fnUntraced(function* (execution: Execution, cmd: unknown, o
 });
 
 export const programBox = (declared: unknown, build: string) => {
-  const execution = nodeExecution(declared, build);
+  const program = nodeExecution(declared, build);
+  const execution = {
+    ...program,
+    audit: (msg: unknown) =>
+      program.audit(msg).pipe(
+        Effect.match({
+          onSuccess: (value) => Audit.Answer.cases.ok.make({ value }),
+          onFailure: Audit.failure,
+        }),
+      ),
+  };
   const declaration = Effect.fromResult(stepper(declared)).pipe(
     Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
     Effect.map((pure) =>
@@ -72,14 +82,7 @@ export const programBox = (declared: unknown, build: string) => {
 
     audit(msg: unknown) {
       // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Worker Loader RPC must answer a Promise
-      return Effect.runPromise(
-        execution.audit(msg).pipe(
-          Effect.match({
-            onSuccess: (value) => Audit.Answer.cases.ok.make({ value }),
-            onFailure: Audit.failure,
-          }),
-        ),
-      );
+      return Effect.runPromise(execution.audit(msg));
     }
 
     fold(model: unknown, msg: unknown) {

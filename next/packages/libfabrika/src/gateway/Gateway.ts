@@ -1218,7 +1218,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         const audit = options.audit;
         const selected =
           audit === undefined
-            ? Effect.succeed({ type: name })
+            ? Effect.succeed<Schema.Json>({ type: name })
             : Effect.suspend(() => audit(binding.process, message)).pipe(
                 Effect.provideContext(context),
                 Effect.catchCause((cause) => {
