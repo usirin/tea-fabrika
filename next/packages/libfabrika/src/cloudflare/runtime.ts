@@ -39,8 +39,8 @@ import * as Audit from "../runtime/Audit.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import { Alarm, CheckedWriter, Recording, WatcherManager, type Incoming } from "../runtime/Entry.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
-import type { Descriptor, Sent } from "../runtime/Runner.ts";
-import { defaultPolicy, ProgramRunner } from "../runtime/Runner.ts";
+import type { Descriptor } from "../runtime/Runner.ts";
+import { defaultPolicy, ProgramRunner, Sent } from "../runtime/Runner.ts";
 import { type Sql } from "../Sql.ts";
 import { Archive, type BucketCalls } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
@@ -676,7 +676,16 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     initialize: (client: ConnectionId, input: unknown, trusted: { url: string; tab: string; name: string }) =>
       wrapped(door.initialize(client, input, trusted)),
     route: (client: ConnectionId, method: string, params: unknown, reader?: string) =>
-      wrapped(door.route(client, method, params, reader)),
+      wrapped(
+        door.route(client, method, params, reader).pipe(
+          // Invalid target messages answer as checked refusals so the connection stays open.
+          Effect.catch((error) =>
+            Schema.is(Audit.AuditError)(error) && error.reason._tag === "Input"
+              ? Effect.succeed(Answer.cases.ok.make({ result: Sent.cases.refused.make({ reason: "bad_msg" }) }))
+              : Effect.fail(error),
+          ),
+        ),
+      ),
     knock: (client: ConnectionId, input: { label: string }) => wrapped(door.knock(client, input)),
     grant: (input: unknown) => wrapped(door.grant(input)),
     disconnect: (client: ConnectionId) => wrapped(door.disconnect(client)),
