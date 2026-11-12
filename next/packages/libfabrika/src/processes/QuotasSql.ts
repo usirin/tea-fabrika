@@ -11,7 +11,7 @@ import * as Schema from "effect/Schema";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Entry, encodedBytes, lineFor } from "../ledger/Log.ts";
 import { accountingEntries } from "../ledger/RefereeSql.ts";
-import { WritePolicy } from "../ledger/WritePolicy.ts";
+import { WritePolicy, RuntimeWrite } from "../ledger/WritePolicy.ts";
 import type { Sql } from "../Sql.ts";
 import * as Quota from "./internal/quota.ts";
 import { ProcessTable } from "./Process.ts";
@@ -31,6 +31,7 @@ const TABLES = [
   "CREATE TABLE IF NOT EXISTS quota_accounts (account TEXT PRIMARY KEY, value TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS quota_entries (rev INTEGER PRIMARY KEY, account TEXT NOT NULL, bytes INTEGER NOT NULL)",
   "CREATE TABLE IF NOT EXISTS quota_steps (name TEXT NOT NULL, letter TEXT NOT NULL, account TEXT NOT NULL, bytes INTEGER NOT NULL, settled INTEGER NOT NULL, PRIMARY KEY(name,letter))",
+  "CREATE TABLE IF NOT EXISTS quota_restored (id INTEGER PRIMARY KEY, rev INTEGER NOT NULL)",
 ];
 
 const encode = Schema.encodeSync(Schema.fromJsonString(Quota.Model));
@@ -84,7 +85,12 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
       model.account,
       encode(model),
     );
-  const propose = (account: string, entry: Entry, ahead = { writes: 0, bytes: 0 }) => {
+  const propose = (
+    account: string,
+    entry: Entry,
+    ahead = { writes: 0, bytes: 0 },
+    replay?: { letter: string; recovery: string },
+  ) => {
     const m = machine(account);
     const next = applyCell(m, load(account), {
       type: "propose",
@@ -93,6 +99,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
       writes: 1,
       bytes: encodedBytes(entry),
       ahead,
+      ...(replay === undefined ? {} : { replay }),
     })[0];
 
     if (next._tag === "reserve_fault") {
@@ -144,7 +151,16 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
         ),
       }),
     );
-  const charge = (entry: Entry, entries: ReadonlyArray<Entry>, trusted: Authority) => {
+  const charge = (
+    entry: Entry,
+    entries: ReadonlyArray<Entry>,
+    trusted: Authority,
+    runtime?: RuntimeWrite["Service"],
+  ) => {
+    if (runtime !== undefined && runtime.process !== entry.stream) {
+      return Result.fail("quota" as const);
+    }
+
     if (trusted === "infrastructure") {
       return Result.succeed(undefined);
     }
@@ -174,6 +190,10 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
       const [held] = sql.exec("SELECT * FROM quota_steps WHERE name=? AND letter=?", target.name, step.value.input);
 
       if (held !== undefined && held.settled === 0) {
+        if (runtime?.process !== entry.stream) {
+          return Result.fail("quota" as const);
+        }
+
         const payer = String(held.account);
         const next = applyCell(machine(payer), load(payer), {
           type: "settle",
@@ -185,6 +205,22 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
         sql.exec("INSERT INTO quota_entries (rev,account,bytes) VALUES (?,?,?)", entry.rev, payer, encodedBytes(entry));
         return Result.succeed(undefined);
       }
+
+      if (held !== undefined && runtime?.process === entry.stream) {
+        return propose(
+          `${target.name}/project`,
+          entry,
+          { writes: 0, bytes: 0 },
+          {
+            letter: step.value.input,
+            recovery: runtime.process,
+          },
+        );
+      }
+    }
+
+    if (runtime !== undefined) {
+      return propose(`${target?.name ?? selected?.name}/project`, entry);
     }
 
     const inbox = target !== undefined && entry.stream === `${target.name}/inbox`;
@@ -206,8 +242,9 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
   const restore = () => {
     initialize();
     const entries = accountingEntries(sql);
+    const through = Number(sql.exec("SELECT rev FROM quota_restored WHERE id=1")[0]?.rev ?? 0);
 
-    for (const entry of entries) {
+    for (const entry of entries.filter((entry) => entry.rev > through)) {
       if (sql.exec("SELECT rev FROM quota_entries WHERE rev=?", entry.rev).length !== 0) {
         continue;
       }
@@ -269,6 +306,11 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
         );
       }
     }
+
+    sql.exec(
+      "INSERT INTO quota_restored (id,rev) VALUES (1,?) ON CONFLICT(id) DO UPDATE SET rev=excluded.rev",
+      entries.at(-1)?.rev ?? 0,
+    );
   };
   const read = Effect.fnUntraced(function* (account: string) {
     return yield* Effect.try({
@@ -297,13 +339,23 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
     ordinary: (process, step) => within({ channel: "program", process }, step),
     recovering: (process, step) => within({ channel: "recovery", process }, step),
     infrastructure: (step) => within("infrastructure", step),
+    runtime: (process, work) => work.pipe(Effect.provideService(RuntimeWrite, { process })),
   });
   return Layer.mergeAll(
     Layer.succeed(Quotas, service),
     Layer.succeed(WritePolicy, {
-      admit: (entry) => {
+      admit: (entry, runtime) => {
         restore();
-        return charge(entry, accountingEntries(sql), authority);
+        const result = charge(entry, accountingEntries(sql), authority, runtime);
+
+        if (Result.isSuccess(result)) {
+          sql.exec(
+            "INSERT INTO quota_restored (id,rev) VALUES (1,?) ON CONFLICT(id) DO UPDATE SET rev=excluded.rev",
+            entry.rev,
+          );
+        }
+
+        return result;
       },
     }),
   );

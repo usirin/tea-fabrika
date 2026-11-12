@@ -2,9 +2,16 @@
  * @stability unstable
  */
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { NotGranted, type Writer } from "../access/SessionManager.ts";
 import type { Accounting } from "../processes/Quotas.ts";
 import type { ProgramRunner } from "./Runner.ts";
+
+/** A refused letter leaves its command or wake saved for another admission.
+ * @stability unstable
+ * @category errors
+ */
+export class QuotaWaiting extends Schema.TaggedError<QuotaWaiting>()("QuotaWaiting", {}) {}
 
 /** Guard every automatic runner entry before it can change saved work.
  * @stability unstable

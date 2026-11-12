@@ -115,5 +115,6 @@ export class Quotas extends Context.Service<
     readonly ordinary: <A>(process: string, step: () => A) => A;
     readonly recovering: <A>(process: string, step: () => A) => A;
     readonly infrastructure: <A>(step: () => A) => A;
+    readonly runtime: <A, E, R>(process: string, work: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
   }
 >()("@kampus/libfabrika/processes/Quotas") {}

@@ -70,6 +70,7 @@ import { defaultPolicy, supervisor, Supervision, type SupervisorMsg } from "./in
 import { MailDelivery } from "./MailDelivery.ts";
 import { diff } from "./Patch.ts";
 import { ProgramDown, Refusal, Step, Write } from "./Program.ts";
+import { QuotaWaiting } from "./QuotaRunner.ts";
 import { recoveryStore } from "./RecoveryStore.ts";
 import { Replies, type RepliesError } from "./Replies.ts";
 import * as RepliesSql from "./RepliesSql.ts";
@@ -100,16 +101,20 @@ export type Descriptor = {
 
 /** A Cmd the runner has saved as dispatched and not yet seen answered. Its id is stable: the
  *  process, the inbox position of the letter whose step made it, and its index there. */
-const Dispatched = Schema.Struct({
+const CommandFields = {
   id: Schema.NonEmptyString,
   cmd: Schema.Json,
-  state: Schema.Literal("dispatched"),
   parent: Schema.NullOr(ParentText),
   traceId: Schema.String,
   build: Schema.String,
   /** A Send this life owes until it is answered; a replayed letter's Send was the life before's. */
   mail: Schema.optionalKey(Schema.Literal(true)),
-});
+};
+
+const Dispatched = Schema.Union([
+  Schema.Struct({ ...CommandFields, state: Schema.Literal("dispatched") }),
+  Schema.Struct({ ...CommandFields, state: Schema.Literal("waiting_answer"), answer: Schema.Json }),
+]);
 type Dispatched = typeof Dispatched.Type;
 const decodeDispatched = Schema.decodeUnknownResult(Schema.Array(Dispatched));
 
@@ -312,7 +317,8 @@ export class ProgramRunner extends Context.Service<
         const setAlarm = Effect.fnUntraced(function* (retryAt?: number) {
           const running = !recovering(supervision) && (supervision === null || (yield* manager.isLive(process.id)));
           const waited = waitUntil(supervision);
-          const owes = running && (live?.cmds.some((cmd) => cmd.mail === true) ?? false);
+          const owes =
+            running && (live?.cmds.some((cmd) => cmd.mail === true || cmd.state === "waiting_answer") ?? false);
           const now = yield* Clock.currentTimeMillis;
           const backoff = supervision?.policy.backoff.minMs ?? defaultPolicy.backoff.minMs;
           sendRetry = !owes ? null : sendRetry !== null && sendRetry > now ? sendRetry : now + backoff;
@@ -794,7 +800,10 @@ export class ProgramRunner extends Context.Service<
                   onSome: (letter) => (letter.rev === next.after ? letter.pos : 0),
                 });
           retry = cmds.filter(
-            (cmd) => cmd.mail === true || Option.exists(decodeTyped(cmd.cmd), (c) => c.type === WRITE),
+            (cmd) =>
+              cmd.mail === true ||
+              cmd.state === "waiting_answer" ||
+              Option.exists(decodeTyped(cmd.cmd), (c) => c.type === WRITE),
           );
           const woke: Live = {
             loaded,
@@ -905,12 +914,47 @@ export class ProgramRunner extends Context.Service<
 
             const input = Option.isSome(down) ? { ...down.value, type: down.value._tag } : letter.m;
             const m = accepted && !own && letter.parent !== null ? stamp(input, letter.parent) : input;
-            const folded = accepted
-              ? yield* stepped(
-                  yield* step("saved_letter", letter.id, () => state.loaded.execution.fold(model, m)),
-                  "saved_letter",
-                )
-              : yield* receive(state, model, letter.m);
+
+            if (!accepted && supervision !== null) {
+              const receipt = supervision.receipts.find((r) => r.letter === letter.id);
+
+              if (receipt?.result !== null && receipt?.result !== undefined) {
+                continue;
+              }
+
+              if (receipt === undefined) {
+                yield* send({
+                  type: "received",
+                  receipt: {
+                    letter: letter.id,
+                    input: yield* Schema.decodeUnknownEffect(Schema.Json)(letter).pipe(Effect.orDie),
+                    errors: [],
+                    tries: 0,
+                    result: null,
+                    process: process.id,
+                  },
+                });
+              }
+            }
+
+            const result = yield* Effect.result(
+              accepted
+                ? stepped(
+                    yield* step("saved_letter", letter.id, () => state.loaded.execution.fold(model, m)),
+                    "saved_letter",
+                  )
+                : receive(state, model, letter.m, letter.id),
+            );
+
+            if (Result.isFailure(result)) {
+              if (result.failure instanceof ProgramDown && recovering(supervision)) {
+                return { state, fresh: [] as ReadonlyArray<Dispatched>, mine: Option.none<History>() };
+              }
+
+              return yield* result.failure;
+            }
+
+            const folded = result.success;
 
             if (folded._tag === "refused") {
               continue;
@@ -971,7 +1015,7 @@ export class ProgramRunner extends Context.Service<
           return { state: next, fresh: fresh as ReadonlyArray<Dispatched>, mine };
         });
 
-        const receive = Effect.fnUntraced(function* (state: Live, model: unknown, m: unknown) {
+        const receive = Effect.fnUntraced(function* (state: Live, model: unknown, m: unknown, letter: string) {
           const port = inputPort(state, m);
 
           if (port === undefined || !port.write || port.personOnly || hasParent(m)) {
@@ -980,10 +1024,12 @@ export class ProgramRunner extends Context.Service<
 
           const refused = Step.cases.refused.make({ reason: "bad_msg" });
           return yield* state.loaded.execution.admit(m).pipe(
-            Effect.flatMap((admitted) => (admitted ? state.loaded.execution.step(model, m) : Effect.succeed(refused))),
             Effect.catchIf(
               (error) => error.reason === "step" && error.source === undefined,
-              () => Effect.succeed(refused),
+              () => Effect.succeed(false),
+            ),
+            Effect.flatMap((admitted) =>
+              admitted ? step("step", letter, () => state.loaded.execution.step(model, m)) : Effect.succeed(refused),
             ),
           );
         });
@@ -1229,51 +1275,80 @@ export class ProgramRunner extends Context.Service<
           }
 
           const type = cmdType(job);
-          const m = yield* type === WRITE
-            ? cmdSpan(job, write(state, job))
-            : type === SEND
-              ? cmdSpan(job, mail(state, job))
-              : handle(state, job);
-          return yield* permit.withPermit(
-            Effect.gen(function* () {
-              const answer = `${job.id}/answer`;
+          const m = yield* job.state === "waiting_answer"
+            ? Effect.succeed(job.answer)
+            : type === WRITE
+              ? cmdSpan(job, write(state, job))
+              : type === SEND
+                ? cmdSpan(job, mail(state, job))
+                : handle(state, job);
+          return yield* permit
+            .withPermit(
+              Effect.gen(function* () {
+                const answer = `${job.id}/answer`;
 
-              if (origin.id !== process.id || recovering(supervision)) {
-                yield* originStore.record(
-                  answer,
-                  RuntimeRecord.cases["cmd.answered"].make({
-                    m: Schema.decodeUnknownSync(Schema.Json)(m),
-                    cmd: job.id,
-                    build: origin.build,
-                  }),
-                  { ...(yield* from(job.parent, job.traceId)), build: origin.build },
-                );
-                const old = yield* originStore.load;
+                if (origin.id !== process.id || recovering(supervision)) {
+                  yield* originStore.record(
+                    answer,
+                    RuntimeRecord.cases["cmd.answered"].make({
+                      m: Schema.decodeUnknownSync(Schema.Json)(m),
+                      cmd: job.id,
+                      build: origin.build,
+                    }),
+                    { ...(yield* from(job.parent, job.traceId)), build: origin.build },
+                  );
+                  const old = yield* originStore.load;
 
-                if (old !== null) {
-                  yield* originStore.save({
-                    ...old,
-                    cmds: old.cmds.filter(
-                      (cmd) => typeof cmd !== "object" || cmd === null || !("id" in cmd) || cmd.id !== job.id,
-                    ),
-                  });
+                  if (old !== null) {
+                    yield* originStore.save({
+                      ...old,
+                      cmds: old.cmds.filter(
+                        (cmd) => typeof cmd !== "object" || cmd === null || !("id" in cmd) || cmd.id !== job.id,
+                      ),
+                    });
+                  }
+
+                  return [];
                 }
 
-                return [];
-              }
+                const current = yield* ready();
+                const sent = yield* mailbox
+                  .send(process.name, answer, m, yield* from(job.parent, job.traceId))
+                  .pipe(Effect.provideService(RunnerMail, { process: process.id, name: process.name }));
 
-              const current = yield* ready();
-              const sent = yield* mailbox
-                .send(process.name, answer, m, yield* from(job.parent, job.traceId))
-                .pipe(Effect.provideService(RunnerMail, { process: process.id, name: process.name }));
+                if (sent._tag === "refused") {
+                  if (sent.reason === "quota") {
+                    return yield* new QuotaWaiting();
+                  }
 
-              if (sent._tag === "refused") {
-                return yield* new LedgerError({ reason: "refused", message: sent.reason });
-              }
+                  return yield* new LedgerError({ reason: "refused", message: sent.reason });
+                }
 
-              return (yield* catchUp(current, { mine: answer })).fresh;
-            }),
-          );
+                return (yield* catchUp(current, { mine: answer })).fresh;
+              }),
+            )
+            .pipe(
+              Effect.catchTag("QuotaWaiting", () =>
+                permit.withPermit(
+                  Effect.gen(function* () {
+                    if (live !== null && job.state !== "waiting_answer") {
+                      const answer = yield* Schema.decodeUnknownEffect(Schema.Json)(m).pipe(Effect.orDie);
+                      const next = {
+                        ...live,
+                        cmds: live.cmds.map((cmd): Dispatched =>
+                          cmd.id === job.id ? { ...cmd, state: "waiting_answer", answer } : cmd,
+                        ),
+                      };
+                      yield* store.save(checkpoint(next, null));
+                      live = next;
+                    }
+
+                    yield* setAlarm();
+                    return [] as ReadonlyArray<Dispatched>;
+                  }),
+                ),
+              ),
+            );
         });
 
         /** Sets the alarm that tries a failed drain again. The permit is held. */
@@ -1453,7 +1528,7 @@ export class ProgramRunner extends Context.Service<
                 // Any alarm tries again every Send a failure left dispatched.
                 mailRetry = null;
                 const state = yield* ready();
-                const sends = state.cmds.filter((cmd) => cmd.mail === true);
+                const sends = state.cmds.filter((cmd) => cmd.mail === true || cmd.state === "waiting_answer");
 
                 if (state.wake === null || state.wake > time) {
                   yield* setAlarm();
@@ -1466,12 +1541,17 @@ export class ProgramRunner extends Context.Service<
                   .pipe(Effect.provideService(RunnerMail, { process: process.id, name: process.name }));
 
                 if (sent._tag === "refused") {
+                  if (sent.reason === "quota") {
+                    return yield* new QuotaWaiting();
+                  }
+
                   return yield* new LedgerError({ reason: "refused", message: sent.reason });
                 }
 
                 const { fresh } = yield* catchUp(state, { mine: id });
                 return { answer: undefined, jobs: [...sends, ...fresh] };
               }).pipe(
+                Effect.catchTag("QuotaWaiting", () => Effect.as(setAlarm(), { answer: undefined, jobs: [] })),
                 // A storage failure while draining leaves the alarm that tries it again.
                 Effect.onExit((exit) =>
                   exit._tag === "Failure" &&

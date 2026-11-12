@@ -1,12 +1,12 @@
 // A process's own storage, next/: its saved model, its unfinished turn and its Cmds' dispatch
 // state, kept in the process object's SQLite (Tier 1, P11). It also appends the runtime's two
 // records to the process's stream, and nothing else. Tables come with the first call.
-import { Context, Effect, Layer, Result, Schema } from "effect";
+import { Context, Effect, Layer, Option, Result, Schema } from "effect";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { lineFor } from "../ledger/Log.ts";
 import { type From } from "../processes/Mailbox.ts";
 import { Activity } from "../processes/Process.ts";
-import type { Accounting } from "../processes/Quotas.ts";
+import { Quotas, type Accounting } from "../processes/Quotas.ts";
 import { Rev } from "../Rev.ts";
 import { type Sql } from "../Sql.ts";
 import { recovering } from "./RecoveryStore.ts";
@@ -108,6 +108,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
       ProcessStore,
       Effect.gen(function* () {
         const ledger = yield* Ledger;
+        const quotas = Option.getOrUndefined(yield* Effect.serviceOption(Quotas));
         let ready = false;
         const stored = Effect.fnUntraced(function* <A>(step: (at: number) => A) {
           return yield* Effect.clockWith((clock) =>
@@ -136,10 +137,11 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
         const bytes = (text: string) => new TextEncoder().encode(text).length;
         return {
           select: Effect.fn("process.select")(function* (process: string) {
-            return yield* ProcessStore.pipe(
+            const selected = ProcessStore.pipe(
               Effect.provide(ProcessStore.layer(sql, { ...options, process })),
               Effect.provideService(Ledger, ledger),
             );
+            return yield* quotas === undefined ? selected : selected.pipe(Effect.provideService(Quotas, quotas));
           }),
           readActivity:
             options.accounting === undefined && options.storage?.get !== undefined
@@ -267,7 +269,8 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
               return yield* new LedgerError({ reason: "refused" });
             }
 
-            const answer = yield* ledger.append(options.process, id, lineFor(from, encodeRecord(decoded.success)));
+            const append = ledger.append(options.process, id, lineFor(from, encodeRecord(decoded.success)));
+            const answer = yield* quotas === undefined ? append : quotas.runtime(options.process, append);
 
             if (answer._tag === "refused") {
               return yield* new LedgerError({ reason: "refused", message: answer.reason });
