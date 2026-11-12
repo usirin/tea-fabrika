@@ -2,8 +2,7 @@
 // a start alone, or a restart alone, loads the program and arms the object's one alarm.
 // Real runner, manager and ledger on SQLite, as RunnerSupervision.test.ts builds them; only the
 // alarm is a recording double.
-import { Outcome } from "@demlik/tea";
-import { Cmd, Machine } from "@demlik/tea/effect";
+import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Schema } from "effect";
 import * as fc from "fast-check";
@@ -27,35 +26,29 @@ const policy = {
 };
 
 const person = Writer.cases.person.make({ key: "SHA256:person", for: from().for });
-const Model = Schema.Struct({ wake: Schema.NullOr(Schema.Number), answers: Schema.Int });
+const Model = Schema.Struct({ wake: Schema.NullOr(Schema.Number) });
 type Model = typeof Model.Type;
 const Msg = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number });
-const work = Cmd.make("work", { input: Schema.Struct({ n: Schema.Int }), ok: Schema.Null, err: ["failed"] });
 
 /** Up to 10^12 ms, about 31 years of epoch time, or no wake at all. */
 const wake = fc.option(fc.nat({ max: 1_000_000_000_000 }), { nil: null });
 
-/** One process name's world. Each build's `init` gives its own first wake, and `cmds` work Cmds. */
-const world = (wakes: Readonly<Record<string, number | null>>, cmds: number) => {
+/** One process name's world. Each build's `init` gives its own first wake and no Cmd: init's Cmds
+ *  are ticket 292's (0253, amendment A3). */
+const world = (wakes: Readonly<Record<string, number | null>>) => {
   const ledger = storage(),
     state = storage(),
     authority = storage();
   const next = ids(...PIDS);
-  const controls = { build: BUILD, handled: 0 };
+  const controls = { build: BUILD };
   const alarms: Array<number | null> = [];
   const machine = Machine.make({
     model: Model,
     msg: Msg,
-    cmds: [work],
-    init: (loaded) => [
-      loaded ?? { wake: wakes[controls.build] ?? null, answers: 0 },
-      Array.from({ length: cmds }, (_, n) => work({ n })),
-    ],
+    cmds: [],
+    init: (loaded) => [loaded ?? { wake: wakes[controls.build] ?? null }, []],
     update: {
       timer: (s) => [s, []],
-      // An answer leaves the wake as init set it, so the last alarm is init's own.
-      work_ok: (s) => [{ ...s, answers: s.answers + 1 }, []],
-      work_err: (s) => [{ ...s, answers: s.answers + 1 }, []],
     },
   });
   const program = Program.make({
@@ -82,8 +75,8 @@ const world = (wakes: Readonly<Record<string, number | null>>, cmds: number) => 
       return {
         append: (i: Incoming) =>
           mailbox.send(NAME, i.id, i.envelope.input, from({ by: i.envelope.by.key, parent: i.envelope.id })),
-        commit: () => Effect.die("this program has no write Cmd"),
-        own: () => Effect.die("this program has no write Cmd"),
+        commit: () => Effect.die("this program has no Cmd"),
+        own: () => Effect.die("this program has no Cmd"),
       };
     }),
   ).pipe(Layer.provide(Mailbox.layer));
@@ -95,16 +88,7 @@ const world = (wakes: Readonly<Record<string, number | null>>, cmds: number) => 
     ).pipe(
       Layer.provideMerge(
         Layer.mergeAll(
-          ProgramLoader.layer(
-            { counter: program },
-            {
-              work: () =>
-                Effect.sync(() => {
-                  controls.handled++;
-                  return Outcome.ok(null);
-                }),
-            },
-          ),
+          ProgramLoader.layer({ counter: program }, {}),
           ProcessStore.layer(state.sql, { process: A }),
           checked,
           Layer.succeed(WatcherManager, { publish: () => Effect.void }),
@@ -132,20 +116,19 @@ const world = (wakes: Readonly<Record<string, number | null>>, cmds: number) => 
 const lastAlarm = (alarms: ReadonlyArray<number | null>) => (alarms.length === 0 ? null : alarms.at(-1)!);
 
 describe("ticket 762 A2: a process's first turn arms its alarm", () => {
-  it("L8: a start alone, init called 1 to 3 times, arms the first model's wake and runs init's Cmds once", async () => {
+  it("L8: a start alone, init called 1 to 3 times, arms the first model's wake", async () => {
     await fc.assert(
       fc.asyncProperty(
         fc.record({
           wake,
           calls: fc.integer({ min: 1, max: 3 }),
-          cmds: fc.integer({ min: 0, max: 2 }),
           // A resent configure may reach the same live object or a fresh wake of it.
           fresh: fc.boolean(),
         }),
-        ({ wake, calls, cmds, fresh }) =>
+        ({ wake, calls, fresh }) =>
           Effect.runPromise(
             Effect.gen(function* () {
-              const w = world({ [BUILD]: wake }, cmds);
+              const w = world({ [BUILD]: wake });
               yield* w.boot;
               const init = ProgramRunner.use((r) => {
                 expect(r.init, "A2's ProgramRunner.init is missing").toBeTypeOf("function");
@@ -162,7 +145,6 @@ describe("ticket 762 A2: a process's first turn arms its alarm", () => {
               }
 
               expect(lastAlarm(w.alarms), "the start's alarm is its first model's wake").toBe(wake);
-              expect(w.controls.handled, "init's Cmds run once per process start (0253)").toBe(cmds);
             }),
           ),
       ),
@@ -177,7 +159,7 @@ describe("ticket 762 A2: a process's first turn arms its alarm", () => {
           Effect.gen(function* () {
             // The first life wakes elsewhere, so an alarm left from it cannot pass for the successor's.
             const before = wake === null ? 1 : wake + 1;
-            const w = world({ [BUILD]: before, [SUCCESSOR]: wake }, 0);
+            const w = world({ [BUILD]: before, [SUCCESSOR]: wake });
             yield* w.boot;
             yield* Effect.gen(function* () {
               const r = yield* ProgramRunner;
