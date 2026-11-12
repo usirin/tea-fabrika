@@ -21,16 +21,19 @@ const REJECTS = ["reject_once", "reject_always"] as const;
 const isReject = (kind: string) => (REJECTS as readonly string[]).includes(kind);
 const isAllow = (kind: string) => (ALLOWS as readonly string[]).includes(kind);
 
-/** The four ACP kinds, or an unknown one: ACP's kind is `string` past the four. */
-const kind = fc.oneof(
+/**
+ * The four ACP kinds, or an unknown one. ACP v2 types the kind `string` past the four; the v1 types
+ * the SDK's `./unstable` export uses close it to four, so a future kind is drawn through a cast.
+ */
+const kind: fc.Arbitrary<acp.PermissionOptionKind> = fc.oneof(
   { arbitrary: fc.constantFrom(...ALLOWS, ...REJECTS), weight: 4 },
-  { arbitrary: fc.string(), weight: 1 },
+  { arbitrary: fc.string().map((s) => s as acp.PermissionOptionKind), weight: 1 },
 );
 
 /** Codex's own ids come up often, so a drawn list holds `cancel` and `decline` side by side. */
 const optionId = fc.oneof(fc.constantFrom("cancel", "decline", "yes", "no", "reject_permissions"), fc.string());
 
-const option = (kinds: fc.Arbitrary<string> = kind): fc.Arbitrary<acp.PermissionOption> =>
+const option = (kinds: fc.Arbitrary<acp.PermissionOptionKind> = kind): fc.Arbitrary<acp.PermissionOption> =>
   fc.record({ optionId, name: fc.string(), kind: kinds });
 
 interface Drawn {
@@ -64,7 +67,11 @@ const picked = ({ options, cancels }: Drawn) => {
 const keeping = ({ options, cancels }: Drawn) =>
   options.filter((o) => isReject(o.kind) && !cancels.includes(o.optionId));
 
-const opt = (optionId: string, kind: string): acp.PermissionOption => ({ optionId, name: optionId, kind });
+const opt = (optionId: string, kind: acp.PermissionOptionKind): acp.PermissionOption => ({
+  optionId,
+  name: optionId,
+  kind,
+});
 
 /** codex-acp 2.5.0 `fileChangeDecisionOptions` (dist/index.js:38352-38367): `cancel` its only no. */
 const CODEX_FILE_CHANGE: Drawn = {
