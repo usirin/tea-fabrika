@@ -1,7 +1,7 @@
 // What one process start used: each declared value as its schema encodes it, keyed by path, where
 // each came from, and a hash of the values alone. Paths are sorted before hashing, and origins stay
 // out of it, so equal settings have one hash whatever source gave them.
-import { Effect, Redacted, Schema } from "effect";
+import { Effect, Predicate, Redacted, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as Codec from "./Codec.ts";
 import type * as Setting from "./Setting.ts";
@@ -22,8 +22,11 @@ export class SnapshotError extends Schema.TaggedError<SnapshotError>()("Snapshot
 
 const hashValues = Effect.fnUntraced(function* (values: Snapshot["values"]) {
   const sorted = Object.entries(values).sort(([a], [b]) => (a < b ? -1 : 1));
+  const text = JSON.stringify(sorted, (_key, value: unknown) =>
+    Predicate.isObject(value) ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : 1))) : value,
+  );
   const digest = yield* Digest.Digest;
-  return yield* digest.digestHex(Digest.sha256, new TextEncoder().encode(JSON.stringify(sorted)));
+  return yield* digest.digestHex(Digest.sha256, new TextEncoder().encode(text));
 });
 
 export const make = Effect.fnUntraced(function* <A, R extends Record<string, Setting.Setting<any>>>(
