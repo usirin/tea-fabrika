@@ -1,8 +1,10 @@
+import { createHash } from "node:crypto";
 // P12, next/. The public Worker route is plain libfabrika code. No socket or workerd class.
 // Builder contract: workers/fetch.ts exports fetch(request, env, config), returning an Effect.
 import { Cause, Effect, Exit } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import * as StartsTest from "../settings/StartsTest.ts";
 import type { BrainOptions, Env } from "./runtime.ts";
 
 type Fetch = (request: Request, env: Env, config: BrainOptions) => Effect.Effect<Response, unknown>;
@@ -48,16 +50,17 @@ const law = (
 const world = (port: number, name: string) => {
   const calls: Array<{ to: string; method: string; args: unknown[] }> = [];
   const response = new Response("gateway", { status: 202 });
-  const config: BrainOptions = {
+  const config = instanceFixture({
     name,
     port,
     person: "person-test",
     founder: "public-test",
     window: null,
     build: "build-test",
-  };
+  });
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only the RPC members the public routes call
   const env = {
+    INSTANCE: JSON.stringify(config),
     CONNECTION: {
       getByName: (to: string) => ({
         fetch: async (request: Request) => {
@@ -68,6 +71,7 @@ const world = (port: number, name: string) => {
     },
     PROJECT: {
       getByName: (to: string) => ({
+        settingsStart: async () => StartsTest.reply(config),
         grant: async (body: unknown) => {
           calls.push({ to, method: "grant", args: [body] });
           return { granted: body };
@@ -220,3 +224,9 @@ describe("P12 public Worker fetch", () => {
     expect(w.calls).toEqual([]);
   });
 });
+
+function instanceFixture(config: StartsTest.Fixture) {
+  return StartsTest.fixture(config, (algorithm, data) =>
+    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  );
+}

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 // P12, next/. [secrets] Generated flows through the real instance, control route, Connection and sinks.
 // Only platform deployment, HTTP/RPC transport, child RSS and Cloudflare handles are supplied.
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -20,6 +21,7 @@ import { lineFor } from "../../ledger/Log.ts";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
+import * as StartsTest from "../../settings/StartsTest.ts";
 import { recordPart } from "../../telemetry/Records.ts";
 import { Chain, SpanRow } from "../../telemetry/Trace.ts";
 import { Attached } from "../../transport/Wire.ts";
@@ -39,6 +41,10 @@ const config = {
   port: 18787,
   build: "test",
 };
+
+const connectionInput = StartsTest.fixture(config, (algorithm, data) =>
+  createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+);
 
 const destinations = ["spans", "logs", "journal", "measurements", "outbox"] as const;
 type Destination = (typeof destinations)[number];
@@ -260,8 +266,10 @@ const flow = async (sample: Flow) => {
   } as unknown as DurableObjectState;
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies RPC transport only; Connection and record processing remain product code
   const env = {
+    INSTANCE: JSON.stringify(connectionInput),
     PROJECT: {
       getByName: () => ({
+        settingsStart: async () => StartsTest.reply(connectionInput),
         route: async () => {
           if (mode === "rpc") {
             throw new Error(`${bearer} ${rawFrame}`);
@@ -284,7 +292,7 @@ const flow = async (sample: Flow) => {
       }),
     },
   } as unknown as Env;
-  const runtime = connectionRuntime(ctx, env, config);
+  const runtime = connectionRuntime(ctx, env, connectionInput);
 
   try {
     const gateway = await runtime.runPromise(ConnectionService.pipe(Effect.provide(logger)));

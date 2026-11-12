@@ -12,6 +12,7 @@ import { Effect, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { describe, expect } from "vitest";
 import { heldPort } from "./port.test-support.ts";
+import { settingsFixture } from "./record-wire.test-support.ts";
 import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -112,14 +113,17 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
       Effect.gen(function* () {
         // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
         const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
-        const instance = yield* localInstance(built, {
-          home,
-          name: PROJECT,
-          person: PERSON,
-          founder: key.line,
-          window: key.raw,
-          port: at.port,
-        });
+        const instance = yield* localInstance(
+          built,
+          settingsFixture({
+            home,
+            name: PROJECT,
+            person: PERSON,
+            founder: key.line,
+            window: key.raw,
+            port: at.port,
+          }),
+        );
         const from: From = {
           by: key.fingerprint,
           for: PERSON,
@@ -328,14 +332,17 @@ const worldScoped = Effect.gen(function* () {
   const context = yield* Layer.build(
     localState().pipe(Layer.provideMerge(SecureRandom.layerWebCrypto), Layer.provideMerge(NodeServices.layer)),
   );
-  const instance: Instance = yield* localInstance(built, {
-    home,
-    name: PROJECT,
-    person: PERSON,
-    founder: key.line,
-    window: key.raw,
-    port: at.port,
-  }).pipe(Effect.provideContext(context));
+  const instance: Instance = yield* localInstance(
+    built,
+    settingsFixture({
+      home,
+      name: PROJECT,
+      person: PERSON,
+      founder: key.line,
+      window: key.raw,
+      port: at.port,
+    }),
+  ).pipe(Effect.provideContext(context));
   const from: From = {
     by: key.fingerprint,
     for: PERSON,

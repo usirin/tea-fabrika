@@ -19,6 +19,7 @@ import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime"
 import { Cause, Deferred, Effect, Exit, Layer, ManagedRuntime, Option, Schema, Tracer } from "effect";
 import * as fc from "fast-check";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { settingsFixture } from "./record-wire.test-support.ts";
 import { projectRuntime, settings, type Env } from "./runtime.ts";
 import { Settings } from "./settings.ts";
 
@@ -160,14 +161,16 @@ const world = async (trace = TRACE, build = "counter-b") => {
   let onRing: () => Promise<void> = async () => {};
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
-    INSTANCE: JSON.stringify({
-      name: "project-test",
-      person: PERSON,
-      founder: key.line,
-      window: key.raw,
-      port: 18787,
-      build: "brain-test",
-    }),
+    INSTANCE: JSON.stringify(
+      settingsFixture({
+        name: "project-test",
+        person: PERSON,
+        founder: key.line,
+        window: key.raw,
+        port: 18787,
+        build: "brain-test",
+      }),
+    ),
     PROCESS: {
       // Ticket 402 keys a Process object by its registered name, so the stub key may be a
       // name: descriptors are keyed by their own process ID, and delivery names that ID.

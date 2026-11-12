@@ -2,10 +2,13 @@
 // callback the runtime really composes: `projectRuntime` builds its project layer, the layer's door
 // builds the Gateway layer, and both are captured here. An independent copy of the guard before that
 // change is the oracle: the same name, and the same reads of `type` in the same order.
-import { Effect, Layer, Result } from "effect";
+import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
+import { Effect, Exit, Layer, Result } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
-import { projectRuntime } from "./runtime.ts";
+import { settingsFixture } from "./record-wire.test-support.ts";
+import { projectRuntime, settings as decodeSettings } from "./runtime.ts";
 
 const held = vi.hoisted(() => ({ project: [] as Array<unknown>, door: [] as Array<unknown> }));
 
@@ -31,10 +34,26 @@ vi.mock("./door.ts", () => ({
 
 const settings = { name: "fabrika", person: "person", founder: "founder", window: null, port: 8123, build: "b" };
 
+const decode = (env: unknown): ReturnType<typeof decodeSettings> => Reflect.apply(decodeSettings, undefined, [env]);
+
+StartsTest.law(
+  "T753 L3 the app reads the shared snapshot and derives its port",
+  fc.tuple(StartsTest.recipe),
+  ([recipe]) =>
+    Effect.gen(function* () {
+      const input = yield* StartsTest.input(recipe);
+      const config = yield* decode({ INSTANCE: JSON.stringify(input) });
+      expect(config.port).toBe(recipe.port);
+      expect(config.build).toBe(recipe.build);
+      const bad = yield* Effect.exit(decode({ INSTANCE: JSON.stringify(StartsTest.corrupt(input, 6)) }));
+      expect(Exit.isFailure(bad)).toBe(true);
+    }).pipe(Effect.provide(Digest.layerWebCrypto)),
+);
+
 /** The `inputs.name` callback, as the runtime composes it. */
 const composedName = async (): Promise<(m: unknown) => string | undefined> => {
   const ctx: unknown = { id: { name: "project-a" } };
-  const env: unknown = { INSTANCE: JSON.stringify(settings) };
+  const env: unknown = { INSTANCE: JSON.stringify(settingsFixture(settings)) };
   const runtime: ReturnType<typeof projectRuntime> = Reflect.apply(projectRuntime, undefined, [ctx, env]);
   await runtime.runPromise(Effect.void);
   await runtime.dispose();

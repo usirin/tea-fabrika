@@ -24,6 +24,7 @@ import { chromium } from "playwright";
 import { describe, expect, it } from "vitest";
 import type { Built } from "../src/build.ts";
 import { heldPort } from "../src/port.test-support.ts";
+import { settingsFixture } from "../src/record-wire.test-support.ts";
 
 const APP = resolve(import.meta.dirname, ".."),
   ROOT = resolve(APP, "../../..");
@@ -136,14 +137,14 @@ describe("P16 real browser from a copied one-file build", () => {
             const instance = await Effect.runPromise(
               localInstance(
                 { ...built, brain: join(alone, "brain.mjs") },
-                {
+                settingsFixture({
                   home,
                   name: "p16-browser",
                   person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
                   founder: `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(Buffer.from(raw, "base64url"))]).toString("base64")}`,
                   window: null,
                   port,
-                },
+                }),
               ).pipe(
                 Effect.provideService(Scope.Scope, scope),
                 Effect.provide(localState()),
@@ -359,14 +360,17 @@ const servedCounter = Effect.gen(function* () {
   const { localState } = yield* Effect.promise(() => import("alchemy/State/LocalState"));
   const instance = yield* owned(
     "server",
-    localInstance(built, {
-      home,
-      name: "p14-browser",
-      person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
-      founder: `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(Buffer.from(raw, "base64url"))]).toString("base64")}`,
-      window: null,
-      port,
-    }).pipe(
+    localInstance(
+      built,
+      settingsFixture({
+        home,
+        name: "p14-browser",
+        person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+        founder: `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(Buffer.from(raw, "base64url"))]).toString("base64")}`,
+        window: null,
+        port,
+      }),
+    ).pipe(
       Effect.provide(localState()),
       Effect.provide(SecureRandom.layerWebCrypto),
       Effect.provide(NodeServices.layer),

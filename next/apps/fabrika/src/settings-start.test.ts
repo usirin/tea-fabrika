@@ -13,13 +13,19 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import * as Load from "@kampus/libfabrika/node/settings/Load";
 import * as Snapshot from "@kampus/libfabrika/settings/Snapshot";
+import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
+import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { Effect, Exit, FileSystem, Layer, Path, Ref, Schema, Stream } from "effect";
 import { Digest } from "effect/crypto";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
+import { rolldown } from "rolldown";
+import { build } from "./build.ts";
+import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
+import { killWorkerd } from "./workerd.test-support.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const check = { seed: SEED, numRuns: 100 };
@@ -198,6 +204,180 @@ const founding = () => {
 
 /** A port nobody else is given while the scope is open. */
 const held = Effect.acquireRelease(heldPort(), (h) => h.release);
+
+it.live("scenario: T753 L13 real Worker retries the same HTTP owner, shares warm gates and reopens", () =>
+  // scenario: Alchemy, workerd's object bridge and isolate lifetime require one real local instance.
+  // Run only in the lead's isolated container. No socket or Docker allowance is requested by this law.
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "t753-worker-" });
+    const port = yield* held;
+    const key = founding();
+    const built = yield* build({ out: path.join(home, "dist") });
+    const input = {
+      ...(yield* StartsTest.input({
+        port: port.port,
+        start: "instance-start-scenario",
+        build: built.build,
+        revision: null,
+        origin: "flag",
+      })),
+      founding: { person: "person_01m6v5270hf3c8x2q7w9z4k5mn", founder: key.line, window: key.raw },
+    };
+    const original = path.join(home, "original.mjs");
+    yield* fs.copyFile(built.brain, original);
+    const entry = path.join(home, "entry.mjs");
+    // The test changes platform answers and SQL failure cuts. All settings and consumer code is the real bundle.
+    yield* fs.writeFileString(
+      entry,
+      `
+      import worker, { Project as OriginalProject, Process, Connection, RecordPart, Control } from "./original.mjs";
+      export { Process, Connection, RecordPart, Control };
+      export class Project extends OriginalProject {
+        constructor(ctx, env) {
+          let fail = false;
+          const counts = { reads: 0, appends: 0 };
+          const sql = new Proxy(ctx.storage.sql, { get(target, key) {
+            if (key !== "exec") return Reflect.get(target, key);
+            return (query, ...args) => {
+              if (/SELECT \\* FROM entries WHERE stream = \\? AND rev > \\?/i.test(query)) counts.reads++;
+              if (/INSERT INTO entries/i.test(query)) {
+                counts.appends++;
+                if (fail) throw new Error("injected settings storage failure");
+              }
+              if (fail && /SELECT \\* FROM entries WHERE stream/i.test(query)) throw new Error("injected settings storage failure");
+              return target.exec(query, ...args);
+            };
+          } });
+          const storage = new Proxy(ctx.storage, { get(target, key) {
+            if (key === "sql") return sql;
+            const value = Reflect.get(target, key);
+            return typeof value === "function" ? value.bind(target) : value;
+          } });
+          const state = new Proxy(ctx, { get(target, key) {
+            if (key === "storage") return storage;
+            const value = Reflect.get(target, key);
+            return typeof value === "function" ? value.bind(target) : value;
+          } });
+          super(state, env);
+          this.testStorage = ctx.storage;
+          this.testCounts = counts;
+          this.testFault = value => { fail = value; };
+        }
+        async settingsStart(input) {
+          if (!await this.testStorage.get("test-settings-armed")) return super.settingsStart(input);
+          const phase = await this.testStorage.get("test-settings-phase") ?? 0;
+          await this.testStorage.put("test-settings-phase", phase + 1);
+          if (phase === 0) return { _tag: "Refused" };
+          this.testFault(phase === 1);
+          try { return await super.settingsStart(input); }
+          finally { this.testFault(false); }
+        }
+        async settingsProbe() {
+          const exists = this.testStorage.sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='entries'").toArray().length > 0;
+          const rows = exists ? this.testStorage.sql.exec("SELECT * FROM entries").toArray().filter(row => {
+            const body = JSON.parse(row.body);
+            return body.settings?.hash === ${JSON.stringify(input.settings.hash)} && body.build === ${JSON.stringify(built.build)};
+          }) : [];
+          return { calls: await this.testStorage.get("test-settings-phase") ?? 0, ...this.testCounts, rows };
+        }
+        async settingsArm() { await this.testStorage.put("test-settings-armed", true); return true; }
+      }
+      export default { fetch(request, env, ctx) {
+        if (new URL(request.url).pathname === "/__settings_arm") return env.PROJECT.getByName("settings-law").settingsArm().then(value => Response.json(value));
+        if (new URL(request.url).pathname === "/__settings_probe") return env.PROJECT.getByName("settings-law").settingsProbe().then(value => Response.json(value));
+        return worker.fetch(request, env, ctx);
+      } };
+    `,
+    );
+    const bundle = yield* Effect.acquireRelease(
+      Effect.promise(() => rolldown({ input: entry, external: [/^cloudflare:/], platform: "neutral" })),
+
+      (owned) => Effect.promise(() => owned.close()),
+    );
+    const brain = path.join(home, "instrumented.mjs");
+
+    yield* Effect.promise(() => bundle.write({ file: brain, format: "esm" }));
+    const instance = yield* localInstance({ ...built, brain }, { ...input, home });
+    yield* HttpClient.get(`${instance.url}/__settings_arm`);
+    const probe = Effect.gen(function* () {
+      const response = yield* HttpClient.get(`${instance.url}/__settings_probe`);
+      return yield* response.json.pipe(
+        Effect.flatMap(
+          Schema.decodeUnknownEffect(
+            Schema.Struct({
+              calls: Schema.Int,
+              reads: Schema.Int,
+              appends: Schema.Int,
+              rows: Schema.Array(
+                Schema.Struct({
+                  id: Schema.String,
+                  body: Schema.String,
+                  sentAt: Schema.String,
+                  traceId: Schema.String,
+                }),
+              ),
+            }),
+          ),
+        ),
+      );
+    });
+    const request = HttpClient.get(`${instance.url}/`);
+    expect((yield* request).status).toBeGreaterThanOrEqual(500);
+    expect((yield* probe).calls).toBe(1);
+    expect((yield* request).status).toBeGreaterThanOrEqual(500);
+    expect((yield* probe).calls).toBe(2);
+    expect((yield* request).status).toBe(200);
+    const cold = yield* probe;
+    expect(cold.calls).toBe(3);
+    expect(cold.rows).toHaveLength(1);
+    const saved = cold.rows[0];
+    expect(saved).toBeDefined();
+
+    for (let n = 0; n < 4; n++) {
+      expect((yield* request).status).toBe(200);
+    }
+
+    expect(yield* probe).toEqual(cold);
+    // Every RecordPart method shares one successful activation context.
+    const part = instance.record("settings-law", "spans/57");
+    const record = Effect.fnUntraced(function* (method: "write" | "read" | "content" | "deleteContent") {
+      const chain = Chain.cases.spans.make({});
+
+      return yield* Effect.promise(() =>
+        method === "write"
+          ? part.write(chain, 57, [])
+          : method === "read"
+            ? part.read(chain, 57, 0)
+            : method === "content"
+              ? part.content(chain, 57, "absent")
+              : part.deleteContent(chain, 57, "absent", { by: "test-person", at: 0, reason: "requested" }),
+      );
+    });
+
+    for (const method of ["write", "read", "content", "deleteContent"] as const) {
+      yield* record(method);
+    }
+
+    const recordCold = yield* probe;
+    expect(recordCold.calls - cold.calls).toBe(1);
+    expect(recordCold.reads - cold.reads).toBe(1);
+    expect(recordCold.appends - cold.appends).toBe(0);
+
+    for (const method of ["write", "read", "content", "deleteContent"] as const) {
+      yield* record(method);
+    }
+
+    expect(yield* probe).toEqual(recordCold);
+    yield* killWorkerd(process.pid);
+    yield* request.pipe(Effect.retry({ times: 100 }));
+    expect((yield* request).status).toBe(200);
+    const reopened = yield* probe;
+    expect(reopened.rows).toEqual(cold.rows);
+    expect(reopened.calls).toBeGreaterThan(recordCold.calls);
+  }).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto, FetchHttpClient.layer])),
+);
 
 /** One dev.ts in its own scoped home, its output collected as it comes. Scope close kills it. */
 const dev = Effect.fnUntraced(function* (port: number, extra: Readonly<Record<string, string>>) {

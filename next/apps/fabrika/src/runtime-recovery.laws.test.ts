@@ -28,6 +28,7 @@ import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { programs } from "virtual:fabrika-built";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { settingsFixture } from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
@@ -514,15 +515,17 @@ const world = (
   };
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but do not have workerd's nominal brands
   const env = {
-    INSTANCE: JSON.stringify({
-      name: "project-test",
-      person: PERSON,
-      founder: key.line,
-      window: key.raw,
-      port: 18787,
-      build: "brain-test",
-      mail: { grants: { "requester:1": ["responder:1"], "responder:1": ["requester:1"] } },
-    }),
+    INSTANCE: JSON.stringify(
+      settingsFixture({
+        name: "project-test",
+        person: PERSON,
+        founder: key.line,
+        window: key.raw,
+        port: 18787,
+        build: "brain-test",
+        mail: { grants: { "requester:1": ["responder:1"], "responder:1": ["requester:1"] } },
+      }),
+    ),
     // Every Project RPC the real class hands off, so new Project calls reach the real service too.
     PROJECT: {
       getByName: () =>

@@ -22,7 +22,7 @@ import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { describe, expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
-import { recordCall } from "./record-wire.test-support.ts";
+import { recordCall, settingsFixture } from "./record-wire.test-support.ts";
 
 // The local instance exposes Promise calls; RecordManager takes Effect calls.
 type RecordCalls = ReturnType<Parameters<typeof RecordManager.remote>[0]>;
@@ -183,15 +183,18 @@ const world = async (
 
     await Effect.runPromise(
       Effect.gen(function* () {
-        const instance = yield* localInstance(built, {
-          home,
-          name: "p12-records",
-          person: PERSON,
-          founder: key.line,
-          window: key.raw,
-          port: at.port,
-          limits: { recordBytes: 64 * 1024 },
-        });
+        const instance = yield* localInstance(
+          built,
+          settingsFixture({
+            home,
+            name: "p12-records",
+            person: PERSON,
+            founder: key.line,
+            window: key.raw,
+            port: at.port,
+            limits: { recordBytes: 64 * 1024 },
+          }),
+        );
         const from: From = {
           by: key.fingerprint,
           for: PERSON,

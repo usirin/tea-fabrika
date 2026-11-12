@@ -1,32 +1,205 @@
 // P12, next/. Saved and wire values enter the real services over in-memory platform handles.
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import { Cause, Effect, Exit, Redacted, Schema } from "effect";
+import {
+  DurableObjectState as ObjectState,
+  fromDurableObjectState,
+} from "@alchemy.run/cloudflare/Workers/DurableObjectState";
+import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
+import { Cause, Effect, Exit, Option, Redacted, Schema, type Scope } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
+import * as StartsTest from "../settings/StartsTest.ts";
+import { Chain } from "../telemetry/Trace.ts";
 import { Attached } from "../transport/Wire.ts";
 import { ConnectionService, connectionRuntime } from "./connection.ts";
 import { control } from "./control.ts";
-import { recordRead } from "./record.ts";
-import { ProcessService, processDescriptor, processRuntime, type Env } from "./runtime.ts";
+import { fetch } from "./fetch.ts";
+import type { RecordShape } from "./objects.ts";
+import { recordRead, recordWrite } from "./record.ts";
+import {
+  ProcessService,
+  ProjectService,
+  processDescriptor,
+  processRuntime,
+  projectRuntime,
+  type Env,
+} from "./runtime.ts";
+
+const recordConstructor = vi.hoisted(() => {
+  const slot: {
+    value?: Effect.Effect<
+      Effect.Effect<RecordShape, unknown, Scope.Scope>,
+      unknown,
+      ObjectState | WorkerEnvironment | Scope.Scope
+    >;
+  } = {};
+  return slot;
+});
+
+// Capture only Alchemy's constructor registration. The actual RecordPart implementation runs below.
+vi.mock("./objects.ts", async (original) => {
+  const actual = await original<typeof import("./objects.ts")>();
+  const { Layer } = await import("effect");
+  return {
+    ...actual,
+    RecordPart: {
+      make: (implementation: NonNullable<typeof recordConstructor.value>) => {
+        recordConstructor.value = implementation;
+        return Layer.empty;
+      },
+    },
+  };
+});
 
 vi.mock("effect", async (original) => {
   const actual = await original<typeof import("effect")>();
   return { ...actual, Effect: { ...actual.Effect } };
 });
 
-const config = {
+const config = instanceFixture({
   name: "parse-test",
   person: "person-test",
   founder: "public-test",
   window: null,
   port: 18787,
   build: "test",
-};
+});
 
 const malformed = (schema: Schema.Top) => fc.jsonValue().filter((value) => !Schema.is(schema)(value));
+
+const entryPaths = ["Project", "Process", "Connection", "HTTP", "RecordPart"] as const;
+
+for (const path of entryPaths) {
+  StartsTest.law(
+    `T753 L3 ${path} rejects a corrupt snapshot before consumer construction`,
+    fc.tuple(StartsTest.recipe, fc.array(fc.nat(), { minLength: 8, maxLength: 25 })),
+    ([recipe, choices]) =>
+      Effect.gen(function* () {
+        let deployment = yield* StartsTest.input(recipe);
+
+        for (const [index, choice] of choices.entries()) {
+          // A reopen keeps immutable input; a deployment chooses a fresh start and snapshot.
+          const moves = ["deliver", "reopen", "deploy"];
+          const move = moves[choice % moves.length];
+
+          if (move === "deploy") {
+            deployment = yield* StartsTest.input({
+              ...recipe,
+              start: `${recipe.start}-${index}`,
+              port: 1 + (choice % 65535),
+            });
+            continue;
+          }
+
+          const w = yield* Effect.acquireRelease(Effect.sync(world), (value) => Effect.sync(() => value.db.close()));
+          let consumers = 0;
+          const bad = StartsTest.corrupt(deployment, Math.floor(choice / moves.length));
+          const sql = w.ctx.storage.sql;
+          const ctx = {
+            ...w.ctx,
+            id: {
+              ...w.ctx.id,
+              name:
+                path === "Process"
+                  ? JSON.stringify(["settings-law", "worker"])
+                  : path === "RecordPart"
+                    ? JSON.stringify(["settings-law", "spans/0"])
+                    : "settings-law",
+            },
+            getWebSockets: () => {
+              consumers++;
+              return [];
+            },
+            storage: {
+              ...w.ctx.storage,
+              get: (...args: Parameters<typeof w.ctx.storage.get>) => {
+                consumers++;
+                return Reflect.apply(w.ctx.storage.get, w.ctx.storage, args);
+              },
+              sql: new Proxy(sql, {
+                get: (target, key) =>
+                  key === "exec"
+                    ? (...args: unknown[]) => {
+                        consumers++;
+                        return Reflect.apply(target.exec, target, args);
+                      }
+                    : Reflect.get(target, key),
+              }),
+            },
+          };
+          const env = { ...w.env, INSTANCE: JSON.stringify(bad) };
+          const publicKey = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x;
+          const local = {
+            ...config,
+            name: "settings-law",
+            port: recipe.port,
+            person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+            founder: publicKey ?? "missing-public-key",
+            window: config.founding.window,
+          };
+          let exit: Exit.Exit<unknown, unknown>;
+
+          if (path === "HTTP") {
+            exit = yield* Effect.exit(
+              fetch(
+                new Request(`http://127.0.0.1:${recipe.port}/window.js`, {
+                  headers: { host: `127.0.0.1:${recipe.port}` },
+                }),
+                env,
+                local,
+                { "/window.js": { hash: "asset", type: "text/javascript", body: "window.fixture = true" } },
+              ),
+            );
+          } else if (path === "RecordPart") {
+            const constructor = Option.getOrThrow(Option.fromUndefinedOr(recordConstructor.value));
+            exit = yield* Effect.exit(
+              Effect.gen(function* () {
+                const build = yield* constructor;
+                const part = yield* build;
+                return yield* part.read(Chain.cases.spans.make({}), 0, 0);
+              }).pipe(
+                Effect.provideService(WorkerEnvironment, env),
+                Effect.provideService(ObjectState, fromDurableObjectState(ctx)),
+              ),
+            );
+          } else {
+            const runtime =
+              path === "Connection"
+                ? connectionRuntime(ctx, env, local)
+                : path === "Process"
+                  ? processRuntime(ctx, env, {})
+                  : projectRuntime(ctx, env, {
+                      config: local,
+                      programs: {},
+                      bootstrap: { id: "boot", name: "boot", program: "missing" },
+                      door: () => Effect.die("consumer before start"),
+                    });
+            yield* Effect.addFinalizer(() => Effect.promise(() => runtime.dispose()));
+            const service =
+              path === "Connection" ? ConnectionService : path === "Process" ? ProcessService : ProjectService;
+            exit = yield* Effect.promise(() => Reflect.apply(runtime.runPromiseExit, runtime, [service]));
+          }
+
+          expect(Exit.isFailure(exit)).toBe(true);
+
+          if (Exit.isFailure(exit)) {
+            expect(Cause.hasDies(exit.cause)).toBe(false);
+            expect(Cause.hasFails(exit.cause)).toBe(true);
+            expect(Cause.findErrorOption(exit.cause)).toMatchObject({
+              _tag: "Some",
+              value: { _tag: "StartsError", reason: { _tag: "Decode" } },
+            });
+          }
+
+          expect(consumers).toBe(0);
+        }
+      }).pipe(Effect.provide(Digest.layerWebCrypto)),
+  );
+}
 
 // Keep parser checks independent of the bearer migration. The separate [secrets] type and
 // flow laws require Redacted; this fixture also reaches HEAD's parser using its old signature.
@@ -107,8 +280,10 @@ const world = () => {
   const route = vi.fn(async (): Promise<unknown> => ({ _tag: "parked", stream: "stream", after: 0 }));
   // oxlint-disable-next-line fabrika/no-type-assertions -- in-memory platform stubs supply just the RPCs these readers reach
   const env = {
+    INSTANCE: JSON.stringify(config),
     PROJECT: {
       getByName: () => ({
+        settingsStart: async () => StartsTest.reply(config),
         route,
         leave: async () => {},
         disconnect: async () => {},
@@ -453,3 +628,62 @@ it("Connection rejects missing or malformed URL segments with a typed error", as
     { seed: 119120, numRuns: 20, examples: [["/ws"], ["/ws/%/tab"], ["/ws/key/%"]] },
   );
 });
+
+function instanceFixture(config: StartsTest.Fixture) {
+  return StartsTest.fixture(config, (algorithm, data) =>
+    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  );
+}
+
+StartsTest.law(
+  "T753 L19 the legacy cap, fallback, resend and rollover behavior remain intact",
+  fc.record({
+    cap: fc.option(fc.integer({ min: 1, max: 1_000_000_000 }), { nil: undefined }),
+    id: fc.integer({ min: 1, max: 1_000_000 }),
+  }),
+  ({ cap, id }) =>
+    Effect.gen(function* () {
+      const w = yield* Effect.acquireRelease(Effect.sync(world), (value) => Effect.sync(() => value.db.close()));
+      let size = 0;
+      const raw = w.ctx.storage.sql;
+      const ctx = {
+        ...w.ctx,
+        id: { ...w.ctx.id, name: JSON.stringify(["settings-law", "spans/0"]) },
+        storage: {
+          ...w.ctx.storage,
+          sql: new Proxy(raw, { get: (target, key) => (key === "databaseSize" ? size : Reflect.get(target, key)) }),
+        },
+      };
+      const chain = Chain.cases.spans.make({});
+      const row = (n: number) => ({
+        span: {
+          traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+          spanId: n.toString(16).padStart(16, "0"),
+          parentSpanId: null,
+          name: "settings-cap-fixture",
+          kind: "internal" as const,
+          startTimeUnixNano: "1794096000000000000",
+          endTimeUnixNano: "1794096000001000000",
+          attributes: {},
+          events: [],
+          links: [],
+          resource: { attributes: { "fab.object": "settings-cap-fixture" } },
+          ok: true,
+        },
+        content: null,
+      });
+      const old = row(id);
+      const next = row(id + 1);
+      const fresh = row(id + 2);
+      expect(yield* recordWrite(ctx, cap, chain, 0, [old])).toEqual({ _tag: "written" });
+      size = (cap ?? 1_000_000_000) - 1;
+      expect(yield* recordWrite(ctx, cap, chain, 0, [next])).toEqual({ _tag: "written" });
+      size++;
+      expect(yield* recordWrite(ctx, cap, chain, 0, [old])).toEqual({ _tag: "written" });
+      expect(yield* recordWrite(ctx, cap, chain, 0, [old, fresh])).toEqual({
+        _tag: "rolled",
+        next: "spans/1",
+        had: [old.span.spanId],
+      });
+    }),
+);

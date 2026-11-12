@@ -29,6 +29,7 @@ import { type Rule, transform } from "lightningcss";
 import { parseSync } from "oxc-parser";
 import { rolldown, type RolldownOptions, type OutputOptions, type RolldownOutput } from "rolldown";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import * as StartsTest from "../../settings/StartsTest.ts";
 
 const ROOT = resolve(import.meta.dirname, "../../../../../..");
 const homes: string[] = [];
@@ -1055,15 +1056,19 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
             // Every carried route as the brain answers it, by its plain and its encoded URL.
             const port = 8787;
             // A file route reaches no object: each binding answers nothing but the name lookup.
-            const binding = { getByName: () => ({}) };
+            const config = StartsTest.fixture(
+              { name: "p14", port, person: "p", founder: "f", window: null, build: built.build },
+              (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+            );
+            const binding = { getByName: () => ({ settingsStart: async () => StartsTest.reply(config) }) };
             // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only what file routes touch
             const env = {
+              INSTANCE: JSON.stringify(config),
               PROJECT: binding,
               CONNECTION: binding,
               PROCESS: binding,
               RECORD: binding,
             } as unknown as Parameters<typeof fetch>[1];
-            const config = { name: "p14", port, person: "p", founder: "f", window: null, build: built.build };
 
             for (const route of ["/", ...Object.keys(built.assets)]) {
               for (const url of [route, route.split("/").map(encodeURIComponent).join("/")]) {
