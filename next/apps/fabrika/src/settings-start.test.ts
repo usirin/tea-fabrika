@@ -43,6 +43,63 @@ const home = Effect.gen(function* () {
   return { places: { person: { path: person, name: PERSON }, repo: { path: repo, name: REPO } }, write };
 });
 
+it.effect.prop(
+  "T843 load: files, env and flags resolve the saved gateway policy and wrong scope stops startup (50 runs)",
+  {
+    limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 20 })),
+    window: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100_000 })),
+    source: Schema.Literals(["file", "env", "flags", "repo"]),
+  },
+  ({ limit, window, source }) =>
+    Effect.gen(function* () {
+      const h = yield* home;
+      const fs = yield* FileSystem.FileSystem;
+      const policy = `[gateway]\nlimit = ${limit}\nwindow = ${window}\n`;
+      yield* fs.writeFileString(h.places.person.path, source === "file" ? policy : "");
+      yield* fs.writeFileString(h.places.repo.path, source === "repo" ? policy : "");
+      const result = yield* Effect.exit(
+        Load.load({
+          ...h.places,
+          env: source === "env" ? { FABRIKA_GATEWAY_LIMIT: String(limit), FABRIKA_GATEWAY_WINDOW: String(window) } : {},
+          flags: source === "flags" ? { "gateway.limit": String(limit), "gateway.window": String(window) } : {},
+          version: "0.0.0",
+        }),
+      );
+      expect(Exit.isFailure(result)).toBe(source === "repo");
+
+      if (source === "repo") {
+        expect(Exit.isFailure(result)).toBe(true);
+      } else {
+        expect(Exit.isSuccess(result)).toBe(true);
+
+        if (Exit.isSuccess(result)) {
+          expect(result.value.values).toMatchObject({ gatewayLimit: limit, gatewayWindow: window });
+          expect(result.value.snapshot.values).toMatchObject({ "gateway.limit": limit, "gateway.window": window });
+        }
+      }
+    }).pipe(Effect.provide(services)),
+  { arbitrary: { seed: SEED, runs: 50 } },
+);
+
+it.effect.prop(
+  "T843 startup rejects zero and unsafe policy values before composing an instance (50 runs)",
+  {
+    bad: Schema.Union([
+      Schema.Int.check(Schema.isLessThanOrEqualTo(0)),
+      Schema.Literals(["NaN", "Infinity", "1.5", "9007199254740992"]),
+    ]),
+  },
+  ({ bad }) =>
+    Effect.gen(function* () {
+      const h = yield* home;
+      const result = yield* Effect.exit(
+        Load.load({ ...h.places, env: {}, flags: { "gateway.limit": String(bad) }, version: "0.0.0" }),
+      );
+      expect(Exit.isFailure(result)).toBe(true);
+    }).pipe(Effect.provide(services)),
+  { arbitrary: { seed: SEED, runs: 50 } },
+);
+
 const action = fc.oneof(
   fc.record({
     _tag: fc.constant("change" as const),
