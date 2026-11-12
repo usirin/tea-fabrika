@@ -47,6 +47,7 @@ import { Archive, type BucketCalls } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { SinkError } from "../telemetry/Trace.ts";
+import { Answer } from "../transport/Wire.ts";
 import {
   ChildReplies,
   CommitReply,
@@ -326,12 +327,17 @@ const flushed = SpanSink.use((sink) => sink.flush);
 export const complete = Effect.fn(function* <A, E, R>(work: Effect.Effect<A, E, R>) {
   return yield* work.pipe(
     Effect.exit,
-    Effect.flatMap((exit) =>
-      flushed.pipe(
+    Effect.flatMap((exit) => {
+      // Counted refusals have nothing to send. Retrying an old archive here would add a row per refusal.
+      if (Exit.isSuccess(exit) && Schema.is(Answer.cases.refused)(exit.value) && exit.value.reason === "reserved") {
+        return exit;
+      }
+
+      return flushed.pipe(
         Effect.flatMap(() => exit),
         Effect.catch((error) => (Exit.isFailure(exit) ? exit : Effect.fail(error))),
-      ),
-    ),
+      );
+    }),
   );
 });
 
@@ -986,7 +992,7 @@ const processLogic = Effect.fnUntraced(function* (
       set: (at) =>
         (at === null
           ? rpc(storage.delete("wake")).pipe(Effect.andThen(rpc(storage.deleteAlarm())))
-          : rpc(storage.put("wake", at)).pipe(Effect.andThen(rpc(storage.setAlarm(at))))
+          : rpc(storage.put("wake", at)).pipe(Effect.andThen(rpc(storage.setAlarm(Math.max(1, at)))))
         ).pipe(Effect.orDie),
     }),
     // Recording captures its sink's services itself (main's P11); the runner no longer provides them.

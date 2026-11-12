@@ -176,7 +176,10 @@ describe("one TOML file per color token, flat in tokens/color/", () => {
   it("names the tile's stylesheet as the one place the tile's tokens may appear", async () => {
     const { parse } = await toml();
     const parts = parse(readFileSync(join(PACKAGE, "tokens", "parts.toml"), "utf8"));
-    expect(tableIn(parts, "tile")["stylesheets"]).toEqual(["apps/fabrika/src/window/window.css"]);
+    expect(tableIn(parts, "tile")["stylesheets"]).toEqual([
+      "apps/fabrika/src/window/window.css",
+      "next/packages/tuval/src/window/style.css",
+    ]);
   });
 
   it("names the design's own tokens as readable anywhere", async () => {
@@ -402,7 +405,9 @@ describe("token-names.json lists what the stylelint rules read", () => {
 
   // Only a part with stylesheets limits where its tokens appear; the design's are read anywhere.
   it("gives the parts as parts.toml names them", () => {
-    expect(names()["parts"]).toEqual({ tile: ["apps/fabrika/src/window/window.css"] });
+    expect(names()["parts"]).toEqual({
+      tile: ["apps/fabrika/src/window/window.css", "next/packages/tuval/src/window/style.css"],
+    });
   });
 
   // Rule 3 reads this list, never a pattern: every Radix 3.0.0 scale and step, in each spelling a

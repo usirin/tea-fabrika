@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-12",
+  "run": "2026-11-12-t870-lead-host",
+  "ticket": "870",
+  "pr": "1059",
+  "started": "2026-11-12T07:52:00-08:00",
+  "ended": "2026-11-12T08:05:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": "claude-fable-5-2",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's version, packages/pipeline. The lead's host checks for ticket 870 at 04ce45299, by one helper agent. The step boxes ran nothing, since the test file starts Miniflare and a box has no sockets, and the pull request merged on green CI at 07:50 before this run ended; the lead should have held it. The run found nothing wrong. Each of the seven P3 assertions was compared with the original: six kept, one stronger (the short renew must answer ok), none weaker; P1, P2, P4 and P5 untouched. The file passed 24 of 24 runs in a row, 8 to 13 s each, 5 of 5 tests. Two plants in the memory ledger ran once each, both red. One full typecheck passed. Not shown: the claim gap on a passing run (the runner prints only broken laws), and the plants on the SQLite and Durable Object ledgers. One path lacks the gap: the missing-hold early return. Tokens were not reported.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 13,
+  "note": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "packages/pipeline/src/asks/laws.ts:151",
+      "plant": "packages/fabrika/src/host/memory.ts:251, a claim succeeds while the lease is live",
+      "result": "red"
+    },
+    {
+      "law": "packages/pipeline/src/asks/laws.ts:156",
+      "plant": "packages/fabrika/src/host/memory.ts:118, a fence from any past claim row still holds",
+      "result": "red"
+    }
+  ]
+}

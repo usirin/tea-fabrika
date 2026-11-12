@@ -112,7 +112,7 @@
     { "name": "--turn-text", "owner": "design" },
     { "name": "--wire", "owner": "design" }
   ],
-  "parts": { "tile": ["apps/fabrika/src/window/window.css"] },
+  "parts": { "tile": ["apps/fabrika/src/window/window.css", "next/packages/tuval/src/window/style.css"] },
   "steps": [
     "--amber-1",
     "--amber-a1",

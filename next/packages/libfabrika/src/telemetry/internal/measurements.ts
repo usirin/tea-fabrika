@@ -6,10 +6,10 @@
 // Every step here is plain code over the synchronous `Sql`; the sink runs the row, the rollup and
 // the size inside a span's `end`, and the archive inside `flush`. No alarm, no timer. Each archive
 // try writes its own health row, `sink.archive`, good or failed, so a day that cannot leave is seen.
-import { Clock, Effect, Option, Result, Schema } from "effect";
+import { Clock, Effect, Option, Result, Schema, Struct } from "effect";
 import type { Sql } from "../../Sql.ts";
 import { Archive, sha256 } from "../Archive.ts";
-import { type Measurements, type SinkError, MetricPoint, sinkError } from "../Trace.ts";
+import { type Measurements, type SinkError, MetricPoint, sinkError, SumPoint } from "../Trace.ts";
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -30,10 +30,33 @@ export const HEALTH_TABLES = [
 		piece TEXT NOT NULL, hour INTEGER NOT NULL, count INTEGER NOT NULL, errors INTEGER NOT NULL,
 		p50 REAL NOT NULL, p95 REAL NOT NULL, max REAL NOT NULL, lag REAL, PRIMARY KEY (piece, hour))`,
   `CREATE TABLE IF NOT EXISTS sizes (at INTEGER PRIMARY KEY, bytes INTEGER NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS sums (
+    piece TEXT NOT NULL, hour INTEGER NOT NULL, refused TEXT NOT NULL, count INTEGER NOT NULL,
+    PRIMARY KEY (piece, hour, refused))`,
   `CREATE TABLE IF NOT EXISTS archived (
 		day TEXT NOT NULL, part INTEGER NOT NULL, key TEXT NOT NULL, sha256 TEXT NOT NULL,
 		rows INTEGER NOT NULL, PRIMARY KEY (day, part))`,
 ];
+
+/** @internal Counts in place, including counts held while storage was full. */
+export const countRefused = (sql: Sql, { piece, hour, refused, count }: SumPoint): void =>
+  void sql.exec(
+    `INSERT INTO sums (piece, hour, refused, count) VALUES (?, ?, ?, ?)
+    ON CONFLICT (piece, hour, refused) DO UPDATE SET count = count + excluded.count`,
+    piece,
+    hour,
+    refused,
+    count,
+  );
+
+const SumColumns = SumPoint.mapFields(Struct.omit(["_tag"]));
+const decodeSum = Schema.decodeUnknownSync(SumColumns);
+
+/** @internal Closed hours in [from, to), oldest first, then the closed tag value. */
+export const readSums = (sql: Sql, piece: string, from: number, to: number): Array<SumPoint> =>
+  sql
+    .exec(`SELECT * FROM sums WHERE piece = ? AND hour >= ? AND hour < ? ORDER BY hour, refused`, piece, from, to)
+    .map((row) => SumPoint.make(decodeSum(row)));
 
 const HealthColumns = Schema.Struct({
   piece: Schema.String,
