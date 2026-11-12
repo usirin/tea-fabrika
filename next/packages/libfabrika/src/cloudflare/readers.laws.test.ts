@@ -1084,6 +1084,11 @@ SettingsTest.suite((recipe, secret) =>
         const tables = ["entries", "dev_descriptors", "unsent", "spans", "content"] as const;
         const output = { ...captured };
 
+        // Each captured output is checked once; saved rows below are read again for changes.
+        for (const channel of SettingsTest.channels) {
+          output[channel] = captured[channel].splice(0);
+        }
+
         for (const table of tables) {
           const rows = databases.flatMap((db) =>
             db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table) === undefined

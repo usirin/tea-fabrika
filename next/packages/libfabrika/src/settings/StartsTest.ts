@@ -268,6 +268,7 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
                 : inputs;
             const current = Option.getOrThrow(Option.fromUndefinedOr(selected[choice % selected.length]));
             const before = driver.counts();
+            const absent = !saved.has(current.start);
 
             if (move === "conflict") {
               const different = yield* input({ ...first, start: current.start, build: `${current.build}-different` });
@@ -299,7 +300,9 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
               }
 
               const after = driver.counts();
-              expect(after.reads - before.reads).toBe(move === "concurrent" ? 3 : move === "lost" ? 2 : 1);
+              const deliveries = move === "concurrent" ? 3 : move === "lost" ? 2 : 1;
+              expect(after.reads - before.reads).toBe(deliveries + (absent ? 1 : 0));
+              expect(after.appends - before.appends).toBe(absent ? 1 : 0);
             }
 
             const entries = yield* driver.entries;

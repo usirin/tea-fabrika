@@ -107,14 +107,19 @@ export const suite = (open: Open) =>
                 expect(driver.counts().consumers).toBe(before.consumers);
                 // The very next entry reuses this owner, which must not retain a failed build.
                 driver.fault("none");
+                const retry = driver.counts();
                 expect(Exit.isSuccess(yield* Effect.exit(entry.enter(choice)))).toBe(true);
+                const afterRetry = driver.counts();
+                expect(afterRetry.calls - retry.calls).toBe(path === "Project" ? 0 : 1);
+                expect(afterRetry.reads - retry.reads).toBe(placed ? 1 : 2);
+                expect(afterRetry.appends - retry.appends).toBe(placed ? 0 : 1);
                 ready = true;
                 placed = true;
               } else {
                 expect(exits.every(Exit.isSuccess)).toBe(true);
                 const after = driver.counts();
                 expect(after.calls - before.calls).toBe(ready || path === "Project" ? 0 : 1);
-                expect(after.reads - before.reads).toBe(ready ? 0 : 1);
+                expect(after.reads - before.reads).toBe(ready ? 0 : placed ? 1 : 2);
                 expect(after.appends - before.appends).toBe(placed ? 0 : 1);
                 ready = true;
                 placed = true;
@@ -163,6 +168,9 @@ export const suite = (open: Open) =>
               yield* Option.getOrThrow(Option.fromUndefinedOr(owners.get(path))).close;
               owners.delete(path);
               ready.delete(path);
+            } else if (move === "open") {
+              // Keep this owner cold so the next move can fail or lose its first answer.
+              owners.set(path, yield* driver.open(path));
             } else {
               driver.fault(move === "fail" ? "storage" : move === "lost" && path !== "Project" ? "lost" : "none");
               const entry =
@@ -179,6 +187,8 @@ export const suite = (open: Open) =>
               if (move === "reject") {
                 expect(Exit.isFailure(exit)).toBe(true);
                 yield* entry.close;
+              } else if (move === "fail" || (move === "lost" && path !== "Project")) {
+                expect(Exit.isFailure(exit)).toBe(true);
               } else if (Exit.isSuccess(exit)) {
                 ready.add(path);
               }
