@@ -1,7 +1,7 @@
 ---
 id: 0150
 title: The email recovery notice is a toast with a plain close, until notification guidelines exist
-status: accepted
+status: superseded by [0151](0151-a-thin-inbox-is-a-tier-1-row.md)
 date: 2026-11-12
 tags: [recovery, notice, toast, notifications, next]
 ---

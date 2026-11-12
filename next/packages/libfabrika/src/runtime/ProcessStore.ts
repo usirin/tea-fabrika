@@ -4,6 +4,7 @@
 import { Context, Effect, Layer, Result, Schema } from "effect";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { lineFor } from "../ledger/Log.ts";
+import { INPUT_BYTES } from "../processes/Children.ts";
 import { type From } from "../processes/Mailbox.ts";
 import { Activity } from "../processes/Process.ts";
 import { Rev } from "../Rev.ts";
@@ -51,6 +52,7 @@ export type RuntimeRecord = typeof RuntimeRecord.Type;
 
 const TABLES = [
   "CREATE TABLE IF NOT EXISTS process_state (process TEXT PRIMARY KEY, checkpoint TEXT NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS process_checkpoint_parts (process TEXT NOT NULL, part INTEGER NOT NULL, checkpoint TEXT NOT NULL, PRIMARY KEY (process, part))",
   "CREATE TABLE IF NOT EXISTS process_letters (process TEXT NOT NULL, id TEXT NOT NULL, rev INTEGER NOT NULL, pos INTEGER NOT NULL, PRIMARY KEY (process, id))",
   "CREATE INDEX IF NOT EXISTS process_letters_id ON process_letters (id, rev)",
   "CREATE TABLE IF NOT EXISTS process_activity (process TEXT PRIMARY KEY, activity TEXT NOT NULL)",
@@ -128,7 +130,6 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
             catch: (error) =>
               new LedgerError({
                 reason: Schema.isSchemaError(error) ? "bad_row" : "storage",
-                message: String(error),
                 cause: error,
               }),
           });
@@ -175,17 +176,61 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
           }),
           load: stored(() => {
             const [row] = sql.exec("SELECT checkpoint FROM process_state WHERE process=?", options.process);
-            return row === undefined ? null : decodeCheckpoint(row.checkpoint);
+
+            if (row === undefined) {
+              return null;
+            }
+
+            // An empty head names a checkpoint split across rows in the same transaction.
+            const text =
+              row.checkpoint === ""
+                ? sql
+                    .exec(
+                      "SELECT checkpoint FROM process_checkpoint_parts WHERE process=? ORDER BY part",
+                      options.process,
+                    )
+                    .map((part) => part.checkpoint)
+                    .join("")
+                : row.checkpoint;
+            return decodeCheckpoint(text);
           }),
           save: (value, placed = []) =>
             stored(() => {
               const text = encodeCheckpoint(value);
+              // UTF-8 takes at most three bytes per UTF-16 unit. Leave room for the row's keys,
+              // and keep surrogate pairs together when a checkpoint crosses a row boundary.
+              const width = Math.floor((INPUT_BYTES - new TextEncoder().encode(options.process).length - 8) / 3);
+              const parts: Array<string> = [];
+
+              for (let offset = 0; offset < text.length;) {
+                let end = Math.min(offset + width, text.length);
+
+                if (end < text.length && /[\uD800-\uDBFF]/.test(text.slice(end - 1, end))) {
+                  end--;
+                }
+
+                parts.push(text.slice(offset, end));
+                offset = end;
+              }
+
               sql.transaction(() => {
+                sql.exec("DELETE FROM process_checkpoint_parts WHERE process=?", options.process);
                 sql.exec(
                   "INSERT INTO process_state (process, checkpoint) VALUES (?, ?) ON CONFLICT (process) DO UPDATE SET checkpoint = excluded.checkpoint",
                   options.process,
-                  text,
+                  parts.length > 1 ? "" : text,
                 );
+
+                if (parts.length > 1) {
+                  for (const [part, checkpoint] of parts.entries()) {
+                    sql.exec(
+                      "INSERT INTO process_checkpoint_parts (process, part, checkpoint) VALUES (?, ?, ?)",
+                      options.process,
+                      part,
+                      checkpoint,
+                    );
+                  }
+                }
 
                 for (const { id, rev, pos } of placed) {
                   sql.exec(

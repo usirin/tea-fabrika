@@ -3,6 +3,7 @@ import { Session, SigningRefused } from "../access/SessionManager.ts";
 import type { LedgerCalls } from "../ledger/Ledger.ts";
 import { Appended, Line } from "../ledger/Log.ts";
 import type { Connections } from "../presence/Connections.ts";
+import { type Child, ChildrenError, Started } from "../processes/Children.ts";
 import type { From, Letter } from "../processes/Mailbox.ts";
 import { ProcessError, State, type Activity, type Start } from "../processes/Process.ts";
 import type { ProcessManager } from "../processes/ProcessManager.ts";
@@ -64,6 +65,12 @@ export const ProcessReplies = Schema.TaggedUnion({
 export type ProcessReply<A> =
   | (Omit<typeof ProcessReplies.cases.ok.Type, "value"> & { readonly value: A })
   | typeof ProcessReplies.cases.ProcessError.Type;
+
+/** A child start's answer over Project RPC (P42): `Started`, or its refusal as data. Storage fails the call. */
+export const ChildReplies = Schema.TaggedUnion({
+  ok: { value: Started },
+  ChildrenError: { reason: ChildrenError.fields.reason },
+});
 
 export interface GatewayCalls {
   readonly connect: () => Effect.Effect<ConnectionId>;
@@ -172,12 +179,13 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
     processDemonitor: ProcessCall<Processes["demonitor"]>;
     processDown: ProcessCall<Processes["down"]>;
     processReceive: ProcessCall<(process: string, after: number) => Effect.Effect<ReadonlyArray<Letter>, ProcessError>>;
+    processChild: RemoteCall<(child: Child, from: From) => Effect.Effect<typeof ChildReplies.Encoded>>;
   };
 
 export type ProcessBinding = Rpc.DurableObjectBranded &
   Remote<Pick<Runner, "msg" | "open" | "due" | "restart" | "swap">> & {
     mailed: RemoteCall<(trace?: { traceId: string; spanId: string }) => Runner["mailed"]>;
-    configure: RemoteCall<(descriptor: Descriptor) => Effect.Effect<void>>;
+    configure: RemoteCall<(descriptor: Descriptor, drain?: boolean) => Effect.Effect<void>>;
     usage: RemoteCall<typeof IsolateUsage.record>;
     descriptor: RemoteCall<(process?: string) => Effect.Effect<Descriptor>>;
     activity: RemoteCall<(value: typeof Activity.Type) => Effect.Effect<void>>;

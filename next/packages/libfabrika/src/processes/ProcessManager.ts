@@ -6,7 +6,7 @@ import type { Rev } from "../Rev.ts";
 import { short } from "../telemetry/Trace.ts";
 import { decodeExitReason, type ExitReason } from "./ExitReason.ts";
 import { processMail } from "./internal/processMail.ts";
-import { type From, type Letter, Mailbox } from "./Mailbox.ts";
+import { type From, inbox, type Letter, letterLine, Mailbox } from "./Mailbox.ts";
 import {
   type Caller,
   clientInbox,
@@ -42,7 +42,12 @@ const failed = Effect.fnUntraced(function* (error: Failure) {
 export class ProcessManager extends Context.Service<
   ProcessManager,
   {
-    readonly start: (request: Start, from: From) => Effect.Effect<StartAnswer, Failure>;
+    /** `first` is a child's first letter (P42): written in the start's own turn, at `["start", id]`. */
+    readonly start: (
+      request: Start,
+      from: From,
+      first?: { readonly m: Schema.Json },
+    ) => Effect.Effect<StartAnswer, Failure>;
     readonly exit: (process: string, reason: ExitReason, from: From) => Effect.Effect<void, Failure>;
     readonly info: Effect.Effect<ReadonlyArray<ProcessInfo>, LedgerError>;
     readonly status: (name: string) => Effect.Effect<
@@ -63,6 +68,9 @@ export class ProcessManager extends Context.Service<
     readonly demonitor: (ref: string, from: From) => Effect.Effect<void, Failure>;
     readonly receive: (process: string, after: Rev) => Stream.Stream<Letter, Failure>;
     readonly down: (process: string, policy: Policy, from: From) => Effect.Effect<void, Failure>;
+    /** The process table inside one ledger turn, trusting only the brain's lines, for a caller that
+     *  decides and writes in that turn (P42's start). */
+    readonly table: (turn: LedgerTurn) => ProcessTable;
   }
 >()("@kampus/libfabrika/processes/ProcessManager") {
   static readonly layer = (
@@ -105,7 +113,11 @@ export class ProcessManager extends Context.Service<
 
           turn.append(inbox, letter, line(from, Send.make({ m: Down.make({ ref, process, reason, to }) })));
         };
-        const start = Effect.fn("process.start")(function* (request: Start, from: From) {
+        const start = Effect.fn("process.start")(function* (
+          request: Start,
+          from: From,
+          first?: { readonly m: Schema.Json },
+        ) {
           yield* Effect.annotateCurrentSpan(
             short({
               [tag("name")]: request.name,
@@ -157,9 +169,17 @@ export class ProcessManager extends Context.Service<
                         process,
                         name: request.name,
                         ...request.code,
+                        ...(request._tag === "first" && request.requester !== undefined
+                          ? { requester: request.requester }
+                          : {}),
                       }),
                     ),
                   );
+
+                  // The first letter keeps the caller's own `from`: it is the requester's mail, not the brain's.
+                  if (first !== undefined) {
+                    turn.append(inbox(request.name), id("start", request.id), letterLine(from, first.m));
+                  }
 
                   if (request._tag === "again") {
                     turn.append(
@@ -381,6 +401,7 @@ export class ProcessManager extends Context.Service<
           demonitor,
           down,
           receive,
+          table: fold,
           info: info(),
           isLive: Effect.fn("process.isLive")(function* (process: string) {
             return yield* tx.transact((turn) => fold(turn).isLive(process));
@@ -395,13 +416,15 @@ export class ProcessManager extends Context.Service<
  * Project. A receive collects its letters so the call can cross an RPC; the Stream is rebuilt here.
  * Refusals keep their ProcessError; a transport failure stays the caller's LedgerError.
  */
-export type ProcessCalls = Omit<Context.Service.Shape<typeof ProcessManager>, "receive"> & {
+export type ProcessCalls = Omit<Context.Service.Shape<typeof ProcessManager>, "receive" | "table"> & {
   readonly receive: (process: string, after: Rev) => Effect.Effect<ReadonlyArray<Letter>, Failure>;
 };
 
-export const remoteProcessManager = (calls: ProcessCalls): Layer.Layer<ProcessManager> =>
+/** `by` is the brain's own writer key: a turn this side is given folds as the brain's does. */
+export const remoteProcessManager = (calls: ProcessCalls, by: string): Layer.Layer<ProcessManager> =>
   Layer.succeed(ProcessManager, {
     ...calls,
+    table: (turn) => ProcessTable.read(turn.read, by),
     receive: (process, after) =>
       Stream.unwrap(Effect.map(calls.receive(process, after), (letters) => Stream.fromIterable(letters))),
   });
