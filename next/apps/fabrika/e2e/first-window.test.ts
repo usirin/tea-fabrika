@@ -366,6 +366,7 @@ describe("L15: use in two tabs (W2)", () => {
               );
               const settled = tabs.map(() => 0);
               const accepted: Array<string> = [];
+              const refused: Array<string> = [];
               const pressed = yield* useChecklist(tabs, moves, ["milk", "bread", "eggs"], Effect.void, (msg, at) =>
                 Effect.gen(function* () {
                   const index = settled[at]!;
@@ -390,6 +391,8 @@ describe("L15: use in two tabs (W2)", () => {
 
                   if (group.result!._tag === "accepted") {
                     accepted.push(first.params.letter);
+                  } else {
+                    refused.push(first.params.letter);
                   }
                 }),
               );
@@ -397,12 +400,21 @@ describe("L15: use in two tabs (W2)", () => {
               const r = yield* reader(h, dev);
               const inbox = yield* r.read(`${NAME}/inbox`);
               const ids = inbox.map((e) => e.id);
-              expect(ids.length, "every accepted press reached the inbox").toBeGreaterThan(0);
-              expect(ids.length).toBeLessThanOrEqual(pressed);
               expect(new Set(ids).size, "a letter landed twice").toBe(ids.length);
-              expect(ids, "each accepted resend landed with its original letter id").toEqual(
-                expect.arrayContaining(accepted),
+              expect(accepted.length, "the walk accepts a press").toBeGreaterThan(0);
+              expect(accepted.length + refused.length, "every press has one terminal answer").toBe(pressed);
+              const letters = new Set([...accepted, ...refused]);
+              expect(new Set(accepted).size, "each accepted press has its own letter id").toBe(accepted.length);
+              expect(ids.filter((id) => letters.has(id)).sort(), "exactly the accepted presses land once").toEqual(
+                [...accepted].sort(),
               );
+
+              for (const entry of inbox.filter((entry) => !letters.has(entry.id))) {
+                expect(entry._tag, "inbox entries are mailbox sends").toBe("send");
+                const { m } = Schema.decodeUnknownSync(Schema.Struct({ m: checklistMachine.msg }))(entry.body);
+                expect(m.type, "every remaining inbox entry is a runner timer").toBe("timer");
+                expect(entry.id, "the runner timer has its own revision-scoped id").toMatch(/\/due\/\d+\/\d+$/);
+              }
             }),
             context,
           ),

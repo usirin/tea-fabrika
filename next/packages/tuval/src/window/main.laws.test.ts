@@ -21,9 +21,9 @@
 // real run under TestClock, so a Cmd that waits for an answer, or a timer that never fires, shows.
 import { describe, expect, it } from "@effect/vitest";
 import { ClientRow, Id } from "@kampus/libfabrika";
-import { ClientKey } from "@kampus/libfabrika/transport/ClientKey";
-import { ClientRows } from "@kampus/libfabrika/transport/ClientRows";
-import { ClientSocket } from "@kampus/libfabrika/transport/ClientSocket";
+import { ClientKey, ClientKeyError } from "@kampus/libfabrika/transport/ClientKey";
+import { ClientRows, ClientRowsError, ErrorClass } from "@kampus/libfabrika/transport/ClientRows";
+import { ClientSocket, ClientSocketError } from "@kampus/libfabrika/transport/ClientSocket";
 import { backoff, CAP, linkTimer } from "@kampus/libfabrika/transport/Link";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
 import { Effect, Exit, Fiber, Layer, Option, Queue, Random, Schema, Scope, Stream } from "effect";
@@ -471,6 +471,130 @@ describe("L10: real runtime progress", () => {
       }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
     { arbitrary: { seed: SEED, runs: 50 } },
   );
+});
+
+describe("L9: failure classes through the real runtime", () => {
+  // Each service fails at an operation the real run reaches. Later moves are chosen from the
+  // current link and open tiles, so shortened walks cannot press an unopened process.
+  for (const operation of ["connect", "sign", "claim", "record"] as const) {
+    it.effect.prop(
+      `${operation} keeps the platform failure class in one failure record, without recursive row writes`,
+      {
+        error: ErrorClass,
+        skip: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 4 })),
+        moves: Schema.Array(Schema.Int).check(Schema.isMinLength(20), Schema.isMaxLength(60)),
+      },
+      ({ error, skip, moves }) =>
+        Effect.gen(function* () {
+          const script: Script = { pong: true, open: true, send: true, waiting: operation === "claim", junk: [] };
+          const door = peer(script);
+          const normalSocket = yield* ClientSocket.pipe(Effect.provide(door.socket));
+          const key = yield* identity;
+          const rows: Array<ClientRow> = [];
+          let injected = 0;
+          let writes = 0;
+          let failedRecord: ClientRow["record"] | undefined;
+          const op = operation === "sign" ? "key" : operation === "claim" ? "persist" : operation;
+          const provided = Layer.mergeAll(
+            Layer.succeed(ClientSocket, {
+              dial: (url: string) =>
+                Effect.suspend(() =>
+                  operation === "connect" && injected++ === 0
+                    ? Effect.fail(new ClientSocketError({ error }))
+                    : normalSocket.dial(url),
+                ),
+            }),
+            Layer.succeed(ClientKey, {
+              current: () =>
+                Effect.succeed({
+                  ...key,
+                  sign: (bytes: Uint8Array) =>
+                    Effect.suspend(() => {
+                      if (operation === "sign") {
+                        injected++;
+                        return Effect.fail(new ClientKeyError({ op: "sign", error }));
+                      }
+
+                      return key.sign(bytes);
+                    }),
+                }),
+              claimPersist: Effect.suspend(() => {
+                if (operation === "claim") {
+                  injected++;
+                  return Effect.fail(new ClientKeyError({ op: "write", error }));
+                }
+
+                return Effect.succeed(false);
+              }),
+              persist: Effect.succeed(true),
+            }),
+            Layer.succeed(ClientRows, {
+              put: (row: ClientRow) =>
+                Effect.suspend(() => {
+                  rows.push(row);
+
+                  if (operation === "record" && (row.record._tag === "failure" || writes++ === skip)) {
+                    injected++;
+                    failedRecord ??= row.record;
+                    return Effect.fail(new ClientRowsError({ op: "write", error }));
+                  }
+
+                  return Effect.void;
+                }),
+            }),
+            Id.Generator.layer,
+          );
+          const booting = yield* startWindow({ tiles, window, build: BUILD, origin: ORIGIN }).pipe(
+            Effect.provide(provided),
+          );
+          const run = yield* booting.ready;
+
+          for (const pick of moves) {
+            yield* tick(500);
+            const state = run.getState();
+
+            if (state.link._tag === "waiting_grant") {
+              script.waiting = false;
+              door.message({ jsonrpc: "2.0", method: "client.granted", params: { nonce: `grant_${pick}` } });
+            } else if (state.link._tag === "online") {
+              const open = state.tiles.find((tile) => tile.reach._tag === "open");
+
+              if (open !== undefined) {
+                yield* run.dispatch({
+                  ...press,
+                  tile: open.id,
+                  m: { type: "check", name: `item ${Math.abs(pick) % 4}` },
+                });
+              }
+            }
+          }
+
+          yield* tick(1);
+          yield* run.idle();
+          expect(injected, "the real service reached the failing operation").toBeGreaterThan(0);
+          const failures = rows.filter((row) => row.record._tag === "failure" && row.record.op === op);
+          expect(
+            failures.map((row) => row.record),
+            "one attempt keeps the original platform class",
+          ).toEqual([{ _tag: "failure", op, error }]);
+
+          for (const row of rows) {
+            expect(Schema.is(ClientRow)(row)).toBe(true);
+            expect(row.build).toBe(BUILD);
+            expect(row.sentAt.length).toBeGreaterThan(0);
+          }
+
+          expect(new Set(rows.map((row) => row.tab)).size).toBe(1);
+
+          if (operation === "record") {
+            expect(failedRecord?._tag, "a normal row failed before its failure row").not.toBe("failure");
+            expect(injected, "the failed failure row is attempted once and never retries").toBe(2);
+            expect(run.getState().link._tag, "row storage cannot stop the window").toBe("online");
+          }
+        }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+      { arbitrary: { seed: SEED, runs: 300 } },
+    );
+  }
 });
 
 describe("L12: wire formats are refused as typed values", () => {

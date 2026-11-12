@@ -19,6 +19,7 @@
 // reasons, other words, free text or none.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
+import { Schema } from "effect";
 import * as fc from "fast-check";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -105,10 +106,11 @@ const fold = (list: ReadonlyArray<Choice>): ReadonlyArray<View> => {
 
   for (const c of list) {
     const held = model.items.length === 0 ? null : model.items[c.pick % model.items.length]!.name;
+    const wake = checklist.wake(model);
     const options: Array<Msg> = [
       { type: "add", name: c.name },
       // Once an item is stamped, its real wake time makes the late state reachable.
-      { type: "timer", at: Math.max(now, checklist.wake(model) ?? now) + c.later },
+      ...(wake === null ? [] : [{ type: "timer" as const, at: wake, arrivedAt: Math.max(now, wake) + c.later }]),
       ...(held === null
         ? []
         : ([
@@ -118,10 +120,11 @@ const fold = (list: ReadonlyArray<Choice>): ReadonlyArray<View> => {
           ] as const)),
     ];
     const msg = options[c.move % options.length]!;
+    expect(Schema.is(checklistMachine.msg)(msg), "the walk sends a checked program input").toBe(true);
 
     if (checklist.refuse(model, msg) === null) {
       model = applyCell(checklistMachine, model, msg)[0];
-      now = msg.type === "timer" ? msg.at : now;
+      now = msg.type === "timer" ? msg.arrivedAt : now;
       views.push(checklist.view.select(model));
     }
   }
