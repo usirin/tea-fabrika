@@ -351,14 +351,28 @@ const acpIn = (place: "scratch" | "repo") =>
           Effect.gen(function* () {
             pending.delete(ask.id);
             const yes = ask.request.options.find((o) => allow && o.kind === "allow_once");
-            const no = refusal(ask.request.options, harness.cancels);
-            const optionId = yes?.optionId ?? (no._tag === "refuse" ? no.optionId : undefined);
-            const given: Answer = yes !== undefined ? "allowed" : no._tag === "refuse" ? "refused" : "cancelled";
+            const chosen = ((): { readonly answer: Answer; readonly optionId?: string } => {
+              if (yes !== undefined) {
+                return { answer: "allowed", optionId: yes.optionId };
+              }
+
+              const no = refusal(ask.request.options, harness.cancels);
+
+              switch (no._tag) {
+                case "refuse":
+                  return { answer: "refused", optionId: no.optionId };
+                case "cannot":
+                  return { answer: "cancelled" };
+                default:
+                  return no satisfies never;
+              }
+            })();
             ask.answer(
-              optionId === undefined
+              chosen.optionId === undefined
                 ? { outcome: { outcome: "cancelled" } }
-                : { outcome: { outcome: "selected", optionId } },
+                : { outcome: { outcome: "selected", optionId: chosen.optionId } },
             );
+            const given = chosen.answer;
             yield* fold({ type: "answered", ask: ask.id, answer: given });
             yield* send("ask", shown(ask, given));
           });

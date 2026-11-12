@@ -125,27 +125,28 @@ export const acpAdapter = (
               const r = refusal(h.ask.request.options, harness.cancels);
               const call = h.ask.request.toolCall;
               const title = call.title ?? call.kind ?? call.toolCallId;
-              h.ask.answer(
-                r._tag === "refuse"
-                  ? { outcome: { outcome: "selected", optionId: r.optionId } }
-                  : { outcome: { outcome: "cancelled" } },
-              );
-              Queue.offerUnsafe(queue, {
-                _tag: "asked",
-                id: call.toolCallId,
-                title: call.title ?? "",
-                ...(r._tag === "refuse" ? { option: r.optionId } : {}),
-              });
+              const asked = { _tag: "asked", id: call.toolCallId, title: call.title ?? "" } as const;
 
-              if (r._tag === "cannot") {
-                const offered = h.ask.request.options.map((o) => o.optionId).join(", ");
-                Queue.failCauseUnsafe(
-                  queue,
-                  Cause.fail(failed("cannot_refuse", `${title}: every no offered ends the turn (offered: ${offered})`)),
-                );
+              switch (r._tag) {
+                case "refuse":
+                  h.ask.answer({ outcome: { outcome: "selected", optionId: r.optionId } });
+                  Queue.offerUnsafe(queue, { ...asked, option: r.optionId });
+                  return;
+                case "cannot": {
+                  h.ask.answer({ outcome: { outcome: "cancelled" } });
+                  Queue.offerUnsafe(queue, asked);
+                  const offered = h.ask.request.options.map((o) => o.optionId).join(", ");
+                  Queue.failCauseUnsafe(
+                    queue,
+                    Cause.fail(
+                      failed("cannot_refuse", `${title}: every no offered ends the turn (offered: ${offered})`),
+                    ),
+                  );
+                  return;
+                }
+                default:
+                  return r satisfies never;
               }
-
-              return;
             }
 
             const u = h.update;
