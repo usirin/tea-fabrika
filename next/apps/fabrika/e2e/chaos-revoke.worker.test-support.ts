@@ -12,7 +12,7 @@ import { Project as RealProject } from "../src/brain.ts";
 import { settings } from "../src/runtime.ts";
 import * as Hold from "./chaos-revoke.test-support.ts";
 
-export { Connection, Control, Process, RecordPart } from "../src/brain.ts";
+export { Connection, Control, IsolateTail, Process, RecordPart } from "../src/brain.ts";
 // oxlint-disable-next-line import/no-default-export -- edge: the local runtime loads the real Worker's default fetch
 export { default } from "../src/brain.ts";
 
