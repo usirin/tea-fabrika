@@ -204,6 +204,7 @@ const world = Effect.gen(function* () {
     founder: key.line,
     window: key.raw,
     port: port.port,
+    rateLimit: { limit: 100_000, window: 60_000 },
   });
   const send = yield* wire(instance.url, key);
   return { instance, built, home, send, from: { ...FROM, by: key.fingerprint, build: built.build } };

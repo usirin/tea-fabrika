@@ -1,6 +1,7 @@
 import { makeRpcStub } from "@alchemy.run/cloudflare/Bridge";
 import { applyCell } from "@demlik/tea";
 import {
+  Cause,
   Context,
   Effect,
   Equal,
@@ -54,7 +55,7 @@ import { Archive, type BucketCalls } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { SinkError } from "../telemetry/Trace.ts";
-import { Answer } from "../transport/Wire.ts";
+import { Answer, RateCountFailure } from "../transport/Wire.ts";
 import {
   CommitReply,
   MailReplies,
@@ -105,6 +106,7 @@ export interface BrainOptions {
   readonly window: string | null;
   readonly port: number;
   readonly build: string;
+  readonly rateLimit: { readonly limit: number; readonly window: number };
   readonly limits?: { readonly recordBytes: number };
 }
 
@@ -292,12 +294,23 @@ const recordLayer = (env: Env, project: string) => RecordManager.remote((name) =
 const archiveLayer = (env: Env) => Archive.bucket(bucketCalls(env.MEASUREMENTS));
 const flushed = SpanSink.use((sink) => sink.flush);
 
-export const complete = Effect.fn(function* <A, E, R>(work: Effect.Effect<A, E, R>) {
+export const complete = Effect.fn(function* <A, E, R>(
+  work: Effect.Effect<A, E, R>,
+  counted: (value: A) => boolean = () => false,
+) {
   return yield* work.pipe(
     Effect.exit,
     Effect.flatMap((exit) => {
+      if (Exit.isFailure(exit) && Schema.is(RateCountFailure)(Cause.squash(exit.cause))) {
+        return exit;
+      }
+
       // Counted refusals have nothing to send. Retrying an old archive here would add a row per refusal.
-      if (Exit.isSuccess(exit) && Schema.is(Answer.cases.refused)(exit.value) && exit.value.reason === "reserved") {
+      if (
+        Exit.isSuccess(exit) &&
+        (counted(exit.value) ||
+          (Schema.is(Answer.cases.refused)(exit.value) && ["reserved", "rate_limited"].includes(exit.value.reason)))
+      ) {
         return exit;
       }
 
@@ -1259,7 +1272,7 @@ const processLogic = Effect.fnUntraced(function* (
         yield* sink.batch(IsolateUsage.record(usage));
       },
       Effect.withSpan("process.usage"),
-      complete,
+      (work) => complete(work),
       Effect.provideContext(services),
     ),
     msg: (input: unknown) => {

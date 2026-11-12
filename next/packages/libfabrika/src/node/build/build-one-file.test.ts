@@ -1066,7 +1066,15 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
               PROCESS: binding,
               RECORD: binding,
             } as unknown as Parameters<typeof fetch>[1];
-            const config = { name: "p14", port, person: "p", founder: "f", window: null, build: built.build };
+            const config = {
+              name: "p14",
+              port,
+              person: "p",
+              founder: "f",
+              window: null,
+              build: built.build,
+              rateLimit: { limit: 100_000, window: 60_000 },
+            };
 
             for (const route of ["/", ...Object.keys(built.assets)]) {
               for (const url of [route, route.split("/").map(encodeURIComponent).join("/")]) {

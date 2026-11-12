@@ -30,7 +30,10 @@ const settings = Object.fromEntries(
 
 // The saved state of a home: its founding facts. A port saved there by an older start is read
 // only to say that it is no longer used.
-const Saved = Settings.mapFields(({ port, ...fields }) => ({ ...fields, port: Schema.optionalKey(port) }));
+const Saved = Settings.mapFields(({ port, rateLimit: _rateLimit, ...fields }) => ({
+  ...fields,
+  port: Schema.optionalKey(port),
+}));
 
 /** The entries that hold a value, as one record. */
 const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) =>
@@ -130,7 +133,12 @@ const command = Command.make("dev", flags, (options) => {
           .writeFileString(file, JSON.stringify(state), { mode: 0o600 })
           .pipe(Effect.mapError((cause) => new InstanceError({ reason: "settings", cause })));
         const built = yield* build({ out: path.join(home, "build") });
-        const handle = yield* localInstance(built, { ...state, port: loaded.values.port, home });
+        const handle = yield* localInstance(built, {
+          ...state,
+          port: loaded.values.port,
+          rateLimit: { limit: loaded.values.gatewayLimit, window: loaded.values.gatewayWindow },
+          home,
+        });
         yield* Effect.forkScoped(
           Stream.runForEach(
             watchPrograms({ ...built.watch, install: handle.install, failed: handle.failed }).pipe(

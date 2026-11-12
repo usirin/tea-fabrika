@@ -233,6 +233,8 @@ export class SpanSink extends Context.Service<
      *  following `rolled`; then archives each due day of raw health rows. Fails with `storage`,
      *  before it sends anything, when an `end` met a write it could not land since the last flush. */
     readonly flush: Effect.Effect<{ readonly sent: number }, SinkError, RecordManager | Archive>;
+    /** Checks the last span commit without flushing records or creating another span. */
+    readonly check: Effect.Effect<void, SinkError>;
     /** The summaries whose hour is in `[from, to)`, after rolling up every closed hour. */
     readonly summaries: (from: number, to: number) => Effect.Effect<ReadonlyArray<MetricPoint>, SinkError>;
     /** One piece's refusal counts in closed hours within `[from, to)`. */
@@ -328,7 +330,8 @@ const make = (sql: Sql, options: { readonly object: string }) => {
       return false;
     }
 
-    const refused = span.attributes.get(REFUSED) === "reserved" ? "reserved" : "other";
+    const value = span.attributes.get(REFUSED);
+    const refused = value === "reserved" || value === "rate_limited" ? value : "other";
     const hour = hourStart(at);
     const key = JSON.stringify([span.name, hour, refused]);
     const count = (counts.get(key)?.count ?? 0) + 1;
@@ -432,8 +435,16 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     const before = state;
     state = applyCell(machine, state, { type: "flush_checked" })[0];
 
-    if (before._tag !== "clean" || counts.size > 0) {
+    if (before._tag !== "clean") {
       return yield* Effect.fail(new SinkError({ reason: "storage", held: held(before).length }));
+    }
+
+    if (counts.size > 0) {
+      const done = commit([], yield* Clock.currentTimeMillis, false);
+
+      if (Result.isFailure(done)) {
+        return yield* new SinkError({ reason: "storage", held: counts.size, cause: done.failure });
+      }
     }
 
     const records = yield* RecordManager;
@@ -461,6 +472,14 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     return { sent };
   });
 
+  const check = Effect.suspend(() => {
+    const before = state;
+    state = applyCell(machine, state, { type: "flush_checked" })[0];
+    return before._tag === "clean" && counts.size === 0
+      ? Effect.void
+      : Effect.fail(new SinkError({ reason: "storage", held: held(before).length + counts.size }));
+  });
+
   const summaries = Effect.fnUntraced(function* (from: number, to: number) {
     const done = commit([], yield* Clock.currentTimeMillis, false);
 
@@ -482,5 +501,5 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     return yield* attempt(() => readSums(sql, piece, from, Math.min(to, hourStart(now))));
   });
 
-  return { tracer, sink: { batch, flush, summaries, sums } };
+  return { tracer, sink: { batch, flush, check, summaries, sums } };
 };

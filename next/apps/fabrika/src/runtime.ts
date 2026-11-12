@@ -1,7 +1,9 @@
+import * as RateLimiterSql from "@kampus/libfabrika/gateway/RateLimiterSql";
 import { LedgerError } from "@kampus/libfabrika/ledger/Ledger";
 import { connectionLayer } from "@kampus/libfabrika/workers/gateway";
 import { projectLayer, type Env as Bindings } from "@kampus/libfabrika/workers/runtime";
 import { Effect, Layer, ManagedRuntime, Predicate, Schema } from "effect";
+import * as RateLimiter from "effect/persistence/RateLimiter";
 import { programs } from "virtual:fabrika-built";
 import { Gateway } from "./door.ts";
 import { Settings } from "./settings.ts";
@@ -45,6 +47,7 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
                     ping: { min: 30_000, max: 75_000 },
                     inputCap: 1_000_000,
                     spentCap: 100_000,
+                    rateLimit: config.rateLimit,
                     deliver: (pid, _envelope, _span, incoming) => options.deliver(pid, incoming),
                     inputs: {
                       schema: Schema.Json,
@@ -57,7 +60,15 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
                           : undefined,
                     },
                     events: { personOnly: [] },
-                  }),
+                  }).pipe(
+                    Layer.provide(
+                      RateLimiter.layer.pipe(
+                        Layer.provide(
+                          RateLimiterSql.layer(options.sql, { build: config.build, policy: config.rateLimit }),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
           }),

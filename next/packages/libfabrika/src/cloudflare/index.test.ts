@@ -114,6 +114,7 @@ it("fetch serves the embedded table on GET and HEAD only after its host and orig
           founder: "public-test",
           window: null,
           build: "build-test",
+          rateLimit: { limit: 100_000, window: 60_000 },
         };
         // An asset request calls no binding: each double fails the law if one is called.
         const refuse = () => {
