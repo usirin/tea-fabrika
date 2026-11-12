@@ -72,5 +72,16 @@ export const load = Effect.fnUntraced(function* (options: {
     options.repo === undefined
       ? {}
       : { repo: { minimum: Predicate.isString(minimum) ? minimum : Declarations.version.default } };
-  return { values: resolved.values, snapshot: yield* Snapshot.make(Declarations.all, resolved), ...context };
+  const saved = yield* Snapshot.make(Declarations.all, resolved);
+  const checked = yield* Snapshot.read(Declarations.all, saved).pipe(
+    Effect.mapError(
+      (cause) =>
+        new Files.SettingsError({
+          reason: "invalid",
+          message: `The saved settings could not be checked.\n  ${Files.STOP}`,
+          cause,
+        }),
+    ),
+  );
+  return { ...checked, ...context };
 });
