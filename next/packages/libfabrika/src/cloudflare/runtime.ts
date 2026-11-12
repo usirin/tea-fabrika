@@ -592,7 +592,13 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   yield* Effect.forkScoped(
     Effect.forEach(
       pending,
-      ([pid, descriptor]) => (descriptor === undefined ? Effect.void : deliver(pid, descriptor)),
+      ([pid, descriptor]) =>
+        descriptor === undefined
+          ? Effect.void
+          : deliver(pid, descriptor).pipe(
+              // The row stays pending, so the next load sends it again; the failure is still seen.
+              Effect.catch((error) => Effect.logWarning(`start of ${pid} not delivered: ${error._tag}`)),
+            ),
       { concurrency: 1, discard: true },
     ),
   );
