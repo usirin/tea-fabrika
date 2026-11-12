@@ -4,7 +4,7 @@
 // Edge: Effect has no node:sqlite driver.
 import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Layer, Path, Stream } from "effect";
+import { Context, Effect, FileSystem, Layer, Path, Stream, Tracer } from "effect";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
@@ -17,6 +17,7 @@ import { ProcessManager } from "../processes/ProcessManager.ts";
 import * as ProgramMailLedger from "../processes/ProgramMailLedger.ts";
 import * as StartChildTest from "../runtime/StartChildTest.ts";
 import type { Sql } from "../Sql.ts";
+import { SpanSink } from "../telemetry/Sink.ts";
 
 /** A folder in a scope: the scope removes it. */
 const folder = FileSystem.FileSystem.use((fs) => fs.makeTempDirectoryScoped({ prefix: "p42r-" })).pipe(
@@ -126,7 +127,11 @@ const databases = Effect.gen(function* () {
       Effect.provide(data(sql("ledger"))),
       Effect.orDie,
     );
-  return { sql, reopen, shared, entries, probe: { open } } satisfies StartChildTest.Store;
+  const tracer: StartChildTest.Store["tracer"] = (sql) =>
+    Effect.map(Layer.build(SpanSink.layer(sql, { object: "p42-secrets" })), (context) =>
+      Context.get(context, Tracer.Tracer),
+    );
+  return { sql, reopen, shared, entries, probe: { open }, tracer } satisfies StartChildTest.Store;
 });
 
 StartChildTest.suite(databases);

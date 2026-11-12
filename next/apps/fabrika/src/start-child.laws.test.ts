@@ -165,18 +165,29 @@ const world = (test: (fixture: Fixture, connect: (tab: string) => Promise<Client
 
 const helpers = ({ instance, hashes, from }: Fixture) => {
   const project = () => (instance as Instance).project(PROJECT);
+  const call = (method: string, ...args: ReadonlyArray<unknown>) => {
+    const target = project();
+    const invoke = target[method];
+
+    if (invoke === undefined) {
+      throw new Error(`Project has no ${method} method`);
+    }
+
+    return invoke.apply(target, args);
+  };
   return {
     start: async (name: string, program: "starter" | "child") => {
-      const started = await Reflect.get(project(), "start")(
+      const started = await call(
+        "start",
         { _tag: "first", id: `start-${name}`, name, code: { program: `p42/${program}`, hash: hashes[program] } },
         from,
       );
       return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
     },
     facts: async (stream: string) =>
-      ((await project().read(stream, 0, "audit")) as Array<any>).map((row) => ({ ...row.body, _tag: row._tag })),
+      ((await call("read", stream, 0, "audit")) as Array<any>).map((row) => ({ ...row.body, _tag: row._tag })),
     live: async (name: string): Promise<string | undefined> =>
-      ((await project().info()) as Array<any>).find((row) => row.name === name)?.process,
+      ((await call("info")) as Array<any>).find((row) => row.name === name)?.process,
   };
 };
 

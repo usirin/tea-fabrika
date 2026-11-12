@@ -14,8 +14,8 @@
 // The oracle is the walk's own model and the store's raw rows read with SQL, never the product's fold.
 import type { Tagged } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
+import type { Tracer } from "effect";
 import {
-  Cause,
   Clock,
   Context,
   Deferred,
@@ -29,7 +29,6 @@ import {
   Result,
   Schema,
   Scope,
-  Tracer,
 } from "effect";
 import * as fc from "fast-check";
 import { InputId, Writer } from "../coordination/index.ts";
@@ -39,7 +38,6 @@ import { Owner, Recipient, Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { type Grants, ProgramMail } from "../processes/ProgramMail.ts";
 import type { Sql } from "../Sql.ts";
-import { SpanSink } from "../telemetry/Sink.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { childStarter, Model } from "./internal/childStarter.test-support.ts";
 import { ProcessStore } from "./ProcessStore.ts";
@@ -57,6 +55,7 @@ export type Store = {
   >;
   readonly entries: (names: Iterable<string>) => Effect.Effect<ReadonlyArray<Entry>>;
   readonly probe: { readonly open: () => number };
+  readonly tracer: (sql: Sql) => Effect.Effect<Tracer.Tracer, never, Scope.Scope>;
 };
 
 const PIDS: ReadonlyArray<string> = Array.from(
@@ -180,8 +179,9 @@ const faulting = (
     message: string;
     checkpoint?: boolean;
     landed?: boolean;
-    inputCheckpoint?: string;
+    inputCheckpoint?: string | undefined;
     checkpointHit?: boolean;
+    marker?: string;
   },
 ) => {
   const wrapped: Sql = {
@@ -192,7 +192,10 @@ const faulting = (
         params.some((p) => p === "exited" || (typeof p === "string" && p.includes('"exited"')))
       ) {
         fault.exited = false;
-        throw new Error(fault.message);
+        throw Object.assign(
+          new Error(fault.message),
+          fault.marker === undefined ? {} : { name: fault.marker, code: fault.marker, errcode: fault.marker },
+        );
       }
 
       if (fault.checkpoint && fault.landed && /INSERT INTO process_state/.test(query)) {
@@ -210,7 +213,10 @@ const faulting = (
         fault.inputCheckpoint = undefined;
         fault.checkpointHit = true;
         // Driver failures can echo bound values. The runner must keep this out of every output.
-        throw new Error(`SQLITE_FULL checkpoint ${JSON.stringify(params)}`);
+        throw Object.assign(
+          new Error(`SQLITE_FULL checkpoint ${JSON.stringify(params)}`),
+          fault.marker === undefined ? {} : { name: fault.marker, code: fault.marker, errcode: fault.marker },
+        );
       }
 
       const rows = sql.exec(query, ...params);
@@ -265,11 +271,12 @@ type World = {
     message: string;
     checkpoint?: boolean;
     landed?: boolean;
-    inputCheckpoint?: string;
+    inputCheckpoint?: string | undefined;
     checkpointHit?: boolean;
+    marker?: string;
   };
   worker?: boolean;
-  hold?: { entered: Deferred.Deferred<void>; release: Deferred.Deferred<void> };
+  hold?: { entered: Deferred.Deferred<void>; release: Deferred.Deferred<void> } | undefined;
   n: number;
 };
 
@@ -456,8 +463,8 @@ const walk = (
     const scope = yield* Scope.make();
     yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
     const life = yield* host(store, world, next.next, scope);
-    const inContext = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-      effect.pipe(Effect.provide(life.context as Context.Context<never>)) as Effect.Effect<A, E, never>;
+    const inContext = <A, E>(effect: Effect.Effect<A, E, Layer.Success<ReturnType<Store["shared"]>>>) =>
+      effect.pipe(Effect.provide(life.context));
     const all = (extra: Iterable<string> = []) => inContext(store.entries([...world.names.keys(), ...extra]));
     const letter = (input: unknown): Incoming => {
       const n = ++world.n;
@@ -1179,9 +1186,8 @@ const prop = (
 
 // --- L11: secrets stay out of Cmd answers, spans and logs ---------------------------------------
 
-const capture = Effect.fnUntraced(function* (sql: Sql) {
-  const context = yield* Layer.build(SpanSink.layer(sql, { object: "p42-secrets" }));
-  const tracer = Context.get(context, Tracer.Tracer);
+const capture = Effect.fnUntraced(function* (sql: Sql, makeTracer: Store["tracer"]) {
+  const tracer = yield* makeTracer(sql);
   const lines: Array<string> = [];
   const logger = Logger.make((options) => {
     lines.push(Logger.formatSimple.log(options), Logger.formatLogFmt.log(options), Logger.formatJson.log(options));
@@ -1211,7 +1217,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
       starts: new Map(),
       parents: new Map(),
       watches: [],
-      fault: { exited: false, message: `SQLITE_FULL at ${secret}` },
+      fault: { exited: false, message: `SQLITE_FULL at ${secret}`, marker: secret },
       n: 0,
     };
     let scope = yield* Scope.make();
@@ -1221,11 +1227,11 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
     for (const [name, program] of BOOT) {
       const started = yield* ProcessManager.use((p) =>
         p.start(Start.cases.first.make({ id: `boot:${name}`, name, code: { program, hash: BUILD } }), brainFrom()),
-      ).pipe(Effect.provide(life.context as Context.Context<ProcessManager>), Effect.orDie);
+      ).pipe(Effect.provide(life.context), Effect.orDie);
       world.names.set(name, { program, pid: started.process, live: true });
     }
 
-    const seenBy = yield* capture(store.sql("spans"));
+    const seenBy = yield* capture(store.sql("spans"), store.tracer);
     type Asked = {
       name: string;
       incoming: Incoming;
@@ -1237,7 +1243,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
     const done = new Set<string>();
     const answers = (name: string) =>
       savedModel(store, name, world.names.get(name)?.pid as string).pipe(
-        Effect.provide(life.context as Context.Context<never>),
+        Effect.provide(life.context),
         Effect.map((model) => model?.answers ?? []),
       );
     const inspect = Effect.fnUntraced(function* (outcome: Exit.Exit<unknown, unknown>) {
@@ -1251,14 +1257,18 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
         outputs.push(JSON.stringify(yield* answers(name)));
       }
 
-      const rows = yield* store
-        .entries(world.names.keys())
-        .pipe(Effect.provide(life.context as Context.Context<never>));
+      const rows = yield* store.entries(world.names.keys()).pipe(Effect.provide(life.context));
       // Keep the whole answer, including its Cmd echo, and the sink's stored failure content.
       outputs.push(...rows.filter((e) => e.id.endsWith("/answer")).map((e) => JSON.stringify(body(e))));
 
       if (Exit.isFailure(outcome)) {
-        outputs.push(Cause.pretty(outcome.cause));
+        for (const reason of outcome.cause.reasons) {
+          const error = reason._tag === "Fail" ? reason.error : reason._tag === "Die" ? reason.defect : undefined;
+
+          if (error instanceof Error) {
+            outputs.push(error.message);
+          }
+        }
       }
 
       for (const output of outputs) {
@@ -1269,9 +1279,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
     });
     const checkAnswer = Effect.fnUntraced(function* (ask: Asked) {
       if (ask.kind === "storage") {
-        const rows = yield* store
-          .entries(world.names.keys())
-          .pipe(Effect.provide(life.context as Context.Context<never>));
+        const rows = yield* store.entries(world.names.keys()).pipe(Effect.provide(life.context));
         expect(
           rows.filter((e) => e._tag === "exited" && body(e)["process"] === world.names.get(ask.name)?.pid),
           "L11: the failed exit recovers exactly once",
@@ -1283,7 +1291,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
 
       const told = yield* answers(ask.name);
       expect(told.length, `L11: ${ask.kind} for ${ask.name} was folded exactly once`).toBe(ask.before + 1);
-      const rows = yield* store.entries([ask.name]).pipe(Effect.provide(life.context as Context.Context<never>));
+      const rows = yield* store.entries([ask.name]).pipe(Effect.provide(life.context));
       expect(
         rows.filter((e) => e.stream === `${ask.name}/inbox` && e.id.endsWith("/answer")).length,
         "L11: the start's whole answer row was written and inspected",
@@ -1537,7 +1545,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                 }),
                 brainFrom(),
               ),
-            ).pipe(Effect.provide(life.context as Context.Context<ProcessManager>), Effect.orDie);
+            ).pipe(Effect.provide(life.context), Effect.orDie);
             const runner = yield* life.runner("starter:1");
             yield* runner
               .msg({

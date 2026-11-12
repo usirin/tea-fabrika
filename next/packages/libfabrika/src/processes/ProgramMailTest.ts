@@ -12,8 +12,7 @@
 //
 // P42 slice 1 (ticket 770) adds L14: a child and the program that started it may mail each other
 // with no host grant, the right read from the requester on the child's first `started` line. The
-// start piece (`Children.ts`, `ChildrenLedger.ts`) is read at run time, so P41's laws above keep
-// running on a tree that does not have it yet.
+// start piece records that right on the child's first start.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Result, Schema, type Scope, Stream } from "effect";
 import * as fc from "fast-check";
@@ -21,6 +20,8 @@ import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import type { Sql, SqlValue } from "../Sql.ts";
+import { Children } from "./Children.ts";
+import * as ChildrenLedger from "./ChildrenLedger.ts";
 import { type From, Mailbox } from "./Mailbox.ts";
 import { Owner, Recipient, Start } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
@@ -682,10 +683,6 @@ const FAMILY_MOVES: ReadonlyArray<FamilyMove> = [
 
 const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string>, done: Set<FamilyMove>) =>
   Effect.fnUntraced(function* (tape: Iterable<fc.AsyncCommand<object, FamilyWalk>>) {
-    // oxlint-disable-next-line fabrika/no-promises -- edge: the start piece is read at run time, so P41's laws load without it
-    const { Children } = yield* Effect.promise(() => import("./Children.ts"));
-    // oxlint-disable-next-line fabrika/no-promises -- edge: the start piece is read at run time, so P41's laws load without it
-    const ChildrenLedger = yield* Effect.promise(() => import("./ChildrenLedger.ts"));
     const store = yield* open;
     const next = ids(...PIDS);
     const world: Family = {
@@ -704,9 +701,8 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
         ),
       ),
     );
-    const run = <A, E>(
-      effect: Effect.Effect<A, E, ProgramMail | ProcessManager | Mailbox | InstanceType<typeof Children>>,
-    ) => effect.pipe(Effect.provide(stack), Effect.result);
+    const run = <A, E>(effect: Effect.Effect<A, E, ProgramMail | ProcessManager | Mailbox | Children>) =>
+      effect.pipe(Effect.provide(stack), Effect.result);
     const must = <A, E>(effect: Effect.Effect<A, E, ProcessManager>, label: string) =>
       Effect.map(run(effect), (answer) => {
         expect(Result.isSuccess(answer), label).toBe(true);
