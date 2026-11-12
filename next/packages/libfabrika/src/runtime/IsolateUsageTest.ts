@@ -11,6 +11,7 @@ import {
   Layer,
   Logger,
   References,
+  Ref,
   Result,
   Schema,
   Tracer,
@@ -50,7 +51,7 @@ export type World = {
 export type Rig = {
   readonly open: Effect.Effect<Store, never, Scope.Scope>;
   readonly deliver: Deliver;
-  readonly runner: Effect.Effect<World, unknown, Scope.Scope>;
+  readonly runner: (usage: Effect.Effect<void, unknown>) => Effect.Effect<World, unknown, Scope.Scope>;
   readonly invoke: (process: string) => Effect.Effect<void, unknown>;
 };
 
@@ -298,8 +299,9 @@ export const suite = (rig: Rig) =>
             Effect.gen(function* () {
               // Both runners see the same controlled clock, including inside fast-check replays.
               yield* TestClock.setTime(0);
-              const control = yield* rig.runner;
-              const measured = yield* rig.runner;
+              const pendingUsage = yield* Ref.make<Effect.Effect<void, unknown>>(Effect.void);
+              const control = yield* rig.runner(Effect.void);
+              const measured = yield* rig.runner(Ref.get(pendingUsage).pipe(Effect.flatten));
 
               for (const [n, cell] of tape.entries()) {
                 yield* TestClock.adjust(cell.elapsed);
@@ -351,9 +353,17 @@ export const suite = (rig: Rig) =>
                 );
                 // Wait for the actual usage call, so the hung case overlaps the program step.
                 yield* Deferred.await(entered);
+                yield* Ref.set(pendingUsage, Fiber.join(pending));
                 expect(yield* measured.snapshot).toEqual(before);
-                const answer = yield* measured.step(id, cell.n);
-                expect(answer).toEqual(yield* control.step(id, cell.n));
+                const expected = yield* control.step(id, cell.n);
+                // A step must answer while its independent usage call is still hung.
+                const answer = yield* Effect.raceFirst(
+                  measured.step(id, cell.n),
+                  TestClock.withLive(Effect.sleep("1 second")).pipe(
+                    Effect.andThen(Effect.fail("the step waited for its usage call")),
+                  ),
+                );
+                expect(answer).toEqual(expected);
                 expect(yield* measured.snapshot).toEqual(yield* control.snapshot);
                 expect(measured.executions()).toBe(control.executions());
                 // A resend must still find the same receipt and must not execute again.

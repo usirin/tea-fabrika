@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { workerLoader } from "../cloudflare/index.ts";
 import type { Env } from "../cloudflare/runtime.ts";
 import { tail } from "../cloudflare/tail.ts";
 import { InputId, Writer } from "../coordination/index.ts";
@@ -15,6 +16,7 @@ import { Mailbox } from "../processes/Mailbox.ts";
 import { Owner, Recipient, Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "../runtime/Entry.ts";
+import { nodeExecution } from "../runtime/Execution.ts";
 import * as IsolateUsageTest from "../runtime/IsolateUsageTest.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
 import { ProgramRunner } from "../runtime/Runner.ts";
@@ -127,82 +129,113 @@ const invoke = (process: string) =>
       .pipe(Effect.annotateSpans({ "fab.process": process }));
   });
 
-const runner = Effect.gen(function* () {
-  const ledger = yield* open;
-  const state = yield* open;
-  let executions = 0;
-  const program = fixture(() => {
-    executions++;
-  });
-  const data = Layer.mergeAll(
-    LedgerSql.layer(ledger.sql, { reader: PID }),
-    LedgerTransactionSql.layer(ledger.sql),
-  ).pipe(Layer.provide(quiet));
-  const coordination = ProcessManager.layer(
-    {
-      owner: Owner.cases.brain.make({}),
-      recipient: Recipient.cases.client.make({ client: "fixture", session: PID }),
-      by: FROM.by,
-    },
-    Effect.succeed(PID),
-  ).pipe(Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data))));
-  const base = yield* Layer.build(coordination);
-  yield* ProcessManager.use((manager) =>
-    manager.start(
-      Start.cases.first.make({ id: "boot", name: NAME, code: { program: "usage-fixture", hash: "fixture-build" } }),
-      FROM,
-    ),
-  ).pipe(Effect.provideContext(base));
-  const dependencies = Layer.mergeAll(
-    ProgramLoader.layer({ "usage-fixture": program }, {}),
-    ProcessStore.layer(state.sql, { process: PID }),
-    Layer.effect(
-      CheckedWriter,
-      Effect.map(Mailbox, (mailbox) => ({
-        append: (input: Incoming) => mailbox.send(NAME, input.id, input.envelope.input, FROM),
-        commit: () => Effect.die("no write declared"),
-        own: () => Effect.die("no write declared"),
-      })),
-    ),
-    Layer.succeed(WatcherManager, { publish: () => Effect.void }),
-    Layer.succeed(Alarm, { set: () => Effect.void }),
-    Layer.succeed(Recording, { flush: Effect.void }),
-  ).pipe(Layer.provideMerge(Layer.succeedContext(base)));
-  const context = yield* Layer.build(
-    ProgramRunner.layer(
-      { id: PID, name: NAME, program: "usage-fixture", build: "fixture-build", owner: OWNER },
+const runner = (usage: Effect.Effect<void, unknown>) =>
+  Effect.gen(function* () {
+    const ledger = yield* open;
+    const state = yield* open;
+    let executions = 0;
+    const program = fixture(() => {
+      executions++;
+    });
+    const execution = nodeExecution(program);
+    // Only Worker Loader transport is doubled; the runner uses the real loader and RPC decoder.
+    const rpc = {
+      describe: () =>
+        Promise.resolve({
+          name: program.name,
+          v: 1,
+          writes: {},
+          inputs: { add: { write: true, personOnly: false } },
+          cmds: [],
+        }),
+      init: (saved: unknown) => Effect.runPromise(execution.init(saved)),
+      step: (model: unknown, msg: unknown) => Effect.runPromise(execution.step(model, msg)),
+      fold: (model: unknown, msg: unknown) => Effect.runPromise(execution.fold(model, msg)),
+      upgrade: (saved: unknown) => Effect.runPromise(execution.upgrade(saved)),
+      reply: (cmd: unknown, outcome: unknown) => Effect.runPromise(execution.reply(cmd, outcome)),
+      check: (kind: string, event: unknown) => Effect.runPromise(execution.check(kind, event)),
+      admit: (msg: unknown) => Effect.runPromise(execution.admit(msg)),
+    };
+    // oxlint-disable-next-line fabrika/no-type-assertions -- only the platform loader and opaque tail fetcher are doubled
+    const platform = { get: () => ({ getEntrypoint: () => rpc }) } as unknown as Parameters<typeof workerLoader>[0];
+    const loader = workerLoader(platform, { "usage-fixture": { hash: "fixture-build", source: "fixture" } });
+    const controller = yield* Effect.acquireRelease(
+      Effect.sync(() => new AbortController()),
+      (held) => Effect.sync(() => held.abort()),
+    );
+    // oxlint-disable-next-line fabrika/no-type-assertions -- an opaque platform tail represents this runner's independent usage invocation
+    const bound = {
+      fetch: () => Effect.runPromise(usage.pipe(Effect.as(new Response())), { signal: controller.signal }),
+    } as unknown as NonNullable<Parameters<typeof loader.load>[2]>;
+    const data = Layer.mergeAll(
+      LedgerSql.layer(ledger.sql, { reader: PID }),
+      LedgerTransactionSql.layer(ledger.sql),
+    ).pipe(Layer.provide(quiet));
+    const coordination = ProcessManager.layer(
       {
-        recovery: { sql: state.sql, name: NAME, capacity: 1024 ** 3 },
+        owner: Owner.cases.brain.make({}),
+        recipient: Recipient.cases.client.make({ client: "fixture", session: PID }),
+        by: FROM.by,
       },
-    ).pipe(Layer.provideMerge(dependencies)),
-  );
-  const service = yield* ProgramRunner.pipe(Effect.provideContext(context));
-  yield* service.open("fixture");
-  const snapshot = Effect.sync(() =>
-    Object.fromEntries(
-      ["process_state", "process_letters", "process_recovery", "process_receipts"].map((table) => [
-        table,
-        state.sql.exec(`SELECT * FROM ${table} ORDER BY rowid`),
-      ]),
-    ),
-  );
-  return {
-    step: (id: string, n: number) =>
-      service.msg({
-        id,
-        envelope: {
-          id: Schema.decodeUnknownSync(InputId)("input_0000000000e008000000000001"),
-          by: OWNER,
-          arrivedAt: 0,
-          input: { type: "add", n },
+      Effect.succeed(PID),
+    ).pipe(Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data))));
+    const base = yield* Layer.build(coordination);
+    yield* ProcessManager.use((manager) =>
+      manager.start(
+        Start.cases.first.make({ id: "boot", name: NAME, code: { program: "usage-fixture", hash: "fixture-build" } }),
+        FROM,
+      ),
+    ).pipe(Effect.provideContext(base));
+    const dependencies = Layer.mergeAll(
+      ProcessStore.layer(state.sql, { process: PID }),
+      Layer.effect(
+        CheckedWriter,
+        Effect.map(Mailbox, (mailbox) => ({
+          append: (input: Incoming) => mailbox.send(NAME, input.id, input.envelope.input, FROM),
+          commit: () => Effect.die("no write declared"),
+          own: () => Effect.die("no write declared"),
+        })),
+      ),
+      Layer.succeed(WatcherManager, { publish: () => Effect.void }),
+      Layer.succeed(Alarm, { set: () => Effect.void }),
+      Layer.succeed(Recording, { flush: Effect.void }),
+    ).pipe(Layer.provideMerge(Layer.succeedContext(base)));
+    const context = yield* Layer.build(
+      ProgramRunner.withLoader(
+        { id: PID, name: NAME, program: "usage-fixture", build: "fixture-build", owner: OWNER },
+        { load: (name) => loader.load(name, PID, bound) },
+        {
+          recovery: { sql: state.sql, name: NAME, capacity: 1024 ** 3 },
         },
-        sentAt: FROM.sentAt,
-        seen: 0,
-        span: { traceId: FROM.traceId, spanId: "00f067aa0ba902b7" },
-      }),
-    snapshot,
-    executions: () => executions,
-  } satisfies IsolateUsageTest.World;
-});
+      ).pipe(Layer.provideMerge(dependencies)),
+    );
+    const service = yield* ProgramRunner.pipe(Effect.provideContext(context));
+    yield* service.open("fixture");
+    const snapshot = Effect.sync(() =>
+      Object.fromEntries(
+        ["process_state", "process_letters", "process_recovery", "process_receipts"].map((table) => [
+          table,
+          state.sql.exec(`SELECT * FROM ${table} ORDER BY rowid`),
+        ]),
+      ),
+    );
+    return {
+      step: (id: string, n: number) =>
+        service.msg({
+          id,
+          envelope: {
+            id: Schema.decodeUnknownSync(InputId)("input_0000000000e008000000000001"),
+            by: OWNER,
+            arrivedAt: 0,
+            input: { type: "add", n },
+          },
+          sentAt: FROM.sentAt,
+          seen: 0,
+          span: { traceId: FROM.traceId, spanId: "00f067aa0ba902b7" },
+        }),
+      snapshot,
+      executions: () => executions,
+    } satisfies IsolateUsageTest.World;
+  });
 
 IsolateUsageTest.suite({ open, deliver, runner, invoke });
