@@ -186,7 +186,7 @@ const helpers = ({ instance, hashes, from }: Fixture) => {
       throw new Error(`Project has no ${method} method`);
     }
 
-    return invoke.apply(target, args);
+    return invoke.apply(target, [...args]);
   };
   return {
     start: async (name: string, program: "starter" | "child") => {
@@ -211,15 +211,15 @@ const Secret = fc
 
 const forms = (text: string) => [text, JSON.stringify(text).slice(1, -1), encodeURIComponent(text)];
 // Effect Arbitrary has no command-walk generator or fast-check adapter.
-const Pick = fc.record({ point: fc.nat(), encoding: fc.integer({ min: 0, max: 2 }) });
-type Pick = typeof Pick extends fc.Arbitrary<infer A> ? A : never;
-type SecretWalk = { step: (pick: Pick) => Effect.Effect<void, unknown> };
+const SecretPick = fc.record({ point: fc.nat(), encoding: fc.integer({ min: 0, max: 2 }) });
+type SecretPick = typeof SecretPick extends fc.Arbitrary<infer A> ? A : never;
+type SecretWalk = { step: (pick: SecretPick) => Effect.Effect<void, unknown> };
 type ChildOutput = "reply" | "span" | "row" | "log";
 
 const ProjectTape = fc
   .commands(
     [
-      Pick.map((pick): fc.AsyncCommand<object, SecretWalk> => ({
+      SecretPick.map((pick): fc.AsyncCommand<object, SecretWalk> => ({
         check: () => true,
         run: (_model, real) => Effect.runPromise(real.step(pick)),
         toString: () => JSON.stringify(pick),
@@ -288,7 +288,7 @@ const projectSecrets = Effect.fnUntraced(function* (
             return request;
           }).pipe(Effect.provide(logging)),
         ),
-      catch: (error) => error,
+      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
     }).pipe(Effect.result);
 
     if (Result.isFailure(outcome)) {
@@ -337,7 +337,7 @@ const projectSecrets = Effect.fnUntraced(function* (
     inspectRows();
   }
 
-  const step = Effect.fnUntraced(function* (pick: Pick) {
+  const step = Effect.fnUntraced(function* (pick: SecretPick) {
     if (remaining.size === 0) {
       if (path === "recovery") {
         // A failed ManagedRuntime initialization is memoized until that runtime is discarded.
@@ -498,7 +498,7 @@ const storageCall = Effect.fnUntraced(function* (
     fixture.cut();
     const failed = yield* Effect.tryPromise({
       try: () => runtime.runPromise(start),
-      catch: (error) => error,
+      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
     }).pipe(Effect.result);
     prepared = Result.isFailure(failed) && fixture.hit();
     yield* reopen;
@@ -506,7 +506,7 @@ const storageCall = Effect.fnUntraced(function* (
     fixture.fail("configure", new Error("configuration interrupted"));
     const failed = yield* Effect.tryPromise({
       try: () => runtime.runPromise(start),
-      catch: (error) => error,
+      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
     }).pipe(Effect.result);
     prepared = Result.isFailure(failed) && fixture.hit();
   } else if (path !== "fresh") {
@@ -583,7 +583,7 @@ const storageCall = Effect.fnUntraced(function* (
   ]);
   const invoke = Effect.tryPromise({
     try: () => runtime.runPromise(call.pipe(Effect.provide(logging))),
-    catch: (error) => error,
+    catch: (error) => (error instanceof Error ? error : new Error(String(error))),
   });
   yield* inspect(fixture, invoke, reopen);
   return printed;
@@ -615,7 +615,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
   const tape = fc
     .commands(
       [
-        Pick.map((pick): fc.AsyncCommand<object, SecretWalk> => ({
+        SecretPick.map((pick): fc.AsyncCommand<object, SecretWalk> => ({
           check: () => true,
           run: (_model, real) => Effect.runPromise(real.step(pick)),
           toString: () => JSON.stringify(pick),
@@ -626,7 +626,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
     .filter((commands) => [...commands].length >= perWalk);
   const law = Effect.fnUntraced(function* (secret: string, commands: Iterable<fc.AsyncCommand<object, SecretWalk>>) {
     let moves = 0;
-    const step = Effect.fnUntraced(function* (pick: Pick) {
+    const step = Effect.fnUntraced(function* (pick: SecretPick) {
       // The model records completed cuts only. Pick an unvisited operation that its prepared
       // process state can reach, or repeat a visited one once the whole inventory is covered.
       const available = remaining.length > 0 ? remaining : inventory;
