@@ -192,6 +192,24 @@ export const childProject = Effect.fnUntraced(function* () {
   const recorded: Array<unknown> = [];
   let failure: { point: ChildFailure; error: Error; process?: string } | undefined;
   let armed = false;
+  let observing = false;
+  let target: { operation: number; error: Error } | undefined;
+  let operations: Array<string> = [];
+  const observe = (operation: string) => {
+    if (!observing) {
+      return;
+    }
+
+    const index = operations.push(operation) - 1;
+
+    if (target?.operation === index) {
+      const error = target.error;
+      target = undefined;
+      hit = true;
+      // The SQL and transaction adapters throw the platform's original error value.
+      throw error;
+    }
+  };
   let hit = false;
   const trip = (point: ChildFailure, process?: string) => {
     if (failure?.point === point && (failure.process === undefined || failure.process === process)) {
@@ -205,6 +223,9 @@ export const childProject = Effect.fnUntraced(function* () {
   const storage = {
     sql: {
       exec: (query: string, ...params: Array<string | number | null>) => {
+        // Keep each occurrence, including repeated reads before and after the write turn.
+        observe(query.replace(/\s+/g, " ").trim());
+
         const process = typeof params[0] === "string" ? params[0] : undefined;
 
         if (query === "SELECT value FROM dev_descriptors WHERE process=?") {
@@ -238,10 +259,18 @@ export const childProject = Effect.fnUntraced(function* () {
         return sql.exec(query, ...params);
       },
       get databaseSize() {
+        observe("databaseSize");
         return sql.size();
       },
     },
-    transactionSync: sql.transaction,
+    transactionSync: <A>(step: () => A): A => {
+      observe("transaction.begin");
+      return sql.transaction(() => {
+        const value = step();
+        observe("transaction.commit");
+        return value;
+      });
+    },
   };
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the storage members read by the public Project service; workerd alone constructs the branded handle
   const ctx = { id: { name: PROJECT }, storage } as unknown as DurableObjectState;
@@ -263,18 +292,25 @@ export const childProject = Effect.fnUntraced(function* () {
           configure: (descriptor: Descriptor, wake = false) =>
             remote(
               Effect.sync(() => {
+                observe("process.configure");
                 trip("configure", descriptor.id);
                 descriptors.set(registered, descriptor);
                 configured.push({ descriptor, wake });
               }),
             ),
-          descriptor: () => remote(Effect.sync(() => descriptors.get(registered))),
+          descriptor: () =>
+            remote(
+              Effect.sync(() => {
+                observe("process.descriptor");
+                return descriptors.get(registered);
+              }),
+            ),
         };
       },
     },
     CONNECTION: {
       getByName: () => ({
-        ring: () => remote(Effect.void),
+        ring: () => remote(Effect.sync(() => observe("connection.ring"))),
         notify: () => remote(Effect.void),
         probe: () => remote(Effect.succeed(42)),
       }),
@@ -284,6 +320,7 @@ export const childProject = Effect.fnUntraced(function* () {
         write: (_chain: unknown, _part: number, rows: unknown) =>
           remote(
             Effect.sync(() => {
+              observe("record.write");
               recorded.push(rows);
               return Written.make({});
             }),
@@ -329,6 +366,7 @@ export const childProject = Effect.fnUntraced(function* () {
     from,
     configured,
     recorded,
+    legacyDescriptors: () => sql.exec("ALTER TABLE dev_descriptors DROP COLUMN pending"),
     monitor: (watcher: string, target: string, ref: string) =>
       ProcessManager.use((manager) => manager.monitor(ref, target, from)).pipe(
         Effect.provide(
@@ -351,6 +389,17 @@ export const childProject = Effect.fnUntraced(function* () {
         .flatMap(({ name }) =>
           typeof name === "string" ? sql.exec(`SELECT * FROM "${name.replaceAll('"', '""')}"`) : [],
         ),
+    observe: (operation?: number, error?: Error) => {
+      operations = [];
+      observing = true;
+      target = operation === undefined || error === undefined ? undefined : { operation, error };
+      hit = false;
+    },
+    observed: () => {
+      observing = false;
+      target = undefined;
+      return operations;
+    },
     fail: (point: ChildFailure, error: Error, process?: string) => {
       failure = { point, error, ...(process === undefined ? {} : { process }) };
       hit = false;

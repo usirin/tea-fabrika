@@ -440,7 +440,260 @@ const projectSecrets = Effect.fnUntraced(function* (
   }
 });
 
+// Each SQL occurrence is a cut, not just each statement spelling: the saved-id read after a
+// committed start and the same read before that start are separate operations.
+const StoragePath = [
+  "fresh",
+  "saved",
+  "already",
+  "ended",
+  "recovery",
+  "migration",
+  "configuration",
+  "exit",
+  "status",
+  "isLive",
+  "info",
+  "resolve",
+  "receive",
+  "object",
+] as const;
+type StoragePath = (typeof StoragePath)[number];
+type StorageCut = { path: StoragePath; operation: number; statement: string };
+
+const storageCall = Effect.fnUntraced(function* (
+  path: StoragePath,
+  inspect: (
+    fixture: Effect.Success<ReturnType<typeof childProject>>,
+    call: Effect.Effect<unknown, unknown>,
+    reopen: Effect.Effect<void>,
+  ) => Effect.Effect<void, unknown, Scope.Scope>,
+) {
+  const fixture = yield* childProject();
+  let scope = yield* Scope.make();
+  yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
+  let runtime = yield* Scope.provide(scope)(fixture.acquire());
+  const reopen = Effect.gen(function* () {
+    yield* Scope.close(scope, Exit.void);
+    scope = yield* Scope.make();
+    runtime = yield* Scope.provide(scope)(fixture.acquire());
+  });
+  const project = yield* Effect.promise(() => runtime.runPromise(ProjectService));
+  const child = {
+    id: `${project.boot.process}/1/0`,
+    name: "child:storage",
+    code: { program: "p42/child", hash: "child-test" },
+    requester: Recipient.cases.process.make({ process: project.boot.process }),
+    input: { type: "inc" },
+  };
+  const start = ProjectService.use((p) => p.processChild(child, fixture.from));
+  let pid = "";
+  let prepared = true;
+
+  if (path === "recovery") {
+    fixture.cut();
+    const failed = yield* Effect.tryPromise({
+      try: () => runtime.runPromise(start),
+      catch: (error) => error,
+    }).pipe(Effect.result);
+    prepared = Result.isFailure(failed) && fixture.hit();
+    yield* reopen;
+  } else if (path === "configuration") {
+    fixture.fail("configure", new Error("configuration interrupted"));
+    const failed = yield* Effect.tryPromise({
+      try: () => runtime.runPromise(start),
+      catch: (error) => error,
+    }).pipe(Effect.result);
+    prepared = Result.isFailure(failed) && fixture.hit();
+  } else if (path !== "fresh") {
+    const started = yield* Effect.promise(() => runtime.runPromise(start));
+    prepared = started._tag === "ok" && started.value._tag === "started";
+
+    if (started._tag !== "ok") {
+      return yield* Effect.die("child was not started");
+    }
+
+    pid = started.value.process;
+
+    if (path === "migration") {
+      fixture.legacyDescriptors();
+      yield* reopen;
+    }
+
+    if (path === "ended") {
+      yield* Effect.promise(() =>
+        runtime.runPromise(ProjectService.use((p) => p.processExit(pid, { _tag: "normal" }, fixture.from))),
+      );
+    }
+
+    if (path === "exit") {
+      yield* Effect.promise(() =>
+        runtime.runPromise(ProjectService.use((p) => p.processMonitor("in", pid, fixture.from))),
+      );
+      yield* fixture.monitor(pid, project.boot.process, "out");
+    }
+  }
+
+  expect(prepared, `L11: ${path} begins in its required process state`).toBe(true);
+  const call = ProjectService.use((p): Effect.Effect<unknown, unknown> => {
+    switch (path) {
+      case "status":
+        return p.processStatus(child.name);
+      case "isLive":
+        return p.processIsLive(pid);
+      case "info":
+        return p.info;
+      case "resolve":
+        return p.processResolve(pid);
+      case "receive":
+        return p.processReceive(pid, 0);
+      case "object":
+        return p.processObject(pid);
+      case "exit":
+        return p.processExit(pid, { _tag: "normal" }, fixture.from);
+      default:
+        return p.processChild(
+          path === "already" || path === "ended" ? { ...child, id: `${project.boot.process}/2/0` } : child,
+          fixture.from,
+        );
+    }
+  });
+  const printed: Array<string> = [];
+  const logging = Logger.layer([
+    Logger.make((options) => {
+      printed.push(Logger.formatSimple.log(options), Logger.formatLogFmt.log(options), Logger.formatJson.log(options));
+    }),
+  ]);
+  const invoke = Effect.tryPromise({
+    try: () => runtime.runPromise(call.pipe(Effect.provide(logging))),
+    catch: (error) => error,
+  });
+  yield* inspect(fixture, invoke, reopen);
+  return printed;
+});
+
+const storageSecrets = Effect.fnUntraced(function* () {
+  const remaining: Array<StorageCut> = [];
+
+  for (const path of StoragePath) {
+    yield* Effect.scoped(
+      storageCall(path, (fixture, call) =>
+        Effect.gen(function* () {
+          fixture.observe();
+          yield* call;
+          const statements = fixture.observed();
+          expect(statements.length, `L11: ${path} reached storage`).toBeGreaterThan(0);
+          statements.forEach((statement, operation) => {
+            remaining.push({ path, operation, statement });
+          });
+        }),
+      ),
+    );
+  }
+
+  const inventory = [...remaining];
+  const reached = new Set<string>();
+  const leaks = new Set<string>();
+  const perWalk = Math.max(4, Math.ceil(inventory.length / 100));
+  const tape = fc
+    .commands(
+      [
+        Pick.map((pick): fc.AsyncCommand<object, SecretWalk> => ({
+          check: () => true,
+          run: (_model, real) => Effect.runPromise(real.step(pick)),
+          toString: () => JSON.stringify(pick),
+        })),
+      ],
+      { maxCommands: perWalk + 8, size: "max" },
+    )
+    .filter((commands) => [...commands].length >= perWalk);
+  const law = Effect.fnUntraced(function* (secret: string, commands: Iterable<fc.AsyncCommand<object, SecretWalk>>) {
+    let moves = 0;
+    const step = Effect.fnUntraced(function* (pick: Pick) {
+      // The model records completed cuts only. Pick an unvisited operation that its prepared
+      // process state can reach, or repeat a visited one once the whole inventory is covered.
+      const available = remaining.length > 0 ? remaining : inventory;
+      const cut = available[pick.point % available.length];
+
+      if (cut === undefined) {
+        return yield* Effect.die("empty storage inventory");
+      }
+
+      const marker = forms(secret)[pick.encoding] ?? secret;
+      const fault = Object.assign(new Error(`SQLITE_FULL at ${marker}`), {
+        name: marker,
+        code: marker,
+        errcode: marker,
+      });
+      const outputs: Record<ChildOutput, Array<string>> = { reply: [], row: [], span: [], log: [] };
+      const printed = yield* Effect.scoped(
+        storageCall(cut.path, (fixture, call, reopen) =>
+          Effect.gen(function* () {
+            fixture.observe(cut.operation, fault);
+            const outcome = yield* call.pipe(Effect.result);
+            fixture.observed();
+            expect(fixture.hit(), `L11: ${cut.path}/${cut.operation} ${cut.statement}`).toBe(true);
+
+            if (Result.isFailure(outcome)) {
+              const error = outcome.failure;
+              outputs.reply.push(error instanceof Error ? error.message : String(error), String(error));
+            } else {
+              outputs.reply.push(...outputText(outcome.success));
+            }
+
+            outputs.row.push(...outputText(fixture.rows()));
+            outputs.span.push(...outputText(fixture.recorded));
+
+            if (cut.path === "recovery" || cut.path === "migration") {
+              yield* reopen;
+            }
+
+            const recovered = yield* call;
+            outputs.reply.push(...outputText(recovered));
+            outputs.row.push(...outputText(fixture.rows()));
+            outputs.span.push(...outputText(fixture.recorded));
+          }),
+        ),
+      );
+      outputs.log.push(...(printed ?? []));
+
+      for (const [output, texts] of Object.entries(outputs)) {
+        if (texts.some((text) => forms(secret).some((form) => text.includes(form)))) {
+          leaks.add(`${cut.path}/${cut.operation} ${cut.statement} -> ${output}`);
+        }
+      }
+
+      reached.add(`${cut.path}/${cut.operation}`);
+
+      if (remaining.length > 0) {
+        remaining.splice(remaining.indexOf(cut), 1);
+      }
+
+      moves++;
+    });
+    yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: {}, real: { step } }), commands));
+    expect(moves, "L11: the storage walk is not empty").toBeGreaterThan(0);
+  });
+  yield* Effect.promise(() =>
+    fc.assert(
+      fc.asyncProperty(Secret, tape, (secret, commands) => Effect.runPromise(law(secret, commands))),
+      { seed: 119120, numRuns: 100, endOnFailure: true },
+    ),
+  );
+  expect(remaining, "L11: every storage operation in every flow was cut").toEqual([]);
+  expect(reached.size).toBe(inventory.length);
+  expect(
+    [...leaks].sort(),
+    `L11: ${reached.size} storage operations were cut; storage text or metadata reached these outputs`,
+  ).toEqual([]);
+});
+
 describe("P42 slice 1: a code start on the real Worker path", () => {
+  effectIt.effect(
+    "L11: every storage read and write in the child and lifecycle flows keeps error text and metadata out of outputs",
+    storageSecrets,
+  );
+
   for (const path of ["descriptor", "recovery", "configuration", "exit"] as const) {
     for (const output of ["reply", "span", "row", "log"] as const) {
       effectIt.effect(
