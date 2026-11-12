@@ -200,6 +200,7 @@ it("P1: policy survives authoring, decoding and Node description, while malforme
         ...fields,
         machine: Machine.make({
           ...machine,
+          cmds: [save],
           init: () => {
             calls.push("init");
             return [{ count: 0, replies: 0 }, []];
