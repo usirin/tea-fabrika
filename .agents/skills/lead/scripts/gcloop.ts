@@ -476,18 +476,18 @@ const trigger = Flag.Literals("trigger", TRIGGERS).pipe(Flag.withDefault("hand" 
 
 const sweepCommand = Command.make("sweep", { trigger }, ({ trigger }) =>
   Effect.gen(function* () {
-    const where = yield* paths();
+    const folders = yield* paths();
     const path = yield* Path.Path;
     const minutes = yield* MINUTES;
     yield* sweep({
-      state: where.state,
+      state: folders.state,
       gc: ["nice", "-n", "15", "sh", path.join(import.meta.dirname, "box.sh"), "gc"],
       trigger,
       minutes,
       limit: Duration.minutes(minutes),
       pid: process.pid,
     });
-    yield* Console.log((yield* status(where.state, minutes)).text);
+    yield* Console.log((yield* status(folders.state, minutes)).text);
   }),
 );
 
@@ -513,9 +513,9 @@ const statusCommand = Command.make(
   { keeps: Flag.Boolean("keeps").pipe(Flag.withDefault(false)) },
   ({ keeps }) =>
     Effect.gen(function* () {
-      const where = yield* paths();
-      const line = yield* status(where.state, yield* MINUTES);
-      const last = newest(yield* sweeps(where.state)).last;
+      const folders = yield* paths();
+      const line = yield* status(folders.state, yield* MINUTES);
+      const last = newest(yield* sweeps(folders.state)).last;
       const kept = keeps && last !== null && last.kept.length > 0 ? `; it kept ${last.kept.join("; ")}` : "";
       yield* Console.log(`${line.text}${kept}`);
     }),
@@ -523,7 +523,7 @@ const statusCommand = Command.make(
 
 const plistCommand = Command.make("plist", {}, () =>
   Effect.gen(function* () {
-    const where = yield* paths();
+    const folders = yield* paths();
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const minutes = yield* MINUTES;
@@ -531,12 +531,12 @@ const plistCommand = Command.make("plist", {}, () =>
     const filled = fill(template, {
       label: LABEL,
       node: process.execPath,
-      script: path.join(where.main, ".agents/skills/lead/scripts/gcloop.ts"),
-      main: where.main,
+      script: path.join(folders.main, ".agents/skills/lead/scripts/gcloop.ts"),
+      main: folders.main,
       minutes: String(minutes),
       seconds: String(minutes * 60),
       path: process.env.PATH ?? "/usr/bin:/bin",
-      log: path.join(where.state, "gc-timer.log"),
+      log: path.join(folders.state, "gc-timer.log"),
     });
 
     if (Result.isFailure(filled)) {
