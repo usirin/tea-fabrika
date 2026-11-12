@@ -1161,8 +1161,8 @@ const prop = (
         // An empty flow cannot pass: every move the law is about ran at least once.
         expect([...done].sort()).toEqual(expect.arrayContaining([...required].sort()));
       }),
-    // CI max S1/S2 19.7 s, runs 43239450301, 43235822398, 43234969237: ceil(2 * 19.7) s.
-    40_000,
+    // CI run 43255323922: max M1/M4 25.1 s, S1/S2 25.0 s; approved twofold limit 51 s.
+    51_000,
   );
 
 const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boolean) =>
@@ -1364,8 +1364,8 @@ const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boole
           ),
         );
       }),
-    // CI max M3 11.1 s across the same three runs: ceil(2 * 11.1) s.
-    23_000,
+    // CI run 43255323922: max M3 15.0 s; approved twofold limit 31 s.
+    31_000,
   );
 
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
@@ -1420,8 +1420,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               ]),
             );
           }),
-        // CI max T1a [secrets] 58.5 s across the same three runs: 2 * 58.5 s.
-        117_000,
+        // CI run 43255323922: max T1a [secrets] 74.9 s, T1a 71.4 s; approved twofold limit 150 s.
+        150_000,
       );
     }
 

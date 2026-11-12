@@ -11,8 +11,8 @@ it("vector: next medians and four provisional split estimates match the recorded
   // Today's CI, both versions. Main runs 42717511599, 42716453289 and 42715921306.
   // The four split files are estimates: original commits-git median 247.6 / 4 = 61.9 s.
   // T871 adds medians from runs 43239450301, 43235822398 and 43234969237, attempt 1.
-  // The store wrapper retains the original aggregate until the split's first ready CI run;
-  // the runtime wrapper has no measurement yet and stays absent.
+  // Split weights use ready run 43255323922: store 18.5 s, job 131312463038, shard 1;
+  // runtime 290.9 s, job 131312462890, shard 4.
   const expected = {
     "next/apps/fabrika/src/brain-life.test.ts": 27.4,
     "next/apps/fabrika/src/build.test.ts": 39.9,
@@ -78,7 +78,8 @@ it("vector: next medians and four provisional split estimates match the recorded
     "next/packages/libfabrika/src/ledger/TraceId.test.ts": 0.8,
     "next/packages/libfabrika/src/node/build/build-assets.test.ts": 48.6,
     "next/packages/libfabrika/src/node/build/build-one-file.test.ts": 11.0,
-    "next/packages/libfabrika/src/node/ProgramMail.test.ts": 245.6,
+    "next/packages/libfabrika/src/node/ProgramMail.test.ts": 18.5,
+    "next/packages/libfabrika/src/node/ProgramMailRuntime.test.ts": 290.9,
     "next/packages/libfabrika/src/node/Nemesis.laws.test.ts": 79.2,
     "next/packages/libfabrika/src/node/dev/dev-errors.laws.test.ts": 2.1,
     "next/packages/libfabrika/src/node/dev/dev-recording.laws.test.ts": 0.1,
