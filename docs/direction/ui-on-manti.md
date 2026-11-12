@@ -7,6 +7,9 @@ wears our own token values, never a theme of Manti's or of another project.
 The one exception (2026-11-01) is a person's own theme file, in their own
 config ([themes](./themes.md)). Manti's tokens stay on Radix values by default. Today's version; walked if a tryout is picked (owner, 2026-11-08).
 
+Its decided rules are in: [0461](../../.decisions/0461-every-ui-part-is-on-manti.md),
+[0462](../../.decisions/0462-popovers-drive-zag-directly.md).
+
 **Proposed** (open for the owner, marked where they come up): how the move is
 split into pull requests, and four places where Manti's defaults clash with
 [popovers.md](./popovers.md) (section 6).

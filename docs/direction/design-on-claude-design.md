@@ -6,6 +6,9 @@ that is pressed with the keyboard only stays a plain page. Before this, every mo
 HTML page built by hand, in the shape the [guidelines skill](../../.claude/skills/guidelines/SKILL.md)
 gave.
 
+Its decided rules are in: [0467](../../.decisions/0467-designs-are-drawn-on-claude-design.md),
+[0468](../../.decisions/0468-a-canvas-decides-a-look.md).
+
 **Changed later on 2026-11-03 by the owner:** a canvas alone was hard to use, since nothing on it
 said what to look at or why. A guidelines study's front door is the plain page again (a pressable
 demo on top, the principles folded under it), and the canvas sits behind it for every artboard
