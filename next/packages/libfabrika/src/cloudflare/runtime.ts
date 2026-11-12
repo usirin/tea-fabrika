@@ -897,6 +897,7 @@ const processLogic = Effect.fnUntraced(function* (
         yield* sink.batch(IsolateUsage.record(usage));
       },
       Effect.withSpan("process.usage"),
+      complete,
       Effect.provideContext(services),
     ),
     msg: (input: unknown) => {
