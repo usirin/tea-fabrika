@@ -7,6 +7,7 @@ import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { ObjectId, Repositories, SourceMetadata } from "../../repositories/Repositories.ts";
+import type { Repository } from "../../repositories/Repositories.ts";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";
 import * as Sources from "./Sources.ts";
@@ -46,6 +47,74 @@ const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string
       },
     }),
   );
+});
+
+const personBases = Effect.fnUntraced(function* (root: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const home = path.join(root, "person-target"),
+    settings = path.join(home, ".fabrika"),
+    linked = path.join(root, "person-link"),
+    missing = path.join(root, "missing-person");
+  yield* fs.makeDirectory(settings, { recursive: true });
+  yield* fs.symlink("person-target/.fabrika", linked);
+  // A lexical parent is readable too, so selecting it cannot pass by accident.
+  yield* fs.writeFileString(path.join(root, "entry.txt"), "wrong parent");
+
+  return {
+    linked,
+    missing,
+    check: Effect.fnUntraced(function* (resolve: Repository["resolve"], absent: boolean, revision: number) {
+      const own = `settings ${revision}`,
+        parent = `person parent ${revision}`;
+      yield* fs.writeFileString(path.join(settings, "entry.txt"), own);
+      yield* fs.writeFileString(path.join(home, "entry.txt"), parent);
+      const actual = [],
+        expected = [];
+
+      for (const from of [".", "./", "./.", "..", "../", "./.."]) {
+        const reads: ReadonlyArray<readonly [string, string]> = from.includes("..")
+          ? [
+              ["entry.txt", parent],
+              ["./.fabrika/entry.txt", own],
+            ]
+          : [
+              ["entry.txt", own],
+              ["../entry.txt", parent],
+            ];
+        const result = yield* resolve(from, "person").pipe(
+          Effect.flatMap((source) =>
+            Effect.gen(function* () {
+              expect(JSON.stringify(source)).not.toContain(root);
+              const values = [];
+
+              for (const [file] of reads) {
+                const value = yield* source.read(file);
+                const read = Schema.decodeUnknownSync(Schema.NullOr(SourceRead))(value);
+                expect(JSON.stringify(value)).not.toContain(root);
+                values.push(read === null ? null : { tag: read._tag, text: new TextDecoder().decode(read.bytes) });
+              }
+
+              return { tag: source._tag, values };
+            }),
+          ),
+          Effect.match({
+            onFailure: (error) => ({ reason: error.reason._tag }),
+            onSuccess: (value) => value,
+          }),
+        );
+        actual.push({ from, result });
+        expected.push({
+          from,
+          result: absent
+            ? { reason: "MissingPath" }
+            : { tag: "disk", values: reads.map(([, text]) => ({ tag: "disk", text })) },
+        });
+      }
+
+      return { actual, expected };
+    }),
+  };
 });
 
 it.effect.prop(
@@ -98,6 +167,19 @@ it.effect.prop(
           entry: (file) => Effect.succeed(entries.get(file) ?? null),
           read: (file) => Effect.succeed(blobs.has(file) ? new TextEncoder().encode(blobs.get(file)!) : null),
         });
+        const bases = yield* personBases(root);
+        const personResolvers = yield* Effect.forEach(
+          [bases.linked, bases.missing],
+          (base) =>
+            Sources.resolver({
+              root: repo,
+              person: base,
+              commit,
+              entry: (file) => Effect.succeed(entries.get(file) ?? null),
+              read: (file) => Effect.succeed(blobs.has(file) ? new TextEncoder().encode(blobs.get(file)!) : null),
+            }),
+          { concurrency: 1 },
+        );
         const sources = ["../inside space", "./local", "./absolute", "../../outside space", "./outside"];
         let present = false,
           disk = "";
@@ -159,6 +241,14 @@ it.effect.prop(
           const own = yield* resolve("../repo/inside space", "person");
           expect(own._tag).toBe("disk");
           checkRead(yield* own.read("entry.txt"), false, commit, `dirty ${index}`, root);
+
+          const baseReads = yield* Effect.forEach(
+            personResolvers,
+            (personResolve, base) => bases.check(personResolve, base === 1, index),
+            { concurrency: 1 },
+          );
+          expect(baseReads.map((read) => read.actual)).toEqual(baseReads.map((read) => read.expected));
+          checkRead(yield* (yield* resolve("./local", "repo")).read("entry.txt"), true, commit, "committed", root);
         }
       }),
     ).pipe(Effect.provide(NodeServices.layer)),
@@ -211,6 +301,15 @@ it("L7: each prefix resolves from the winning file's base, pins committed bytes 
               yield* git(repo, ["add", "."]);
               yield* git(repo, ["commit", "-m", "fixture"]);
               yield* git(repo, ["push", "origin", "stable"]);
+              const bases = yield* personBases(root);
+              const personSelections = yield* Effect.forEach(
+                [bases.linked, bases.missing],
+                (base) =>
+                  Effect.gen(function* () {
+                    return yield* (yield* Repositories).open(repo);
+                  }).pipe(Effect.provide(RepositoriesGit.layer({ person: base }))),
+                { concurrency: 1 },
+              );
               yield* Effect.gen(function* () {
                 const selected = yield* (yield* Repositories).open(repo);
                 const pinned = selected.snapshot.commit;
@@ -300,6 +399,14 @@ it("L7: each prefix resolves from the winning file's base, pins committed bytes 
                   const own = yield* selected.resolve("../repo/inside space", "person");
                   expect(own._tag).toBe("disk");
                   checkRead(yield* own.read("entry.txt"), false, pinned, checkout, root);
+
+                  const baseReads = yield* Effect.forEach(
+                    personSelections,
+                    (personSelection, base) => bases.check(personSelection.resolve, base === 1, index),
+                    { concurrency: 1 },
+                  );
+                  expect(baseReads.map((read) => read.actual)).toEqual(baseReads.map((read) => read.expected));
+                  checkRead(yield* stillGood.read("entry.txt"), true, pinned, "commit 0", root);
                   expect(selected.snapshot.commit).toBe(pinned);
                 }
               }).pipe(Effect.provide(RepositoriesGit.layer({ person })));
