@@ -1,7 +1,18 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Context, Effect, Layer, Redacted, Schema } from "effect";
 import * as fc from "fast-check";
-import { Change, CodeHost, CodeHostError, Commit, Merged, Tree, Updated } from "./CodeHost.ts";
+import {
+  Change,
+  CodeHost,
+  CodeHostError,
+  Commit,
+  Merged,
+  RateLimited,
+  Refused,
+  Tree,
+  Unavailable,
+  Updated,
+} from "./CodeHost.ts";
 
 // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's synchronous command interface
 const sync = <A, E>(effect: Effect.Effect<A, E>) => Effect.runSync(effect);
@@ -18,7 +29,7 @@ export type ChangeData = typeof Change.cases.found.Type & {
 export type Method = "change" | "update" | "merge";
 
 export type Fault =
-  | { readonly kind: "fault"; readonly reason: CodeHostError["reason"] }
+  | { readonly kind: "fault"; readonly reason: "unavailable" | "rate_limited" | "refused" }
   | { readonly kind: "defect" }
   | { readonly kind: "interrupt" };
 
@@ -38,6 +49,8 @@ export class Control extends Context.Service<
 
 export const commit = (hex: string) => Schema.decodeUnknownSync(Commit)(hex);
 export const tree = (hex: string) => Schema.decodeUnknownSync(Tree)(hex);
+
+const reasons = { unavailable: Unavailable, rate_limited: RateLimited, refused: Refused };
 
 export const layer = (options: { readonly token?: Redacted.Redacted<string> } = {}): Layer.Layer<CodeHost | Control> =>
   Layer.effectContext(
@@ -68,7 +81,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
           const cause = new Error(options.token === undefined ? "scripted host failure" : reveal(options.token));
 
           if (fault?.kind === "fault") {
-            return Effect.fail(new CodeHostError({ reason: fault.reason, cause }));
+            return Effect.fail(new CodeHostError({ reason: new reasons[fault.reason]({ cause }) }));
           }
 
           if (fault?.kind === "defect") {
@@ -100,7 +113,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
                 const found = changes.get(change);
 
                 if (found === undefined) {
-                  return Effect.fail(new CodeHostError({ reason: "refused" }));
+                  return Effect.fail(new CodeHostError({ reason: new Refused({ cause: undefined }) }));
                 }
 
                 if (found.state !== "open") {
@@ -149,7 +162,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
                 const found = changes.get(change);
 
                 if (found === undefined) {
-                  return Effect.fail(new CodeHostError({ reason: "refused" }));
+                  return Effect.fail(new CodeHostError({ reason: new Refused({ cause: undefined }) }));
                 }
 
                 if (found.state === "draft" || found.state === "closed") {

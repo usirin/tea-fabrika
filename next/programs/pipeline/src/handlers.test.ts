@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
-import { Ci, CiError } from "@kampus/libfabrika/ci/Ci";
-import { CodeHost, CodeHostError, Commit } from "@kampus/libfabrika/codehost/CodeHost";
+import * as Ci from "@kampus/libfabrika/ci/Ci";
+import * as CodeHost from "@kampus/libfabrika/codehost/CodeHost";
 import { Cause, Effect, Exit, Layer, Schema } from "effect";
 import * as fc from "fast-check";
 import { handlers } from "./handlers.ts";
@@ -18,23 +18,30 @@ describe("L12: handlers map faults", () => {
         }),
         (cell) => {
           expect.hasAssertions();
-          const head = Schema.decodeUnknownSync(Commit)("a".repeat(40));
+          const head = Schema.decodeUnknownSync(CodeHost.Commit)("a".repeat(40));
           const reason = cell.method === "checks" && cell.reason === "refused" ? "unavailable" : cell.reason;
+          const cause = cell.cause === undefined ? undefined : new Error(cell.cause);
           const fault =
             cell.method === "checks"
-              ? new CiError({
-                  reason: reason as CiError["reason"],
-                  ...(cell.cause === undefined ? {} : { cause: new Error(cell.cause) }),
+              ? new Ci.CiError({
+                  reason: reason === "rate_limited" ? new Ci.RateLimited({ cause }) : new Ci.Unavailable({ cause }),
                 })
-              : new CodeHostError({ reason, ...(cell.cause === undefined ? {} : { cause: new Error(cell.cause) }) });
+              : new CodeHost.CodeHostError({
+                  reason:
+                    reason === "refused"
+                      ? new CodeHost.Refused({ cause })
+                      : reason === "rate_limited"
+                        ? new CodeHost.RateLimited({ cause })
+                        : new CodeHost.Unavailable({ cause }),
+                });
           const fail =
             cell.kind === "interrupt"
               ? Effect.interrupt
               : cell.kind === "defect"
                 ? Effect.die(new Error(cell.cause ?? "defect"))
                 : Effect.fail(fault);
-          const host = Layer.succeed(CodeHost, { change: () => fail, update: () => fail, merge: () => fail });
-          const ci = Layer.succeed(Ci, { start: () => fail, at: () => fail });
+          const host = Layer.succeed(CodeHost.CodeHost, { change: () => fail, update: () => fail, merge: () => fail });
+          const ci = Layer.succeed(Ci.Ci, { start: () => fail, at: () => fail });
           const cmd: Record<string, unknown> = { type: cell.method, attempt: 1, change: 1, head, start: cell.start };
 
           if (cell.kind === "bad_head") {

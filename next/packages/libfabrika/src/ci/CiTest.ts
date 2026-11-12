@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Context, Effect, Layer, Redacted, Schema } from "effect";
 import * as fc from "fast-check";
 import type { CheckRun } from "./Ci.ts";
-import { Checks, Ci, CiError, Status } from "./Ci.ts";
+import { Checks, Ci, CiError, RateLimited, Status, Unavailable } from "./Ci.ts";
 
 // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's synchronous command interface
 const sync = <A, E>(effect: Effect.Effect<A, E>) => Effect.runSync(effect);
@@ -49,6 +49,8 @@ const rank = (run: typeof CheckRun.Type) => {
   return 0;
 };
 
+const reasons = { unavailable: Unavailable, rate_limited: RateLimited };
+
 export const layer = (options: { readonly token?: Redacted.Redacted<string> } = {}): Layer.Layer<Ci | Control> =>
   Layer.effectContext(
     Effect.sync(() => {
@@ -62,7 +64,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
           const cause = new Error(options.token === undefined ? "scripted CI failure" : Redacted.value(options.token));
 
           if (fault?.kind === "fault") {
-            return Effect.fail(new CiError({ reason: fault.reason, cause }));
+            return Effect.fail(new CiError({ reason: new reasons[fault.reason]({ cause }) }));
           }
 
           if (fault?.kind === "defect") {
