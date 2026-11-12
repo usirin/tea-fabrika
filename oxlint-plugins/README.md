@@ -556,3 +556,40 @@ below were of the first count's findings.
 The laws are in `no-question-word-key.test.ts`, the last describe of `modules.test.ts`,
 `no-wall-clock.test.ts` and `after-hooks.test.ts`, each through the real config at generated paths.
 
+
+## One machine per file, decision 0046
+
+`fabrika/one-machine-per-file` blocks in `next/` and `.agents/`. Tests and shared law suites
+are left out by `*.test.ts`, `*.test.tsx`, `*Test.ts` and `*.test-support.ts` under `next/`,
+and `*.test.ts` under `.agents/`.
+
+It counts exported tea `Machine.make` calls, including one inside an exported factory, object or
+program. A second call fires. A private top-level helper used inside another machine's arguments
+passes; a private machine wrapped by an exported program counts. Two calls in one exported factory
+count twice. Named and namespace imports from `@demlik/tea` and `@demlik/tea/effect`, renamed
+imports and literal `["make"]` access are recognized. Local shadows and type-only imports pass.
+
+For each reached call, an imported value or imported member used directly as `model`, `msg` or
+`update` fires. A local value, inline expression or schema built from imported fields passes.
+Every file with a machine call, even a private call, also refuses imports from the closed I/O
+list in the rule. That list covers the named Effect runtime, clock, storage and stream modules,
+Effect's process/http/cli/unstable subpaths, `@effect/*`, `node:`, tea runners, and the platform
+imports named in 0042. Pure `effect/encoding` and `effect/crypto` imports pass. Type-only imports
+pass, both whole declarations and individual specifiers.
+
+The approved plan measured 13 files with exported machines or factories and expected zero hits.
+The rule's replay on 2026-11-11 finds **1 hit**, in lead tooling's `flow/machine.ts:101`:
+`msg: Schema.Never` is an imported member. The other 12 files pass. All 13 copied files with a
+second exported call fire for that added call. The zero-hit law remains red pending a plan
+amendment; no disable or ledger entry hides the hit. A zero-hit measurement would still say
+nothing about the false-alarm rate of forms not yet written.
+
+Review keeps these parts of 0046:
+
+- Whether changing data is control state and must be a tea machine.
+- Input or output through relative/workspace imports, globals or dynamic imports.
+- Building or editing another file's Model by hand.
+- Whether a factory returns its machine and whether its config carries a service.
+
+The syntax rule misses aliases of `Machine.make`, destructuring, re-exports and imported helpers
+that make machines. Each new written form needs review. It has no type information.
