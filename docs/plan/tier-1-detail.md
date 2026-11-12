@@ -564,6 +564,8 @@ export class Nemesis extends Context.Service<Nemesis, {
 }
 ```
 
+*Changed 2026-11-12, as P17b's slice 1 built it ([PR 1037](https://github.com/usirin/tea-fabrika/pull/1037)); the sketch above stays as it was written.* The schemas and the pure check are in `next/packages/libfabrika/src/runtime/Chaos.ts`, and the contract alone is in `runtime/Nemesis.ts` ([0095](../../.decisions/0095-a-service-file-holds-only-its-contract.md)). There is no static `none`: the off layer is `NemesisNone.layer`, and it fails both calls with `NemesisError`, whose `reason` is `Off`. `fire` takes a `Fire` (`{id, ordinal, target, fault}`) and `check` takes a `Target`, which names only `fabrika/checklist` ([0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)). Both fail with `NemesisError`, never `LedgerError`: its `reason` is `Off`, `BadTarget`, `NotGranted`, `Unreachable`, `BadRow` or `Storage`, each keeping its cause. `abort`'s targets are `connection`, `process` and `project`, since main has no separate gateway object. `runtime/` may not import `ledger/`, so `NemesisLedger.layer` reads history through `ProcessHistory` in `processes/`. `Report` holds `letters`, `doubled` and `gaps` with the two stream boundaries it read to and the restart facts it saw.
+
 - The box does not change: `globalOutbound: null`, no stub in its env. The isolate returns `cmds`. `ProgramRunner` in the process object reads them.
 - The wiring (`brain.ts`) holds one table: `{chaos: Nemesis}`. A `fire` from any other program is refused and logged as `bad_cmd`, and the letter stays.
 - `Nemesis`'s live Layer is built at wiring, on stubs. It is not in `app/`, so `app/` never imports transport.
