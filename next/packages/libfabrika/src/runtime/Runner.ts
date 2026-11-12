@@ -63,11 +63,11 @@ import {
   WatcherManager,
 } from "./Entry.ts";
 import { fromFailure } from "./internal/exitReason.ts";
-import { Failure, Policy } from "./internal/recovery.ts";
+import { Failure, Policy, type Receipt } from "./internal/recovery.ts";
 import { defaultPolicy, supervisor, Supervision, type SupervisorMsg } from "./internal/supervisor.ts";
 import { MailDelivery } from "./MailDelivery.ts";
 import { diff } from "./Patch.ts";
-import { ProgramDown, Refusal, Step, Write } from "./Program.ts";
+import { Admission, ProgramDown, Refusal, Step, Write } from "./Program.ts";
 import { recoveryStore } from "./RecoveryStore.ts";
 import { Replies, type RepliesError } from "./Replies.ts";
 import * as RepliesSql from "./RepliesSql.ts";
@@ -289,7 +289,7 @@ export class ProgramRunner extends Context.Service<
         const deliveries = (s: Supervision): number => s.maxDeliveries ?? s.policy.maxDeliveries;
         /** The journal is replacing its process: no program work runs until it is idle again. */
         const recovering = (s: Supervision | null): boolean =>
-          s !== null && s.journal._tag !== "idle" && s.journal._tag !== "stepping";
+          s !== null && s.journal._tag !== "idle" && s.journal._tag !== "stepping" && s.journal._tag !== "checking";
         /** When recovery waits: down's own wait, or a successor's start that is not due yet. */
         const waitUntil = (s: Supervision | null): number | null => {
           const j = s?.journal;
@@ -343,6 +343,17 @@ export class ProgramRunner extends Context.Service<
             const p = yield* coordinator;
 
             switch (j._tag) {
+              case "writing_reply": {
+                yield* replies.rememberReply(j.reply);
+                yield* store.activity(Activity.cases.idle.make({ process: j.attempt.process }));
+                yield* complete({ type: "reply_written", seq: j.attempt.seq });
+                break;
+              }
+              case "clearing_attempt": {
+                yield* store.activity(Activity.cases.idle.make({ process: j.attempt.process }));
+                yield* complete({ type: "attempt_cleared", seq: j.attempt.seq });
+                break;
+              }
               case "writing_dead": {
                 const { failure } = j;
                 const receipt = s.receipts.find(
@@ -581,7 +592,12 @@ export class ProgramRunner extends Context.Service<
           yield* continueRecovery();
           const resumed = yield* currentRecovery;
           const now = resumed.journal;
-          const current = now._tag === "idle" ? now.process : now._tag === "stepping" ? now.attempt.process : null;
+          const current =
+            now._tag === "idle"
+              ? now.process
+              : now._tag === "stepping" || now._tag === "checking"
+                ? now.attempt.process
+                : null;
 
           if (current !== null) {
             yield* adopt(current, resumed.build);
@@ -591,7 +607,7 @@ export class ProgramRunner extends Context.Service<
             // One captured identity, one interruption: the saved attempt wins over the marker.
             const marker = yield* store.readActivity;
             const letter =
-              now._tag === "stepping" && now.attempt.process === process.id
+              (now._tag === "stepping" || now._tag === "checking") && now.attempt.process === process.id
                 ? now.attempt.letter
                 : now._tag === "idle" && marker?._tag === "stepping" && marker.process === process.id
                   ? marker.letter
@@ -638,7 +654,8 @@ export class ProgramRunner extends Context.Service<
         const step = Effect.fnUntraced(function* (
           reason: ProgramDown["reason"],
           letter: string,
-          f: () => Effect.Effect<Step, ProgramDown>,
+          f: () => Effect.Effect<Step, RunnerFailure>,
+          receipt?: Receipt,
         ) {
           if (supervision !== null) {
             const status = yield* (yield* coordinator).status(process.name);
@@ -651,8 +668,10 @@ export class ProgramRunner extends Context.Service<
           const j = supervision?.journal;
 
           if (j !== undefined && result._tag === "Failure") {
-            if (j._tag !== "stepping") {
-              return yield* new LedgerError({ reason: "bad_row", cause: result.cause });
+            const failed = Cause.findError(result.cause);
+
+            if (j._tag !== "stepping" && j._tag !== "checking") {
+              return yield* Effect.failCause(result.cause);
             }
 
             const { phase: _phase, at, ...attempt } = j.attempt;
@@ -666,33 +685,28 @@ export class ProgramRunner extends Context.Service<
               return yield* Effect.failCause(result.cause);
             }
 
-            const wrapped = Cause.squash(result.cause);
+            if (Result.isFailure(failed) || !Schema.is(ProgramDown)(failed.success)) {
+              return yield* Effect.failCause(result.cause);
+            }
 
-            if (wrapped instanceof ProgramDown && wrapped.source !== undefined) {
-              yield* send({ type: "finished", seq: attempt.seq });
-              yield* store.activity(Activity.cases.idle.make({ process: process.id })).pipe(Effect.ignore);
+            const wrapped = failed.success;
+
+            if (wrapped.source !== undefined) {
+              yield* complete({ type: "abandoned", seq: attempt.seq });
+              yield* continueRecovery();
               return yield* wrapped;
             }
 
-            const original =
-              wrapped instanceof ProgramDown && Object.hasOwn(wrapped, "cause") ? wrapped.cause : wrapped;
-            const error =
-              wrapped instanceof ProgramDown
-                ? wrapped.errorClass
-                : original instanceof Error
-                  ? original.constructor.name
-                  : original === null
-                    ? "null"
-                    : typeof original;
-            const down = wrapped instanceof ProgramDown ? wrapped : new ProgramDown({ reason, cause: original });
+            const original = Object.hasOwn(wrapped, "cause") ? wrapped.cause : wrapped;
+            const error = wrapped.errorClass;
             const failure = (reason === "step" ? Failure.cases.fresh : Failure.cases.saved).make({ ...attempt, error });
-            // The step's own failure is the answer; a later recovery write's failure never replaces it.
-            yield* observed(
-              { type: "threw", seq: attempt.seq, error, reason: fromFailure(failure), from: meta },
-              attempt.process,
-              { failure, content: original },
-            ).pipe(Effect.mapError(() => down));
-            return yield* down;
+            const msg: SupervisorMsg =
+              j._tag === "checking" && receipt !== undefined
+                ? { type: "check_threw", seq: attempt.seq, receipt, error, reason: fromFailure(failure), from: meta }
+                : { type: "threw", seq: attempt.seq, error, reason: fromFailure(failure), from: meta };
+            // The original program failure wins even when its observation cannot be saved.
+            yield* observed(msg, attempt.process, { failure, content: original }).pipe(Effect.mapError(() => wrapped));
+            return yield* wrapped;
           }
 
           if (j?._tag === "stepping") {
@@ -1528,30 +1542,72 @@ export class ProgramRunner extends Context.Service<
 
             const m = stamp(input.envelope.input, input.envelope.id);
 
-            // The port's schema runs inside the box; Schemas do not cross its RPC (P12).
-            if (!(yield* state.loaded.execution.admit(m))) {
-              return { answer: Sent.cases.refused.make({ reason: "bad_msg" }), jobs: [] };
-            }
-
-            if (supervision !== null && !supervision.receipts.some((r) => r.letter === input.id)) {
-              yield* send({
-                type: "received",
-                receipt: {
-                  letter: input.id,
-                  input: yield* Schema.decodeUnknownEffect(Schema.Json)(input).pipe(
-                    Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-                  ),
-                  digest: yield* inputDigest(input),
-                  errors: [],
-                  tries: 0,
-                  result: null,
-                  process: process.id,
-                },
-              });
-            }
-
+            const receipt: Receipt = {
+              letter: input.id,
+              input: yield* Schema.decodeUnknownEffect(Schema.Json)(input).pipe(
+                Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+              ),
+              digest: yield* inputDigest(input),
+              errors: [],
+              tries: 0,
+              result: null,
+              process: process.id,
+            };
             const preparation = yield* Effect.result(
-              step("step", input.id, () => state.loaded.execution.step(state.model, m)),
+              step(
+                "step",
+                input.id,
+                () =>
+                  Effect.gen(function* () {
+                    const j = (yield* currentRecovery).journal;
+
+                    if (j._tag !== "checking") {
+                      return yield* new LedgerError({ reason: "bad_row" });
+                    }
+
+                    const seq = j.attempt.seq;
+                    // Port and fresh checks share the same saved attempt and model.
+                    const admission = (yield* state.loaded.execution.admit(m))
+                      ? yield* state.loaded.execution.fresh(state.model, m)
+                      : Admission.cases.invalid.make({});
+
+                    if (admission._tag === "admitted") {
+                      yield* complete({ type: "admitted", seq, receipt });
+                      return yield* state.loaded.execution.update(state.model, m);
+                    }
+
+                    const parent = Schema.decodeUnknownOption(InputId)(input.envelope.id);
+
+                    if (admission._tag === "invalid" || Option.isNone(parent)) {
+                      yield* complete({ type: "abandoned", seq });
+                      yield* continueRecovery();
+                      return Step.cases.refused.make(admission._tag === "invalid" ? { reason: "bad_msg" } : admission);
+                    }
+
+                    yield* complete({
+                      type: "refused",
+                      seq,
+                      reply: {
+                        name: process.name,
+                        id: input.id,
+                        parent: parent.value,
+                        by: input.envelope.by.key,
+                        for: input.envelope.by.for,
+                        digest: yield* inputDigest(input),
+                        answer: Step.cases.refused.make(admission),
+                      },
+                    });
+                    yield* continueRecovery();
+                    const kept = yield* replies.reply(process.name, input.id);
+
+                    if (kept === null) {
+                      return yield* new LedgerError({ reason: "bad_row" });
+                    }
+
+                    return kept.answer;
+                  }),
+                receipt,
+              ),
             );
 
             if (Result.isFailure(preparation)) {
@@ -1576,25 +1632,7 @@ export class ProgramRunner extends Context.Service<
 
             if (prepared._tag === "refused") {
               const { _tag: _case, ...reason } = prepared;
-              const parent = Schema.decodeUnknownOption(InputId)(input.envelope.id);
-
-              // A delivery saved before input TypeIDs has no input ID to bind; its refusal stays unsaved.
-              if (Option.isNone(parent)) {
-                return { answer: Sent.cases.refused.make(reason), jobs: [] };
-              }
-
-              // Saved before it is answered: a lost answer's retry reads this first row.
-              const kept = yield* replies.rememberReply({
-                name: process.name,
-                id: input.id,
-                parent: parent.value,
-                by: input.envelope.by.key,
-                for: input.envelope.by.for,
-                digest: yield* inputDigest(input),
-                answer: prepared,
-              });
-              const { _tag: _first, ...first } = kept.answer;
-              return { answer: Sent.cases.refused.make(first), jobs: [] };
+              return { answer: Sent.cases.refused.make(reason), jobs: [] };
             }
 
             // Reading an old delivery never authorizes a new write with a legacy input ID.

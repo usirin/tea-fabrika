@@ -48,7 +48,6 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
                     deliver: (pid, _envelope, _span, incoming) => options.deliver(pid, incoming),
                     inputs: {
                       schema: Schema.Json,
-                      log: Schema.Json,
                       raw: [],
                       personOnly: [],
                       name: (m) =>

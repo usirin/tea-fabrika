@@ -13,6 +13,7 @@ import {
   Tracer,
 } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
+import * as Redacted from "effect/Redacted";
 import { admitted } from "../access/Access.ts";
 import { ClientManager } from "../access/ClientManager.ts";
 import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
@@ -34,6 +35,7 @@ import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 import { ProcessManager, remoteProcessManager, type ProcessCalls } from "../processes/ProcessManager.ts";
 import { ProgramMail, type ProgramMailError, type Delivery, type Grants } from "../processes/ProgramMail.ts";
 import * as ProgramMailLedger from "../processes/ProgramMailLedger.ts";
+import * as Audit from "../runtime/Audit.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import { Alarm, CheckedWriter, Recording, WatcherManager, type Incoming } from "../runtime/Entry.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
@@ -103,6 +105,7 @@ export interface ProjectDoorOptions {
   readonly write: <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
   readonly policy: (process: string) => Effect.Effect<{ inputs: Array<string>; events: Array<string> }, LedgerError>;
   readonly isLive: (process: string) => Effect.Effect<boolean, LedgerError>;
+  readonly audit: (process: string, message: unknown) => Effect.Effect<Schema.Json, Audit.AuditError>;
   readonly nextProcess: () => Effect.Effect<string>;
   readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError>;
   readonly deliver: (process: string, input: Incoming) => Effect.Effect<Sent, LedgerError>;
@@ -465,6 +468,25 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
       write,
       policy,
       isLive: processes.isLive,
+      audit: Effect.fn("project.audit")(function* (pid: string, message: unknown) {
+        const program = yield* Effect.gen(function* () {
+          const life = yield* resolved(pid);
+          const program = yield* loader.load(life.state.code.program, life.state.process);
+
+          if (program.hash !== life.state.code.hash) {
+            return yield* new Audit.AuditError({ reason: new Audit.Transport({}) });
+          }
+
+          return program;
+        }).pipe(
+          Effect.mapError((cause) =>
+            Schema.is(Audit.AuditError)(cause)
+              ? cause
+              : new Audit.AuditError({ reason: new Audit.Transport({ cause: Redacted.make(cause) }) }),
+          ),
+        );
+        return yield* program.execution.audit(message);
+      }),
       nextProcess: () => ids.next,
       notify,
       deliver: (pid, incoming) =>

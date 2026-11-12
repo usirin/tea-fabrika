@@ -137,6 +137,12 @@ const Declaration = Schema.Struct({
     data: Schemas,
     select: code<Code<[model: unknown], unknown>>("a view selector"),
   }),
+  audit: Schema.optionalKey(
+    Schema.Struct({
+      data: Schemas,
+      select: code<Code<[msg: unknown], unknown>>("an audit selector"),
+    }),
+  ),
   refuse: code<Code<[model: unknown, msg: unknown], unknown>>("a refusal check"),
   inputs: Schema.Record(Schema.String, Input),
   outputs: Schema.Record(Schema.String, Schemas),
@@ -195,13 +201,17 @@ type Policies<W> = {
   };
 };
 
-type Spec<T extends ProgramMachine, V extends Schema.Json, I, O, W> = {
+type Spec<T extends ProgramMachine, V extends Schema.Json, I, O, W, A extends Declared> = {
   readonly name: string;
   readonly maxDeliveries?: number;
   readonly machine: T;
   readonly state: Omit<State, "schema"> & { readonly schema?: never };
   readonly msg?: never;
   readonly view: (model: NoInfer<T["model"]["Type"]>) => V & NoInfer<ViewFor<I>>;
+  readonly audit?: {
+    readonly data: A;
+    readonly select: (msg: NoInfer<T["msg"]["Type"]>) => NoInfer<A["Type"]>;
+  };
   readonly refuse: (model: NoInfer<T["model"]["Type"]>, msg: NoInfer<T["msg"]["Type"]>) => Refusal | null;
   readonly inputs: I & Ports<NoInfer<T["msg"]["Type"]>, I>;
   readonly outputs: O;
@@ -225,6 +235,7 @@ export type Program<
   I = Record<string, Input>,
   O = Record<string, Declared>,
   W = Record<string, EventPolicy>,
+  A extends Declared = Declared,
 > = {
   readonly name: string;
   readonly maxDeliveries?: number;
@@ -235,6 +246,7 @@ export type Program<
     readonly data: typeof Schema.Json;
     readonly select: (model: T["model"]["Type"]) => V;
   };
+  readonly audit?: { readonly data: A; readonly select: (msg: T["msg"]["Type"]) => A["Type"] };
   readonly refuse: (model: T["model"]["Type"], msg: T["msg"]["Type"]) => Refusal | null;
   readonly inputs: FilledPorts<T, I>;
   readonly outputs: O;
@@ -260,6 +272,7 @@ const Authoring = Schema.Struct({
       InputSchema.cases.read,
     ]),
   ),
+  audit: Declaration.fields.audit,
   refuse: Declaration.fields.refuse,
   outputs: Declaration.fields.outputs,
   writes: Declaration.fields.writes,
@@ -292,9 +305,11 @@ const construct = (raw: unknown) =>
   );
 
 // Schema checks callable fields; the spec's types check the signatures without calling them.
-const typedProgram = <T extends ProgramMachine, V extends Schema.Json, I, O, W>(spec: Spec<T, V, I, O, W>) =>
+const typedProgram = <T extends ProgramMachine, V extends Schema.Json, I, O, W, A extends Declared>(
+  spec: Spec<T, V, I, O, W, A>,
+) =>
   Schema.declare(
-    (u): u is Program<T, V, I, O, W> =>
+    (u): u is Program<T, V, I, O, W, A> =>
       Result.isSuccess(decodeDeclaration(u)) &&
       Predicate.isObjectOrArray(u) &&
       Predicate.hasProperty(u, "machine") &&
@@ -308,9 +323,10 @@ const make = <
   const I extends Readonly<Record<string, unknown>>,
   O extends Readonly<Record<string, Declared>>,
   W extends Readonly<Record<string, EventPolicy>>,
+  A extends Declared = Declared,
 >(
-  spec: Spec<T, V, I, O, W>,
-): Program<T, V, I, O, W> => {
+  spec: Spec<T, V, I, O, W, A>,
+): Program<T, V, I, O, W, A> => {
   const checked = construct(spec);
 
   if (Result.isFailure(checked)) {
@@ -326,7 +342,8 @@ const makeEffect = Effect.fn("program.make")(function* <
   const I extends Readonly<Record<string, unknown>>,
   O extends Readonly<Record<string, Declared>>,
   W extends Readonly<Record<string, EventPolicy>>,
->(spec: Spec<T, V, I, O, W>): Effect.fn.Return<Program<T, V, I, O, W>, SchemaIssue.Issue> {
+  A extends Declared = Declared,
+>(spec: Spec<T, V, I, O, W, A>): Effect.fn.Return<Program<T, V, I, O, W, A>, SchemaIssue.Issue> {
   const checked = construct(spec);
 
   if (Result.isFailure(checked)) {
@@ -362,6 +379,12 @@ export const Step = Schema.TaggedUnion({
 });
 export type Step = typeof Step.Type;
 
+/** A fresh check decides admission without preparing a model or running update. */
+export const Admission = Schema.TaggedUnion({ admitted: {}, invalid: {}, refused: Refusal.fields });
+export type Admission = typeof Admission.Type;
+/** An update's checked model, view, Cmds and wake time. */
+export type Prepared = typeof Step.cases.stepped.Type;
+
 /** The program cannot run: it did not load, a fresh step threw or returned bad data, or saved
  *  state or a saved letter does not fold. Never a refusal: nothing was decided. */
 export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown", {
@@ -387,6 +410,8 @@ export type Stepper = {
   readonly program: typeof Declaration.Type;
   /** Boots from a saved model, or from nothing. */
   readonly init: (saved: unknown) => Step;
+  readonly fresh: (model: unknown, msg: unknown) => Result.Result<Admission, ProgramDown>;
+  readonly update: (model: unknown, msg: unknown) => Result.Result<Prepared, ProgramDown>;
   /** A fresh input: checked, maybe refused, then stepped. */
   readonly step: (model: unknown, msg: unknown) => Step;
   /** A saved input: applied as it was accepted, never refused again. */
@@ -529,7 +554,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
   };
 
   /** The machine's answer as JSON, checked. Bad data is ProgramDown with `reason`. */
-  const prepare = (next: unknown, cmds: ReadonlyArray<unknown>, reason: ProgramDown["reason"]): Step => {
+  const prepare = (next: unknown, cmds: ReadonlyArray<unknown>, reason: ProgramDown["reason"]): Prepared => {
     const encoded = encodeModel(next);
     const view = guard(reason, () => encodeView(program.view.select(next)));
     const wake = guard(reason, () => decodeWake(program.wake(next)));
@@ -554,19 +579,18 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     });
   };
 
-  return Result.succeed({
-    program,
-    init: (saved) => {
-      const start = saved === null ? null : model(saved, "saved_state");
-      const [next] = guard("load", () => machine.init(start, {}));
-      return prepare(next, [], "load");
-    },
-    step: (raw, msg) => {
+  const checked = <A>(f: () => A): Result.Result<A, ProgramDown> =>
+    Result.try({
+      try: f,
+      catch: (cause) => (Schema.is(ProgramDown)(cause) ? cause : new ProgramDown({ reason: "step", cause })),
+    });
+  const fresh: Stepper["fresh"] = (raw, msg) =>
+    checked(() => {
       const now = model(raw, "saved_state");
       const m = message(msg, false);
 
       if (Option.isNone(m) || !cells.has(m.value.type)) {
-        return Step.cases.refused.make({ reason: "bad_msg" });
+        return Admission.cases.invalid.make({});
       }
 
       const refusal = guard("step", () => decodeRefusal(program.refuse(now, m.value)));
@@ -575,12 +599,54 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
         throw new ProgramDown({ reason: "step", error: "ProgramDown", cause: refusal.failure });
       }
 
-      if (refusal.success !== null) {
-        return Step.cases.refused.make(refusal.success);
+      return refusal.success === null
+        ? Admission.cases.admitted.make({})
+        : Admission.cases.refused.make(refusal.success);
+    });
+  const update: Stepper["update"] = (raw, msg) =>
+    checked(() => {
+      const now = model(raw, "saved_state");
+      const m = message(msg, false);
+
+      if (Option.isNone(m) || !cells.has(m.value.type)) {
+        throw new ProgramDown({ reason: "step" });
       }
 
       const [next, cmds] = guard("step", () => applyCell(machine, now, m.value));
       return prepare(next, cmds, "step");
+    });
+
+  return Result.succeed({
+    program,
+    fresh,
+    update,
+    init: (saved) => {
+      const start = saved === null ? null : model(saved, "saved_state");
+      const [next] = guard("load", () => machine.init(start, {}));
+      return prepare(next, [], "load");
+    },
+    step: (raw, msg) => {
+      const admission = fresh(raw, msg);
+
+      if (Result.isFailure(admission)) {
+        throw admission.failure;
+      }
+
+      if (admission.success._tag === "invalid") {
+        return Step.cases.refused.make({ reason: "bad_msg" });
+      }
+
+      if (admission.success._tag === "refused") {
+        return Step.cases.refused.make(admission.success);
+      }
+
+      const prepared = update(raw, msg);
+
+      if (Result.isFailure(prepared)) {
+        throw prepared.failure;
+      }
+
+      return prepared.success;
     },
     fold: (raw, msg) => {
       const now = model(raw, "saved_state");
