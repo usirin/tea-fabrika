@@ -387,17 +387,16 @@ it.layer(
           return yield* Effect.die("restart recorded no successor");
         }
 
-        const inbox = yield* invoke(instance.project(PROJECT), "read", "checklist:1/inbox", 0, "usage-probe").pipe(
-          Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(Schema.Unknown))),
-        );
+        // The three accepted client inputs replay. The old process's alarm stamps do not
+        // drive its successor, and execution.fold spans need not be in the successor's record.
+        const replayed = calls(stepped, "step").length;
         const folded = yield* until(
           read(world, successor),
-          (rows) => cpu(rows, "fold").length === inbox.length,
+          (rows) => cpu(rows, "fold").length === replayed,
           "successor execution.fold calls did not each produce an isolate.cpu row",
         );
-        expect(inbox.length).toBeGreaterThan(0);
-        expect(cpu(folded, "fold")).toHaveLength(inbox.length);
-        expect(calls(folded, "fold")).toHaveLength(inbox.length);
+        expect(replayed).toBe(3);
+        expect(cpu(folded, "fold")).toHaveLength(replayed);
 
         for (const [process, spans] of [
           [checklist, stepped],

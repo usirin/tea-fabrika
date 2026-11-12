@@ -1,7 +1,20 @@
 // next/. SQLite laws, with no driver (0062). A decision tape chooses only a move allowed by
 // the calls so far. The oracle reads committed health and span rows, never the sink's model.
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Deferred, Effect, Exit, Fiber, Logger, References, Ref, Result, Tracer, type Scope } from "effect";
+import {
+  Cause,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Logger,
+  References,
+  Ref,
+  Result,
+  Schema,
+  Tracer,
+  type Scope,
+} from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
@@ -71,6 +84,8 @@ const DeliveryCell = fc.record({
 });
 type DeliveryCell = typeof DeliveryCell extends fc.Arbitrary<infer A> ? A : never;
 const DeliveryTape = fc.array(DeliveryCell, { minLength: 1, maxLength: 24 });
+
+class DeliveryError extends Schema.TaggedError<DeliveryError>()("DeliveryError", { message: Schema.String }) {}
 
 const sample = (process: string, cpuMs: number): typeof IsolateUsage.Usage.Type => ({
   process,
@@ -331,7 +346,7 @@ export const suite = (rig: Rig) =>
                   behavior === "hang"
                     ? Effect.never
                     : behavior === "fail"
-                      ? Effect.fail(new TypeError(`PRIVATE_DELIVERY_${cell.error}_END`))
+                      ? Effect.fail(new DeliveryError({ message: `PRIVATE_DELIVERY_${cell.error}_END` }))
                       : Effect.void;
                 const delivery = rig.deliver(
                   { project: "project-test", name: "checklist:1", process: pid(1) },
@@ -370,7 +385,7 @@ export const suite = (rig: Rig) =>
 
                   if (behavior === "fail") {
                     expect(logs[0]?.level).toBe("Error");
-                    expect(JSON.stringify(logs[0])).toContain("TypeError");
+                    expect(JSON.stringify(logs[0])).toContain("DeliveryError");
                   }
 
                   expect(
