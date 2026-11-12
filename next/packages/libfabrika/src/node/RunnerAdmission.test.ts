@@ -104,21 +104,23 @@ const environment: ProjectAuditTest.Harness["environment"] = (
       },
       load: unused,
     },
-    PROCESS: namespace((object: string) => ({
-      configure: async () => undefined,
-      usage: async (rows: Parameters<typeof usage>[1]) => usage(object, rows),
-      msg: async (input: Incoming) => {
-        const message = input.envelope.input;
-        const stamped = Predicate.isObject(message) ? { ...message, parent: input.envelope.id } : message;
+    PROCESS: namespace(
+      vi.fn().mockImplementation((object: string) => ({
+        configure: async () => undefined,
+        usage: async (rows: Parameters<typeof usage>[1]) => usage(object, rows),
+        msg: async (input: Incoming) => {
+          const message = input.envelope.input;
+          const stamped = Predicate.isObject(message) ? { ...message, parent: input.envelope.id } : message;
 
-        if (!(await box.admit(stamped))) {
-          return Sent.cases.refused.make({ reason: "bad_msg" });
-        }
+          if (!(await box.admit(stamped))) {
+            return Sent.cases.refused.make({ reason: "bad_msg" });
+          }
 
-        const rev = accept();
-        return Sent.cases.accepted.make({ rev, pos: rev });
-      },
-    })),
+          const rev = accept();
+          return Sent.cases.accepted.make({ rev, pos: rev });
+        },
+      })),
+    ),
     RECORD: namespace(vi.fn().mockReturnValue({ write: async () => Written.cases.written.make({}) })),
     MEASUREMENTS: {
       head: unused,
