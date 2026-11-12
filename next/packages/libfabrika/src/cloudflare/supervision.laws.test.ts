@@ -578,7 +578,7 @@ it("P2: runners select policy before init and retain policy, pending recovery an
                   }),
                   moves,
                 ),
-              catch: (cause) => cause,
+              catch: (cause) => new Cause.UnknownError(cause),
             });
           }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
         ),
