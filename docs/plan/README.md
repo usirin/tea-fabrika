@@ -99,7 +99,9 @@ lands each slice once its steps pass
 [PR 687](https://github.com/usirin/tea-fabrika/pull/687): each program and its window scripts ride
 inside the brain, and the local bar did not get worse ([experiment 241](../../experiments/241-one-file-build.md)).
 → next: P15, P17b, P18 to P20, P23 to
-P25, P27a and P36 have tests on their branches and wait for builds; P28's tests are in, and its
+P25, P27a and P36 have tests on their branches and wait for builds. P36's tests change first:
+email recovery now lets the device in at once, with no wait and no Cancel (2026-11-11,
+[0138](../../.decisions/0138-email-recovery-lets-in-at-once.md), tracker ticket 840). P28's tests are in, and its
 build waits on P19, P21 and P26. Ticket 331 names both P24 and P28, a clash to fix
 ([P24's row](./tier-1.md#the-pull-requests-one-at-a-time)).
 P34c, new on 2026-11-09 ([0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)),
