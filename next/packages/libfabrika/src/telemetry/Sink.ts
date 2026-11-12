@@ -251,17 +251,19 @@ const make = (sql: Sql, options: { readonly object: string }) => {
   let state = machine.init(null, {})[0];
 
   /** Runs `step` as one atomic step, with the tables made first on first use. */
-  const atomic = <A>(step: () => A): A =>
-    sql.transaction(() => {
+  const atomic = <A>(step: () => A): A => {
+    const result = sql.transaction(() => {
       if (!ready) {
         for (const query of [...HEALTH_TABLES, ...SINK_TABLES]) {
           sql.exec(query);
         }
       }
 
-      ready = true;
       return step();
     });
+    ready = true;
+    return result;
+  };
 
   const land = ({ health, chain, row, content }: Ended) => {
     writeHealth(sql, health);

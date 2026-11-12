@@ -15,7 +15,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { errorClass } from "../telemetry/Trace.ts";
 import { isolateUsage, ProcessClient, rejected } from "./platform.ts";
-import type { Env } from "./runtime.ts";
+import { processStub, type Env } from "./runtime.ts";
 
 /**
  * Schema for attribution fixed when a program isolate is loaded.
@@ -53,7 +53,7 @@ export const tail = Effect.fnUntraced(function* (
 ) {
   const work = Effect.gen(function* () {
     const rows = yield* isolateUsage(props.process, items);
-    const stub = env.PROCESS.getByName(JSON.stringify([props.project, props.name]));
+    const stub = processStub(env, props.project, props.name);
     yield* ProcessClient.make(stub).usage(rows);
   });
   yield* work.pipe(Effect.catchCause((cause) => Effect.logError(errorClass(rejected(Cause.squash(cause))))));
