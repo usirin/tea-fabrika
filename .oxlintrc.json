@@ -959,7 +959,8 @@
               "packs",
               "access",
               "runtime",
-              "gateway"
+              "gateway",
+              "desktop"
             ],
             "folders": ["node", "cloudflare", "coordination"],
             "files": ["index", "Id", "Testing", "ProcessId", "Sql", "Rev", "SpanTag"],
@@ -1196,7 +1197,8 @@
         "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/transport/**",
         "next/packages/libfabrika/src/gateway/**",
-        "next/packages/libfabrika/src/settings/**"
+        "next/packages/libfabrika/src/settings/**",
+        "next/packages/libfabrika/src/desktop/**"
       ],
       "rules": { "unicorn/filename-case": ["error", { "case": "pascalCase" }] }
     },
@@ -1214,7 +1216,8 @@
         "next/packages/libfabrika/src/runtime/internal/**",
         "next/packages/libfabrika/src/transport/internal/**",
         "next/packages/libfabrika/src/gateway/internal/**",
-        "next/packages/libfabrika/src/settings/internal/**"
+        "next/packages/libfabrika/src/settings/internal/**",
+        "next/packages/libfabrika/src/desktop/internal/**"
       ],
       "rules": { "unicorn/filename-case": ["error", { "case": "camelCase" }] }
     },
@@ -1335,6 +1338,204 @@
       // on `i`, slips past both, and that gap is accepted (0065).
       "files": ["programs/trace/src/**/*.ts"],
       "rules": { "typescript/prefer-for-of": "error" }
+    },
+    // P21 slice 1: retain every module ban when adding desktop and contract restrictions.
+    {
+      "files": ["next/packages/libfabrika/src/desktop/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "./*/internal/**",
+                  "../*/internal/**",
+                  "./../*/internal/**",
+                  "../../*/internal/**",
+                  "./../../*/internal/**"
+                ],
+                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
+              },
+              {
+                "group": [
+                  "electron",
+                  "electron/**",
+                  "node:*",
+                  "@types/node",
+                  "@types/node/**",
+                  "@types/electron",
+                  "@types/electron/**",
+                  "@types/web",
+                  "@types/web/**",
+                  "lib.dom",
+                  "lib.dom.*",
+                  "**/node/**",
+                  "**/electron/**",
+                  "**/cloudflare/**",
+                  "**/gateway/**",
+                  "cloudflare:*",
+                  "@cloudflare/**",
+                  "miniflare",
+                  "miniflare/**",
+                  "workerd",
+                  "wrangler"
+                ],
+                "message": "P21 L11 and L12: desktop uses platform-free contracts, never gateway or platform types and implementations."
+              }
+            ]
+          }
+        ],
+        "typescript/no-restricted-types": [
+          "error",
+          {
+            "types": {
+              "Window": "P21 L11: a desktop contract names no platform type.",
+              "Document": "P21 L11: a desktop contract names no platform type.",
+              "NodeJS": "P21 L11: a desktop contract names no platform type.",
+              "NodeJS.Timeout": "P21 L11: a desktop contract names no platform type.",
+              "Electron": "P21 L11: a desktop contract names no platform type.",
+              "Electron.BrowserWindow": "P21 L11: a desktop contract names no platform type.",
+              "BrowserWindow": "P21 L11: a desktop contract names no platform type.",
+              "WebContents": "P21 L11: a desktop contract names no platform type.",
+              "HTMLElement": "P21 L11: a desktop contract names no platform type.",
+              "HTMLDocument": "P21 L11: a desktop contract names no platform type.",
+              "Element": "P21 L11: a desktop contract names no platform type.",
+              "Event": "P21 L11: a desktop contract names no platform type.",
+              "Buffer": "P21 L11: a desktop contract names no platform type."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "files": ["next/packages/libfabrika/src/desktop/PersonCheck.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "effect",
+                "importNames": ["Layer"],
+                "message": "P21 L12: PersonCheck holds only its contract. Its Layer is a sibling file."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "./*/internal/**",
+                  "../*/internal/**",
+                  "./../*/internal/**",
+                  "../../*/internal/**",
+                  "./../../*/internal/**"
+                ],
+                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
+              },
+              {
+                "group": [
+                  "electron",
+                  "electron/**",
+                  "node:*",
+                  "@types/node",
+                  "@types/node/**",
+                  "@types/electron",
+                  "@types/electron/**",
+                  "@types/web",
+                  "@types/web/**",
+                  "lib.dom",
+                  "lib.dom.*",
+                  "**/node/**",
+                  "**/electron/**",
+                  "**/cloudflare/**",
+                  "**/gateway/**",
+                  "cloudflare:*",
+                  "@cloudflare/**",
+                  "miniflare",
+                  "miniflare/**",
+                  "workerd",
+                  "wrangler"
+                ],
+                "message": "P21 L11 and L12: desktop uses platform-free contracts, never gateway or platform types and implementations."
+              },
+              {
+                "group": ["effect/Layer"],
+                "message": "P21 L12: the service contract imports no Layer implementation."
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }

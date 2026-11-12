@@ -663,7 +663,7 @@ it("pinned: L6 a second machine is planted and lint.ts exits 1", async () => {
   expect(out.status).toBe(1);
 });
 
-// L12: lint inputs stay here. The contract import restriction needs a scoped config rule.
+// format: the contract's forbidden Layer import is a lint input, including its static implementation.
 it("format: P21 L12 a PersonCheck contract cannot carry a Layer implementation", async () => {
   const file = "next/packages/libfabrika/src/desktop/PersonCheck.ts";
   const result = await lintCopies({
@@ -709,4 +709,40 @@ it("format: P21 L11 desktop public types cannot name Electron, Node or the DOM",
   });
   expect.soft(result("eslint(no-restricted-imports)", imported)).toContain(1);
   expect.soft(result("typescript(no-restricted-types)", globals)).toEqual([1, 2, 3, 4]);
+});
+
+// format: these module paths include erased imports because platform types count too.
+it("format: P21 L12 desktop refuses gateway and platform imports while admitting access", async () => {
+  const file = "next/packages/libfabrika/src/desktop/Menu.ts";
+  const result = await lintCopies({
+    [file]: [
+      'import type { Grant } from "../access/Access.ts";',
+      'import type { Gateway } from "../gateway/Gateway.ts";',
+      'import type { Load } from "../node/settings/Load.ts";',
+      'import type { Extra } from "../electron/Extra.ts";',
+      'import type { Brain } from "../cloudflare/objects.ts";',
+      'import type { Stats } from "node:fs";',
+      'import type { Document } from "@types/web";',
+    ].join("\n"),
+  });
+  expect(result("eslint(no-restricted-imports)", file)).toEqual([2, 3, 4, 5, 6, 7]);
+});
+
+// format: module admission and PascalCase apply to desktop's new front files too.
+it("format: P21 desktop is admitted as a module and keeps the front-file naming rule", async () => {
+  const front = "next/packages/libfabrika/src/desktop/Menu.ts";
+  const bad = "next/packages/libfabrika/src/desktop/bad.ts";
+  const contract = "next/packages/libfabrika/src/desktop/PersonCheck.ts";
+  const layer = "next/packages/libfabrika/src/desktop/PersonCheckTest.ts";
+  const result = await lintCopies({
+    [front]: "export const view = () => [];\n",
+    [bad]: "export const view = () => [];\n",
+    [contract]: 'import { Context, Schema } from "effect";\nexport const Answer = Schema.String;\n',
+    [layer]: 'import { Layer } from "effect";\nexport const layer = Layer.empty;\n',
+  });
+  expect(result("fabrika(modules)", front)).toEqual([]);
+  expect(result("unicorn(filename-case)", front)).toEqual([]);
+  expect(result("unicorn(filename-case)", bad)).toEqual([1]);
+  expect(result("eslint(no-restricted-imports)", contract)).toEqual([]);
+  expect(result("eslint(no-restricted-imports)", layer)).toEqual([]);
 });

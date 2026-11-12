@@ -17,40 +17,87 @@ const signed = (cmds: ReadonlyArray<Test.Command>) =>
 
 const waiting = (s: Test.Model) => Menu.view(s).filter((i) => i._tag === "waiting");
 const safe = (s: string) => s.replace(/[\p{Cc}\p{Cf}]/gu, "");
+// pinned: amendment A-Lint uses the existing brain-line text cap, in UTF-16 code units.
+const labelLimit = 256;
+
+const displayed = (raw: string) => {
+  const cut = safe(raw).slice(0, labelLimit);
+  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
+};
+
+const hasLabel = (words: string, raw: string) => {
+  const clean = safe(raw);
+  const shown = displayed(raw);
+  const next = clean.codePointAt(shown.length);
+  return (
+    words.isWellFormed() &&
+    words.includes(shown) &&
+    (next === undefined || !words.includes(shown + String.fromCodePoint(next)))
+  );
+};
+
 const hasCode = (words: string, code: string) => words.replace(/\s/g, "").includes(code);
 
 // After build: sign on approve, approve on Enter, or accept a checked reply with the wrong cmd.
 it("L1: signatures follow the matching check; no check failure or Enter writes", () => {
-  propertyInvariant(
+  propertyTrace(
     Test.machine,
     Test.ctx,
     Test.walks,
-    ({ prev, msg, next, cmds }) => {
-      if (msg.type === "enter") {
-        return (Test.same(prev, next) && cmds.length === 0) || "Enter acted";
+    (steps, _final, initCmds) => {
+      if (signed(initCmds).length > 0) {
+        return "init signed without a checked person";
       }
 
-      if (msg.type === "not_checked") {
-        return (
-          (cmds.length === 0 &&
-            (prev._tag !== "checking" || msg.cmd !== prev.cmd ? Test.same(prev, next) : next._tag === "idle")) ||
-          "a failed check acted"
-        );
-      }
+      const pending = new Set(initCmds.filter((c) => c.type === "check").map((c) => c.cmd));
 
-      if (msg.type === "checked" && (prev._tag !== "checking" || msg.cmd !== prev.cmd)) {
-        return (Test.same(prev, next) && cmds.length === 0) || "a stale check acted";
-      }
+      for (const { prev, msg, next, cmds } of steps) {
+        if (msg.type === "enter" && (!Test.same(prev, next) || cmds.length > 0)) {
+          return "Enter acted";
+        }
 
-      if (signed(cmds).length > 0 && msg.type !== "rows") {
-        return (
-          (msg.type === "checked" &&
+        if (msg.type === "not_checked") {
+          const stale = prev._tag !== "checking" || msg.cmd !== prev.cmd;
+
+          if (cmds.length > 0 || (stale ? !Test.same(prev, next) : next._tag !== "idle")) {
+            return "a failed check acted";
+          }
+        }
+
+        if (
+          msg.type === "checked" &&
+          (prev._tag !== "checking" || msg.cmd !== prev.cmd) &&
+          (!Test.same(prev, next) || cmds.length > 0)
+        ) {
+          return "a stale check acted";
+        }
+
+        // Live-pass grants are checked separately by L6. A rows message can never revoke.
+        const writes = signed(cmds).filter((c) => msg.type !== "rows" || c.type === "sign_revoke");
+
+        if (
+          writes.length > 0 &&
+          !(
+            msg.type === "checked" &&
             prev._tag === "checking" &&
             msg.cmd === prev.cmd &&
-            signed(cmds).length === 1 &&
-            next._tag === "idle") ||
-          "a signature had no matching check"
-        );
+            pending.has(msg.cmd) &&
+            writes.length === 1 &&
+            next._tag === "idle"
+          )
+        ) {
+          return "a signature had no matching check command";
+        }
+
+        if (msg.type === "checked" || msg.type === "not_checked") {
+          pending.delete(msg.cmd);
+        }
+
+        for (const command of cmds) {
+          if (command.type === "check") {
+            pending.add(command.cmd);
+          }
+        }
       }
 
       return true;
@@ -75,6 +122,10 @@ it("L2: the signature keeps the clicked row, capabilities and act across later r
           shown === undefined ||
           (next._tag === "checking" &&
             next.act._tag === msg.type &&
+            next.act.key === shown.key &&
+            cmds.length === 1 &&
+            cmds[0]?.type === "check" &&
+            cmds[0].cmd === msg.cmd &&
             next.cmd === msg.cmd &&
             Test.same(next.act.shown, shown)) ||
           "click did not capture its row"
@@ -433,10 +484,8 @@ it("L8: equal models give ordered unique items, empty is explicit, and state is 
   );
 });
 
-// L9's length clause needs a plan correction: gateway/internal/waiting.ts accepts Schema.String
-// with no label limit. This part tests controls, bidi marks, code preservation and safe labels.
-// After build: interpolate the raw label in check.reason or an item's words.
-it("L9: prompts and items remove controls and bidi marks while keeping the displayed label and code", () => {
+// After build: interpolate the raw label, omit the cap, or cut through a surrogate pair.
+it("L9: prompts and items keep the code and the safe label within the pinned 256-unit limit", () => {
   const hostile = fc.record({
     label: fc.oneof(
       fc.constant(""),
@@ -444,6 +493,9 @@ it("L9: prompts and items remove controls and bidi marks while keeping the displ
         .tuple(Test.label, fc.constantFrom("\u0000\n\t\u001b", "\u202e\u2066\u2069", "\u007f\u0085"), Test.label)
         .map(([a, controls, b]) => `${a}${controls}${b}`),
       fc.stringMatching(/^[A-Za-z]{512,1024}$/),
+      fc
+        .tuple(fc.integer({ min: 253, max: 257 }), fc.constantFrom("😀", "𐐷"))
+        .map(([length, pair]) => `${"x".repeat(length)}${pair}tail`),
     ),
   });
   const flows = hostile.chain(({ label }) =>
@@ -474,12 +526,16 @@ it("L9: prompts and items remove controls and bidi marks while keeping the displ
               ? next.clients.find((c) => c.key === item.key)
               : undefined;
 
-        if (shown !== undefined && safe(shown.label).length < 25 && !item.words.includes(safe(shown.label))) {
-          return "an item lost the shown label";
+        if (shown !== undefined && !hasLabel(item.words, shown.label)) {
+          return "an item lost the shown label, exceeded its limit or split a surrogate pair";
         }
 
-        if (item._tag === "waiting" && !hasCode(item.words, item.code)) {
-          return "a waiting code was lost";
+        if (item._tag === "waiting") {
+          const row = next.rows.find((r) => r.key === item.key);
+
+          if (row === undefined || item.code !== row.code || !hasCode(item.words, row.code)) {
+            return "a waiting code was lost or replaced";
+          }
         }
       }
 
@@ -493,7 +549,7 @@ it("L9: prompts and items remove controls and bidi marks while keeping the displ
 
           if (
             act === undefined ||
-            (safe(act.shown.label).length < 25 && !command.reason.includes(safe(act.shown.label))) ||
+            !hasLabel(command.reason, act.shown.label) ||
             (act._tag === "approve" && !hasCode(command.reason, act.shown.code))
           ) {
             return "the check prompt lost the clicked label or code";
