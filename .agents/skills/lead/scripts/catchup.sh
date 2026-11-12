@@ -27,8 +27,8 @@
 #     did not catch up, or main moved after the checks),
 #     freshmain.ts runs `pnpm lint` on the head merged with it and refuses a red one, a conflict or
 #     a fetch that fails. No flag skips it. The tests are not run again (ticket 552)
-#   - prints sizecap.ts's one line, the product lines against 0087's cap, before it waits on the
-#     checks. It is advice: it never stops a merge until a replay lets it block
+#   - prints sizecap.ts's one line, the pull request's product lines, before it waits on the
+#     checks. It is advice only: no number caps a pull request (0099), so it never stops a merge
 #   - trusts commits only as one pull_request_target run of main's commits.yaml for this ticket
 #   - once the squash is on main, closes each ticket the PR description names on a line of its
 #     own, `fabrika close ticket <N>`, and prints what it closed (0015)
@@ -510,8 +510,8 @@ else
 	esac
 fi
 rmdir "$LOCK"; held=no
-# 0087's cap: one line with the pull request's product lines against `[review] lines`. Advice only
-# until the replay on merged pull requests lets it block; it never stops a merge.
+# One line with the pull request's product lines, which asks about slicing past sizecap.ts's
+# advice number. Advice only: no number caps a pull request (0099), so it never stops a merge.
 if size=$(node "$LEAD/sizecap.ts" diff origin/main "$tip"); then echo "pr $pr: $size"; else echo "pr $pr: size not counted"; fi
 # A head that caught up (or already held main) waits for every check on this exact sha, up to an
 # hour, then for a trusted commits run. A green head that did not catch up was read whole above.
