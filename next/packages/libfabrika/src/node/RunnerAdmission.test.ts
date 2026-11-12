@@ -84,7 +84,7 @@ const environment: ProjectAuditTest.Harness["environment"] = (
   const unused = vi.fn((): never => {
     throw new Error("unused platform call");
   });
-  const namespace = (getByName: ReturnType<typeof vi.fn> = vi.fn().mockImplementation(unused)) => ({
+  const namespace = <Get extends (...args: never[]) => unknown>(getByName: Get) => ({
     getByName,
     newUniqueId: unused,
     idFromName: unused,
@@ -93,8 +93,8 @@ const environment: ProjectAuditTest.Harness["environment"] = (
     jurisdiction: unused,
   });
   return {
-    PROJECT: namespace(),
-    CONNECTION: namespace(),
+    PROJECT: namespace(unused),
+    CONNECTION: namespace(unused),
     LOADER: {
       get: vi.fn().mockReturnValue({ getEntrypoint: vi.fn().mockReturnValue(box), getDurableObjectClass: unused }),
       load: unused,
