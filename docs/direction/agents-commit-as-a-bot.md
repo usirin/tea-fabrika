@@ -47,6 +47,14 @@
   "Unverified" (the Tier 1 plan's P32). [Experiment 212](../../experiments/212-fabrika-bot-commits.md)
   section 10 has what the first real app showed.
 
+Its decided rules are in: [0401](../../.decisions/0401-agents-commit-as-the-fabrikalfa-bot.md),
+[0402](../../.decisions/0402-one-bot-per-owner-key-in-brain.md),
+[0403](../../.decisions/0403-a-stand-in-token-in-the-box.md),
+[0404](../../.decisions/0404-only-mains-squash-is-verified.md),
+[0405](../../.decisions/0405-pull-requests-open-as-person-or-bot.md),
+[0406](../../.decisions/0406-the-bot-is-held-to-its-branches.md),
+[0407](../../.decisions/0407-this-repos-agent-commits-are-the-bots.md).
+
 Not walked yet: the branch rules on a repo other than this one (under Open, below).
 
 Built from [experiment 211](../../experiments/211-started-claude-sandbox.md), which asked what the
