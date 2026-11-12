@@ -52,7 +52,8 @@ export class Connections extends Context.Service<
 							session TEXT NOT NULL, at INTEGER NOT NULL)`);
                 return step();
               }),
-            catch: (error) => new LedgerError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage" }),
+            catch: (error) =>
+              new LedgerError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", cause: error }),
           });
         });
         const probe = Effect.fn("connections.probe")(function* (connection: Connection) {
