@@ -3,7 +3,7 @@
 // an unsaved one is asked afresh, in the plan's order. Only the write turn writes, and it is
 // `ProcessManager.start`'s own: the name's registration, its `started` line at the start's id and
 // its first letter, in one turn. Whatever that turn answers, the start reads again once.
-import { Effect, Equal, Layer, Option, Result, Schema } from "effect";
+import { Cause, Effect, Equal, Exit, Layer, Option, Result, Schema, Tracer } from "effect";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { short } from "../telemetry/Trace.ts";
@@ -168,6 +168,41 @@ export const layer = (config: {
           Effect.annotateCurrentSpan({ [tag("answer")]: "refused", [tag("reason")]: error.reason }),
         ),
       );
-      return Children.of({ start });
+      return Children.of({
+        start: Effect.fnUntraced(function* (input, from) {
+          const tracer = yield* Tracer.Tracer;
+          // Storage causes stay with the caller. Every nested span records only the safe reason.
+          const safe = Tracer.make({
+            context: tracer.context,
+            span(options) {
+              const span = tracer.span(options);
+              const end = span.end.bind(span);
+              span.end = (time, exit) => {
+                const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
+                end(
+                  time,
+                  Exit.isSuccess(exit)
+                    ? exit
+                    : Exit.fail(
+                        new ChildrenError({
+                          reason:
+                            Option.isSome(error) && error.value instanceof ChildrenError
+                              ? error.value.reason
+                              : "storage",
+                        }),
+                      ),
+                );
+              };
+              return span;
+            },
+          });
+          return yield* start(input, from).pipe(
+            Effect.withTracer(safe),
+            Effect.catchCause((cause) =>
+              Cause.hasDies(cause) ? Effect.die(new Error("children.start failed")) : Effect.failCause(cause),
+            ),
+          );
+        }),
+      });
     }),
   );

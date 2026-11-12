@@ -10,6 +10,7 @@ import {
   Context,
   DateTime,
   Effect,
+  Exit,
   Layer,
   Option,
   Result,
@@ -987,6 +988,12 @@ export class ProgramRunner extends Context.Service<
           yield* setAlarm();
         });
 
+        const exits = (state: Live, job: Dispatched): boolean =>
+          cmdType(job) === EXIT &&
+          job.oversize === undefined &&
+          state.loaded.declaration.cmds.includes(EXIT) &&
+          Option.isSome(decodeExit(job.cmd));
+
         /**
          * Accepted letters fold; other mail takes the fresh checks and cannot fail the process.
          * Every first fold saves its Cmds, but only this call's letter returns Cmds to run.
@@ -995,6 +1002,10 @@ export class ProgramRunner extends Context.Service<
           state: Live,
           options: { readonly mine?: string; readonly dirty?: boolean } = {},
         ) {
+          if (ended === process.id) {
+            return { state, fresh: [] as ReadonlyArray<Dispatched>, mine: Option.none<History>() };
+          }
+
           const letters = yield* Stream.runCollect(mailbox.read(process.name, state.after));
           const saved = yield* store.load;
 
@@ -1038,6 +1049,14 @@ export class ProgramRunner extends Context.Service<
             }
 
             const own = inRunnerSpace(letter.id) && letter.id.startsWith(`${process.id}/`);
+            const ending = cmds.findIndex((job) => exits(state, job));
+
+            // Only answers to Cmds before exit may still fold. Ordinary mail waits for the next life.
+            if (ending >= 0 && !cmds.slice(0, ending).some((job) => own && letter.id === `${job.id}/answer`)) {
+              stop = Math.min(stop, index);
+              continue;
+            }
+
             const accepted =
               signal ||
               own ||
@@ -1396,15 +1415,26 @@ export class ProgramRunner extends Context.Service<
         /** The built-in exit (P42): this life ends with `normal`, as OTP's `{stop, normal, State}`, and
          *  answers nothing. `null` is the ended life; a malformed exit is answered `bad_cmd`. */
         const stop = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
-          if (
-            job.oversize !== undefined ||
-            Option.isNone(decodeExit(job.cmd)) ||
-            !state.loaded.declaration.cmds.includes(EXIT)
-          ) {
+          if (!exits(state, job)) {
             return yield* err(job, "bad_cmd");
           }
 
-          yield* manager.exit(process.id, ExitReason.cases.normal.make({}), yield* from(job.parent, job.traceId));
+          const tracer = yield* Tracer.Tracer;
+          const safe = Tracer.make({
+            context: tracer.context,
+            span(options) {
+              const span = tracer.span(options);
+              const end = span.end.bind(span);
+              span.end = (time, exit) =>
+                end(time, Exit.isSuccess(exit) ? exit : Exit.fail(new LedgerError({ reason: "storage" })));
+              return span;
+            },
+          });
+          yield* manager.exit(process.id, ExitReason.cases.normal.make({}), yield* from(job.parent, job.traceId)).pipe(
+            Effect.withTracer(safe),
+            Effect.mapError(() => new LedgerError({ reason: "storage" })),
+            Effect.catchDefect(() => Effect.die(new Error("process.exit failed"))),
+          );
           return null;
         });
 
@@ -1817,6 +1847,10 @@ export class ProgramRunner extends Context.Service<
 
             if (prior !== null) {
               return { answer: Sent.cases.accepted.make({ rev: prior.rev, pos: prior.pos }), jobs: [] };
+            }
+
+            if (ended === process.id || state.cmds.some((job) => exits(state, job))) {
+              return { answer: Sent.cases.refused.make({ reason: "ended" }), jobs: [] };
             }
 
             const port = inputPort(state, input.envelope.input);
