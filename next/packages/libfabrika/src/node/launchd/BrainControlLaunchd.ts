@@ -29,11 +29,11 @@ import * as LaunchdStatus from "./LaunchdStatus.ts";
 
 const Job = Schema.Struct({
   Label: Schema.NonEmptyString,
-  ProgramArguments: Schema.Array(Schema.String),
+  ProgramArguments: Schema.Array(LaunchdStatus.Scalar),
   EnvironmentVariables: Schema.Struct({
     ELECTRON_RUN_AS_NODE: Schema.Literal("1"),
-    FABRIKA_HOME: Schema.String,
-    FABRIKA_BUILD: Schema.String,
+    FABRIKA_HOME: LaunchdStatus.Scalar,
+    FABRIKA_BUILD: LaunchdStatus.Scalar,
   }),
   RunAtLoad: Schema.Literal(true),
   KeepAlive: Schema.Struct({ SuccessfulExit: Schema.Literal(false) }),
@@ -160,6 +160,12 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
     yield* file.sync.pipe(Effect.mapError(storage));
     return { xml, bytes: yield* fs.readFileString(xml).pipe(Effect.mapError(storage)) };
   });
+  const syncHome = Effect.scoped(
+    Effect.gen(function* () {
+      const directory = yield* fs.open(spec.home, { flag: "r" }).pipe(Effect.mapError(storage));
+      yield* directory.sync.pipe(Effect.mapError(storage));
+    }),
+  );
   const install = Effect.scoped(
     Effect.gen(function* () {
       yield* canonical;
@@ -171,6 +177,8 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
           return yield* conflict("plist configuration");
         }
 
+        // A prior publication may have failed while syncing this directory.
+        yield* syncHome;
         return;
       }
 
@@ -184,8 +192,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
         ),
         Effect.mapError((cause) => (cause._tag === "BrainControlError" ? cause : storage(cause))),
       );
-      const directory = yield* fs.open(spec.home, { flag: "r" }).pipe(Effect.mapError(storage));
-      yield* directory.sync.pipe(Effect.mapError(storage));
+      yield* syncHome;
     }),
   );
   const start = Effect.scoped(
@@ -238,8 +245,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
         Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
         Effect.mapError(storage),
       );
-      const directory = yield* fs.open(spec.home, { flag: "r" }).pipe(Effect.mapError(storage));
-      yield* directory.sync.pipe(Effect.mapError(storage));
+      yield* syncHome;
     }),
   );
   return BrainControl.of({ inspect, install, start, stop, remove });

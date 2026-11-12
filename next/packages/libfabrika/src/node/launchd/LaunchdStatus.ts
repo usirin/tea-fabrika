@@ -15,7 +15,15 @@ const Response = Schema.Struct({
   stderr: Schema.Redacted(Schema.String),
 });
 
-const scalar = (value: string) => value.length > 0 && !/["\\{}\p{Cc}]/u.test(value) && value === value.trim();
+/**
+ * A job value that print can represent without ambiguous quoting or whitespace.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const Scalar = Schema.NonEmptyString.check(Schema.isPattern(/^[^"\\{}\p{Cc}]+$/u), Schema.isTrimmed());
+
+const scalar = Schema.is(Scalar);
 
 /**
  * Accepts exact absence or a complete, unambiguous job description.
