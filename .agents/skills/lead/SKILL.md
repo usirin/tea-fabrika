@@ -149,7 +149,8 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `box.sh new <name> <base> <branch> --ticket <n> --plan <path> [--root <sha>]` | check the start and save its facts (the lane root that build order and the commits check read from), then clone and install |
 | `box.sh run <name> <prompt> <out> --step <step>` | run Codex, save redacted output and the run row |
 | `box.sh fetch <name> <branch> --sign <step> --ticket <n>` | fetch without force, sign the recorded run and check commits |
-| `box.sh gc [--dry-run]` | remove every box that sat idle 2 h (24 h when drive kept it stuck) once its work is on a remote, backing unpushed commits up to `<branch>-wip` first (a box with uncommitted files is kept, since a backup saves only HEAD, until its lane lands: then its files go into the main checkout as a stash at `refs/keep/box/<box>-files` first), then every `state/<box>.box` whose box is gone, then every clean, idle linked worktree whose lane's pull request merged or closed, found by its branch, by a remote branch at its HEAD or by the PR's head commit, then `boxfiles.ts` moves a landed lane's gone boxes' files and mutation folders into the main checkout's `runs/boxes/<lane>/` and removes their git views and Codex homes (its header says when; `--dry-run` lists it all with sizes); before any folder goes, `keepruns.sh` moves its `runs/` (raw samples, never in git) into the main checkout's `runs/<folder>/`, and a folder it cannot move is kept, as in `box.sh rm` and `catchup.sh`; it prints each keep with its reason, and drive runs it at start, at most once in 30 minutes across all starts and always on a nearly full disk (`gcDue`), and names those keeps when it still refuses on disk. Cleanup is the tooling's job: never ask the owner to free disk (owner, 2026-11-09) |
+| `box.sh gc [--dry-run]` | remove every box that sat idle 2 h (24 h when drive kept it stuck) once its work is on a remote, backing unpushed commits up to `<branch>-wip` first (a box with uncommitted files is kept, since a backup saves only HEAD, until its lane lands: then its files go into the main checkout as a stash at `refs/keep/box/<box>-files` first), then every `state/<box>.box` whose box is gone, then every clean, idle linked worktree whose lane's pull request merged or closed, found by its branch, by a remote branch at its HEAD or by the PR's head commit, then `boxfiles.ts` moves a landed lane's gone boxes' files and mutation folders into the main checkout's `runs/boxes/<lane>/` and removes their git views and Codex homes (its header says when; `--dry-run` lists it all with sizes); before any folder goes, `keepruns.sh` moves its `runs/` (raw samples, never in git) into the main checkout's `runs/<folder>/`, and a folder it cannot move is kept, as in `box.sh rm` and `catchup.sh`; it prints each keep with its reason. No step's start runs it: `gcloop.ts` does, on a timer and after each merge ([below](#box-cleanup-on-a-timer)). Cleanup is the tooling's job: never ask the owner to free disk (owner, 2026-11-09) |
+| `gcloop.ts sweep [--trigger timer\|merge\|hand]` / `kick --trigger merge` / `status [--keeps]` / `plist` | the box cleanup's loop ([0101](../../../.decisions/0101-box-cleanup-runs-on-a-timer.md)): `sweep` runs `box.sh gc` under `nice` for at most one period, unless another sweep holds `state/gc.lock` (then it records `skipped` and exits 0), and appends one line to `state/gc.jsonl` either way: start, end, outcome (`ok`, `failed` with its reason, `skipped`), what it removed and kept, MB freed, free space before and after. `kick` starts a sweep in the background and returns; `catchup.sh` kicks one after each merge. `status` prints one line, `LATE` when the newest sweep that ran started more than two periods ago; drive puts it in a `low_disk` refusal. `plist` prints the timer's unit. The period is `GC_MINUTES`, default 30 |
 | `drive.ts <lane> <step> <brief>` | one Codex step end to end, with no agent waiting: box, run, fetch, checks, backup push, field row, state; one JSON line (below) |
 | `chain.ts <lane> <lane-brief.md>` | the whole lane end to end, with no lead agent holding it: tests, build, review through `drive.ts`, then the PR, `loosening.sh` and `catchup.sh`; a short judgment agent only on an ask or a stuck ([below](#run-a-whole-lane-with-chaints)) |
 | `flow/run.ts <flow-file> [--resume] [--lead] [--state <file>]` | run one flow, a list of typed steps saved to `BOXES/state/flow-<name>.json` before it starts, with no agent holding the loop ([0064](../../../.decisions/0064-the-lead-drives-with-flows.md)); one JSON line, exit 0 done, 20 parked on an ask, 30 stuck, 2 usage. A step marked `lead` runs only with `--lead`, so a run started by anyone else parks there. `flow/flows/land-decision.ts` lands a docs-only decision PR |
@@ -250,9 +251,10 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   mutation step whose diff has no product lines; its field row says `skip`, which review's order
   check takes in place of a mutation row), 2 usage, 3 refused before any agent ran, printed as
   `refused:<check>`: `agent_cap` (12 agents running, 0012: Codex boxes plus Claude steps drive
-  started), `low_disk` (under 20 GB free after `box.sh gc`), `branch_checked_out` (the lane's
-  branch checked out in a worktree, which the end-of-step fetch could not update), `docker_busy` (a
-  mutation step while another run holds the one Docker box), or a `box.sh new` start check
+  started), `low_disk` (under 20 GB free; drive starts no cleanup, and the reason carries
+  `gcloop.ts status --keeps`), `branch_checked_out` (the lane's branch checked out in a worktree,
+  which the end-of-step fetch could not update), `docker_busy` (a mutation step while another run
+  holds the one Docker box), or a `box.sh new` start check
   (`plan_unapproved`, `base_not_signed`, `shared_ticket`, `root_not_ancestor`). A refusal is not a
   step outcome, so the stuck count holds only steps an agent ran. It never retries. A stuck step keeps its
   box. A box's number is the first that no older run's files hold, and the line's `report` is `null`
@@ -374,6 +376,31 @@ and Codex's own sandbox, in place of Codex through ACP (`scripts/codexexec.ts`).
   again with `--start <step>` to go on from there: its rounds count on from the ones the chain
   record holds, so no earlier round's record, brief or judgment file is written over. Read the
   line's own `exit`, never the shell's: `volta run` answers 126 for any exit that is not 0.
+
+## Box cleanup on a timer
+
+`box.sh gc` runs on a launchd timer every `GC_MINUTES` (default 30) and once after each merge, and
+never on a step's start ([0101](../../../.decisions/0101-box-cleanup-runs-on-a-timer.md)). The unit
+is `gc.plist` beside this file; `gcloop.ts plist` fills in this laptop's paths and the period. Run
+these from the main checkout. Install:
+
+```sh
+node .agents/skills/lead/scripts/gcloop.ts plist > ~/Library/LaunchAgents/local.tea-fabrika.gc.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.tea-fabrika.gc.plist
+```
+
+Uninstall:
+
+```sh
+launchctl bootout gui/$(id -u)/local.tea-fabrika.gc
+rm ~/Library/LaunchAgents/local.tea-fabrika.gc.plist
+```
+
+`launchctl list local.tea-fabrika.gc` lists it (its pid while a sweep runs, and the last exit
+status). The `bootout` line alone stops it. A new `GC_MINUTES`, or a new Node, needs both install
+lines again. At each check, read `node .agents/skills/lead/scripts/gcloop.ts status`: a `LATE` line
+means the timer is dead or every sweep was skipped behind a hung one. Fix the cause the same turn.
+The timer's own output goes to `BOXES/state/gc-timer.log`.
 
 ## Pushes and protected refs
 

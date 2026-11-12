@@ -368,7 +368,8 @@ export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown"
   reason: Schema.Literals(["load", "no_program", "step", "saved_state", "saved_letter"]),
   /** An RPC or reply decode failure decided nothing about the input. It must be retried. */
   source: Schema.optionalKey(Schema.Literals(["rpc", "decode"])),
-  /** The thrown class, preserved as checked data across Worker RPC. */
+  /** The thrown class, preserved as checked data across Worker RPC. A failure the runtime
+   *  translates names ProgramDown itself: the cause it keeps is for diagnosis in memory only. */
   error: Schema.optionalKey(Schema.String),
   cause: Schema.optionalKey(Schema.Unknown),
 }) {
@@ -403,6 +404,10 @@ const decodeTyped = (u: unknown): Option.Option<Typed> => (isTyped(u) ? Option.s
 const decodeWake = Schema.decodeUnknownResult(Schema.NullOr(Schema.Number));
 
 /** Runs `f`, turning any throw into ProgramDown with `reason`. */
+/** What each failed result failed with, in order: a check that meets several keeps them all. */
+const failures = (results: ReadonlyArray<Result.Result<unknown, unknown>>): ReadonlyArray<unknown> =>
+  results.flatMap((result) => (Result.isFailure(result) ? [result.failure] : []));
+
 const guard = <A>(reason: ProgramDown["reason"], f: () => A): A => {
   const done = Result.try({
     try: f,
@@ -476,7 +481,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     const decoded = decodeModel(raw);
 
     if (Result.isFailure(decoded)) {
-      throw new ProgramDown({ reason });
+      throw new ProgramDown({ reason, error: "ProgramDown", cause: decoded.failure });
     }
 
     return decoded.success;
@@ -531,14 +536,14 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     const json = cmds.map((cmd) => (cmdOk(cmd) ? decodeJson(cmd) : Result.fail(null)));
 
     if (Result.isFailure(encoded) || Result.isFailure(view) || Result.isFailure(wake) || json.some(Result.isFailure)) {
-      throw new ProgramDown({ reason });
+      throw new ProgramDown({ reason, error: "ProgramDown", cause: failures([encoded, view, wake, ...json]) });
     }
 
     const model = decodeJson(encoded.success);
     const shown = decodeJson(view.success);
 
     if (Result.isFailure(model) || Result.isFailure(shown)) {
-      throw new ProgramDown({ reason });
+      throw new ProgramDown({ reason, error: "ProgramDown", cause: failures([model, shown]) });
     }
 
     return Step.cases.stepped.make({
@@ -567,7 +572,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       const refusal = guard("step", () => decodeRefusal(program.refuse(now, m.value)));
 
       if (Result.isFailure(refusal)) {
-        throw new ProgramDown({ reason: "step" });
+        throw new ProgramDown({ reason: "step", error: "ProgramDown", cause: refusal.failure });
       }
 
       if (refusal.success !== null) {

@@ -14,6 +14,10 @@ import "./env.sh?raw";
 import "./fieldrow.py?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./gc.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./gcloop.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./flow/Beat.ts?raw";
 import "./keepruns.sh?raw";
 import "./leakgrep.sh?raw";
 import "./mutbox-entry.sh?raw";

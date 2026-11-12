@@ -12,7 +12,7 @@ export interface Env extends Bindings {
 
 export const settings = Effect.fn("instance.settings")(function* (env: Env) {
   return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Settings))(env.INSTANCE).pipe(
-    Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+    Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
   );
 });
 
