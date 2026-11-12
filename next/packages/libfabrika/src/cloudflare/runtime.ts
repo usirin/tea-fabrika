@@ -1,5 +1,6 @@
 import { makeRpcStub } from "@alchemy.run/cloudflare/Bridge";
 import {
+  Clock,
   Context,
   Effect,
   Exit,
@@ -840,12 +841,19 @@ const processLogic = Effect.fnUntraced(function* (
       publish: (client, update) => publish(client, { ...update, pid: active }).pipe(Effect.ignore),
     }),
     Layer.succeed(Alarm, {
-      // The program's wake is saved as it set it; the platform alarm moves a past time to now.
-      set: (at) =>
-        (at === null
-          ? rpc(storage.delete("wake")).pipe(Effect.andThen(rpc(storage.deleteAlarm())))
-          : rpc(storage.put("wake", at)).pipe(Effect.andThen(rpc(storage.setAlarm(at))))
-        ).pipe(Effect.orDie),
+      set: Effect.fnUntraced(function* (at: number | null) {
+        if (at === null) {
+          yield* rpc(storage.delete("wake"));
+          yield* rpc(storage.deleteAlarm());
+          return;
+        }
+
+        // workerd rejects zero and clamps past alarms to now. Save that effective time too,
+        // so a timer stamps the current time and its retries keep the same letter ID.
+        const scheduled = Math.max(1, at, yield* Clock.currentTimeMillis);
+        yield* rpc(storage.put("wake", scheduled));
+        yield* rpc(storage.setAlarm(scheduled));
+      }, Effect.orDie),
     }),
     // Recording captures its sink's services itself (main's P11); the runner no longer provides them.
     Layer.succeed(Recording, { flush: sink.flush.pipe(Effect.provideContext(services)) }),
