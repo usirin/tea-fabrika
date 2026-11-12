@@ -4,6 +4,7 @@ import { ProgramDown } from "../runtime/Program.ts";
 export type { ProgramSource } from "../runtime/Execution.ts";
 export { cloudflareSql } from "./CloudflareSql.ts";
 export { fetch, serveAsset } from "./fetch.ts";
+export { Props as IsolateTailProps, receive as receiveIsolateTail } from "./tail.ts";
 
 type Calls = Rpc.WorkerEntrypointBranded &
   Required<ExecutionCalls> & {
@@ -11,7 +12,7 @@ type Calls = Rpc.WorkerEntrypointBranded &
   };
 
 export const workerLoader = (loader: WorkerLoader, programs: Readonly<Record<string, ProgramSource>>) => ({
-  load: Effect.fn("loader.load")(function* (name: string, process: string) {
+  load: Effect.fn("loader.load")(function* (name: string, process: string, tail?: Fetcher) {
     const code = Object.hasOwn(programs, name) ? programs[name] : undefined;
 
     if (code === undefined) {
@@ -25,6 +26,7 @@ export const workerLoader = (loader: WorkerLoader, programs: Readonly<Record<str
       modules: { "program.js": code.source },
       env: {},
       globalOutbound: null,
+      ...(tail === undefined ? {} : { tails: [tail] }),
     }));
     const rpc = worker.getEntrypoint<Calls>();
     const fail = (cause: unknown) => new ProgramDown({ reason: "load", error: "ProgramDown", cause });

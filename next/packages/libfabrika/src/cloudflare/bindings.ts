@@ -8,6 +8,7 @@ import { ProcessError, type Activity, type Start } from "../processes/Process.ts
 import type { ProcessManager } from "../processes/ProcessManager.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import type { Incoming } from "../runtime/Entry.ts";
+import type * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import type { Descriptor, ProgramRunner } from "../runtime/Runner.ts";
 import type { RecordCalls } from "../telemetry/Records.ts";
 import type { checkHello } from "../transport/Hello.ts";
@@ -148,6 +149,7 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
 export type ProcessBinding = Rpc.DurableObjectBranded &
   Remote<Pick<Runner, "msg" | "open" | "due" | "restart">> & {
     configure: RemoteCall<(descriptor: Descriptor) => Effect.Effect<void>>;
+    usage: RemoteCall<typeof IsolateUsage.record>;
     descriptor: RemoteCall<() => Effect.Effect<Descriptor>>;
     activity: RemoteCall<(value: typeof Activity.Type) => Effect.Effect<void>>;
     recover: RemoteCall<() => Effect.Effect<unknown>>;

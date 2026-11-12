@@ -223,6 +223,8 @@ class SinkSpan extends Tracer.NativeSpan {
 export class SpanSink extends Context.Service<
   SpanSink,
   {
+    /** Collects spans ended by this work and commits them together, including after a failed write. */
+    readonly batch: <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
     /** Sends `unsent` to each chain's current part, deleting each row only after a good answer and
      *  following `rolled`; then archives each due day of raw health rows. Fails with `storage`,
      *  before it sends anything, when an `end` met a write it could not land since the last flush. */
@@ -308,6 +310,27 @@ const make = (sql: Sql, options: { readonly object: string }) => {
         commit([ended(span, endTime, exit, options.object)], Number(endTime / 1_000_000n), true);
       }),
   });
+
+  const batch = <A, E, R>(work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.suspend(() => {
+      const rows: Array<Ended> = [];
+      const collecting = Tracer.make({
+        span: (init) => new SinkSpan(init, (span, time, exit) => rows.push(ended(span, time, exit, options.object))),
+      });
+      return work.pipe(
+        Effect.withTracer(collecting),
+        Effect.ensuring(
+          Effect.gen(function* () {
+            const now = yield* Clock.currentTimeMillis;
+            yield* Effect.sync(() => {
+              if (rows.length > 0) {
+                commit(rows, now, true);
+              }
+            });
+          }),
+        ),
+      );
+    });
 
   const attempt = Effect.fnUntraced(function* <A>(step: () => A) {
     return yield* Effect.try({ try: () => atomic(step), catch: sinkError });
@@ -404,5 +427,5 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     return yield* attempt(() => readSummaries(sql, from, to));
   });
 
-  return { tracer, sink: { flush, summaries } };
+  return { tracer, sink: { batch, flush, summaries } };
 };

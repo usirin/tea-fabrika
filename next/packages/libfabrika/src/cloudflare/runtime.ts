@@ -34,6 +34,7 @@ import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 import { ProcessManager, remoteProcessManager, type ProcessCalls } from "../processes/ProcessManager.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import { Alarm, CheckedWriter, Recording, WatcherManager, type Incoming } from "../runtime/Entry.ts";
+import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
 import type { Descriptor, Sent } from "../runtime/Runner.ts";
 import { defaultPolicy, ProgramRunner } from "../runtime/Runner.ts";
@@ -58,6 +59,7 @@ import { cloudflareSql } from "./CloudflareSql.ts";
 import { workerLoader, type ProgramSource } from "./index.ts";
 import type { RecordShape } from "./objects.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient } from "./platform.ts";
+import { bind as bindTail } from "./tail.ts";
 
 const Event = Schema.declare<Parameters<typeof lineFor>[1]>(
   (value): value is Parameters<typeof lineFor>[1] =>
@@ -405,7 +407,11 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   };
 
   for (const process of yield* processes.info) {
-    const program = yield* loader.load(process.program, process.process);
+    const program = yield* loader.load(
+      process.program,
+      process.process,
+      bindTail(ctx, { project: name, name: process.name, process: process.process }),
+    );
     remember(process.name, program.declaration);
 
     if (sql.exec("SELECT process FROM dev_descriptors WHERE process=?", process.process).length === 0) {
@@ -430,7 +436,11 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     }
 
     const program = yield* loader
-      .load(life.state.code.program, life.state.process)
+      .load(
+        life.state.code.program,
+        life.state.process,
+        bindTail(ctx, { project: name, name: life.name, process: life.state.process }),
+      )
       .pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
     return remember(life.name, program.declaration);
   });
@@ -834,7 +844,10 @@ const processLogic = Effect.fnUntraced(function* (
   // ProcessStore, under the registered name every successor shares.
   const runnerLayer = ProgramRunner.withLoader(
     saved,
-    { load: (name) => Effect.suspend(() => loader.load(name, active)) },
+    {
+      load: (name) =>
+        Effect.suspend(() => loader.load(name, active, bindTail(ctx, { project, name: saved.name, process: active }))),
+    },
     { policy: defaultPolicy, recovery: { sql, name: saved.name, capacity: 1024 ** 3 } },
   ).pipe(Layer.provide(dependencies), Layer.provide(Layer.succeedContext(services)));
   const runner = yield* ProgramRunner.pipe(Effect.provide(runnerLayer));
@@ -842,6 +855,11 @@ const processLogic = Effect.fnUntraced(function* (
   const attributed = <A, E>(work: Effect.Effect<A, E>) =>
     Effect.suspend(() => work.pipe(Effect.annotateSpans({ "fab.process": active }), Effect.provideContext(services)));
   return {
+    usage: (rows: unknown) =>
+      Schema.decodeUnknownEffect(Schema.Array(IsolateUsage.Usage))(rows).pipe(
+        Effect.flatMap(IsolateUsage.record),
+        Effect.provideContext(services),
+      ),
     msg: (input: unknown) => {
       const work = attributed(runner.msg(input));
       // The door's input span is in another object, so its trace crosses the call as data.

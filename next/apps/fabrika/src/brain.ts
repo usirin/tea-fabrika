@@ -3,7 +3,7 @@ import type { Descriptor, Incoming } from "@kampus/libfabrika";
 import type { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import type { Activity, Start } from "@kampus/libfabrika/processes/Process";
-import { fetch } from "@kampus/libfabrika/workers";
+import { fetch, receiveIsolateTail, type IsolateTailProps } from "@kampus/libfabrika/workers";
 import { control } from "@kampus/libfabrika/workers/control";
 import { ConnectionService } from "@kampus/libfabrika/workers/gateway";
 import {
@@ -207,6 +207,11 @@ type ContextProject = (typeof ProjectService)["Service"];
 export class Process extends DurableObject<Env> {
   readonly runtime = processRuntime(this.ctx, this.env, programs);
 
+  usage(rows: unknown) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object usage delivery returns a Promise
+    return this.runtime.runPromise(ProcessService.use((p) => p.usage(rows)));
+  }
+
   configure(descriptor: Descriptor) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object configuration returns a Promise
     return Effect.runPromise(configureProcess(this.ctx, descriptor));
@@ -309,6 +314,13 @@ const Bridge = makeDurableObjectBridge(DurableObject, {
 });
 
 export class RecordPart extends Bridge("RecordPart") {}
+
+export class IsolateTail extends WorkerEntrypoint<Env, typeof IsolateTailProps.Type> {
+  tail(items: Parameters<typeof receiveIsolateTail>[2]) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the platform tail callback returns a Promise
+    return Effect.runPromise(receiveIsolateTail(this.env, this.ctx.props, items));
+  }
+}
 
 export class Control extends WorkerEntrypoint<Env, { token: string }> {
   fetch(request: Request) {
