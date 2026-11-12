@@ -77,13 +77,14 @@ describe("T878 composed repository opening", () => {
             Effect.gen(function* () {
               const parser = yield* Toml;
               let personReads = 0;
+              let invalidPerson = false;
               const parsed: Array<string> = [],
                 touches: Array<string> = [];
               const fs = FileSystem.layerNoop({
                 readFileString: () => {
                   personReads++;
                   return Effect.succeed(
-                    `# person\n\n[instance]\nport = ${personReads === 1 ? port : (port % 65535) + 1}\n`,
+                    `# person\n\n[instance]\nport = ${invalidPerson ? '"invalid"' : personReads === 1 ? port : (port % 65535) + 1}\n`,
                   );
                 },
               });
@@ -108,20 +109,25 @@ describe("T878 composed repository opening", () => {
                 '[pack.x]\nfrom = "../../outside"\n',
                 "[instance\n",
                 '[review]\ngoverned = ["src/"]\n',
+                'fabrika-version = "bad"\n',
               ];
-              const reasons = [null, null, null, "version", "scope", "unknown", "syntax", "unknown"];
+              const reasons = [null, null, null, "version", "scope", "unknown", "syntax", "unknown", "invalid"];
+              const lines = [null, null, 3, 1, 2, 2, 2, 2, 1];
+              const keys = [null, null, null, "fabrika-version", "instance.port", null, null, null, "fabrika-version"];
 
               for (const c of cells) {
                 personReads = 0;
                 parsed.length = 0;
                 const index = c.pick % docs.length;
-                const body = docs[index]!;
+                invalidPerson = c.move % 2 !== 0 && reasons[index] === null;
+                const padding = c.move % 6;
+                const body = docs[index] === null ? null : "\n".repeat(padding) + docs[index]!;
                 const result = yield* OpenRepository.prepare("selected-repo", options).pipe(
                   Effect.provide([reader(body, touches), fs, counted]),
                   Effect.exit,
                 );
-                expect(Exit.isSuccess(result)).toBe(reasons[index] === null);
-                expect(personReads).toBe(index === 3 || index === 6 ? 0 : 1);
+                expect(Exit.isSuccess(result)).toBe(reasons[index] === null && !invalidPerson);
+                expect(personReads).toBe(index === 3 || index === 6 || index === 8 ? 0 : 1);
                 expect(parsed.filter((value) => value === body)).toHaveLength(body === null ? 0 : 1);
 
                 if (Exit.isSuccess(result)) {
@@ -131,13 +137,32 @@ describe("T878 composed repository opening", () => {
                   expect(saved.origins["instance.port"]).toEqual({ _tag: "file", file: personName, line: 4 });
 
                   if (index === 2) {
-                    expect(saved.origins["fabrika-version"]).toEqual({ _tag: "file", file: document, line: 3 });
+                    expect(saved.origins["fabrika-version"]).toEqual({
+                      _tag: "file",
+                      file: document,
+                      line: 3 + padding,
+                    });
                   }
 
                   expect(saved.hash).toBe(checked.snapshot.hash);
                   expect(result.value.snapshot.commit).toBe(repoSnapshot(body).commit);
                 } else {
                   expect(result.cause.reasons.some((r) => r._tag === "Fail")).toBe(true);
+                  const failure = result.cause.reasons.find((r) => r._tag === "Fail");
+
+                  if (failure?._tag === "Fail") {
+                    expect(failure.error.reason._tag).toBe("InvalidDocument");
+                    // The diagnostic must preserve the source position and known setting key.
+                    expect(failure.error.message).toContain(
+                      `${invalidPerson ? personName : document}, line ${invalidPerson ? 4 : lines[index]! + padding}`,
+                    );
+
+                    const key = invalidPerson ? "instance.port" : keys[index];
+
+                    if (key !== null) {
+                      expect(failure.error.message).toContain(key!);
+                    }
+                  }
                 }
 
                 expect(touches).toEqual([]);
@@ -356,11 +381,17 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
               };
 
               for (const c of cells) {
-                const source = c.pick % 3;
+                const source = c.pick % 7;
                 const body =
                   source === 0
                     ? `fabrika-version = "0.0.0"\n[unknown]\nvalue = ${JSON.stringify(secret)}\n`
-                    : 'fabrika-version = "0.0.0"\n';
+                    : source === 3
+                      ? `fabrika-version = ${JSON.stringify(secret)}\n`
+                      : source === 4
+                        ? `[${JSON.stringify(secret)}]\nvalue = true\n`
+                        : source === 5
+                          ? `fabrika-version = ${JSON.stringify(secret)} [\n`
+                          : 'fabrika-version = "0.0.0"\n';
                 const gitError = new RepositoriesError({
                   reason: new ReadFailed({ cause: Redacted.make(new Error(`${url} ${folder} ${secret}`)) }),
                 });
@@ -372,7 +403,13 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                   env: { UNRELATED_TOKEN: secret },
                   version: "0.0.0",
                 }).pipe(
-                  Effect.provide([selected, FileSystem.layerNoop({ readFileString: () => Effect.succeed("") })]),
+                  Effect.provide([
+                    selected,
+                    FileSystem.layerNoop({
+                      readFileString: () =>
+                        Effect.succeed(source === 6 ? `[instance]\nport = ${JSON.stringify(secret)}\n` : ""),
+                    }),
+                  ]),
                   Effect.exit,
                 );
 

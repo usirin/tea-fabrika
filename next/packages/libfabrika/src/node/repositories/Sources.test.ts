@@ -57,6 +57,8 @@ it("L7: each prefix resolves from the winning file's base, pins committed bytes 
               yield* fs.writeFileString(path.join(repo, "inside space/entry.txt"), "commit 0");
               yield* fs.symlink("../inside space", path.join(repo, ".fabrika/local-link"));
               yield* fs.symlink("../../outside space", path.join(repo, ".fabrika/outside-link"));
+              yield* fs.symlink(path.join(repo, "inside space"), path.join(repo, ".fabrika/absolute-local"));
+              yield* fs.symlink(outside, path.join(repo, ".fabrika/absolute-outside"));
               yield* fs.symlink("cycle-b", path.join(repo, ".fabrika/cycle-a"));
               yield* fs.symlink("cycle-a", path.join(repo, ".fabrika/cycle-b"));
               yield* git(repo, ["add", "."]);
@@ -67,7 +69,15 @@ it("L7: each prefix resolves from the winning file's base, pins committed bytes 
                 const pinned = selected.snapshot.commit;
                 let disk = "outside 0",
                   present = true;
-                const sources = ["../inside space", "./local-link", "../../outside space", "./outside-link"];
+                const sources = [
+                  { from: "../inside space", committed: true },
+                  { from: "./local-link", committed: true },
+                  // Regression: absolute committed links must return to tree reads inside the repo.
+                  { from: "./absolute-local", committed: true },
+                  { from: "../../outside space", committed: false },
+                  { from: "./outside-link", committed: false },
+                  { from: "./absolute-outside", committed: false },
+                ];
 
                 for (const [index, cell] of tape.entries()) {
                   const move = cell.move % 4;
@@ -76,6 +86,8 @@ it("L7: each prefix resolves from the winning file's base, pins committed bytes 
                     yield* fs.writeFileString(path.join(repo, "inside space/entry.txt"), `dirty ${index}`);
                     yield* fs.remove(path.join(repo, ".fabrika/local-link"));
                     yield* fs.symlink("../../outside space", path.join(repo, ".fabrika/local-link"));
+                    yield* fs.remove(path.join(repo, ".fabrika/absolute-local"));
+                    yield* fs.symlink(outside, path.join(repo, ".fabrika/absolute-local"));
                   } else if (move === 1) {
                     present = true;
                     disk = `outside ${index + 1}`;
@@ -86,8 +98,7 @@ it("L7: each prefix resolves from the winning file's base, pins committed bytes 
                     yield* fs.remove(outside, { recursive: true, force: true });
                   }
 
-                  const from = sources[cell.pick % sources.length]!;
-                  const committed = cell.pick % sources.length < 2;
+                  const { from, committed } = sources[cell.pick % sources.length]!;
                   const resolved = yield* selected.resolve(from, "repo").pipe(Effect.exit);
                   expect(Exit.isSuccess(resolved)).toBe(committed || present);
 
