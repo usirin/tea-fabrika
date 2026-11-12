@@ -281,6 +281,75 @@ const health: IsolateUsageTest.Rig["health"] = (sql) =>
 
 IsolateUsageTest.suite({ open, deliver, runner, invoke, telemetry, rows, health });
 
+for (const accepted of [true, false]) {
+  it.effect.prop(
+    `U7 ProcessService.usage flushes ${accepted ? "successful" : "rejected"} calls before returning, without opening the runner`,
+    {
+      batch: Schema.Array(
+        Schema.Struct({
+          ...IsolateUsage.Usage.fields,
+          process: Schema.Literal(PID),
+          cpuMs: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 30_000 })),
+          wallMs: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 30_000 })),
+        }),
+      ).check(Schema.isMinLength(1), Schema.isMaxLength(32)),
+    },
+    ({ batch }) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const state = yield* open;
+          const written: Array<SpanRow> = [];
+          const saved = { id: PID, name: NAME, program: "usage-fixture", build: "fixture-build", owner: OWNER };
+          // oxlint-disable-next-line fabrika/no-type-assertions -- native storage handles only; the Process service and telemetry sink are real
+          const ctx = {
+            id: { name: JSON.stringify(["project-test", NAME]) },
+            storage: {
+              sql: {
+                exec: state.sql.exec,
+                get databaseSize() {
+                  return state.sql.size();
+                },
+              },
+              transactionSync: state.sql.transaction,
+              get: () => Promise.resolve(saved),
+            },
+          } as unknown as Parameters<typeof processRuntime>[0];
+          // oxlint-disable-next-line fabrika/no-type-assertions -- record RPC is captured at the platform edge; program execution must remain unopened
+          const env = {
+            PROJECT: { getByName: () => ({}) },
+            RECORD: {
+              getByName: () => ({
+                write: (_chain: unknown, _part: number, sent: ReadonlyArray<{ span: SpanRow }>) => {
+                  written.push(...sent.map(({ span }) => span));
+                  return Promise.resolve(Written.cases.written.make({}));
+                },
+              }),
+            },
+          } as unknown as Env;
+          const runtime = yield* Effect.acquireRelease(
+            Effect.sync(() => processRuntime(ctx, env, {})),
+            (held) => Effect.promise(() => held.dispose()),
+          );
+          // Initialize first, so no startup flush can accidentally satisfy the wake's obligation.
+          yield* Effect.promise(() => runtime.runPromise(ProcessService));
+          written.length = 0;
+          const input = accepted ? batch : batch.map((row) => ({ ...row, cpuMs: -row.cpuMs - 1 }));
+          const result = yield* Effect.promise(() =>
+            runtime.runPromise(ProcessService.use((service) => Effect.exit(service.usage(input)))),
+          );
+          expect(Exit.isSuccess(result)).toBe(accepted);
+          // Inspect delivery now, before disposal or any other service call can flush it.
+          const calls = written.filter((row) => row.name === "process.usage");
+          expect(calls, "the ended usage span must reach the record during this wake").toHaveLength(1);
+          expect(calls[0]?.ok).toBe(accepted);
+          expect(written.filter((row) => row.name === "isolate.cpu")).toHaveLength(accepted ? batch.length : 0);
+          expect(rows(state.sql), "the wake must leave no telemetry awaiting a later runner call").toHaveLength(0);
+        }),
+      ),
+    { arbitrary: { seed: 119120, runs: 40 } },
+  );
+}
+
 it.effect("U3 batched refused spans keep only hourly counts, including batches with no accepted span", () =>
   Effect.gen(function* () {
     const once = (batches: ReadonlyArray<{ refused: ReadonlyArray<string>; accepted: number }>) =>
