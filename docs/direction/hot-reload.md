@@ -7,6 +7,8 @@ layer does, the facts on the ledger, where it is off, and the laws, each with it
 swap, the least sure at 60%, was approved on its own. Each lean keeps its number: a lean under 80%
 is decided but still names what would settle it.
 
+Its decided rules are in: [0291](../../.decisions/0291-hot-reload-swaps-one-program.md), [0292](../../.decisions/0292-a-bad-save-never-runs.md), [0293](../../.decisions/0293-every-record-names-its-build.md), [0294](../../.decisions/0294-a-window-swaps-its-view-by-hash.md), [0295](../../.decisions/0295-where-hot-reload-is-off.md).
+
 Built from [experiment 183](../../experiments/183-hmr.md), which swapped a program's code under a
 running process in Miniflare and read how about ten tools do it, and a clickable page, "Hot reload
 guidelines", a private page with the six principles you can press.
