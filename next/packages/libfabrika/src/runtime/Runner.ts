@@ -52,6 +52,7 @@ import {
 import { InputId } from "../Id.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { MailRefusal } from "../processes/ProgramMail.ts";
+import * as Chaos from "./Chaos.ts";
 import {
   Alarm,
   CheckedWriter,
@@ -1751,6 +1752,20 @@ export class ProgramRunner extends Context.Service<
             // The port's schema runs inside the box; Schemas do not cross its RPC (P12).
             if (!(yield* state.loaded.execution.admit(m))) {
               return { answer: Sent.cases.refused.make({ reason: "bad_msg" }), jobs: [] };
+            }
+
+            // Only the host knows this process's trusted binding; a target literal cannot prove it.
+            if (process.program === "fabrika/chaos") {
+              const start = Schema.decodeUnknownOption(
+                Schema.Struct({ type: Schema.Literal("start"), ...Chaos.Start.fields }),
+              )(m);
+
+              if (
+                Option.isSome(start) &&
+                (start.value.target.name === process.name || start.value.target.process === process.id)
+              ) {
+                return { answer: Sent.cases.refused.make({ reason: "bad_target" }), jobs: [] };
+              }
             }
 
             if (supervision !== null && !supervision.receipts.some((r) => r.letter === input.id)) {

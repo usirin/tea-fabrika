@@ -51,7 +51,12 @@
     "./node/dev-recording": "./src/node/dev/dev-recording.ts",
     "./brain-life": "./src/runtime/BrainLife.ts",
     "./brain-event": "./src/runtime/BrainEvent.ts",
-    "./testing": "./src/Testing.ts"
+    "./testing": "./src/Testing.ts",
+    "./codehost/*": "./src/codehost/*.ts",
+    "./codehost/internal/*": null,
+    "./ci/*": "./src/ci/*.ts",
+    "./ci/internal/*": null,
+    "./node/Chaos.test-support": "./src/node/Chaos.test-support.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p ."
@@ -62,6 +67,7 @@
     "@alchemy.run/cloudflare-runtime": "2.0.0-beta.85",
     "@demlik/tea": "catalog:",
     "effect": "catalog:",
+    "pure-rand": "8.4.2",
     "lightningcss": "catalog:",
     "oxc-parser": "catalog:",
     "oxc-transform-react": "catalog:",
