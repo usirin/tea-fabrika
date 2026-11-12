@@ -76,7 +76,7 @@ const required = <A>(value: A | undefined): A => Option.getOrThrow(Option.fromUn
 const Nat = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10_000 }));
 const Cell = Schema.Struct({ pick: Nat, amount: Nat, reopen: Schema.Boolean });
 const Tape = Schema.Array(Cell).check(Schema.isMinLength(5), Schema.isMaxLength(25));
-const options = { arbitrary: { seed: 119120, runs: 40, size: 100 } };
+const options = { timeout: 600_000, arbitrary: { seed: 119120, runs: 40, size: 100 } };
 const names = ["alpha:1", "alpha:2", "beta:1"];
 
 const call = Effect.fnUntraced(function* (

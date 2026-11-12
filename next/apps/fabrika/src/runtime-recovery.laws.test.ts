@@ -11,6 +11,7 @@ import { revokeText } from "@kampus/libfabrika/access/Text";
 import { programBox } from "@kampus/libfabrika/box";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { copied, type ExitReason, fcBadReason, fcExitReason } from "@kampus/libfabrika/processes/Process.test-support";
+import * as QuotasSql from "@kampus/libfabrika/processes/QuotasSql";
 import { Program } from "@kampus/libfabrika/runtime/Program";
 import { send } from "@kampus/libfabrika/runtime/Send";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
@@ -437,9 +438,20 @@ type Entry = {
 
 type Lost = { readonly at: number; readonly side: "before" | "after" } | null;
 
+const quotaLimits = {
+  recordBytes: 1_000_000_000,
+  writes: 13_760,
+  storage: "1000000000 B",
+  recovery: {
+    project: { writes: 160, bytes: "74080 B", letter: { writes: 10, bytes: "5469 B" } },
+    process: { writes: 290, bytes: "207410 B", letter: { writes: 50, bytes: "18790 B" } },
+  },
+};
+
 const world = (
   fault: "failed" | "interrupted" | "healthy" = "healthy",
   flow: { readonly limit: number | null; readonly lost: Lost } = { limit: null, lost: null },
+  limits = quotaLimits,
 ) => {
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
   table.programs["fabrika/counter"] = { hash: "counter-a", source: "counter" };
@@ -526,6 +538,7 @@ const world = (
       window: key.raw,
       port: 18787,
       rateLimit: { limit: 100_000, window: 60_000 },
+      limits,
       build: "brain-test",
       mail: { grants: { "requester:1": ["responder:1"], "responder:1": ["requester:1"] } },
     }),
@@ -724,7 +737,11 @@ const world = (
     },
   } as unknown as Env;
   project = projectObject(ctx, env);
-  closers.push(async () => {
+  const close = async () => {
+    if (closed) {
+      return;
+    }
+
     closed = true;
     interrupted.resolve();
 
@@ -736,7 +753,8 @@ const world = (
 
     await project.runtime.dispose();
     db.close();
-  });
+  };
+  closers.push(close);
   /** The registered name the Project saved for a process ID, if any. */
   const nameFor = (pid: string): string | undefined => {
     const row = db.prepare("SELECT value FROM dev_descriptors WHERE process=?").get(pid);
@@ -764,6 +782,12 @@ const world = (
     return found[1];
   };
   return {
+    close,
+    localUsage: (pid: string) =>
+      QuotasSql.accounting(nodeSql(processFor(pid).db), {
+        name: nameFor(pid)!,
+        limits: { writes: 290, bytes: 207_410, letter: { writes: 50, bytes: 18_790 } },
+      }).status,
     get project() {
       return project;
     },
@@ -1517,3 +1541,77 @@ it("scenario: W3, an evicted sender retries its owed Send from its alarm and add
   w.holdAlarm(requester, false);
   await oneExchange(w, requester, responder, "held-sender");
 }, 30_000);
+
+const QuotaCell = Schema.Struct({
+  pick: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1000 })),
+  reopen: Schema.Boolean,
+});
+
+const QuotaTape = Schema.Array(QuotaCell).check(Schema.isMinLength(3), Schema.isMaxLength(12));
+
+// The Project and Process implementations are real. Only object handles and loader RPC are supplied.
+describe("P34c live object accounting", () => {
+  effect.effect.prop(
+    "Q9/Q12 the assembled door refuses before an envelope, binding, reply or local step is saved",
+    { tape: QuotaTape },
+    ({ tape }) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const w = yield* Effect.acquireRelease(
+            Effect.sync(() => world("healthy", { limit: null, lost: null }, { ...quotaLimits, writes: 2 })),
+            (w) => Effect.promise(() => w.close()),
+          );
+          yield* Effect.promise(() => w.project.info());
+          const pid = yield* Effect.promise(() => w.startPoison("quota:1"));
+          const client = yield* Effect.promise(() => w.admit());
+          const send = (pid: string, letter: string) =>
+            Effect.promise(() =>
+              w.project.route(client, "process.send", { pid, letter, m: { type: "inc" }, sentAt: SENT, seen: 0 }),
+            );
+          expect(yield* send(pid, "paid")).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+          expect(yield* Effect.promise(() => w.process(pid).object.open("audit"))).toMatchObject({
+            view: { count: 1 },
+          });
+          const local = yield* w.localUsage(pid);
+          expect(local.program.writes).toBeGreaterThan(0);
+          expect(local.recovery.total).toEqual({ writes: 0, bytes: 0 });
+          let baseline: unknown;
+          const counts = (db: DatabaseSync) =>
+            Object.fromEntries(
+              db
+                .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+                .all()
+                .map(({ name }) => [
+                  String(name),
+                  db.prepare(`SELECT count(*) AS n FROM "${String(name).replaceAll('"', '""')}"`).get()?.n,
+                ]),
+            );
+
+          for (const [n, c] of tape.entries()) {
+            expect(yield* send(pid, `refused:${n}:${c.pick}`)).toMatchObject({ _tag: "refused", reason: "quota" });
+            const current = { project: counts(w.db), process: counts(w.process(pid).db) };
+
+            if (baseline === undefined) {
+              baseline = current;
+            } else {
+              expect(current).toEqual(baseline);
+            }
+
+            expect(yield* w.localUsage(pid)).toEqual(local);
+            expect(yield* Effect.promise(() => w.process(pid).object.open("audit"))).toMatchObject({
+              view: { count: 1 },
+            });
+
+            if (c.reopen) {
+              yield* Effect.promise(() => w.reopenAll());
+            }
+          }
+
+          // A different checked program has its own room in the same Project.
+          const counterPid = w.attempts.find((d) => d.name === "counter:1")!.id;
+          expect(yield* send(counterPid, "other-program")).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+        }),
+      ),
+    { timeout: 120_000, arbitrary: { seed: 119120, runs: 40 } },
+  );
+});

@@ -10,9 +10,9 @@ import { Toml } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 
 const declaration = (path: string) => {
-  const found = Declarations.all.declarations.find((d) => d.path === path);
-  expect(found, `${path} must be declared once`).toBeDefined();
-  return Option.getOrThrow(Option.fromUndefinedOr(found));
+  const found = Declarations.all.declarations.filter((d) => d.path === path);
+  expect(found, `${path} must be declared once`).toHaveLength(1);
+  return Option.getOrThrow(Option.fromUndefinedOr(found[0]));
 };
 
 const group = () =>
@@ -106,29 +106,56 @@ describe("P34c Q11 settings", () => {
     ({ tape }) =>
       layers(
         Effect.gen(function* () {
-          const selected = new Map<string, number>();
+          const defaults = new Map<string, number>([
+            ["writes", 13_760],
+            ["storage", 1_000_000_000],
+            ...Object.entries(measured).flatMap(([location, value]) => [
+              [`recovery.${location}.writes`, value.writes] as const,
+              [`recovery.${location}.bytes`, value.bytes] as const,
+              [`recovery.${location}.letter.writes`, value.letter.writes] as const,
+              [`recovery.${location}.letter.bytes`, value.letter.bytes] as const,
+            ]),
+          ]);
+          const selected = new Map(defaults);
 
           for (const cell of tape) {
-            const paths = ["writes", "storage"];
+            const paths = [...selected.keys()];
             const key = paths[cell.pick % paths.length]!;
-            const cap = key === "writes" ? 13_760 : 1_000_000_000;
+            const cap = key === "writes" ? 13_760 : key === "storage" ? 1_000_000_000 : 1_000_000;
+            selected.set(key, cell.remove ? defaults.get(key)! : 1 + (cell.value % cap));
+            const tables = new Map<string, string[]>();
 
-            if (cell.remove) {
-              selected.delete(key);
-            } else {
-              selected.set(key, 1 + (cell.value % cap));
+            for (const [key, value] of selected) {
+              const segments = key.split(".");
+              const field = segments.pop()!;
+              const table = ["limits", ...segments].join(".");
+              const rows = tables.get(table) ?? [];
+              rows.push(`${field} = ${field === "bytes" || field === "storage" ? `"${value} B"` : value}`);
+              tables.set(table, rows);
             }
 
-            const text = `[limits]\n${[...selected].map(([k, v]) => `${k} = ${k === "storage" ? `"${v} B"` : v}`).join("\n")}\n`;
+            const text = [...tables].map(([table, rows]) => `[${table}]\n${rows.join("\n")}`).join("\n");
             const resolved = yield* resolve(text);
             const g = group();
             const saved = yield* Snapshot.make(g, resolved);
             const transport = Schema.decodeSync(Schema.fromJsonString(Snapshot.Snapshot))(JSON.stringify(saved));
             const restored = yield* Snapshot.read(g, transport);
             expect(numeric(restored.values)).toEqual({
-              writes: selected.get("writes") ?? 13_760,
-              storage: selected.get("storage") ?? 1_000_000_000,
-              recovery: measured,
+              writes: selected.get("writes"),
+              storage: selected.get("storage"),
+              recovery: Object.fromEntries(
+                ["project", "process"].map((location) => [
+                  location,
+                  {
+                    writes: selected.get(`recovery.${location}.writes`),
+                    bytes: selected.get(`recovery.${location}.bytes`),
+                    letter: {
+                      writes: selected.get(`recovery.${location}.letter.writes`),
+                      bytes: selected.get(`recovery.${location}.letter.bytes`),
+                    },
+                  },
+                ]),
+              ),
             });
             expect(restored.snapshot).toEqual(saved);
             const bad = { ...transport, values: { ...transport.values } };

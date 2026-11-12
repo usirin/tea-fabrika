@@ -21,12 +21,12 @@ const Tape = Schema.Array(Schema.Struct({ pick: Nat, bytes: Nat })).check(
 
 const empty = { value: {}, spans: [] };
 
-const defaults = Effect.fnUntraced(function* () {
+const defaults = Effect.fnUntraced(function* (writes = 13_760, bytes = 1_000_000_000) {
   const resolved = yield* Sources.resolve(Declarations.all, {
     flags: Sources.flags({}),
     env: Sources.env({}),
     repo: Sources.file("repo.toml", empty),
-    person: Sources.file("person.toml", empty),
+    person: Sources.file("person.toml", { value: { limits: { writes, storage: `${bytes} B` } }, spans: [] }),
   });
   return yield* Snapshot.make(Declarations.all, resolved);
 });
@@ -68,18 +68,22 @@ describe("P34c typed quota boundaries", () => {
     { tape: Tape },
     ({ tape }) =>
       Effect.gen(function* () {
-        const saved = yield* defaults();
-        const good = yield* QuotaSettings.read(saved);
-        expect(good.writes).toBe(13_760);
-        expect(ByteSize.toNumberUnsafe(good.storage)).toBe(1_000_000_000);
+        let writes = 13_760;
+        let bytes = 1_000_000_000;
 
         for (const cell of tape) {
+          writes = 1 + ((writes + cell.pick) % 13_760);
+          bytes = 1 + ((bytes + cell.bytes) % 1_000_000_000);
+          const saved = yield* defaults(writes, bytes);
+          const good = yield* QuotaSettings.read(saved);
+          expect(good.writes).toBe(writes);
+          expect(ByteSize.toNumberUnsafe(good.storage)).toBe(bytes);
           const paths = ["limits.writes", "limits.storage", "limits.recovery"];
           const path = paths[cell.pick % paths.length]!;
           const missing = { ...saved, values: { ...saved.values } };
           delete missing.values[path];
           expect(yield* Effect.result(QuotaSettings.read(missing))).toMatchObject({ _tag: "Failure" });
-          const corrupted = { ...saved, values: { ...saved.values, [path]: cell.bytes } };
+          const corrupted = { ...saved, values: { ...saved.values, [path]: { invalid: cell.bytes } } };
           expect(yield* Effect.result(QuotaSettings.read(corrupted))).toMatchObject({ _tag: "Failure" });
           expect(yield* Effect.result(QuotaSettings.read(undefined))).toMatchObject({ _tag: "Failure" });
         }

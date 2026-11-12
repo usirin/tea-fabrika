@@ -5,6 +5,7 @@ import { applyCell } from "@demlik/tea";
 import { propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import * as fc from "fast-check";
+import { expectTypeOf } from "vitest";
 import * as Quota from "./quota.ts";
 
 const limits = { writes: 5, bytes: 31, letter: { writes: 3, bytes: 23 } };
@@ -118,17 +119,20 @@ describe("P34c quota machine", () => {
 
           // Repeated complete windows prove retained total is not a byte ceiling.
           at += 60_001;
-          const growth = n < cells.length - 1 ? limits.bytes : limits.bytes + 1;
+          const fail = n === Math.floor(cells.length / 2);
+          const byteFault = cells[0]!.pick % 2 === 0;
+          const growth = fail && byteFault ? limits.bytes + 1 : limits.bytes;
+          const writes = fail && !byteFault ? limits.writes + 1 : 1;
           const proposed = applyCell(machine, model, {
             type: "propose",
             at,
             operation: `recovery:${n}`,
-            writes: 1,
+            writes,
             bytes: growth,
             ahead: { writes: 0, bytes: 0 },
           })[0];
 
-          if (growth <= limits.bytes) {
+          if (!fail) {
             totalBytes += growth;
             totalWrites++;
             expect(proposed._tag).toBe("ready");
@@ -136,7 +140,10 @@ describe("P34c quota machine", () => {
             expect(proposed.bytes).toBe(growth);
           } else {
             expect(proposed._tag).toBe("reserve_fault");
-            expect(proposed.fault).toMatchObject({ _tag: "RecoveryReserveExhausted", resource: "storage" });
+            expect(proposed.fault).toMatchObject({
+              _tag: "RecoveryReserveExhausted",
+              resource: byteFault ? "storage" : "writes",
+            });
             expect(proposed.operation).toBe(`recovery:${n}`);
           }
 
@@ -144,6 +151,69 @@ describe("P34c quota machine", () => {
         }
 
         expect(model._tag).toBe("reserve_fault");
+        expectTypeOf<Extract<Quota.Model, { readonly _tag: "reserve_fault" }>["operation"]>().not.toBeNullable();
+        expectTypeOf<Quota.Model["_tag"]>().toEqualTypeOf<"ready" | "reserve_fault">();
+      }),
+      options,
+    );
+  });
+
+  // replay is supplied by trusted storage after checking the committed inbox and receipt.
+  // Its letter/recovery pair identifies room used once; ordinary request data never reaches it.
+  it("Q18 replay room is spent once per accepted letter and recovery, apart from the minute window", () => {
+    fc.assert(
+      fc.property(tape, (cells) => {
+        const machine = Quota.make({ account: "alpha:1/process", channel: "recovery", limits });
+        let model = machine.init(null, {})[0];
+        const accepted: string[] = [];
+        let bytes = 0;
+        let writes = 0;
+
+        for (const [n, c] of cells.entries()) {
+          const letter = `accepted:${n}:${c.amount}`;
+          accepted.push(letter);
+          const next = applyCell(machine, model, {
+            type: "propose",
+            at: 1,
+            operation: `replay:${n}`,
+            writes: limits.letter.writes,
+            bytes: limits.letter.bytes,
+            ahead: { writes: 0, bytes: 0 },
+            replay: { letter, recovery: "restart:1" },
+          })[0];
+          expect(next.decision._tag).toBe("admitted");
+          writes += limits.letter.writes;
+          bytes += limits.letter.bytes;
+          expect(next.total).toEqual({ writes, bytes });
+          // The generated history grows beyond both minute caps at the same arrival time.
+          expect(next.writes).toBe(0);
+          expect(next.bytes).toBe(0);
+          model = machine.init(next, {})[0];
+        }
+
+        // Spend the entire fixed allowance, then try to spend an earlier letter's room again.
+        model = applyCell(machine, model, {
+          type: "propose",
+          at: 1,
+          operation: "fixed",
+          writes: limits.writes,
+          bytes: limits.bytes,
+          ahead: { writes: 0, bytes: 0 },
+        })[0];
+        expect(model.decision._tag).toBe("admitted");
+        const letter = accepted[cells[0]!.pick % accepted.length]!;
+        const twice = applyCell(machine, model, {
+          type: "propose",
+          at: 1,
+          operation: "replay:twice",
+          writes: 1,
+          bytes: 1,
+          ahead: { writes: 0, bytes: 0 },
+          replay: { letter, recovery: "restart:1" },
+        })[0];
+        expect(twice._tag).toBe("reserve_fault");
+        expect(twice.total).toEqual(model.total);
+        expect(twice.operation).toBe("replay:twice");
       }),
       options,
     );

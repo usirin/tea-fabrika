@@ -52,6 +52,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             SpanSink.layer(store.sql, { object: "quota-project" }).pipe(
               Layer.provideMerge(Layer.merge(archive, RecordManager.memory(1_000_000_000))),
             );
+          // Keep one sink alive while retrying so a growing held buffer cannot hide behind a new layer.
+          let live = yield* Layer.build(layer());
           let baseline: ReturnType<typeof counts> | undefined;
           let attempts = 0;
           const expected = new Map<string, number>();
@@ -77,8 +79,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
           for (const cell of tape) {
             // Keep the set of pieces fixed after the first attempt while varying retry order.
-            yield* run(0).pipe(Effect.provide(layer()));
-            yield* run(1).pipe(Effect.provide(layer()));
+            yield* run(cell.pick % 2).pipe(Effect.provide(live));
+            yield* run(1 - (cell.pick % 2)).pipe(Effect.provide(live));
             attempts += 2;
             const now = counts(store.sql);
 
@@ -90,9 +92,10 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
             if (cell.reopen) {
               yield* store.reopen;
+              live = yield* Layer.build(layer());
             }
 
-            yield* SpanSink.use((s) => s.flush).pipe(Effect.provide(layer()));
+            yield* SpanSink.use((s) => s.flush).pipe(Effect.provide(live));
             expect(shipped, "refusal completion cannot trigger archive writes").toEqual([]);
           }
 
@@ -112,7 +115,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                 expect(store.sql.exec(`SELECT count(*) AS n FROM "${table}"`)[0]?.n).toBe(0);
               }
             }
-          }).pipe(Effect.provide(layer()));
+          }).pipe(Effect.provide(live));
         }),
       { arbitrary: { seed: 119120, runs: 40 } },
     );

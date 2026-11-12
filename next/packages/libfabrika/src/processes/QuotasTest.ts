@@ -11,7 +11,7 @@ import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import type { Line } from "../ledger/Log.ts";
-import { Entry, Row, lineFor } from "../ledger/Log.ts";
+import { Appended, Entry, Row, lineFor } from "../ledger/Log.ts";
 import { Referee } from "../ledger/Referee.ts";
 import * as RefereeSql from "../ledger/RefereeSql.ts";
 import type { Sql } from "../Sql.ts";
@@ -313,6 +313,11 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                 expect(answer).toMatchObject({ failure: { reason: "quota" } });
                 expect(w.snapshot()).toEqual(before);
                 refused++;
+              }
+
+              // Ordinary mail cannot spend either name's Project recovery room.
+              for (const target of [name, "beta:1"]) {
+                expect((yield* w.run(Quotas.use((q) => q.recovery(target)))).total).toEqual({ writes: 0, bytes: 0 });
               }
 
               yield* w.store.reopen;
