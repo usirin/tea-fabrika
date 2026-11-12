@@ -1,15 +1,22 @@
 // Ticket 762, amendment A2, next/. A process's first turn is the runner's `init`, OTP's init/1:
 // a start alone, or a restart alone, loads the program and arms the object's one alarm.
 // Real runner, manager and ledger on SQLite, as RunnerSupervision.test.ts builds them; only the
-// alarm is a recording double.
+// alarm is a recording double. Each generated world acquires its folder and files in its own scope,
+// and the scope gives them back whether the run passed, failed or was cut (0061).
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Exit, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Mailbox, ProcessStore, SessionManager, Writer } from "../coordination/index.ts";
-import { A, brain, data, first, from, ids, PIDS, read, storage } from "../processes/Process.test-support.ts";
+import { nodeSql } from "../ledger/NodeSqlite.ts";
+import { A, brain, data, first, from, ids, PIDS, read } from "../processes/Process.test-support.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
+import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { Program } from "./Program.ts";
 import { ProgramRunner } from "./Runner.ts";
@@ -34,12 +41,47 @@ const Msg = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number });
 /** Up to 10^12 ms, about 31 years of epoch time, or no wake at all. */
 const wake = fc.option(fc.nat({ max: 1_000_000_000_000 }), { nil: null });
 
+/** A folder in a scope: the scope removes it. */
+const folder = Effect.acquireRelease(
+  Effect.sync(() => mkdtempSync(join(tmpdir(), "t762-init-"))),
+  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+);
+
+/** One SQLite file in a scope. One Sql across reopens, each call to the handle open now; the scope
+ *  closes whichever handle is open. */
+const database = (path: string) =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const open = () => {
+        const db = new DatabaseSync(path);
+        db.exec("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF");
+        return { db, sql: nodeSql(db) };
+      };
+      const held = { now: open() };
+      const sql: Sql = {
+        exec: (query, ...params) => held.now.sql.exec(query, ...params),
+        transaction: (step) => held.now.sql.transaction(step),
+        size: () => held.now.sql.size(),
+      };
+      return {
+        held,
+        sql,
+        reopen: () => {
+          held.now.db.close();
+          held.now = open();
+        },
+      };
+    }),
+    ({ held }) => Effect.sync(() => held.now.db.isOpen && held.now.db.close()),
+  );
+
 /** One process name's world. Each build's `init` gives its own first wake and no Cmd: init's Cmds
  *  are ticket 292's (0253, amendment A3). */
-const world = (wakes: Readonly<Record<string, number | null>>) => {
-  const ledger = storage(),
-    state = storage(),
-    authority = storage();
+const world = Effect.fnUntraced(function* (wakes: Readonly<Record<string, number | null>>) {
+  const path = yield* folder;
+  const ledger = yield* database(join(path, "ledger.db"));
+  const state = yield* database(join(path, "state.db"));
+  const authority = yield* database(join(path, "authority.db"));
   const next = ids(...PIDS);
   // `throws`: the program's init throws, as a program bug would; `loaded`: what each init was given.
   const controls = { build: BUILD, throws: false, loaded: [] as Array<Model | null> };
@@ -120,7 +162,7 @@ const world = (wakes: Readonly<Record<string, number | null>>) => {
       authority.reopen();
     },
   };
-};
+});
 
 const lives = read(`processes/${NAME}`);
 
@@ -140,7 +182,7 @@ describe("ticket 762 A2: a process's first turn arms its alarm", () => {
         ({ wake, calls, fresh }) =>
           Effect.runPromise(
             Effect.gen(function* () {
-              const w = world({ [BUILD]: wake });
+              const w = yield* world({ [BUILD]: wake });
               yield* w.boot;
               const init = ProgramRunner.use((r) => {
                 expect(r.init, "A2's ProgramRunner.init is missing").toBeTypeOf("function");
@@ -157,7 +199,7 @@ describe("ticket 762 A2: a process's first turn arms its alarm", () => {
               }
 
               expect(lastAlarm(w.alarms), "the start's alarm is its first model's wake").toBe(wake);
-            }),
+            }).pipe(Effect.scoped),
           ),
       ),
       { seed: SEED, numRuns: 150 },
@@ -171,7 +213,7 @@ describe("ticket 762 A2: a process's first turn arms its alarm", () => {
           Effect.gen(function* () {
             // The first life wakes elsewhere, so an alarm left from it cannot pass for the successor's.
             const before = wake === null ? 1 : wake + 1;
-            const w = world({ [BUILD]: before, [SUCCESSOR]: wake });
+            const w = yield* world({ [BUILD]: before, [SUCCESSOR]: wake });
             yield* w.boot;
             yield* Effect.gen(function* () {
               const r = yield* ProgramRunner;
@@ -182,7 +224,7 @@ describe("ticket 762 A2: a process's first turn arms its alarm", () => {
               yield* r.restart({ id: `restart-${id}`, build: SUCCESSOR });
             }).pipe(Effect.provide(w.layer()));
             expect(lastAlarm(w.alarms), "the successor's alarm is its first model's wake").toBe(wake);
-          }),
+          }).pipe(Effect.scoped),
         ),
       ),
       { seed: SEED, numRuns: 50 },
@@ -201,7 +243,7 @@ describe("ticket 762 A2: a process's first turn arms its alarm", () => {
     ({ restored, wake }) =>
       Effect.gen(function* () {
         // A restored life's earlier model wakes at 0, so its due runs one timer step and saves it.
-        const w = world({ [BUILD]: restored ? 0 : wake });
+        const w = yield* world({ [BUILD]: restored ? 0 : wake });
         yield* w.boot;
 
         if (restored) {
@@ -228,7 +270,7 @@ describe("ticket 762 A2: a process's first turn arms its alarm", () => {
           yield* r.due(deadline!);
           expect((yield* lives).filter((row) => row._tag === "restarted")).toMatchObject([{ body: { after: A } }]);
         }).pipe(Effect.provide(w.layer()));
-      }),
+      }).pipe(Effect.scoped),
     { arbitrary: { seed: SEED, runs: 50 } },
   );
 });
