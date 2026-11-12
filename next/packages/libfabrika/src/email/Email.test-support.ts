@@ -589,9 +589,9 @@ export const testKey = (seed: ReadonlyArray<number>) =>
             Effect.tryPromise(() => crypto.subtle.sign("Ed25519", key, new Uint8Array(bytes))).pipe(
               Effect.map((bytes) => new Uint8Array(bytes)),
             ),
-        }),
+        }).pipe(Effect.orDie),
     };
-  });
+  }).pipe(Effect.orDie);
 
 export const harness = (flow: Flow, beforeAppend: IO<void> = Effect.void, afterAppend: IO<void> = Effect.void) =>
   Effect.gen(function* () {
