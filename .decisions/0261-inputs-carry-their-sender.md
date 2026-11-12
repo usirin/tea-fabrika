@@ -1,7 +1,7 @@
 ---
 id: 0261
 title: Every input carries its sender, stamped at the door, and every write carries the input that caused it in the data, so an agent signs its own writes and never the person's
-status: accepted
+status: amended-in-part by [0140](0140-gateway-refuses-client-id-and-by.md)
 date: 2026-11-04
 tags: [inputs, sender, envelope, cause, signing, delegation, gateway, both-versions]
 ---
@@ -58,3 +58,4 @@ the data, never in the call stack.**
   [0263](0263-a-writes-signer-is-its-causes-sender.md) holds that.
 - Not decided here: a client-sent `id` or `by` being refused and recorded, and a write with no cause
   being `own`. Both are still proposed in the note.
+  Decided in [0140](0140-gateway-refuses-client-id-and-by.md): refused and counted, never kept, and `own`.

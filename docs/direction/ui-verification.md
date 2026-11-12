@@ -430,6 +430,8 @@ B  aimed looks, plus one open look a week at the full grid of one program
 
 A is cheaper; B is how tonight's title bar was found. It clashes with Linear's way, so it is yours.
 
+Decided 2026-11-11: A, in [0142](../../.decisions/0142-no-weekly-open-look.md).
+
 ## What the ledger records
 
 One `ui_checked` row per check, state, layout, size and look, and one `rated` row per rating (the
