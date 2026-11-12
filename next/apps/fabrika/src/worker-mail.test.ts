@@ -105,6 +105,7 @@ const instrumentMailBrain = async (brain: string, home: string) => {
 import * as Brain from ${JSON.stringify(brain)};
 export default Brain.default;
 export const Connection = Brain.Connection;
+export const IsolateTail = Brain.IsolateTail;
 export const Project = Brain.Project;
 export const RecordPart = Brain.RecordPart;
 export class Process extends Brain.Process {
