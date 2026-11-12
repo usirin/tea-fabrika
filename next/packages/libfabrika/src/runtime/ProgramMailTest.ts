@@ -618,11 +618,14 @@ const walk = (
       );
     });
 
-    const owed = (name: string) =>
-      Effect.map(
-        checkpoint(name),
-        (saved) => saved?.cmds.some((cmd) => Schema.is(Schema.Struct({ mail: Schema.Literal(true) }))(cmd)) ?? false,
+    /** The command ids of every Send the name's saved checkpoint still owes. */
+    const owedIds = (name: string) =>
+      Effect.map(checkpoint(name), (saved) =>
+        (saved?.cmds ?? []).flatMap((cmd) =>
+          Schema.is(Schema.Struct({ id: Schema.String, mail: Schema.Literal(true) }))(cmd) ? [cmd.id] : [],
+        ),
       );
+    const owed = (name: string) => Effect.map(owedIds(name), (ids) => ids.length > 0);
 
     /** The invariants every prefix keeps. */
     const check = Effect.fnUntraced(function* () {
@@ -836,14 +839,23 @@ const walk = (
             }
           } else {
             const healthy = !world.fault.mail && !world.fault.ack && !world.fault.wake;
+            // An earlier Send whose answer was lost stays owed until its own alarm: S1 keeps that one.
+            const before = yield* owedIds(requesterName(k));
             yield* call(work, `${requesterName(k)}'s start`);
 
             if (moves.includes("evict") && healthy) {
-              expect(yield* owed(requesterName(k)), "S2: the completed Send is no longer owed").toBe(false);
+              const after = yield* owedIds(requesterName(k));
               expect(
-                (yield* store.alarms.saved).filter((a) => a.name === requesterName(k)),
-                "S2: the last Send's answer removes its retry alarm",
+                after.filter((id) => !before.includes(id)),
+                "S2: the completed Send is no longer owed",
               ).toEqual([]);
+
+              if (after.length === 0) {
+                expect(
+                  (yield* store.alarms.saved).filter((a) => a.name === requesterName(k)),
+                  "S2: the last Send's answer removes its retry alarm",
+                ).toEqual([]);
+              }
             }
           }
 
