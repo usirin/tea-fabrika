@@ -54,8 +54,8 @@ const law = (
 type Connection = {
   frame: (text: string) => Effect.Effect<void, unknown>;
   ring: ReturnType<typeof connection>["ring"];
-  wake: () => Effect.Effect<void>;
-  probe: (session: string) => Effect.Effect<number | null>;
+  wake: () => Effect.Effect<void, unknown>;
+  probe: (session: string) => Effect.Effect<number | null, unknown>;
 };
 
 const online = () =>
@@ -250,7 +250,10 @@ describe("P12 Connection attachment laws", () => {
         Effect.gen(function* () {
           expect(reader).toBe("gateway/session-1");
           expect(read()).toMatchObject({ waits: [{ id, stream, after }] });
-          yield* ring(stream, after + 1); // Reentrant RPC, before registration returns.
+          // Reentrant RPC, before registration returns.
+          yield* ring(stream, after + 1).pipe(
+            Effect.mapError((cause) => new LedgerError({ reason: "storage", cause })),
+          );
           return { _tag: "parked" } as const;
         }),
       );
