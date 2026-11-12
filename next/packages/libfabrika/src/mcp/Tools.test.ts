@@ -142,6 +142,76 @@ const richDeclaration = (fallback: string, reverse: boolean) => {
   };
 };
 
+const schemaForms = [
+  "suspended message",
+  "suspended member",
+  "suspended alternatives",
+  "multiple tags",
+  "encoded keys",
+] as const;
+
+type SchemaForm = (typeof schemaForms)[number];
+
+const schemaDeclaration = (form: SchemaForm, reverse: boolean, encodedKey: string) => {
+  const left = Schema.Struct({ side: Schema.Literal("left"), n: Schema.Int });
+  const right = Schema.Struct({ side: Schema.Literal("right"), text: Schema.String });
+  const leftMessage = Schema.Struct({ type: Schema.Literal("choose"), ...left.fields });
+  const rightMessage = Schema.Struct({ type: Schema.Literal("choose"), ...right.fields });
+  const timer = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int });
+  const alternatives = Schema.Union(reverse ? [rightMessage, leftMessage] : [leftMessage, rightMessage]);
+  const plain = Schema.Union([alternatives, timer]);
+  const encodedLeft = left.pipe(Schema.encodeKeys({ n: encodedKey }));
+  const encodedRight = right.pipe(Schema.encodeKeys({ text: encodedKey }));
+  const msg =
+    form === "suspended message"
+      ? Schema.suspend(() => plain)
+      : form === "suspended member"
+        ? Schema.Union(
+            reverse
+              ? [rightMessage, Schema.suspend(() => leftMessage), timer]
+              : [Schema.suspend(() => leftMessage), rightMessage, timer],
+          )
+        : form === "suspended alternatives"
+          ? Schema.Union([Schema.suspend(() => alternatives), timer])
+          : form === "multiple tags"
+            ? Schema.Union([
+                Schema.Struct({ type: Schema.Literals(["choose", "other"]), ...left.fields }),
+                rightMessage,
+                timer,
+              ])
+            : Schema.Union([
+                leftMessage.pipe(Schema.encodeKeys({ n: encodedKey })),
+                rightMessage.pipe(Schema.encodeKeys({ text: encodedKey })),
+                timer,
+              ]);
+  const machine = Machine.make({
+    model: Schema.Null,
+    msg,
+    cmds: [],
+    init: () => [null, []],
+    update: { choose: (m) => [m, []], other: (m) => [m, []], timer: (m) => [m, []] },
+  });
+  const choose =
+    form === "encoded keys"
+      ? Schema.Union([encodedLeft, encodedRight])
+      : Schema.Union(reverse && form !== "multiple tags" ? [right, left] : [left, right]);
+  const inputs = form === "multiple tags" ? { choose: "Choose", other: "Other" } : { choose: "Choose" };
+  const program = Program.make({
+    name: "pack/forms",
+    machine,
+    state: { v: 1, upgrades: [] },
+    view: () => null,
+    refuse: () => null,
+    inputs,
+    outputs: {},
+    writes: {},
+    wake: () => null,
+  });
+  const schemas: Readonly<Record<string, Schema.Codec<object, unknown>>> =
+    form === "multiple tags" ? { choose, other: left } : { choose };
+  return { program, schemas };
+};
+
 it.prop(
   "T1: ps first, then visible ports in program and declaration order, with their own schemas and read hints",
   { declarations: Declarations },
@@ -283,6 +353,76 @@ it.prop(
   },
   options(300),
 );
+
+for (const form of schemaForms) {
+  it.prop(
+    `T1: ${form} preserves every port schema`,
+    { reverse: Schema.Boolean, suffix: Schema.Int },
+    ({ reverse, suffix }) => {
+      const { program, schemas } = schemaDeclaration(form, reverse, `wire_${suffix}`);
+      const result = Tools.list([program]);
+      expect(Result.isSuccess(result)).toBe(true);
+
+      if (Result.isSuccess(result)) {
+        expect(result.success.map((tool) => tool.name)).toEqual([
+          "ps",
+          ...Object.keys(schemas).map((key) => `forms_${key}`),
+        ]);
+
+        for (const [i, schema] of Object.values(schemas).entries()) {
+          expect(result.success[i + 1]?.inputSchema).toEqual(inputSchema(schema));
+          expect(result.success[i + 1]?.annotations?.readOnlyHint).not.toBe(true);
+        }
+      }
+    },
+    options(300),
+  );
+
+  it.prop(
+    `T2: ${form} keeps both alternatives and encoded JSON fields`,
+    { text, n: Schema.Int, reverse: Schema.Boolean, input: Schema.Json },
+    ({ text: s, n, reverse, input }) => {
+      const encodedKey = `wire_${n}`;
+      const { program, schemas } = schemaDeclaration(form, reverse, encodedKey);
+
+      for (const [key, schema] of Object.entries(schemas)) {
+        const port = Programs.port(program, key);
+        expect(Option.isSome(port)).toBe(true);
+        const values = [
+          { side: "left", [form === "encoded keys" ? encodedKey : "n"]: n },
+          { side: "right", [form === "encoded keys" ? encodedKey : "text"]: s },
+          { side: "left", [form === "encoded keys" ? encodedKey : "n"]: s },
+          { side: "right", [form === "encoded keys" ? encodedKey : "text"]: n },
+          { side: "other", n, text: s },
+          input,
+        ];
+
+        for (const value of values) {
+          const decoded = Schema.decodeUnknownResult(Schema.toCodecJson(schema), closed)(value);
+
+          if (Option.isSome(port)) {
+            const actual = Schema.decodeUnknownResult(Schema.toCodecJson(port.value), closed)(value);
+            expect(Result.isSuccess(actual)).toBe(Result.isSuccess(decoded));
+
+            if (Result.isSuccess(actual) && Result.isSuccess(decoded)) {
+              expect(actual.success).toEqual(decoded.success);
+              expect(Schema.encodeUnknownResult(Schema.toCodecJson(port.value))(actual.success)).toEqual(
+                Schema.encodeUnknownResult(Schema.toCodecJson(schema))(decoded.success),
+              );
+            }
+          }
+
+          expect(Tools.read([program], `forms_${key}`, { value })).toEqual(
+            Result.isFailure(decoded)
+              ? { _tag: "refused", reason: "bad_input" }
+              : { _tag: "write", program: program.name, m: { ...decoded.success, type: key } },
+          );
+        }
+      }
+    },
+    options(300),
+  );
+}
 
 for (const key of ["bounds", "choose", "defaulted", "read", "shared"] as const) {
   it.prop(
