@@ -805,7 +805,7 @@ const walk = Effect.fnUntraced(function* (
 
 export const suite = (harness: Harness, register: Register) =>
   describe("P13 runner admission", () => {
-    const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<string>) => {
+    const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<string>, numRuns = 40) => {
       const reached = new Set<string>();
       register(
         name,
@@ -814,7 +814,7 @@ export const suite = (harness: Harness, register: Register) =>
           const monitor = capture();
           return walk(harness, tape, moves, reached, monitor).pipe(Effect.withTracer(monitor.tracer));
         },
-        parameters,
+        { ...parameters, numRuns },
         reached,
         required,
       );
@@ -848,6 +848,7 @@ export const suite = (harness: Harness, register: Register) =>
       "A9: transport loss and failed activity cleanup resume without a program-crash charge",
       ["admit", "rpc", "cleanup", "update_rpc", "update_cleanup", "reopen"],
       ["rpc", "cleanup", "update_rpc", "update_cleanup", "resume_without_charge"],
+      100,
     );
     const cuts = new Set<string>();
     register(

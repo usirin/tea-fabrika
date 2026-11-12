@@ -55,7 +55,9 @@ const ctx = (p: typeof Policy.Type = policy) => ({ policy: p, process: A, name: 
 const step = (model: Model, msg: Msg): Model => applyCell(supervisor, model, msg as never)[0];
 
 const valid = (model: unknown): boolean => Schema.is(Supervision)(model);
-const roundTrip = (model: Model): unknown => JSON.parse(JSON.stringify(Schema.encodeSync(Supervision)(model)));
+
+const roundTrip = (model: Model): unknown =>
+  Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(JSON.stringify(Schema.encodeSync(Supervision)(model)));
 
 /** JSON text with sorted keys: a decoded copy may order its fields differently. */
 const canon = (value: unknown): string =>

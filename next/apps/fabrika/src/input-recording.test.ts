@@ -1,5 +1,6 @@
 // P13 slice 2, next/. Run in the isolated test container: the real build, Alchemy and local instance.
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
+import { DatabaseSync } from "node:sqlite"; // edge: inspect the isolated instance's SQLite persistence cuts
 import { NodeServices } from "@effect/platform-node";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
@@ -19,6 +20,11 @@ const SENT = "2026-11-11T00:00:00Z";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const Stored = Schema.Struct({ id: Schema.String, body: Schema.Json });
 const Started = Schema.Struct({ process: Schema.String });
+
+const Journal = Schema.Struct({
+  crashes: Schema.Int,
+  journal: Schema.Struct({ _tag: Schema.String, reply: Schema.optionalKey(Schema.Json) }),
+});
 
 const Metadata = Schema.Struct({
   type: Schema.Literal("save"),
@@ -47,6 +53,69 @@ const field = (bytes: Uint8Array) => {
   n.writeUInt32BE(bytes.length);
   return Buffer.concat([n, bytes]);
 };
+
+const recovery = Effect.fnUntraced(function* (home: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+
+  for (const file of yield* fs.glob("**/*.{sqlite,db}", { root: home, dot: true, exclude: ["node_modules/"] })) {
+    const db = yield* Effect.acquireRelease(
+      Effect.sync(() => new DatabaseSync(path.join(home, file))),
+      (db) => Effect.sync(() => db.close()),
+    );
+    const table = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='process_recovery'").get();
+
+    if (table !== undefined && db.prepare("SELECT name FROM process_recovery WHERE name=?").get(NAME) !== undefined) {
+      return db;
+    }
+  }
+
+  return yield* Effect.die(new Error("the live instance has no recovery database"));
+});
+
+const pendingReply = Effect.fnUntraced(function* (
+  home: string,
+  move: string,
+  body: string,
+  letter: string,
+  route: Effect.Effect<unknown, Error>,
+) {
+  const db = yield* recovery(home);
+  const read = () =>
+    Schema.decodeUnknownSync(Schema.fromJsonString(Journal))(
+      db.prepare("SELECT value FROM process_recovery WHERE name=?").get(NAME)?.value,
+    );
+  const before = read();
+  const trigger =
+    move === "reply_write"
+      ? "CREATE TRIGGER p13_cut BEFORE INSERT ON process_replies BEGIN SELECT RAISE(FAIL, 'reply cut'); END"
+      : "CREATE TRIGGER p13_cut BEFORE UPDATE OF value ON process_recovery WHEN json_extract(OLD.value, '$.journal._tag')='writing_reply' AND json_extract(NEW.value, '$.journal._tag')='idle' BEGIN SELECT RAISE(FAIL, 'reply completion cut'); END";
+  yield* Effect.acquireRelease(
+    Effect.sync(() => db.exec(trigger)),
+    () => Effect.sync(() => db.exec("DROP TRIGGER p13_cut")),
+  );
+  expect((yield* Effect.result(route))._tag).toBe("Failure");
+  const pending = read();
+  expect(pending.journal._tag).toBe("writing_reply");
+  expect(pending.crashes).toBe(before.crashes);
+  expect(db.prepare("SELECT value FROM process_receipts WHERE name=? AND letter=?").get(NAME, letter)).toBeUndefined();
+  const reply = db.prepare("SELECT value FROM process_replies WHERE name=? AND id=?").get(NAME, letter);
+  expect(reply === undefined).toBe(move === "reply_write");
+  const output = JSON.stringify([db.prepare("SELECT value FROM process_recovery WHERE name=?").get(NAME), reply]);
+
+  for (const form of [body, JSON.stringify(body).slice(1, -1), encodeURIComponent(body)]) {
+    expect(output).not.toContain(form);
+  }
+});
+
+const resumedReply = Effect.fnUntraced(function* (home: string) {
+  const db = yield* recovery(home);
+  const saved = Schema.decodeUnknownSync(Schema.fromJsonString(Journal))(
+    db.prepare("SELECT value FROM process_recovery WHERE name=?").get(NAME)?.value,
+  );
+  expect(saved.journal._tag).toBe("idle");
+  expect(saved.crashes).toBe(0);
+});
 
 const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: Set<string>) {
   const fs = yield* FileSystem.FileSystem;
@@ -144,14 +213,19 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
   let count = 0;
   let serial = 0;
   const accepted: Array<{ letter: string; m: typeof Metadata.Type & { body: string }; answer: unknown }> = [];
+  const refused: typeof accepted = [];
   const received: Array<typeof Metadata.Type> = [];
   const bodies: Array<string> = [];
 
   for (const entropy of tape) {
-    const choices =
-      accepted.length === 0
-        ? ["admit", "refuse", "audit_failed"]
-        : ["admit", "refuse", "audit_failed", "lost_answer", "reconnect", "retry"];
+    const choices = [
+      "admit",
+      "refuse",
+      "audit_failed",
+      "reconnect",
+      ...(accepted.length === 0 ? [] : ["lost_answer", "retry"]),
+      ...(refused.length === 0 ? [] : ["refused_retry", "refused_lost_answer", "reply_write", "reply_complete"]),
+    ];
     const move = choices[entropy % choices.length]!;
     reached.add(move);
 
@@ -160,8 +234,15 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
       continue;
     }
 
-    if (move === "retry" || move === "lost_answer") {
-      const prior = accepted[Math.floor(entropy / choices.length) % accepted.length]!;
+    if (move === "retry" || move === "lost_answer" || move === "refused_retry" || move === "refused_lost_answer") {
+      const history = move.startsWith("refused_") ? refused : accepted;
+      const prior = history[Math.floor(entropy / choices.length) % history.length]!;
+
+      if (move === "refused_lost_answer") {
+        yield* invoke(instance.process(pid), "abort", []);
+        client = yield* connect(++serial);
+      }
+
       // A previous call has already committed. Its answer may have been lost to the caller.
       expect(
         yield* invoke(project, "route", [
@@ -176,14 +257,23 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
       const m = {
         type: "save",
         note: move === "audit_failed" ? "fail" : "record",
-        base: move === "refuse" ? count + 1 : count,
+        base: move === "refuse" || move === "reply_write" || move === "reply_complete" ? count + 1 : count,
         reason: "user-save",
         body,
       } as const;
       const letter = `wire-${++serial}`;
-      const result = yield* Effect.result(
-        invoke(project, "route", [client, "process.send", { pid, letter, m, sentAt: SENT, seen: 0 }]),
-      );
+      const route = () => invoke(project, "route", [client, "process.send", { pid, letter, m, sentAt: SENT, seen: 0 }]);
+      let result;
+
+      if (move === "reply_write" || move === "reply_complete") {
+        yield* Effect.scoped(pendingReply(home, move, body, letter, route()));
+        yield* invoke(instance.process(pid), "abort", []);
+        client = yield* connect(++serial);
+        result = yield* Effect.result(route());
+        yield* Effect.scoped(resumedReply(home));
+      } else {
+        result = yield* Effect.result(route());
+      }
 
       if (move === "audit_failed") {
         expect(result._tag).toBe("Failure");
@@ -194,6 +284,12 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
         if (move === "admit") {
           count++;
           accepted.push({ letter, m, answer: result._tag === "Success" ? result.success : null });
+        } else {
+          expect(result).toMatchObject({
+            _tag: "Success",
+            success: { _tag: "ok", result: { _tag: "refused", reason: "changed_elsewhere", now: count } },
+          });
+          refused.push({ letter, m, answer: result._tag === "Success" ? result.success : null });
         }
       }
     }
@@ -215,7 +311,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
 it("A13: built boxes and the real instance record selected metadata across refusal, lost answers and reconnects", async () => {
   const reached = new Set<string>();
   await fc.assert(
-    fc.asyncProperty(fc.array(fc.noBias(fc.nat()), { minLength: 12, maxLength: 18 }), (tape) =>
+    fc.asyncProperty(fc.array(fc.noBias(fc.nat()), { minLength: 20, maxLength: 28 }), (tape) =>
       Effect.runPromise(
         Effect.scoped(walk(tape, reached)).pipe(
           Effect.provide(NodeServices.layer),
@@ -227,6 +323,17 @@ it("A13: built boxes and the real instance record selected metadata across refus
     { seed: 119120, numRuns: 6 },
   );
   expect([...reached]).toEqual(
-    expect.arrayContaining(["admit", "refuse", "audit_failed", "lost_answer", "reconnect", "retry"]),
+    expect.arrayContaining([
+      "admit",
+      "refuse",
+      "audit_failed",
+      "lost_answer",
+      "reconnect",
+      "retry",
+      "refused_retry",
+      "refused_lost_answer",
+      "reply_write",
+      "reply_complete",
+    ]),
   );
 }, 600_000);

@@ -3,7 +3,8 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Cause, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
-import { nodeExecution } from "./Execution.ts";
+import * as Audit from "./Audit.ts";
+import { nodeExecution, workerExecution } from "./Execution.ts";
 import { capture, unleaked } from "./RepliesTest.ts";
 
 const Model = Schema.Struct({ versions: Schema.Record(Schema.String, Schema.Int) });
@@ -116,7 +117,7 @@ describe("P13 safe audit", () => {
                 const body = JSON.stringify({ private: cell.pick, line: `"/雪\n${n}` });
                 const input = Save.make({ type: "save", note, base, body });
                 bodies.push(body);
-                const modes = ["decode", "selector", "output", "json"] as const;
+                const modes = ["decode", "selector", "output", "json", "rpc", "reply"] as const;
                 const mode = modes[cell.move % modes.length]!;
                 reached.add(mode);
                 const program =
@@ -127,7 +128,50 @@ describe("P13 safe audit", () => {
                       : mode === "json"
                         ? declared(() => ({ hidden: 1n }), Schema.Unknown)
                         : declared(metadata);
-                const execution = nodeExecution(program);
+                const node = nodeExecution(program);
+
+                if (mode !== "rpc" && mode !== "reply") {
+                  const direct = yield* Effect.exit(node.audit(mode === "decode" ? { ...input, base: body } : input));
+                  expect(Exit.isFailure(direct)).toBe(true);
+
+                  if (Exit.isFailure(direct)) {
+                    expect(Cause.hasDies(direct.cause)).toBe(false);
+                    const error = Cause.squash(direct.cause);
+                    expect(error).toBeInstanceOf(Audit.AuditError);
+                    outputs.push(String(error), JSON.stringify(error), Cause.pretty(direct.cause));
+                  }
+                }
+
+                const execution = workerExecution({
+                  init: async (saved) => Effect.runPromise(node.init(saved)),
+                  step: async (model, msg) => Effect.runPromise(node.step(model, msg)),
+                  fresh: async (model, msg) => Effect.runPromise(node.fresh(model, msg)),
+                  update: async (model, msg) => Effect.runPromise(node.update(model, msg)),
+                  fold: async (model, msg) => Effect.runPromise(node.fold(model, msg)),
+                  upgrade: async (saved) => Effect.runPromise(node.upgrade(saved)),
+                  reply: async (cmd, result) => Effect.runPromise(node.reply(cmd, result)),
+                  audit: async (msg) => {
+                    if (mode === "rpc") {
+                      return raised(body);
+                    }
+
+                    if (mode === "reply") {
+                      return { private: body, url: `https://audit.test/?body=${encodeURIComponent(body)}` };
+                    }
+
+                    const answer = await Effect.runPromise(
+                      node.audit(msg).pipe(
+                        Effect.match({
+                          onSuccess: (value) => Audit.Answer.cases.ok.make({ value }),
+                          onFailure: Audit.failure,
+                        }),
+                      ),
+                    );
+                    outputs.push(JSON.stringify(answer));
+                    expect(Schema.is(Audit.Answer)(answer)).toBe(true);
+                    return answer;
+                  },
+                });
                 const exit = yield* Effect.exit(
                   execution.audit(mode === "decode" ? { ...input, base: body } : input),
                 ).pipe(Effect.withTracer(spans.tracer));
@@ -152,6 +196,6 @@ describe("P13 safe audit", () => {
       ),
       parameters,
     );
-    expect([...reached]).toEqual(expect.arrayContaining(["decode", "selector", "output", "json"]));
+    expect([...reached]).toEqual(expect.arrayContaining(["decode", "selector", "output", "json", "rpc", "reply"]));
   });
 });
