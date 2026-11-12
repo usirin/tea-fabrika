@@ -111,14 +111,16 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
       expect(code).toBeDefined();
       yield* Effect.gen(function* () {
         const held = yield* Effect.acquireRelease(heldPort(), (port) => port.release);
-        const instance = yield* localInstance(built, {
+        const options = {
           home,
           name: PROJECT,
           person: PERSON,
           founder,
           window: raw,
           port: held.port,
-        });
+          rateLimit: { limit: 100_000, window: 60_000 },
+        };
+        const instance = yield* localInstance(built, options);
         const from: From = {
           by: fingerprint,
           for: PERSON,
