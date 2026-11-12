@@ -2,6 +2,10 @@
 
 Decided 2026-10-17. The MCP part was added 2026-10-18.
 
+Its decided rules are in: [0430](../../.decisions/0430-tsh-is-a-unix-shell-for-tea-programs.md),
+[0431](../../.decisions/0431-agents-get-programs-as-mcp-tools.md),
+[0432](../../.decisions/0432-next-has-fabsh-rethought-from-tsh.md).
+
 *Changed 2026-11-01: `tsh` stays in today's version. The new version's shell is `fabsh`,
 in `next/`, in Tier 2 ([the tiers](../plan/tiers.md)). It is rethought, not copied.*
 
