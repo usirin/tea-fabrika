@@ -845,7 +845,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
                 }),
               ),
             ),
-            (runtime: ManagedRuntime.ManagedRuntime<ProcessService>) => runtime.disposeEffect,
+            (runtime: ManagedRuntime.ManagedRuntime<ProcessService, never>) => runtime.disposeEffect,
           );
           yield* Effect.promise(async () => {
             const first = await Effect.runPromise(Effect.result(configureProcess(ctx, descriptor, runtime, true)));
