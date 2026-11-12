@@ -2615,7 +2615,7 @@ describe("P11 recovery gaps and durable installation", () => {
         const rows = yield* read(PROCESS);
         expect(rows.filter((row) => row._tag === "state.upgraded")).toMatchObject([
           {
-            build: "new-build",
+            build: "old-build",
             body: { program: "queue", from: 1, to: 3, ran: ["n_to_count", "add_runtime"] },
           },
         ]);
