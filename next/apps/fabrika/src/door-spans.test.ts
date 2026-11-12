@@ -290,14 +290,25 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
 
 const capture = (delegate: Tracer.Tracer) => {
   const spans: Array<Tracer.Span> = [];
+  const events: Array<{
+    spanId: string;
+    name: string;
+    startTime: bigint;
+    attributes: Record<string, unknown> | undefined;
+  }> = [];
   const tracer = Tracer.make({
     span(options) {
       const span = delegate.span(options);
+      const event = span.event.bind(span);
+      span.event = (name, startTime, attributes) => {
+        events.push({ spanId: span.spanId, name, startTime, attributes });
+        event(name, startTime, attributes);
+      };
       spans.push(span);
       return span;
     },
   });
-  return { spans, tracer };
+  return { spans, events, tracer };
 };
 
 const parent = (a: Sample) => Tracer.externalSpan({ traceId: a.traceId, spanId: a.spanId });
@@ -391,7 +402,10 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                     .flatMap(({ name }) => db.prepare(`SELECT * FROM "${String(name)}"`).all()),
                 );
                 const shown = JSON.stringify(
-                  tracer.spans.map((s) => ({ name: s.name, tags: [...s.attributes], events: s.events })),
+                  {
+                    spans: tracer.spans.map((s) => ({ name: s.name, tags: [...s.attributes] })),
+                    events: tracer.events,
+                  },
                   (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v),
                 );
                 const outputs = [...w.writes, ...w.archived, JSON.stringify(cells), shown, ...errors].flatMap(

@@ -1,4 +1,4 @@
-// P13 slice 2, next/. Run in the isolated test container: the real build, Alchemy and local instance.
+// P13 slice 2, next/. The real build, Alchemy and local instance run under plain vitest.
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite"; // edge: inspect the isolated instance's SQLite persistence cuts
 import { NodeServices } from "@effect/platform-node";
@@ -35,7 +35,7 @@ const Metadata = Schema.Struct({
 
 const invoke = (target: object, method: string, args: ReadonlyArray<unknown>) =>
   Effect.tryPromise({
-    try: () => Reflect.apply(Reflect.get(target, method), target, args),
+    try: () => Reflect.apply(Reflect.get(target, method), target, args) as PromiseLike<unknown>,
     catch: (cause) => new Error("local instance call failed", { cause }),
   });
 
@@ -306,17 +306,43 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
       }
     }
   }
+
+  // A13 reaches the project call below the wire. An unknown type must remain a normal refusal.
+  const unknown = { type: `unknown-${count}-${serial}`, body: `BODY-unknown-${tape.at(-1)} "/雪\n` };
+  expect(
+    yield* invoke(project, "route", [
+      client,
+      "process.send",
+      { pid, letter: `unknown-${++serial}`, m: unknown, sentAt: SENT, seen: 0 },
+    ]),
+  ).toMatchObject({ _tag: "ok", result: { _tag: "refused" } });
+  reached.add("unknown");
+
+  // The same client can still submit a valid input after the refusal.
+  const control = { type: "save", note: "record", base: count, reason: "user-save", body: "control" };
+  expect(
+    yield* invoke(project, "route", [
+      client,
+      "process.send",
+      { pid, letter: `control-${++serial}`, m: control, sentAt: SENT, seen: 0 },
+    ]),
+  ).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+  const rows = yield* invoke(project, "read", ["gateway/inputs", 0, "p13-unknown-check"]);
+
+  for (const form of [unknown.body, JSON.stringify(unknown.body).slice(1, -1), encodeURIComponent(unknown.body)]) {
+    expect(JSON.stringify(rows)).not.toContain(form);
+  }
 });
 
-it("A13: built boxes and the real instance record selected metadata across refusal, lost answers and reconnects", async () => {
+it("A13: built boxes and the real instance record selected metadata across refusal, unknown types, lost answers and reconnects", async () => {
   const reached = new Set<string>();
   await fc.assert(
     fc.asyncProperty(fc.array(fc.noBias(fc.nat()), { minLength: 20, maxLength: 28 }), (tape) =>
       Effect.runPromise(
         Effect.scoped(walk(tape, reached)).pipe(
-          Effect.provide(NodeServices.layer),
           Effect.provide(SecureRandom.layerWebCrypto),
           Effect.provide(localState()),
+          Effect.provide(NodeServices.layer),
         ),
       ),
     ),
@@ -334,6 +360,7 @@ it("A13: built boxes and the real instance record selected metadata across refus
       "refused_lost_answer",
       "reply_write",
       "reply_complete",
+      "unknown",
     ]),
   );
 }, 600_000);
