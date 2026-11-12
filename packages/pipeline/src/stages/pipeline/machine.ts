@@ -13,9 +13,9 @@ import { Carried, Given } from "./carry.ts";
 import { openWords, ruleChangeLines, throughWords } from "./found.ts";
 import { EndOutcome, isEnd, LaneOutcome, StopOutcome } from "./outcome.ts";
 import type { Folded } from "./restart.ts";
-import { AskFor, LaneStep, ROUTES, type Move as Route, STEPS } from "./routes.ts";
+import { AskFor, askedFor, askedStep, LaneStep, ROUTES, type Move as Route, STEPS } from "./routes.ts";
 
-export { AskFor, LaneStep, STEPS };
+export { AskFor, askedFor, askedStep, LaneStep, STEPS };
 
 // The lane: one tracker ticket through every step, in order. Plain tea. Each step is a machine of
 // its own, and the lane starts each as one Act and reads its outcome, as `operate` does; it never
@@ -89,14 +89,6 @@ const stopsAt = (step: LaneStep, end: LaneOutcome): Resume =>
  * back for. Past it, only a person's `again`. 3 is a guess (docs/direction/jidoka-and-andon.md#bounds).
  */
 export const MAX_ROUNDS = 3;
-
-const isAskFor = Schema.is(AskFor);
-
-/** The kind of question a lane's ask id names: `a-approve-3` is `approve`. `null`: not a lane's. Pure. */
-export const askedFor = (ask: string): AskFor | null => {
-  const kind = /^a-([a-z_]+)-\d+$/.exec(ask)?.[1];
-  return kind !== undefined && isAskFor(kind) ? kind : null;
-};
 
 /** The picks that give the builder one more round past the bound: a person's call, each counted once. */
 const GRANTS: Readonly<Partial<Record<AskFor, readonly string[]>>> = {
@@ -275,6 +267,9 @@ const StepIn = Schema.Struct({
 
 const AskIn = Schema.Struct({
   number: Schema.Finite,
+  for: Schema.optionalKey(Schema.String),
+  step: Schema.optionalKey(LaneStep),
+  carry: Schema.optionalKey(Carry),
   ask: Schema.String,
   what: Schema.String,
   picks: Schema.Array(Schema.String),
@@ -286,10 +281,16 @@ const AskIn = Schema.Struct({
   spent: Schema.optionalKey(Schema.Literal(true)),
   /** The head a merge's question is about, as the person sees it: the `asked` fact keeps it (self-fix PR 10). */
   head: Schema.optionalKey(Schema.String),
+  /** Why it asks, from how the step ended, for the `asked` fact. Left out: nothing ended into it. */
+  why: Schema.optionalKey(Schema.String),
 });
 
 /** How the lane ended, for what it takes with it. Left out: a lane saved before this key still reads. */
-const ReleaseIn = Schema.Struct({ ...LaneIn.fields, outcome: Schema.optionalKey(LaneOutcome) });
+const ReleaseIn = Schema.Struct({
+  ...LaneIn.fields,
+  outcome: Schema.optionalKey(LaneOutcome),
+  resume: Schema.optionalKey(LaneStep),
+});
 
 /** Who filed it, as the lane reads it. */
 export const Filed = Schema.Struct({
@@ -333,6 +334,10 @@ export const Question = Schema.Struct({
   for: AskFor,
   step: LaneStep,
   call: Schema.optionalKey(Call),
+  /** What the step asked about, its outcome's own `for`. Left out: no step's ask, or a lane saved before. */
+  about: Schema.optionalKey(Schema.String),
+  /** Why it asks, from how the step ended. Left out: no step ended into it, or a lane saved before. */
+  why: Schema.optionalKey(Schema.String),
 });
 export type Question = typeof Question.Type;
 
@@ -816,17 +821,6 @@ const pausedBy = (question: Question): StopOutcome =>
 /** Where the same line typed again goes on after a pause on `pick`: where the restart takes it. Pure. */
 const pausedAt = (question: Question, pick: string): Resume => goesOnFrom(resumeOf(question, pick), pausedBy(question));
 
-/** Where a spent round's `again` goes: the writer first after a review, as a review's send-back does. */
-const againTo = (step: LaneStep): LaneStep =>
-  EXAM_STEPS.has(step) ? "exam" : step === "review" ? "test_writer" : "build";
-
-/**
- * The step a question of `kind` comes back to, asked after `step` ended. The rounds' question comes
- * back to where its `again` goes; main's change to the test writer's files, to the test writer. Pure.
- */
-export const askedStep = (kind: AskFor, step: LaneStep): LaneStep =>
-  kind === "rounds_spent" ? againTo(step) : kind === "exam_conflict" ? "test_writer" : step;
-
 /**
  * Where a lane goes on after `step` ended with `outcome` in `round`, with `trail` behind it, had it
  * stopped right there. Pure.
@@ -951,7 +945,7 @@ const spentQuestion = (s: Held, step: LaneStep): string => {
     : `[build] send_back is false in this repository, and ${still}. Should the work go round once more?`;
 };
 
-const questionFor = (s: Held, kind: AskFor, step: LaneStep, asks: string, call?: Call): Question => {
+const questionFor = (s: Held, kind: AskFor, step: LaneStep, asks: string, call?: Call, ended?: Outcome): Question => {
   const what = {
     approve: `Do you approve plan version ${s.carry.version ?? 1}?`,
     exam_merge: titleOf(examMergeWords(s.carry)),
@@ -970,10 +964,20 @@ const questionFor = (s: Held, kind: AskFor, step: LaneStep, asks: string, call?:
   // the old count is safe too: that count was never more than the trail, and its answer added a row.
   const ask = `a-${kind}-${s.trail.length}`;
   const to = askedStep(kind, step);
+  const from = endedInto(step, ended);
   return call === undefined
-    ? { ask, what, picks: picksFor(kind, to), for: kind, step: to }
-    : { ask, what, picks: CALL_PICKS, for: kind, step: to, call };
+    ? { ask, what, picks: picksFor(kind, to), for: kind, step: to, ...from }
+    : { ask, what, picks: CALL_PICKS, for: kind, step: to, call, ...from };
 };
+
+/** What a step's end tells its question: what it asked about, and why it asks. None: nothing ended. Pure. */
+const endedInto = (step: LaneStep, ended: Outcome | undefined): { readonly about?: string; readonly why?: string } =>
+  ended === undefined
+    ? {}
+    : {
+        ...(ended.kind === "ask" ? { about: ended.for } : {}),
+        why: `The ${STEP_WORDS[step]} step ended with ${nameOf(ended)}.`,
+      };
 
 /** The question when main changed the test writer's files: which, and what `again` does. Pure. */
 const conflictWords = (files: readonly string[]): string =>
@@ -1061,6 +1065,9 @@ const headAsked = (kind: AskFor, carry: Carry): { readonly head?: string } => {
 const asking = (s: Held, question: Question): Step_ => {
   const cmd = askPerson({
     number: s.number,
+    for: question.for === "step" ? (question.call?.about ?? question.about ?? "unknown") : question.for,
+    step: question.step,
+    carry: s.carry,
     ask: question.ask,
     what: question.what,
     picks: question.picks,
@@ -1072,6 +1079,7 @@ const asking = (s: Held, question: Question): Step_ => {
     // What changes and why, beside the question: the exam step's own words came before its review.
     ...(question.for === "exam_merge" ? { also: examMergeAlso(s.carry) } : {}),
     ...headAsked(question.for, s.carry),
+    ...(question.why === undefined ? {} : { why: question.why }),
     intent: intentOf("lane", s.number, question.ask),
   });
   return [{ ...s, phase: "asking", question, asked: cmd }, [cmd]];
@@ -1222,19 +1230,20 @@ const releasing = (s: Held, close: End | Stop): Step_ => {
     number: s.number,
     lane: s.lane,
     outcome: close.outcome,
+    ...("at" in close ? { resume: close.at.step } : {}),
     intent: intentOf("lane", s.number, "release"),
   });
   return [{ ...heldOf(s), ...close, phase: "releasing", asked: cmd }, [cmd]];
 };
 
 /** `said`: what the trail and the end say. `asks`: the question, if this move asks one. `call`: if that question is a call. */
-const move = (s: Held, step: LaneStep, m: Move, said: string, asks = said, call?: Call): Step_ => {
+const move = (s: Held, step: LaneStep, m: Move, said: string, asks = said, call?: Call, ended?: Outcome): Step_ => {
   if ("to" in m) {
     return running(s, m.to, m.round);
   }
 
   if ("ask" in m) {
-    return asking(s, questionFor(s, m.ask, step, asks, call));
+    return asking(s, questionFor(s, m.ask, step, asks, call, ended));
   }
 
   if ("fresh" in m) {
@@ -1681,6 +1690,7 @@ export const lane = defineMachine({
         said,
         askWords(s.step, outcome),
         outcome.kind === "ask" && past !== undefined ? { about: outcome.for, after: past } : undefined,
+        outcome,
       );
     },
     // A step that could not run is run once more, as the same Act (P8). Twice: the lane stops there.

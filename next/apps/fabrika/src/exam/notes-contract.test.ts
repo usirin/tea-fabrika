@@ -9,7 +9,7 @@ import { expect, it } from "@effect/vitest";
 import {
   Alarm,
   CheckedWriter,
-  Door,
+  Gateway,
   Id,
   Input,
   Program,
@@ -23,20 +23,21 @@ import {
   type Refusal,
   type Update,
 } from "@kampus/libfabrika";
-import {
-  Mailbox,
-  ClientManager,
-  Owner,
-  ProcessManager,
-  ProcessStore,
-  ProcessIdGenerator,
-  Recipient,
-  Start,
-  Writer,
-} from "@kampus/libfabrika/coordination";
-import { Archive, Doorbell, Ledger, LedgerTransaction, RecordManager, SpanSink } from "@kampus/libfabrika/data";
+import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
+import { Writer } from "@kampus/libfabrika/access/SessionManager";
+import { Doorbell, Ledger } from "@kampus/libfabrika/ledger/Ledger";
+import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
+import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
+import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
+import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
+import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
+import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
+import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport";
+import { Archive } from "@kampus/libfabrika/telemetry/Archive";
+import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
+import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
+import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Result, Schema, Stream } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { TestClock } from "effect/testing";
@@ -147,7 +148,7 @@ const world = Effect.fnUntraced(function* (program: ReturnType<typeof makeProgra
   );
   const sql = nodeSql(db);
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
-  const ledger = Layer.mergeAll(Ledger.sql(sql, { reader: "p8" }), LedgerTransaction.layer(sql)).pipe(
+  const ledger = Layer.mergeAll(LedgerSql.layer(sql, { reader: "p8" }), LedgerTransactionSql.layer(sql)).pipe(
     Layer.provide(quiet),
   );
   let nextProcess = 0;
@@ -266,7 +267,7 @@ const world = Effect.fnUntraced(function* (program: ReturnType<typeof makeProgra
       };
       const env = Layer.mergeAll(
         ledger,
-        ClientManager.layer(founder).pipe(Layer.provide(ledger)),
+        ClientManagerLedger.layer(founder).pipe(Layer.provide(ledger)),
         SpanSink.layer(sql, { object: process }),
         RecordManager.memory(4 * 1024 * 1024),
         Archive.memory,
@@ -274,7 +275,7 @@ const world = Effect.fnUntraced(function* (program: ReturnType<typeof makeProgra
         ProcessIdGenerator.layer,
       );
       let deliveries = 0;
-      const layer = Door.layer({
+      const layer = Gateway.layer({
         sql,
         founder,
         name: "p8",
@@ -304,7 +305,7 @@ const world = Effect.fnUntraced(function* (program: ReturnType<typeof makeProgra
         events: { personOnly: [] },
       }).pipe(Layer.provide(env));
       const connect = Effect.gen(function* () {
-        const door = yield* Door.pipe(Effect.provide(layer)),
+        const door = yield* Gateway.pipe(Effect.provide(layer)),
           client = yield* door.connect(),
           nonce = yield* door.challenge(client);
         const signed = yield* writeSshsig({
@@ -340,7 +341,7 @@ const world = Effect.fnUntraced(function* (program: ReturnType<typeof makeProgra
       return {
         connect,
         deliveries: () => deliveries,
-        bindings: () => sql.exec("SELECT value FROM door_bindings").map((r) => JSON.parse(String(r.value))),
+        bindings: () => sql.exec("SELECT value FROM gateway_bindings").map((r) => JSON.parse(String(r.value))),
       };
     }),
     store,
@@ -803,7 +804,7 @@ it.effect.prop(
 const terminalAnswer = (actual: unknown) => expect(actual).toEqual({ _tag: "refused", reason: "dead" });
 
 it.effect.prop(
-  "p25: the real Door answers dead on terminal delivery and its saved settled retry",
+  "p25: the real Gateway answers dead on terminal delivery and its saved settled retry",
   { body: Arbitrary.schema(Body) },
   ({ body }) =>
     Effect.gen(function* () {
@@ -839,7 +840,7 @@ it.effect.prop(
       expect(sender.bindings()).toMatchObject([
         { state: { _tag: "settled", result: { _tag: "refused", reason: "dead" } } },
       ]);
-      // A new real Door layer reads the saved binding; the runner must not receive a fourth delivery.
+      // A new real Gateway layer reads the saved binding; the runner must not receive a fourth delivery.
       const restarted = yield* sender.connect;
       terminalAnswer(yield* restarted.door.route(restarted.client, "process.send", request));
       expect(sender.deliveries()).toBe(3);

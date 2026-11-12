@@ -31,10 +31,14 @@ ticket -> triage -> plan (the owner approves its Properties)
        -> exam pull request, when rules change
        -> test writer: new tests red on the base, existing tests green
        -> build: cannot touch the tests
-       -> mutation step: StrykerJS, a fixed sample of about 150
        -> one review of the whole diff, by another agent
        -> push -> the lead agent's read, green CI, leak grep -> merge
+then, each hour: StrykerJS on what merged to main, a fixed sample of about 150 -> tickets
 ```
+
+*Changed 2026-11-10 ([0066](../../.decisions/0066-mutation-runs-on-a-schedule.md)):* mutation left
+the pull request's steps and runs hourly against main. *It said: a mutation step between build and
+review.*
 
 - **Each step has its own agent.** The one that writes the code writes no law, no
   lint rule, no CI rule and no mutation skip list
@@ -54,7 +58,10 @@ ticket -> triage -> plan (the owner approves its Properties)
 - **A live run on a target repository:** only through the ship stage.
 - **A pull request that went by hand:** it follows [autonomy is measured trust](./autonomy-is-measured-trust.md):
   a merge does not wait on the owner. One review by a separate agent says merge-ready, CI is green,
-  and the lead agent reads the diff and runs a leak grep, then merges and writes the `MergeRow`.
+  and the lead agent reads the diff and runs a leak grep, then merges. `catchup.sh` comments on
+  each ticket it closes with the pull request and its merge commit
+  (`.agents/skills/lead/scripts/catchup.sh:86`); the row per merge that note proposes (M1) is
+  not written yet.
   This holds for product code, exam pull requests and exam paths too: the lead merges with
   `catchup.sh` once every step passed and `loosening.sh` shows no real loosening after the lead's
   hand check. The lead reads each new edge comment. Still the owner's: real loosening or removal

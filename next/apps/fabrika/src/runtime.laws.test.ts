@@ -1,4 +1,4 @@
-// P12, next/. Project and Gateway use their real composition and SQLite services.
+// P12, next/. Project and Connection use their real composition and SQLite services.
 // Only platform handles are supplied here. No sockets or substitute authority rules.
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -6,12 +6,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { Descriptor, Incoming, Sent } from "@kampus/libfabrika";
+import { SigningRefused } from "@kampus/libfabrika/access/SessionManager";
+import { revokeText } from "@kampus/libfabrika/access/Text";
 import { BrainEvent } from "@kampus/libfabrika/brain-event";
-import { revokeText, SigningRefused, Start, type From } from "@kampus/libfabrika/coordination";
-import type { SpanRow } from "@kampus/libfabrika/data";
+import { type From } from "@kampus/libfabrika/processes/Mailbox";
+import { Start } from "@kampus/libfabrika/processes/Process";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { Attached } from "@kampus/libfabrika/transport";
-import { GatewayService, gatewayRuntime } from "@kampus/libfabrika/workers/gateway";
+import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
+import { Attached } from "@kampus/libfabrika/transport/Wire";
+import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
 import { Cause, Deferred, Effect, Exit, Layer, ManagedRuntime, Option, Schema, Tracer } from "effect";
 import * as fc from "fast-check";
@@ -138,7 +141,8 @@ const storage = (db: DatabaseSync) => {
 };
 
 const world = async (trace = TRACE, build = "counter-b") => {
-  table.programs.counter = { hash: "counter-a", source: "counter" };
+  // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
+  table.programs["fabrika/counter"] = { hash: "counter-a", source: "counter" };
   table.programs.approvals = { hash: "approvals-a", source: "approvals" };
   const home = mkdtempSync(join(tmpdir(), "p12-r-")),
     key = identity();
@@ -156,7 +160,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
   let onRing: () => Promise<void> = async () => {};
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
-    STAGE: JSON.stringify({
+    INSTANCE: JSON.stringify({
       name: "project-test",
       person: PERSON,
       founder: key.line,
@@ -181,7 +185,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
         };
       },
     },
-    GATEWAY: {
+    CONNECTION: {
       getByName: () => ({ ring: () => onRing(), notify: async () => {}, probe: async () => 42 }),
     },
     RECORD: {
@@ -192,7 +196,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
         },
       }),
     },
-    HEALTH: {},
+    MEASUREMENTS: {},
     LOADER: {
       get: (id: string) => ({
         getEntrypoint: () => ({
@@ -209,7 +213,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
                   cmds: [],
                 }
               : {
-                  name: "counter",
+                  name: "fabrika/counter",
                   v: 1,
                   writes: {},
                   inputs: { inc: { write: true, personOnly: false } },
@@ -319,7 +323,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
     },
     reopen: async () => {
       await runtime.dispose();
-      table.programs.counter = { hash: build, source: "changed counter" };
+      table.programs["fabrika/counter"] = { hash: build, source: "changed counter" };
       runtime = projectRuntime(ctx, env);
       return run(ProjectService);
     },
@@ -330,6 +334,79 @@ const world = async (trace = TRACE, build = "counter-b") => {
     },
   };
 };
+
+// The L4/L8 world is a scoped resource: its release closes what `world()` opened (0061).
+const opened = Effect.acquireRelease(
+  Effect.promise(() => world()),
+  () =>
+    Effect.promise(async () => {
+      for (const close of closers.splice(0).reverse()) {
+        await close();
+      }
+    }),
+);
+
+// Ways to bend a registered name toward a program identity. Each holds a slash.
+const bends: ReadonlyArray<(name: string) => string> = [
+  () => "fabrika/counter",
+  (name) => `fabrika/${name}`,
+  (name) => `${name}/x`,
+  (name) => name.replace(/[:.]/, "/"),
+];
+
+// The walk: from the brain's own bootstrap, each step starts the core code under a fresh valid
+// registered name, or tries a current name bent into a slashed one, which is refused.
+const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<number>) => {
+  const names = ["counter:1"];
+  let refused = 0;
+  expect(w.configured.map((d) => ({ name: d.name, program: d.program }))).toEqual([
+    { name: "counter:1", program: "fabrika/counter" },
+  ]);
+  const [started] = await w.run(w.p.read("processes/counter:1", 0, "audit"));
+  expect(JSON.stringify(started)).toContain('"fabrika/counter"');
+
+  for (const [i, n] of tape.entries()) {
+    const code = { program: "fabrika/counter", hash: "counter-a" };
+
+    if (i % 2 === 0) {
+      const name = n % 2 === 0 ? `counter:${names.length + 1}` : `tally-${n % 97}.${names.length}`;
+      await w.run(w.p.start(Start.cases.first.make({ id: `p40-${i}`, name, code }), w.from));
+      names.push(name);
+    } else {
+      const bent = bends[n % bends.length]!(names[Math.floor(n / bends.length) % names.length]!);
+      const result = await w.run(
+        Effect.result(w.p.start(Start.cases.first.make({ id: `p40-${i}`, name: bent, code }), w.from)),
+      );
+      expect(result, `${bent} is refused`).toMatchObject({ _tag: "Failure" });
+      refused++;
+    }
+
+    const info = await w.run(w.p.info);
+    expect(info.map((p) => p.name).sort()).toEqual([...names].sort());
+    expect(info.every((p) => p.program === "fabrika/counter")).toBe(true);
+    expect(w.configured.every((d) => d.program === "fabrika/counter" && !d.name.includes("/"))).toBe(true);
+  }
+
+  expect(refused).toBeGreaterThan(0);
+};
+
+describe("P40 the core counter's identity in the brain", () => {
+  it("L4 and L8: the bootstrap runs fabrika/counter as counter:1, and no start turns a program identity into a registered name", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.array(fc.nat(), { minLength: 2, maxLength: 8 }), (tape) =>
+        Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const w = yield* opened;
+              yield* Effect.promise(() => walk(w, tape));
+            }),
+          ),
+        ),
+      ),
+      { seed: 119120, numRuns: 10 },
+    );
+  });
+});
 
 describe("P12 Project authority", () => {
   law("the bootstrap entry keeps the caller's span trace", async ({ trace }) => {
@@ -343,7 +420,7 @@ describe("P12 Project authority", () => {
     await w.run(
       w.p.brain(event).pipe(Effect.withParentSpan(Tracer.externalSpan({ traceId: trace, spanId: "00f067aa0ba902b7" }))),
     );
-    const [row] = await w.run(w.p.read("door/brain", 0, "audit"));
+    const [row] = await w.run(w.p.read("gateway/brain", 0, "audit"));
     const { _tag, ...body } = event;
     expect(row).toMatchObject({ traceId: trace, id: write, _tag, body });
   });
@@ -351,7 +428,7 @@ describe("P12 Project authority", () => {
     const w = await world(trace, build);
     const first = w.p.boot;
     const before = await w.run(w.p.read("processes/counter:1", 0, "audit"));
-    await w.run(w.p.exit(first.process, "normal", w.from));
+    await w.run(w.p.exit(first.process, { _tag: "normal" }, w.from));
     const configured = w.configured.length;
     const reopened = await w.reopen();
     expect(reopened.boot).toEqual(first);
@@ -378,7 +455,7 @@ describe("P12 Project authority", () => {
     const result = await w.run(Effect.exit(w.p.sign(pid, write, w.received[0]!.envelope.id, "answered")));
     expect(result).toMatchObject({ _tag: "Success", value: { by: { _tag: "person" } } });
     // The saved delivery is independent evidence of the declaration used at admission.
-    const saved = w.db.prepare("SELECT saved FROM door_sessions WHERE parent=?").get(w.received[0]!.envelope.id);
+    const saved = w.db.prepare("SELECT saved FROM gateway_sessions WHERE parent=?").get(w.received[0]!.envelope.id);
     expect(JSON.parse(String(saved!.saved))).toMatchObject({
       input: { personOnly: true, process: pid },
     });
@@ -441,7 +518,7 @@ describe("P12 Project authority", () => {
               Start.cases.first.make({
                 id: `nested:${write}`,
                 name: `nested:${write}`,
-                code: { program: "counter", hash: "counter-a" },
+                code: { program: "fabrika/counter", hash: "counter-a" },
               }),
               w.from,
             )
@@ -455,7 +532,7 @@ describe("P12 Project authority", () => {
       } else if (operation === "start") {
         await w.start();
       } else if (operation === "exit") {
-        await w.run(w.p.exit(pid, "normal", w.from));
+        await w.run(w.p.exit(pid, { _tag: "normal" }, w.from));
       } else {
         await w.send(pid, "inc", letter);
         await w.run(w.p.inbox(pid, w.received[0]!));
@@ -513,7 +590,7 @@ describe("P12 Project saved and wire readers", () => {
       value: { _tag: "LedgerError", reason: "bad_row" },
     });
   };
-  it("saved stage settings fail through the Project runtime's typed error channel", async () => {
+  it("saved instance settings fail through the Project runtime's typed error channel", async () => {
     const encoded = Schema.fromJsonString(Settings);
     const invalid = fc
       .oneof(
@@ -530,7 +607,7 @@ describe("P12 Project saved and wire readers", () => {
           typed(
             await Effect.runPromiseExit(
               Effect.suspend(() => {
-                runtime = projectRuntime(w.ctx, { ...w.env, STAGE: raw });
+                runtime = projectRuntime(w.ctx, { ...w.env, INSTANCE: raw });
                 return runtime.contextEffect;
               }),
             ),
@@ -568,7 +645,7 @@ describe("P12 Project saved and wire readers", () => {
               typed(await w.run(Effect.exit(w.p.own(pid, "invalid-event", "events", raw))));
             } else {
               w.db
-                .prepare("UPDATE stage_descriptors SET value=?, pending=? WHERE process=?")
+                .prepare("UPDATE dev_descriptors SET value=?, pending=? WHERE process=?")
                 .run(JSON.stringify(raw), reader === "pending descriptor" ? 1 : 0, pid);
               const exit =
                 reader === "pending descriptor"
@@ -620,7 +697,7 @@ describe("P12 WebCrypto failures", () => {
             } else {
               // oxlint-disable-next-line fabrika/no-type-assertions -- the digest must fail before any R2 method runs
               const bucket = { put } as unknown as R2Bucket;
-              await expect(bucketCalls(bucket).put("health", body, "0".repeat(64))).rejects.toMatchObject({
+              await expect(bucketCalls(bucket).put("measurements", body, "0".repeat(64))).rejects.toMatchObject({
                 _tag: "LedgerError",
                 reason: "crypto",
               });
@@ -642,7 +719,7 @@ describe("P12 WebCrypto failures", () => {
   }
 });
 
-describe("P12 Gateway recording", () => {
+describe("P12 Connection recording", () => {
   for (const operation of ["ring", "probe", "close", "notify"] as const) {
     law(`an authenticated ${operation} records through the project's sink`, async ({ letter, rev }) => {
       const w = await world(),
@@ -667,7 +744,7 @@ describe("P12 Gateway recording", () => {
         },
         close: () => {},
       };
-      // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture supplies the hibernating socket and SQL members consumed by Gateway
+      // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture supplies the hibernating socket and SQL members consumed by Connection
       const ctx = {
         id: { name: "gateway-test" },
         storage: storage(db),
@@ -682,10 +759,10 @@ describe("P12 Gateway recording", () => {
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node socket double implements attachment, send and close without workerd's socket brand
       const socket = ws as unknown as WebSocket;
       const config = await Effect.runPromise(settings(w.env));
-      const runtime = gatewayRuntime(ctx, { ...w.env, PROJECT: project }, config);
+      const runtime = connectionRuntime(ctx, { ...w.env, PROJECT: project }, config);
 
       try {
-        const gateway = await runtime.runPromise(GatewayService),
+        const gateway = await runtime.runPromise(ConnectionService),
           before = w.recorded.length;
         const action: Effect.Effect<unknown, unknown> =
           operation === "ring"
@@ -697,7 +774,7 @@ describe("P12 Gateway recording", () => {
                 : gateway.notify(letter, { method: "view.patch", params: {} });
         await runtime.runPromise(Effect.exit(action));
         const rows = w.recorded.slice(before);
-        expect(rows.some((row) => row.name === `gateway.${operation}`)).toBe(true);
+        expect(rows.some((row) => row.name === `connection.${operation}`)).toBe(true);
 
         if (operation === "notify") {
           expect(rows.some((row) => !row.ok)).toBe(true);
@@ -766,10 +843,10 @@ describe("P12 Gateway recording", () => {
     } as unknown as Env["PROJECT"];
     // oxlint-disable-next-line fabrika/no-type-assertions -- Node socket double implements attachment, send and close without workerd's socket brand
     const socket = ws as unknown as WebSocket;
-    const runtime = gatewayRuntime(ctx, { ...w.env, PROJECT: project }, await Effect.runPromise(settings(w.env)));
+    const runtime = connectionRuntime(ctx, { ...w.env, PROJECT: project }, await Effect.runPromise(settings(w.env)));
 
     try {
-      const gateway = await runtime.runPromise(GatewayService),
+      const gateway = await runtime.runPromise(ConnectionService),
         before = w.recorded.length;
       const frame = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ledger.read", params: { stream: "x", after: 0 } });
       await runtime.runPromise(gateway.message(socket, frame));

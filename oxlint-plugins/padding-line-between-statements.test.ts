@@ -4,11 +4,18 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import * as fc from "fast-check";
+import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, expect, it } from "vitest";
+import { paddingLineBetweenStatements } from "./padding-line-between-statements.ts";
 
 const ROOT = join(import.meta.dirname, "..");
 const OXLINT = join(ROOT, "node_modules", ".bin", "oxlint");
 const CODE = "fabrika(padding-line-between-statements)";
+
+// RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
+RuleTester.describe = (_name, fn) => fn();
+RuleTester.it = (_name, fn) => fn();
+const tester = new RuleTester({ cwd: import.meta.dirname });
 
 const plant = mkdtempSync(join(import.meta.dirname, ".plant-"));
 afterAll(() => rmSync(plant, { recursive: true, force: true }));
@@ -40,21 +47,67 @@ const piece = (kind: Kind, n: number): { readonly text: string; readonly first: 
   }
 };
 
-const fires = (file: string): readonly number[] => {
-  const out = spawnSync(OXLINT, ["--format=json", relative(ROOT, file)], {
+type Report = {
+  readonly diagnostics: readonly {
+    readonly code: string;
+    readonly filename: string;
+    readonly labels: readonly { readonly span: { readonly line: number } }[];
+  }[];
+};
+
+/** The lines the rule fires at in each file, from one oxlint run through the repo's own config. */
+const firesIn = (files: readonly string[]): ReadonlyMap<string, readonly number[]> => {
+  const out = spawnSync(OXLINT, ["--format=json", ...files.map((f) => relative(ROOT, f))], {
     cwd: ROOT,
     encoding: "utf8",
   });
-  const report = JSON.parse(out.stdout) as {
-    readonly diagnostics: readonly {
-      readonly code: string;
-      readonly labels: readonly { readonly span: { readonly line: number } }[];
-    }[];
-  };
-  return report.diagnostics
-    .filter((d) => d.code === CODE)
-    .flatMap((d) => (d.labels[0] === undefined ? [] : [d.labels[0].span.line]))
-    .sort((a, b) => a - b);
+  const report = JSON.parse(out.stdout) as Report;
+  const lines = new Map<string, number[]>(files.map((f) => [f, []]));
+
+  for (const d of report.diagnostics) {
+    const at = lines.get(join(ROOT, d.filename));
+
+    if (d.code === CODE && at !== undefined && d.labels[0] !== undefined) {
+      at.push(d.labels[0].span.line);
+    }
+  }
+
+  return new Map([...lines].map(([f, at]) => [f, at.sort((a, b) => a - b)]));
+};
+
+const fires = (file: string): readonly number[] => firesIn([file]).get(file)!;
+
+/** One generated case: the text, where the rule fires, and the exact text its fix writes. */
+type Case = { readonly text: string; readonly expected: readonly number[]; readonly fixed: string };
+
+/** In process, RuleTester: the errors' lines, the exact fix, and the fixed text firing nothing. */
+const check = ({ text, expected, fixed }: Case) => {
+  tester.run("padding-line-between-statements", paddingLineBetweenStatements, {
+    valid: expected.length === 0 ? [{ code: text, filename: "case.ts" }] : [{ code: fixed, filename: "case.ts" }],
+    invalid:
+      expected.length === 0
+        ? []
+        : [
+            {
+              code: text,
+              filename: "case.ts",
+              errors: expected.map((line) => ({ line, message: /Leave a blank line before this statement/ })),
+              output: fixed,
+            },
+          ],
+  });
+};
+
+/** One CLI pass over every file of a property: where it fires, what `--fix` writes, then nothing. */
+const cli = (cases: ReadonlyMap<string, Case>) => {
+  const files = [...cases.keys()];
+  const found = firesIn(files);
+  expect(Object.fromEntries(found)).toEqual(Object.fromEntries([...cases].map(([f, c]) => [f, c.expected])));
+  spawnSync(OXLINT, ["--fix", ...files.map((f) => relative(ROOT, f))], { cwd: ROOT, encoding: "utf8" });
+  expect(Object.fromEntries(files.map((f) => [f, readFileSync(f, "utf8")]))).toEqual(
+    Object.fromEntries([...cases].map(([f, c]) => [f, c.fixed])),
+  );
+  expect([...firesIn(files).values()].flat()).toEqual([]);
 };
 
 const file = fc.array(
@@ -68,9 +121,11 @@ const file = fc.array(
 
 it("fires before each piece with no blank line above it, unless both sides are one line or imports, and its fix adds just that line", () => {
   let n = 0;
+  const cases = new Map<string, Case>();
   fc.assert(
     fc.property(file, (pieces) => {
       let text = "";
+      let fixed = "";
       let line = 1;
       const expected: number[] = [];
       pieces.forEach(({ kind, blank, comment }, i) => {
@@ -84,26 +139,26 @@ it("fires before each piece with no blank line above it, unless both sides are o
 
           if (blank) {
             text += "\n";
+            fixed += "\n";
             line++;
           } else if (!both && !short) {
             expected.push(line + lead.split("\n").length - 1);
+            fixed += "\n";
           }
         }
 
         text += `${lead}${body}\n`;
+        fixed += `${lead}${body}\n`;
         line += `${lead}${body}`.split("\n").length;
       });
       const at = join(plant, `p${n++}.ts`);
       writeFileSync(at, text);
-      expect(fires(at)).toEqual(expected);
-      spawnSync(OXLINT, ["--fix", relative(ROOT, at)], { cwd: ROOT, encoding: "utf8" });
-      const fixed = readFileSync(at, "utf8");
-      expect(fires(at)).toEqual([]);
-      expect(fixed.replaceAll(/\n\n+/g, "\n")).toBe(text.replaceAll(/\n\n+/g, "\n"));
-      expect(fixed.split("\n").length - text.split("\n").length).toBe(expected.length);
+      cases.set(at, { text, expected, fixed });
+      check({ text, expected, fixed });
     }),
     { seed: 119120, numRuns: 40 },
   );
+  cli(cases);
 });
 
 /** One statement in a function body: a plain one-line statement, or a control statement. */
@@ -142,9 +197,13 @@ const body = fc.array(
 
 it("inside a block, fires before and after each control statement with no blank line there, never at the block's ends, and its fix adds just that line", () => {
   let n = 0;
+  const cases = new Map<string, Case>();
   fc.assert(
     fc.property(body, (statements) => {
-      let text = "declare const ys: number[];\ndeclare const f: () => number;\n\nexport function g() {\n\tlet x = 0;\n";
+      const head =
+        "declare const ys: number[];\ndeclare const f: () => number;\n\nexport function g() {\n\tlet x = 0;\n";
+      let text = head;
+      let fixed = head;
       let line = 6;
       const expected: number[] = [];
       statements.forEach(({ kind, blank }, i) => {
@@ -152,32 +211,36 @@ it("inside a block, fires before and after each control statement with no blank 
 
         if (blank) {
           text += "\n";
+          fixed += "\n";
           line++;
         } else if (prev !== "plain" || kind !== "plain") {
           expected.push(line);
+          fixed += "\n";
         }
 
         const piece = inner(kind, i);
         text += `${piece}\n`;
+        fixed += `${piece}\n`;
         line += piece.split("\n").length;
       });
-      text += "\treturn x;\n}\n";
       const last = statements.at(-1)!.kind;
 
       if (last !== "plain") {
         expected.push(line);
+        fixed += "\n";
       }
+
+      text += "\treturn x;\n}\n";
+      fixed += "\treturn x;\n}\n";
 
       const at = join(plant, `b${n++}.ts`);
       writeFileSync(at, text);
-      expect(fires(at)).toEqual(expected);
-      spawnSync(OXLINT, ["--fix", relative(ROOT, at)], { cwd: ROOT, encoding: "utf8" });
-      const fixed = readFileSync(at, "utf8");
-      expect(fires(at)).toEqual([]);
-      expect(fixed.replaceAll(/\n\n+/g, "\n")).toBe(text.replaceAll(/\n\n+/g, "\n"));
+      cases.set(at, { text, expected, fixed });
+      check({ text, expected, fixed });
     }),
     { seed: 119120, numRuns: 40 },
   );
+  cli(cases);
 });
 
 it.each([

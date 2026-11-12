@@ -3,6 +3,9 @@
 **Decided by the owner, 2026-11-05.** This is about `next/`. Today's version keeps its GitHub
 sign-in until `next/` replaces it. It answers Tier 1's open question 10.
 
+Its decided rules are in: [0322](../../.decisions/0322-a-key-per-client-github-never-a-way-in.md),
+[0323](../../.decisions/0323-an-invite-is-a-one-day-link.md).
+
 ```ts
 // A sketch, next/. Two keys, two jobs, and no third party.
 send(initialize({key: tab.publicKey, signed: yield* tab.sign({nonce, url, tab})})); // each client, its own key

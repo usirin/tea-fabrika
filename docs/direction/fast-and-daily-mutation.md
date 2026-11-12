@@ -1,5 +1,7 @@
 # A fast check per pull request, a mutation queue for the rest
 
+**Changed 2026-11-10 by [0066](../../.decisions/0066-mutation-runs-on-a-schedule.md):** the check on each pull request is gone; mutation runs hourly against main. The rest of this note holds as the plan for the `next/` queue.
+
 **Decided 2026-11-01.** The owner approved every lean below, each with its confidence, and
 added two things: incremental reuse between rounds on one pull request, and the size restated
 at the measured rate.

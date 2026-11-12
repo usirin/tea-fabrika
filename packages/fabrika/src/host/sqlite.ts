@@ -8,7 +8,11 @@
 //
 // `layerSqliteSync` is the same ledger on one connection in the caller's own thread, with no
 // worker: for a host bundled into one file, which has no `./sqlite-worker.ts` beside it (the
-// fabrika app). Each call blocks that thread while SQLite runs it.
+// fabrika app). Each call blocks that thread while SQLite runs it, but never while it waits on
+// another process's write lock: that connection does not wait in SQLite (`busy_timeout` 0), and a
+// call that found the file busy before it changed anything is tried again in Effect, every 25 ms
+// for up to 10 s, SQLite's own wait here (sqlite-driver.ts). So one held lock never stalls every
+// other call in the thread behind it: each call waits its own 10 s, then fails as it did.
 //
 // The time: Effect's `Clock`, the one the layer is built under, read once per call in this thread
 // and handed to the thread that runs it. A test that builds the layer under a `TestClock` owns the
@@ -16,10 +20,10 @@
 //
 // Node at the edge: worker threads (`./sqlite-worker.ts`) and their message ports.
 import { Worker } from "node:worker_threads";
-import { Clock, Deferred, Duration, Effect, Layer, PubSub, Schedule, Stream } from "effect";
+import { Clock, Deferred, Duration, Effect, Layer, PubSub, Schedule, Schema, Stream } from "effect";
 import { fromRaw, Ledger, LedgerUnreachable, type Raw, rawOf, type WireCall } from "./ledger.ts";
 import { MAX_DELIVERIES, RULES } from "./rules.ts";
-import { dispatch, isMethod, openDb, readOnlyRows } from "./sqlite-driver.ts";
+import { dispatch, isMethod, type Method, openDb, readOnlyRows } from "./sqlite-driver.ts";
 
 /**
  * The file's own driver, past the ledger's rules: for a test that writes a row the way a bad
@@ -139,6 +143,16 @@ export const layerSqlite = (o: SqliteOptions) =>
     }),
   );
 
+/** SQLite's busy answer, in any of its extended codes: another connection holds the lock. */
+const isBusy = (e: unknown): boolean =>
+  typeof e === "object" && e !== null && "errcode" in e && typeof e.errcode === "number" && (e.errcode & 0xff) === 5;
+
+/** A call that found the file busy before it changed anything: safe to send again as it is. */
+class Busy extends Schema.TaggedError<Busy>()("Busy", { message: Schema.String }) {}
+
+/** How a busy call is tried again: SQLite's own wait, 10 s, without holding the thread. */
+const BUSY_AGAIN = Schedule.spaced(Duration.millis(25)).pipe(Schedule.upTo({ duration: Duration.seconds(10) }));
+
 /** The same `Ledger` on one connection in this thread: no worker, and each call blocks the thread. */
 export const layerSqliteSync = (o: Omit<SqliteOptions, "threads">) =>
   Layer.effect(
@@ -146,21 +160,47 @@ export const layerSqliteSync = (o: Omit<SqliteOptions, "threads">) =>
     Effect.gen(function* () {
       const clock = yield* Clock.Clock;
       const { db } = yield* Effect.acquireRelease(
-        Effect.sync(() => openDb(o.path)),
+        Effect.sync(() => {
+          const opened = openDb(o.path);
+          // Opened and moved under SQLite's wait; from here a held lock answers busy at once.
+          opened.db.all("PRAGMA busy_timeout = 0");
+          return opened;
+        }),
         (opened) => Effect.sync(() => opened.close()),
       );
+      // Whether this call's transaction committed: a busy call after a commit is not sent again.
+      let committed = false;
+      const counted: typeof db = {
+        all: db.all,
+        tx: (fn) => {
+          const res = db.tx(fn);
+          committed = true;
+          return res;
+        },
+      };
       const graceMs = o.graceMs ?? 1000;
       const maxDeliveries = o.maxDeliveries === undefined ? MAX_DELIVERIES : o.maxDeliveries;
+      const once = (method: Method, args: readonly unknown[]) =>
+        Effect.try({
+          try: () => {
+            committed = false;
+            return dispatch(counted, RULES, graceMs, clock.currentTimeMillisUnsafe(), method, args, maxDeliveries);
+          },
+          catch: (e) => {
+            const message = e instanceof Error ? e.message : String(e);
+            return isBusy(e) && !committed
+              ? new Busy({ message })
+              : new LedgerUnreachable({ method: "sqlite", message });
+          },
+        });
       return yield* served(o, (method, args) =>
         isMethod(method)
-          ? Effect.try({
-              try: () => dispatch(db, RULES, graceMs, clock.currentTimeMillisUnsafe(), method, args, maxDeliveries),
-              catch: (e) =>
-                new LedgerUnreachable({
-                  method: "sqlite",
-                  message: e instanceof Error ? e.message : String(e),
-                }),
-            })
+          ? once(method, args).pipe(
+              Effect.retry({ schedule: BUSY_AGAIN, while: (e) => e._tag === "Busy" }),
+              Effect.catchTag("Busy", (e) =>
+                Effect.fail(new LedgerUnreachable({ method: "sqlite", message: e.message })),
+              ),
+            )
           : Effect.fail(new LedgerUnreachable({ method: "sqlite", message: `no call ${method}` })),
       );
     }),

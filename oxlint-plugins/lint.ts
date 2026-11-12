@@ -11,7 +11,15 @@ import { checkTracked } from "./gitignore.mjs";
 import { type Finding, fingerprint, LEDGER_ROOT, outside, settle } from "./ledger.ts";
 import { scriptReads } from "./script-reads.mjs";
 
-const ADVICE = new Set(["fabrika(no-effect-promise)", "fabrika(no-raw-try-catch)", "fabrika(prefer-schema-arbitrary)"]);
+const ADVICE = new Set([
+  // Ticket 737: bare JSON.parse and service IDs advise until their false alarms are counted.
+  "eslint(no-restricted-properties)",
+  "fabrika(service-id)",
+  "fabrika(law-shape)",
+  "fabrika(no-effect-promise)",
+  "fabrika(no-raw-try-catch)",
+  "fabrika(prefer-schema-arbitrary)",
+]);
 
 interface Diagnostic {
   readonly code?: string;

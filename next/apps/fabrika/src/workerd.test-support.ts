@@ -1,12 +1,12 @@
 // next/, test support. Kills the one workerd under a parent process, for the real-workerd crash laws
-// (stage-wire's cases A and C, worker-supervision's case B), and reads where the kill landed.
+// (instance-wire's cases A and C, worker-supervision's case B), and reads where the kill landed.
 // Read through its module, as port.test-support is.
 // edge: Effect SQL has no read-only open of another process's SQLite file, which killedMoment needs
 import { DatabaseSync } from "node:sqlite";
 // edge: workerd writes a Durable Object's key-value rows with V8's serializer, and only node:v8 reads it
 import { deserialize } from "node:v8";
 import { NodeServices } from "@effect/platform-node";
-import { Activity } from "@kampus/libfabrika/coordination";
+import { Activity } from "@kampus/libfabrika/processes/Process";
 import { Effect, FileSystem, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
@@ -59,11 +59,16 @@ export const killWorkerd = Effect.fn("workerd.kill")(function* (parent: number) 
 /** Where a kill landed for one name: inside a step, with its letter, or between steps. */
 const Moment = Schema.TaggedUnion({ inside: { letter: Schema.String }, between: {} });
 
-// Only what the wake rule reads from the saved supervision: its name and its saved attempt.
+// Only what the wake rule reads from the saved supervision: its name and whether its journal is
+// `stepping`, with the attempt it names, or `idle`. Any other case matches the empty struct last.
 const Saved = Schema.fromJsonString(
   Schema.Struct({
     name: Schema.String,
-    attempt: Schema.NullOr(Schema.Struct({ process: Schema.String, letter: Schema.String })),
+    journal: Schema.Union([
+      Schema.TaggedStruct("stepping", { attempt: Schema.Struct({ process: Schema.String, letter: Schema.String }) }),
+      Schema.TaggedStruct("idle", {}),
+      Schema.Struct({}),
+    ]),
   }),
 );
 
@@ -84,16 +89,17 @@ const objectRows = (db: DatabaseSync, name: string) => {
   // workerd's own key-value table (`_cf_KV`, key TEXT, value BLOB), read for its one `activity` row.
   const kv = table("_cf_KV") ? db.prepare("SELECT value FROM _cf_KV WHERE key='activity'").get() : undefined;
   return {
-    attempt: Schema.decodeUnknownSync(Saved)(saved.value).attempt,
+    journal: Schema.decodeUnknownSync(Saved)(saved.value).journal,
     marker: kv === undefined ? undefined : Schema.decodeUnknownSync(Activity)(deserialize(kv.value as Uint8Array)),
   };
 };
 
 /**
  * What a kill left on disk for `name`, read-only, after the reconnect and before any call into the object:
- * the product's own wake rule (runner.ts, the first runner call after a restart). Inside means the saved
- * attempt names `pid`, or the stored `activity` marker is `stepping` for `pid`; between means neither.
- * It reads the home's SQLite files as stage-wire's `savedRows` does, and no row but these two.
+ * the product's own wake rule (Runner.ts, the first runner call after a restart). Inside means the saved
+ * journal is `stepping` with an attempt for `pid`, or it is `idle` and the stored `activity` marker is
+ * `stepping` for `pid`; between means neither.
+ * It reads the home's SQLite files as instance-wire's `savedRows` does, and no row but these two.
  */
 export const killedMoment = Effect.fn("workerd.killedMoment")(function* (home: string, name: string, pid: string) {
   const fs = yield* FileSystem.FileSystem;
@@ -134,8 +140,13 @@ export const killedMoment = Effect.fn("workerd.killedMoment")(function* (home: s
     return yield* Effect.die(new Error(`expected one saved supervision for ${name}, found ${found.length}`));
   }
 
-  const attempt = only.attempt?.process === pid ? only.attempt : null;
-  const marker = only.marker?._tag === "stepping" && only.marker.process === pid ? only.marker : null;
-  const letter = attempt?.letter ?? marker?.letter;
+  // One captured identity, one interruption: the saved attempt wins over the marker, as in Runner.ts.
+  const { journal, marker } = only;
+  const letter =
+    "attempt" in journal && journal.attempt.process === pid
+      ? journal.attempt.letter
+      : "_tag" in journal && journal._tag === "idle" && marker?._tag === "stepping" && marker.process === pid
+        ? marker.letter
+        : undefined;
   return letter === undefined ? Moment.cases.between.make({}) : Moment.cases.inside.make({ letter });
 }, Effect.provide(NodeServices.layer));

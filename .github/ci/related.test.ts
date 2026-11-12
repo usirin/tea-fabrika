@@ -18,8 +18,9 @@ const files = readdirSync(join(root, ".agents/skills"), { recursive: true, withF
   .filter((entry) => entry.isFile())
   .map((entry) => relative(root, join(entry.parentPath, entry.name)));
 
+// Any depth under `scripts/`, as vitest.config.ts includes tests there (the flow runner's `flow/`).
 const tree = new Map(
-  files.filter((path) => /\/scripts\/[^/]+$/.test(path)).map((path) => [path, readFileSync(join(root, path), "utf8")]),
+  files.filter((path) => /\/scripts\/.+$/.test(path)).map((path) => [path, readFileSync(join(root, path), "utf8")]),
 );
 
 const scripts = [...tree.keys()].filter((path) => !path.endsWith(".test.ts"));
@@ -67,18 +68,29 @@ const affected = async (paths: string[]) => {
   return (await vitest.getRelevantTestSpecifications()).map((spec) => relative(root, spec.moduleId)).sort();
 };
 
+const declaring = (changed: ReadonlyArray<string>) =>
+  tests.filter((test) => changed.some((path) => readers.get(test)!.has(path))).sort();
+
 it("real script subsets select exactly their declaring tests, never an empty set", async () => {
   await fc.assert(
     fc.asyncProperty(fc.subarray(readScripts, { minLength: 1, maxLength: 12 }), async (paths) => {
-      // Also check each member alone: another declared script must not hide a missing import.
-      for (const changed of [paths, ...paths.map((path) => [path])]) {
-        const expected = tests.filter((test) => changed.some((path) => readers.get(test)!.has(path))).sort();
-        expect(expected.length).toBeGreaterThan(0);
-        expect(await affected(changed)).toEqual(expected);
-      }
+      const expected = declaring(paths);
+      expect(expected.length).toBeGreaterThan(0);
+      expect(await affected(paths)).toEqual(expected);
     }),
     options,
   );
+});
+
+// scenario: every real script alone, each in its own test, so another declared script in a subset
+// cannot hide a missing import. The subset property once re-checked only its sampled members
+// alone, inside its own run: about 150 graph walks in one test, 12.7 s in the mutation
+// container's plain run and over the mutation run's 10 s limit (CI runs 42988915529 and
+// 42989306764). This walks every script, not a sample, at one walk per test.
+it.each(readScripts)("the real script %s alone selects exactly its declaring tests, never none", async (path) => {
+  const expected = declaring([path]);
+  expect(expected.length).toBeGreaterThan(0);
+  expect(await affected([path])).toEqual(expected);
 });
 
 it("real skill Markdown subsets select no test", async () => {

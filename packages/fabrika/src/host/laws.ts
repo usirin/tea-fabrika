@@ -1423,14 +1423,16 @@ export { PLANTED, type Planted } from "./rules.ts";
 /**
  * The ledger's SQL under one planted mistake (`rules.ts`'s PLANTED), on one node:sqlite connection
  * in this thread, with its alarm. Only for seeing a law fail on it; nothing else runs it.
+ * It opens `:memory:`, not a file: nothing reads the planted ledger after the law, and a file commits
+ * each write with a flush to disk.
  */
-export const layerPlanted = (path: string, planted: L.Planted, graceMs = 1000) =>
+export const layerPlanted = (planted: L.Planted, graceMs = 1000) =>
   Layer.effect(
     Ledger,
     Effect.gen(function* () {
       const clock = yield* Clock.Clock;
       const { db } = yield* Effect.acquireRelease(
-        Effect.sync(() => openDb(path)),
+        Effect.sync(() => openDb(":memory:")),
         (d) => Effect.sync(() => d.close()),
       );
       const rules = L.PLANTED[planted];

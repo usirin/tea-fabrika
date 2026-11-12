@@ -1,6 +1,6 @@
 import type { JobTrace, Span } from "@kampus/fabrika-old";
 import { listUsdOf } from "@kampus/pipeline/stages/price";
-import type { Entry, FactOf } from "@kampus/pipeline/tickets/ticket";
+import { closedAsks, type Entry, type FactOf, readAnswer, questionOf } from "@kampus/pipeline/tickets/ticket";
 
 // One ticket's lanes, folded from its facts: the fold the view and the laws share (ticket 141).
 // Today's version. Pure.
@@ -59,15 +59,15 @@ export type Lane = {
   readonly restart: { readonly at: number; readonly from: string } | null;
   /** The restart's at, else its first started's at. */
   readonly from: number;
-  /** Its last ended or answered, or now while open. A lane a newer one followed: its last fact. */
+  /** Its last end, answer or withdrawal, or now while open. An older lane: its last fact. */
   readonly to: number;
   readonly rows: readonly LaneRow[];
-  /** A step not ended or an ask not answered, and no newer lane after it. */
+  /** A step not ended or an ask still waiting, and no newer lane after it. */
   readonly open: boolean;
 };
 
 /** The kinds of fact a replay stops at. */
-const STOPS: ReadonlySet<string> = new Set(["started", "ended", "asked", "answered", "restarted"]);
+const STOPS: ReadonlySet<string> = new Set(["started", "ended", "asked", "answered", "withdrawn", "restarted"]);
 
 /**
  * A step's price from what its end says: a list price written, else one the tokens give, else what
@@ -112,7 +112,7 @@ interface Building {
   /** Each row, by place: a step by its run, or an ask with its fact and time. */
   readonly rows: (
     | { readonly kind: "step"; readonly started: FactOf<"started">; readonly at: number }
-    | { readonly kind: "wait"; readonly asked: FactOf<"asked">; readonly at: number }
+    | { readonly kind: "wait"; asked: FactOf<"asked">; readonly at: number }
   )[];
 }
 
@@ -120,7 +120,9 @@ interface Building {
 export const lanesOf = (timeline: readonly Entry[], now: number, upTo: number): readonly Lane[] => {
   const clock = Math.min(now, upTo);
   const seen = timeline.filter((e) => e.at <= upTo);
+  const closed = closedAsks(seen);
   const ends = new Map<string, { readonly at: number; readonly fact: Ended }>();
+  const withdrawals = new Map<string, number>();
   const answers = new Map<string, { readonly at: number; readonly pick: string; readonly by: string }>();
 
   for (const e of seen) {
@@ -128,13 +130,24 @@ export const lanesOf = (timeline: readonly Entry[], now: number, upTo: number): 
       ends.set(e.fact.run, { at: e.at, fact: e.fact });
     }
 
+    // A changed ask keeps waiting through a re-seal, including a crash between the writes.
+    if (e.fact.type === "withdrawn" && e.fact.why !== "changed" && !withdrawals.has(e.fact.ask)) {
+      withdrawals.set(e.fact.ask, e.at);
+    }
+
     if (e.fact.type === "answered" && !answers.has(e.fact.ask)) {
-      answers.set(e.fact.ask, { at: e.at, pick: e.fact.pick, by: e.by.id });
+      const answer = readAnswer(seen, e.fact);
+
+      if (answer !== null) {
+        answers.set(e.fact.ask, { at: e.at, pick: answer.pick, by: e.by.id });
+        answers.set(answer.ask, { at: e.at, pick: answer.pick, by: e.by.id });
+      }
     }
   }
 
   const lanes: Building[] = [];
   const byTrace = new Map<string, Building>();
+  const waits = new Map<string, Extract<Building["rows"][number], { readonly kind: "wait" }>>();
   let restart: { readonly at: number; readonly from: string } | null = null;
   let running: Building | null = null;
 
@@ -162,8 +175,23 @@ export const lanesOf = (timeline: readonly Entry[], now: number, upTo: number): 
     }
 
     if (fact.type === "asked") {
+      const replaced = "format" in fact && fact.replaces !== undefined ? waits.get(fact.replaces) : undefined;
+
+      if (replaced !== undefined) {
+        // Keep the original lane and start time for this question, with its current ask id.
+        replaced.asked = fact;
+        waits.set(fact.ask, replaced);
+        continue;
+      }
+
       const named = fact.trace === undefined ? undefined : byTrace.get(fact.trace);
-      (named ?? running)?.rows.push({ kind: "wait", asked: fact, at: e.at });
+      const lane = named ?? running;
+
+      if (lane !== null) {
+        const row = { kind: "wait" as const, asked: fact, at: e.at };
+        lane.rows.push(row);
+        waits.set(fact.ask, row);
+      }
     }
   }
 
@@ -175,12 +203,13 @@ export const lanesOf = (timeline: readonly Entry[], now: number, upTo: number): 
     const rows = lane.rows.map((row): LaneRow => {
       if (row.kind === "wait") {
         const answer = answers.get(row.asked.ask) ?? null;
+        const withdrawn = withdrawals.get(row.asked.ask);
         return {
           kind: "wait",
           ask: row.asked.ask,
-          what: row.asked.what,
+          what: questionOf(row.asked),
           from: row.at,
-          to: answer?.at ?? (over ? row.at : clock),
+          to: answer?.at ?? withdrawn ?? (over ? row.at : clock),
           pick: answer?.pick ?? null,
           by: answer?.by ?? null,
         };
@@ -202,7 +231,7 @@ export const lanesOf = (timeline: readonly Entry[], now: number, upTo: number): 
         price: priceOf(model, harness, end?.fact ?? null),
       };
     });
-    const open = !over && rows.some((r) => (r.kind === "step" ? r.ended === null : r.pick === null));
+    const open = !over && rows.some((r) => (r.kind === "step" ? r.ended === null : !closed.has(r.ask)));
     const last = Math.max(...rows.map((r) => r.to));
     return {
       trace: lane.trace,
@@ -215,7 +244,7 @@ export const lanesOf = (timeline: readonly Entry[], now: number, upTo: number): 
   });
 };
 
-/** The times a replay stops at: each started, ended, asked, answered and restarted, in order. */
+/** The times a replay stops at: each step, ask, answer, withdrawal and restart, in order. */
 export const stopsOf = (timeline: readonly Entry[]): readonly number[] =>
   timeline.filter((e) => STOPS.has(e.fact.type)).map((e) => e.at);
 

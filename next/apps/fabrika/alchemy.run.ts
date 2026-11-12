@@ -28,9 +28,9 @@ export const stack = (
       state: Alchemy.localState(),
     },
     Effect.gen(function* () {
-      const stage = yield* setting(JSON.stringify(settings));
-      const health = yield* Cloudflare.R2.Bucket("Health", {
-        name: "fabrika-health",
+      const instance = yield* setting(JSON.stringify(settings));
+      const measurements = yield* Cloudflare.R2.Bucket("Measurements", {
+        name: "fabrika-measurements",
         lifecycleRules: [],
         locks: [],
       });
@@ -44,12 +44,12 @@ export const stack = (
         env: {
           PROJECT: Cloudflare.DurableObject("Project"),
           PROCESS: Cloudflare.DurableObject("Process"),
-          GATEWAY: Cloudflare.DurableObject("Gateway"),
+          CONNECTION: Cloudflare.DurableObject("Connection"),
           RECORD: Cloudflare.DurableObject("RecordPart"),
           RecordPart: Cloudflare.DurableObject("RecordPart"),
           LOADER: Cloudflare.WorkerLoader(),
-          HEALTH: health,
-          STAGE: stage,
+          MEASUREMENTS: measurements,
+          INSTANCE: instance,
         },
       });
       return { url: brain.url };

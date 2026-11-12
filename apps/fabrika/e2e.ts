@@ -11,6 +11,7 @@ import { kindOf, nameOf } from "@kampus/pipeline/tickets/ticket";
 import { SEVEN, SEVEN_TITLE } from "@tea-fabrika/tracker/seven";
 import { Effect } from "effect";
 import { _electron, type ElectronApplication, type Locator, type Page } from "playwright";
+import { askDesk } from "./e2e/ask-desk.ts";
 import { PROTOCOL } from "./src/link.ts";
 
 // The app, driven end to end through Playwright's Electron support: the whole flow in the one
@@ -160,6 +161,25 @@ const screen = async (page: Page, id: string) => {
 };
 
 const lastRow = (text: string) => text.split("\n").at(-1) ?? "";
+
+/**
+ * The prompt's line as typed, with soft wraps undone: from the last row that starts with the prompt
+ * to the end of the screen, joined. Every row but the last must be as wide as the first, since a
+ * soft wrap fills its row; a shorter one is a hard break, and the line is then not one line.
+ */
+const promptLine = (text: string): string | null => {
+  const rows = text.split("\n");
+  const start = rows.findLastIndex((row) => row.startsWith("tsh$"));
+
+  if (start < 0) {
+    return null;
+  }
+
+  const line = rows.slice(start);
+  const width = line[0]?.length ?? 0;
+  const full = line.slice(0, -1).every((row) => row.length === width);
+  return full && (line.at(-1)?.length ?? 0) <= width ? line.join("") : null;
+};
 
 /** The tiles drawn now, in reading order. */
 const tiles = (page: Page) =>
@@ -1991,10 +2011,13 @@ const lookFocus = async () => {
       await Promise.all([page.emulateMedia({ colorScheme: look }), page.keyboard.type(burst, { delay: 1 })]);
       const rows = await until(
         `L3: the burst echoed after switching to ${look}`,
-        async () => ({
-          left: lastRow(await screen(page, "t1")),
-          right: lastRow(await screen(page, "t2")),
-        }),
+        async () => {
+          const [t1, t2] = [await screen(page, "t1"), await screen(page, "t2")];
+          // The last rows ride along: a failure shows what was joined, so a wrap never reads as a
+          // lost key.
+          const tail = { t1: t1.split("\n").slice(-3), t2: t2.split("\n").slice(-3) };
+          return { left: promptLine(t1), right: promptLine(t2), tail };
+        },
         (seen) => seen.left !== "tsh$" || seen.right === `tsh$ ${burst}`,
       );
       check(`L3: the left prompt stays empty in ${look}`, rows.left === "tsh$", rows);
@@ -2828,7 +2851,6 @@ const grid = async (page: Page, visit: (layout: Layout, ids: readonly string[]) 
 
 /** The key states the ARIA stage reads, in the order it puts each layout through them. */
 const STATES = ["plain", "asks-dot", "close-asked", "info", "palette", "strips", "closing", "pipe"] as const;
-
 type State = (typeof STATES)[number];
 
 /** The existing, made-up ticket #7 has a plan waiting on the person. No agent is started. */
@@ -3384,6 +3406,18 @@ const all = async () => {
     await borderDrag();
     await keysLook();
     await trackerFocus();
+    await askDesk({
+      launch,
+      prompted,
+      run,
+      prefixed,
+      focusOn,
+      tilesAre,
+      lookIs,
+      hostPid,
+      stop,
+      shots,
+    });
     // The 60 focus images need a 1440 by 900 window, taller than a CI runner's screen, so they
     // run only with --focus, the way the ARIA trees run only with --aria.
   } finally {
@@ -3397,7 +3431,9 @@ const all = async () => {
 };
 
 // Each capture stage can also run alone. ARIA answers 2 only when it cannot reach a state.
-if (process.argv.includes("--keys")) {
+if (process.argv.includes("--ask-desk")) {
+  await askDesk({ launch, prompted, run, prefixed, focusOn, tilesAre, lookIs, hostPid, stop, shots });
+} else if (process.argv.includes("--keys")) {
   await keysLook();
 } else if (process.argv.includes("--drag")) {
   await borderDrag();
@@ -3414,7 +3450,6 @@ if (process.argv.includes("--keys")) {
 }
 
 const after = await pgrep(here);
-
 check("the host stopped by its pid: pgrep finds nothing of this app left", after.length === 0, after);
 
 const sock = await stat(join(home, "host", "sock")).then(

@@ -78,7 +78,6 @@ const commit = (n: Note, paths: string[] = []): Commit => ({
 
 const pr = (commits: Commit[], more: Partial<PullRequest> = {}): PullRequest => ({
   head: "head",
-  containsBase: true,
   changed: commits.flatMap((c) => c.paths),
   commits,
   notes: commits.flatMap((c) => (c.signed === null ? [] : [c.signed])),
@@ -491,11 +490,17 @@ describe("check (p83 to p86)", () => {
       runs,
     );
   });
-  // Plant: skip containsBase.
-  it("P18: a branch behind its base is broken at its own head", () => {
+  // 0098: where a branch stands against main is no input, so no pull request is broken for it; a gap
+  // in its links is a commit whose note does not fit, unsigned_commit. Plant: answer broken_chain at
+  // the head again.
+  it("P18: no pull request, signed or not, is broken_chain at pull request time", () => {
+    const drops = fc.array(fc.boolean(), { minLength: 10, maxLength: 10 });
     fc.assert(
-      fc.property(route, sha, ({ commits }, head) => {
-        expect(answers(pr(commits, { containsBase: false, head }))).toEqual([stuck("broken_chain", head)]);
+      fc.property(route, sha, drops, ({ commits }, head, drop) => {
+        const mixed = commits.map((c, i) => (drop[i] === true ? { ...c, signed: null } : c));
+        const reasons = answers(pr(mixed, { head })).flatMap((a) => (a._tag === "stuck" ? [a.reason] : []));
+        expect(reasons).not.toContain("broken_chain");
+        expect(reasons).toEqual(mixed.flatMap((c) => (c.signed === null ? ["unsigned_commit"] : [])));
       }),
       runs,
     );
@@ -616,7 +621,7 @@ const chainData = fc
       [base!, r.trees[0]!],
       [squash!, r.trees.at(-1)!],
     ]),
-    placed: { onMain: true, before: new Set([base!]) },
+    placed: { onMain: true, before: new Set([base!]), head: null },
   }));
 
 describe("chain (p86 and p89 after merge)", () => {
@@ -732,6 +737,25 @@ describe("chain (p86 and p89 after merge)", () => {
       runs,
     );
   });
+  // 0098: a squash that landed behind main has its own tree, and the chain ends at the head's tree.
+  // Plant: end at the squash's tree only; or accept any end once a head is given.
+  it("P31: a chain ends at the head's tree when the squash landed behind main, and only there", () => {
+    fc.assert(
+      fc.property(chainData, (d) => {
+        const end = d.rows.at(-1)!.link.to;
+        const behind = new Map(d.trees).set(d.squash, d.other);
+        const atHead = { ...d.placed, head: end };
+        expect(chain(d.squash, d.rows, behind, atHead)).toEqual([DONE]);
+        expect(chain(d.squash, d.rows, behind, d.placed)).toEqual([stuck("broken_chain", d.squash)]);
+        expect(chain(d.squash, d.rows.slice(0, -1), behind, atHead)).toEqual([stuck("broken_chain", d.squash)]);
+        expect(chain(d.squash, d.rows.slice(1), behind, atHead)).toEqual([stuck("broken_chain", d.squash)]);
+        expect(chain(d.squash, d.rows, behind, { ...atHead, onMain: false })).toEqual([
+          stuck("broken_chain", d.squash),
+        ]);
+      }),
+      runs,
+    );
+  });
 });
 
 describe("printed lines", () => {
@@ -780,6 +804,8 @@ describe("printed lines", () => {
 describe("trusted config files", () => {
   // format: pin every byte of the trusted list, including all previously protected rows and reasons.
   it("format: exam-paths.json bytes", () => {
+    // A snapshot is one template, so no comment fits beside the one line that quotes today's app.
+    // oxlint-disable fabrika/no-stage-word -- the pinned bytes quote today's app, which keeps its pipeline words
     expect(readFileSync(join(ROOT, "exam-paths.json"), "utf8")).toMatchInlineSnapshot(`
       "[
         { "glob": "exam-paths.json", "why": "this list: dropping a row is changing the exam" },
@@ -791,17 +817,32 @@ describe("trusted config files", () => {
         },
         { "glob": "next/**/*.test.ts", "why": "next/'s tests" },
         { "glob": "next/**/*.test.tsx", "why": "next/'s tests" },
+        { "glob": "next/**/*Test.ts", "why": "next/'s shared suites, read as RecordPartTest.suite(open) (0062)" },
+        { "glob": "next/**/*.test-support.ts", "why": "next/'s test support: the stores and fixtures laws run on" },
         {
           "glob": "next/**/tsconfig.json",
           "why": "next/'s type checks, including Node's erasable syntax"
         },
-        { "glob": "next/packages/libfabrika/src/compiler.ts", "why": "the shared Compiler check" },
-        { "glob": "next/packages/libfabrika/src/id.test-support.ts", "why": "the generated ID fixtures" },
+        { "glob": "next/packages/libfabrika/src/node/build/compiler.ts", "why": "the shared Compiler check" },
+        { "glob": "next/packages/libfabrika/src/Id.test-support.ts", "why": "the generated ID fixtures" },
         {
           "glob": "next/apps/fabrika/src/port.test-support.ts",
-          "why": "the port a stage test hands to dev.ts"
+          "why": "the port an instance test hands to dev.ts"
         },
         { "glob": "fixtures/next/**", "why": "saved letters and vectors the tests read" },
+        { "glob": "**/*.ask-desk.test.ts", "why": "today's ask-desk PR 1 laws" },
+        {
+          "glob": "programs/tracker/src/ask-window.laws.test.ts",
+          "why": "the shared ask editor, attention and status laws"
+        },
+        {
+          "glob": "packages/pipeline/src/ask-desk.test-support.ts",
+          "why": "the ask-desk properties' test runner and input constraints"
+        },
+        { "glob": "fixtures/ask-desk/**", "why": "ask-desk saved cases, vectors and mutation plants" },
+        { "glob": "apps/fabrika/e2e.ts", "why": "today's real-app checks and their routing" },
+        { "glob": "apps/fabrika/e2e/**", "why": "today's real-app checks and captures" },
+        { "glob": "programs/tracker/package.json", "why": "the shared ask-view subpath" },
         { "glob": "next/apps/fabrika/e2e.ts", "why": "the end-to-end runner" },
         { "glob": "next/apps/fabrika/e2e/**", "why": "the end-to-end tests" },
         {
@@ -842,6 +883,7 @@ describe("trusted config files", () => {
         },
         { "glob": "unreachable-ledger.json", "why": "the owner's ledger of dead exports" },
         { "glob": "package.json", "why": "the root scripts: lint, test, typecheck and this check" },
+        { "glob": "pnpm-lock.yaml", "why": "the exact dependencies the tests and checks run" },
         { "glob": "tsconfig.base.json", "why": "the type checker's strictness" },
         { "glob": "patches/**", "why": "the Effect checks patched into tsgo" },
         {
@@ -861,6 +903,7 @@ describe("trusted config files", () => {
       ]
       "
     `);
+    // oxlint-enable fabrika/no-stage-word
   });
   // format: pin workflow events, permissions, checkout flags, env and commands byte for byte.
   it("format: commits workflow bytes", () => {
