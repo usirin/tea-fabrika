@@ -25,8 +25,10 @@ import type { Sql } from "../Sql.ts";
 import type { Archive } from "./Archive.ts";
 import {
   archiveDays,
+  countRefused,
   HEALTH_TABLES,
   hourStart,
+  readSums,
   readSummaries,
   rollup,
   writeHealth,
@@ -40,9 +42,11 @@ import {
   errorClass,
   OBJECT,
   PROCESS,
+  REFUSED,
   SinkError,
   SpanRow,
   type MetricPoint,
+  SumPoint,
   short,
   sinkError,
   type Tag,
@@ -229,6 +233,8 @@ export class SpanSink extends Context.Service<
     readonly flush: Effect.Effect<{ readonly sent: number }, SinkError, RecordManager | Archive>;
     /** The summaries whose hour is in `[from, to)`, after rolling up every closed hour. */
     readonly summaries: (from: number, to: number) => Effect.Effect<ReadonlyArray<MetricPoint>, SinkError>;
+    /** One piece's refusal counts in closed hours within `[from, to)`. */
+    readonly sums: (piece: string, from: number, to: number) => Effect.Effect<ReadonlyArray<SumPoint>, SinkError>;
   }
 >()("@kampus/libfabrika/telemetry/Sink.SpanSink") {
   /** Provides `Tracer.Tracer` and `SpanSink` over this object's `Sql`. Building it touches nothing:
@@ -247,19 +253,23 @@ const make = (sql: Sql, options: { readonly object: string }) => {
   /** Spans held after a full disk, a failure owed to the next flush, and the newest hour sized.
    *  Changed only by what `applyCell` returns. Memory only: a wake checks once more. */
   let state = machine.init(null, {})[0];
+  // Full-disk retries keep only hourly counts, never the refused span or its body.
+  const counts = new Map<string, SumPoint>();
 
   /** Runs `step` as one atomic step, with the tables made first on first use. */
-  const atomic = <A>(step: () => A): A =>
-    sql.transaction(() => {
+  const atomic = <A>(step: () => A): A => {
+    const result = sql.transaction(() => {
       if (!ready) {
         for (const query of [...HEALTH_TABLES, ...SINK_TABLES]) {
           sql.exec(query);
         }
       }
 
-      ready = true;
       return step();
     });
+    ready = true;
+    return result;
+  };
 
   const land = ({ health, chain, row, content }: Ended) => {
     writeHealth(sql, health);
@@ -284,6 +294,10 @@ const make = (sql: Sql, options: { readonly object: string }) => {
             land(one);
           }
 
+          for (const point of counts.values()) {
+            countRefused(sql, point);
+          }
+
           if (hour > checked) {
             rollup(sql, now);
 
@@ -294,6 +308,11 @@ const make = (sql: Sql, options: { readonly object: string }) => {
         }),
       catch: (error) => error,
     });
+
+    if (Result.isSuccess(done)) {
+      counts.clear();
+    }
+
     state = applyCell(
       machine,
       state,
@@ -305,7 +324,19 @@ const make = (sql: Sql, options: { readonly object: string }) => {
   const tracer = Tracer.make({
     span: (init) =>
       new SinkSpan(init, (span, endTime, exit) => {
-        commit([ended(span, endTime, exit, options.object)], Number(endTime / 1_000_000n), true);
+        const at = Number(endTime / 1_000_000n);
+
+        if (span.attributes.has(REFUSED)) {
+          const refused = span.attributes.get(REFUSED) === "reserved" ? "reserved" : "other";
+          const hour = hourStart(at);
+          const key = JSON.stringify([span.name, hour, refused]);
+          const count = (counts.get(key)?.count ?? 0) + 1;
+          counts.set(key, SumPoint.make({ piece: span.name, hour, refused, count }));
+          commit([], at, true);
+          return;
+        }
+
+        commit([ended(span, endTime, exit, options.object)], at, true);
       }),
   });
 
@@ -365,7 +396,7 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     const before = state;
     state = applyCell(machine, state, { type: "flush_checked" })[0];
 
-    if (before._tag !== "clean") {
+    if (before._tag !== "clean" || counts.size > 0) {
       return yield* Effect.fail(new SinkError({ reason: "storage", held: held(before).length }));
     }
 
@@ -404,5 +435,16 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     return yield* attempt(() => readSummaries(sql, from, to));
   });
 
-  return { tracer, sink: { flush, summaries } };
+  const sums = Effect.fnUntraced(function* (piece: string, from: number, to: number) {
+    const now = yield* Clock.currentTimeMillis;
+    const done = commit([], now, false);
+
+    if (Result.isFailure(done)) {
+      return yield* Effect.fail(new SinkError({ reason: "storage", held: held(state).length, cause: done.failure }));
+    }
+
+    return yield* attempt(() => readSums(sql, piece, from, Math.min(to, hourStart(now))));
+  });
+
+  return { tracer, sink: { flush, summaries, sums } };
 };

@@ -55,6 +55,13 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+*2026-11-12:* ticket 844 ([PR 1027](https://github.com/usirin/tea-fabrika/pull/1027)) changes
+P10's law p67 in `next/`, as [0140](../../.decisions/0140-gateway-refuses-client-id-and-by.md) and
+[0143](../../.decisions/0143-a-refused-write-is-counted-never-a-row.md) decided. The gateway refuses
+a write that stamps its own `id`, `by`, `for` or `arrivedAt` before it makes an input id, and keeps
+only a count per piece and hour: no ledger entry, no span row and no measurement row. It finishes
+no Tier 1 row, so the count stays 20.
+
 *2026-11-12:* P17b, the rest of Tier 1's chaos row, is cut in three slices on tracker ticket 287.
 Slice 1 in `next/`, the history checker and the off contract, is
 [PR 1037](https://github.com/usirin/tea-fabrika/pull/1037): the fault and report schemas, the
