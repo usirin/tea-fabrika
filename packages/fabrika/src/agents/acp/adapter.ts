@@ -1,11 +1,12 @@
 import type * as acp from "@agentclientprotocol/sdk/unstable";
-import { type Cause, Effect, Exit, type FileSystem, Queue, Scope, Stream } from "effect";
+import { Cause, Effect, Exit, type FileSystem, Queue, Scope, Stream } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import { type Adapter, type AdapterTurn, type AgentFailed, failed, type Raw, type Stop } from "../agent/turn.ts";
 import type { Env } from "../claude/env.ts";
 import { TOOLS } from "../claude/sandbox.ts";
 import { connect, type Heard } from "./client.ts";
 import { claudeOptions, claudeSystem, harnessOf, type Row, rowName, withSystem } from "./harness.ts";
+import { refusal } from "./refusal.ts";
 
 // Any harness that speaks ACP, as an adapter of the interface
 // (../agent/turn.ts): our ACP client (./client.ts) on a row of the harness
@@ -120,19 +121,32 @@ export const acpAdapter = (
           const heard = (h: Heard) => {
             if (h.kind === "ask") {
               flush();
-              // Refused: a contained run asks nobody. ACP's own words for "no".
-              const no = h.ask.request.options.find((o) => o.kind === "reject_once");
-              h.ask.answer(
-                no === undefined
-                  ? { outcome: { outcome: "cancelled" } }
-                  : { outcome: { outcome: "selected", optionId: no.optionId } },
-              );
-              Queue.offerUnsafe(queue, {
-                _tag: "asked",
-                id: h.ask.request.toolCall.toolCallId,
-                title: h.ask.request.toolCall.title ?? "",
-              });
-              return;
+              // Refused: a contained run asks nobody, with a no that keeps the turn (./refusal.ts).
+              const r = refusal(h.ask.request.options, harness.cancels);
+              const call = h.ask.request.toolCall;
+              const title = call.title ?? call.kind ?? call.toolCallId;
+              const asked = { _tag: "asked", id: call.toolCallId, title: call.title ?? "" } as const;
+
+              switch (r._tag) {
+                case "refuse":
+                  h.ask.answer({ outcome: { outcome: "selected", optionId: r.optionId } });
+                  Queue.offerUnsafe(queue, { ...asked, option: r.optionId });
+                  return;
+                case "cannot": {
+                  h.ask.answer({ outcome: { outcome: "cancelled" } });
+                  Queue.offerUnsafe(queue, asked);
+                  const offered = h.ask.request.options.map((o) => o.optionId).join(", ");
+                  Queue.failCauseUnsafe(
+                    queue,
+                    Cause.fail(
+                      failed("cannot_refuse", `${title}: every no offered ends the turn (offered: ${offered})`),
+                    ),
+                  );
+                  return;
+                }
+                default:
+                  return r satisfies never;
+              }
             }
 
             const u = h.update;

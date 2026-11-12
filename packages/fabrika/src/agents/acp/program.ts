@@ -10,6 +10,7 @@ import { runTraced } from "../../program/trace.ts";
 import { agentTrace } from "../trace/agent.ts";
 import { connect, type Heard, type Opened, type PendingAsk, valuesOf } from "./client.ts";
 import { AGENTS, CODEX_MODES, harnessOf, type Row } from "./harness.ts";
+import { refusal } from "./refusal.ts";
 import { Session, session, type Waiting } from "./session.ts";
 import { type AcpEvents, acpEvents } from "./spans.ts";
 import {
@@ -349,16 +350,29 @@ const acpIn = (place: "scratch" | "repo") =>
         const answer = (ask: PendingAsk, allow: boolean) =>
           Effect.gen(function* () {
             pending.delete(ask.id);
-            const option =
-              ask.request.options.find((o) => allow && o.kind === "allow_once") ??
-              ask.request.options.find((o) => o.kind === "reject_once");
-            const given: Answer =
-              option === undefined ? "cancelled" : option.kind === "allow_once" ? "allowed" : "refused";
+            const yes = ask.request.options.find((o) => allow && o.kind === "allow_once");
+            const chosen = ((): { readonly answer: Answer; readonly optionId?: string } => {
+              if (yes !== undefined) {
+                return { answer: "allowed", optionId: yes.optionId };
+              }
+
+              const no = refusal(ask.request.options, harness.cancels);
+
+              switch (no._tag) {
+                case "refuse":
+                  return { answer: "refused", optionId: no.optionId };
+                case "cannot":
+                  return { answer: "cancelled" };
+                default:
+                  return no satisfies never;
+              }
+            })();
             ask.answer(
-              option === undefined
+              chosen.optionId === undefined
                 ? { outcome: { outcome: "cancelled" } }
-                : { outcome: { outcome: "selected", optionId: option.optionId } },
+                : { outcome: { outcome: "selected", optionId: chosen.optionId } },
             );
+            const given = chosen.answer;
             yield* fold({ type: "answered", ask: ask.id, answer: given });
             yield* send("ask", shown(ask, given));
           });
