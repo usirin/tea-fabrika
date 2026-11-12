@@ -319,6 +319,11 @@ node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
 and Codex's own sandbox, in place of Codex through ACP (`scripts/codexexec.ts`). `drive.ts` takes
 `--agent codex-exec` for one step.
 
+A lane keeps one version of its scripts from start to end (ticket 835): chain.ts copies `.agents/`
+at the main checkout's commit into `BOXES/pins/<lane>.<pid>` and runs from there, so a pull of main
+while it runs changes nothing it spawns. Its chain record's `scripts` names the commit. To take new
+scripts, stop the lane and start it again with `--start <step>`; it prints the commit it ran on before.
+
 - **The lane brief** is one Markdown file. Its text before the first `## ` heading goes to every
   step (the ticket, its version, the approved plan, the decided notes). Then one section per step,
   `## tests`, `## build` and `## review`, written as a step brief is written today

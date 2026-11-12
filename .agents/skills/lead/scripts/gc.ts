@@ -20,6 +20,10 @@
 //
 // A box's tree is in BOXES/box (lane.ts boxTree); one made before that layout is still in BOXES.
 //
+// A lane's pinned scripts (BOXES/pins/<lane>.<pid>, lane.ts pinFolder) are removed by the lane's own
+// scope; a pin a killed lane left goes once no running process names it and it is older than IDLE
+// (decidePin).
+//
 // Before any folder goes, keepruns.sh moves its runs/ (raw samples, never in git) into the main
 // checkout's runs/<folder>/; when that fails, the folder is kept.
 //
@@ -35,8 +39,9 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { Schema } from "effect";
-import { boxTree, boxTrees, IDLE, oldBoxTree, wipOf } from "./lane.ts";
+import { boxTree, boxTrees, IDLE, oldBoxTree, pinsFolder, wipOf } from "./lane.ts";
 import { GC_SECONDS } from "./mutbox.ts";
+import { type PgrepAnswer, pgrepAnswer } from "./pgrep.ts";
 
 const HOUR = 3_600_000;
 export const STUCK = 24 * HOUR;
@@ -67,6 +72,13 @@ export type Verdict = typeof Verdict.Type;
 const keep = (reason: string) => Verdict.cases.keep.make({ reason });
 const remove = (reason: "merged" | "closed" | "on_remote") => Verdict.cases.remove.make({ reason });
 
+/** What gc does with one lane's pinned scripts. */
+export const PinVerdict = Schema.TaggedUnion({
+  keep: { reason: Schema.String },
+  remove: { reason: Schema.String },
+});
+export type PinVerdict = typeof PinVerdict.Type;
+
 /** The branch a box's commits are backed up to, best first. */
 export const backupsOf = (name: string, branch: string | null): string[] => {
   const own = `fabrikalfa/${name}-wip`;
@@ -78,6 +90,19 @@ export const backupsOf = (name: string, branch: string | null): string[] => {
  * otherwise still read. A box saves its facts only after its folder exists, so none is half made. */
 export const deadFacts = (files: readonly string[], boxes: ReadonlySet<string>): string[] =>
   files.filter((f) => f.endsWith(".box") && !boxes.has(f.slice(0, -".box".length)));
+
+/**
+ * The Check for one lane's pinned scripts, pure. A pin goes only when no process names it and it is
+ * IDLE old; a process list pgrep cannot read keeps it, never reads as none running.
+ */
+export const decidePin = (holders: PgrepAnswer, idle: number): PinVerdict =>
+  holders._tag === "refused"
+    ? PinVerdict.cases.keep.make({ reason: "pgrep cannot list processes, so a lane may still run from it" })
+    : holders.count > 0
+      ? PinVerdict.cases.keep.make({ reason: `${holders.count} running processes name it` })
+      : idle < IDLE
+        ? PinVerdict.cases.keep.make({ reason: "made less than 2 h ago" })
+        : PinVerdict.cases.remove.make({ reason: "no running process names it" });
 
 /** The Check, pure. */
 export const decide = (s: Seen): Verdict => {
@@ -462,10 +487,12 @@ const main = () => {
       name,
       box: boxTree(env.BOXES, name),
     })),
-    ...foldersIn(env.BOXES, (n) => n === "state" || n === "box" || n.endsWith("-gitdata")).map((name) => ({
-      name,
-      box: oldBoxTree(env.BOXES, name),
-    })),
+    ...foldersIn(env.BOXES, (n) => n === "state" || n === "box" || n === "pins" || n.endsWith("-gitdata")).map(
+      (name) => ({
+        name,
+        box: oldBoxTree(env.BOXES, name),
+      }),
+    ),
   ].sort((a, b) => a.name.localeCompare(b.name));
   // The boxes this run removed, or would remove: boxfiles.ts sweeps only a box whose tree is gone.
   const gone: string[] = [];
@@ -609,6 +636,26 @@ const main = () => {
     }
 
     console.log(`${dry ? "would remove" : "removed"} state/${f}: its box is gone`);
+  }
+
+  // A lane's pinned scripts: its own scope removes them, so one left here is a lane that was
+  // killed. It goes once no running process names it and it is older than IDLE.
+  const pins = pinsFolder(env.BOXES);
+
+  for (const name of foldersIn(pins, () => false)) {
+    const folder = join(pins, name);
+    const holders = sh("pgrep", ["-f", folder]);
+    const verdict = decidePin(pgrepAnswer(holders.code, holders.out), now - statSync(folder).mtimeMs);
+
+    if (verdict._tag === "remove" && !dry) {
+      rmSync(folder, { recursive: true, force: true });
+    }
+
+    console.log(
+      verdict._tag === "keep"
+        ? `keep pins/${name}: ${verdict.reason}`
+        : `${dry ? "would remove" : "removed"} pins/${name}: ${verdict.reason}`,
+    );
   }
 
   // What a landed lane's gone boxes left beside the boxes. Landed is the lane's own branch with a
