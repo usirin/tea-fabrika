@@ -2,6 +2,22 @@
 // patches and the runner that steps a process. Browser-safe: it reaches no platform.
 export * as Id from "./Id.ts";
 export { IdError, type IdSchema, type IdValue } from "./Id.ts";
+/**
+ * @stability unstable
+ */
+export * as Chaos from "./runtime/Chaos.ts";
+/**
+ * @stability unstable
+ */
+export * as Nemesis from "./runtime/Nemesis.ts";
+/**
+ * @stability unstable
+ */
+export * as NemesisLedger from "./runtime/NemesisLedger.ts";
+/**
+ * @stability unstable
+ */
+export * as NemesisNone from "./runtime/NemesisNone.ts";
 export {
   Alarm,
   CheckedWriter,
