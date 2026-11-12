@@ -3,11 +3,15 @@
 // starts on the ledger. Only a fresh start saves anything: its `started` line and its first letter.
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";
+import { ROW_BYTES } from "../ledger/Log.ts";
 import { ProcessId } from "../ProcessId.ts";
 import { Rev } from "../Rev.ts";
 import { Code, Recipient, Text } from "./internal/processTable.ts";
 import type { From } from "./Mailbox.ts";
 import { ProcessName } from "./Process.ts";
+
+/** The most bytes a first letter's row may hold: the ledger's row limit. */
+export const INPUT_BYTES = ROW_BYTES;
 
 /** A host right, by program: a process of `source` may start a process of `to`. Read as a set. */
 export const StartGrant = Schema.Struct({ source: Text, to: Text });

@@ -52,8 +52,9 @@ import {
   type Writer,
 } from "../coordination/index.ts";
 import { InputId } from "../Id.ts";
-import { Children, Started } from "../processes/Children.ts";
+import { Children, INPUT_BYTES, Started } from "../processes/Children.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
+import { ProcessName } from "../processes/Process.ts";
 import { MailRefusal } from "../processes/ProgramMail.ts";
 import {
   Alarm,
@@ -111,6 +112,8 @@ const Dispatched = Schema.Struct({
   /** A host Cmd this life owes until it is answered, kept under its first name from when only Send
    *  was one; a replayed letter's was the life before's. */
   mail: Schema.optionalKey(Schema.Literal(true)),
+  /** A start_child whose input can never be a letter, saved without it so its row fits (A6). */
+  oversize: Schema.optionalKey(Schema.Literal(true)),
 });
 type Dispatched = typeof Dispatched.Type;
 const decodeDispatched = Schema.decodeUnknownResult(Schema.Array(Dispatched));
@@ -159,6 +162,27 @@ const strictStartChild = Schema.decodeUnknownOption(StartChildInput, { onExcessP
 const strictExit = Schema.decodeUnknownOption(ExitInput, { onExcessProperty: "error" });
 const decodeStartChild = (cmd: unknown) => Option.flatMap(operands(cmd, StartChildInput.fields), strictStartChild);
 const decodeExit = (cmd: unknown) => Option.flatMap(operands(cmd, ExitInput.fields), strictExit);
+const isName = Schema.is(ProcessName);
+const encoder = new TextEncoder();
+
+/** A start_child's operands without its input: what its checkpoint keeps when the input is over the
+ *  ledger's row limit, and what every answer echoes, so no row holds the first letter twice. */
+const withoutInput = (cmd: unknown): unknown => {
+  if (typeof cmd !== "object" || cmd === null || Array.isArray(cmd) || !Object.hasOwn(cmd, "input")) {
+    return cmd;
+  }
+
+  const { input: _input, ...rest } = cmd as Record<string, unknown>;
+  return rest;
+};
+
+/** Whether a Cmd is a start_child whose input, as JSON, is over the ledger's row limit. */
+const oversize = (cmd: unknown): boolean =>
+  Option.exists(decodeTyped(cmd), (c) => c.type === START_CHILD) &&
+  typeof cmd === "object" &&
+  cmd !== null &&
+  "input" in cmd &&
+  encoder.encode(JSON.stringify(cmd.input) ?? "").length > INPUT_BYTES;
 
 /** Pending deliveries keep their original parent, including one saved before input TypeIDs. */
 const Delivery = Schema.Struct({
@@ -1043,12 +1067,13 @@ export class ProgramRunner extends Context.Service<
             const owed = !accepted || letter.id === options.mine;
             const dispatched = folded.cmds.map((cmd, index): Dispatched => ({
               id: `${process.id}/${letter.pos}/${index}`,
-              cmd,
+              cmd: oversize(cmd) ? withoutInput(cmd) : cmd,
               state: "dispatched",
               parent: letter.parent,
               traceId: letter.traceId,
               build: process.build,
               ...(owed && Option.exists(decodeTyped(cmd), (c) => HOST.has(c.type)) ? { mail: true as const } : {}),
+              ...(oversize(cmd) ? { oversize: true as const } : {}),
             }));
             cmds = [...cmds, ...dispatched];
 
@@ -1128,10 +1153,12 @@ export class ProgramRunner extends Context.Service<
         // --- Cmds ---------------------------------------------------------------------------
 
         const at = Clock.currentTimeMillis;
+        /** The Cmd an answer echoes: a start_child's without its input (A6). */
+        const echo = (job: Dispatched): unknown => (cmdType(job) === START_CHILD ? withoutInput(job.cmd) : job.cmd);
         const ok = Effect.fnUntraced(function* (job: Dispatched, value: unknown) {
           return yield* Effect.map(at, (time) => ({
             type: `${cmdType(job)}_ok`,
-            cmd: job.cmd,
+            cmd: echo(job),
             value,
             at: time,
           }));
@@ -1139,7 +1166,7 @@ export class ProgramRunner extends Context.Service<
         const err = Effect.fnUntraced(function* (job: Dispatched, reason: string, error: unknown = failure(reason)) {
           return yield* Effect.map(at, (time) => ({
             type: `${cmdType(job)}_err`,
-            cmd: job.cmd,
+            cmd: echo(job),
             error,
             reason,
             at: time,
@@ -1295,6 +1322,11 @@ export class ProgramRunner extends Context.Service<
             return code.failure.reason === "no_program"
               ? yield* err(job, "no_program")
               : yield* new LedgerError({ reason: "unreachable" });
+          }
+
+          // An input over the row limit was never saved: L6's order goes on without Children.start.
+          if (job.oversize === true) {
+            return yield* err(job, isName(name) ? "bad_input" : "bad_name");
           }
 
           // The Worker's loader names its build's hash; the Node loader runs this runner's build.

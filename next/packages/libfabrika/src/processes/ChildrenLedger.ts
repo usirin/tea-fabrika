@@ -7,7 +7,7 @@ import { Effect, Equal, Layer, Option, Result, Schema } from "effect";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { short } from "../telemetry/Trace.ts";
-import { Child, Children, ChildrenError, type StartGrant, Started } from "./Children.ts";
+import { Child, Children, ChildrenError, INPUT_BYTES, type StartGrant, Started } from "./Children.ts";
 import { type From, inbox, letterLine } from "./Mailbox.ts";
 import { ProcessError, ProcessName, type ProcessTable, Start } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
@@ -24,8 +24,6 @@ const storage = (cause: LedgerError) => new ChildrenError({ reason: "storage", c
 /** The first letter's id in the child's inbox. */
 const letterId = (id: string): string => JSON.stringify(["start", id]);
 
-/** Cloudflare's row limit, the bound the ledger refuses a letter's row over (`too_big`). */
-const ROW_BYTES = 2_000_000;
 const encoder = new TextEncoder();
 
 /** Whether the first letter's row fits, counted as the ledger counts it, so it is judged at decode. */
@@ -36,7 +34,7 @@ const fits = (child: Child, from: From, m: Schema.Json): boolean => {
     [...texts, line.traceId, line.build, line._tag, JSON.stringify(line.body)].reduce(
       (n, text) => n + (text === null ? 0 : encoder.encode(text).length),
       0,
-    ) <= ROW_BYTES
+    ) <= INPUT_BYTES
   );
 };
 

@@ -13,12 +13,9 @@ import { errorClass, short } from "../../telemetry/Trace.ts";
 import type { Doorbell } from "../Ledger.ts";
 import { LedgerError } from "../Ledger.ts";
 import type { LedgerTurn } from "../LedgerTransaction.ts";
-import { Appended, Entry, Line, PAGE, Row, Waited } from "../Log.ts";
+import { Appended, Entry, Line, PAGE, Row, ROW_BYTES, Waited } from "../Log.ts";
 import type { Referee } from "../Referee.ts";
 import { STREAM, tag } from "./ledgerTrace.ts";
-
-/** Cloudflare's row limit, so node:sqlite answers what workerd would (flag 13). */
-const MOST_BYTES = 2_000_000;
 
 const TABLES = [
   `CREATE TABLE IF NOT EXISTS entries (
@@ -106,7 +103,8 @@ const check = (stream: string, id: string, input: unknown): Result.Result<Line, 
   const { by, sentAt, parent, traceId, build, body } = line.success;
   const texts = [stream, id, by, line.success.for, sentAt, parent, traceId, build, line.success._tag];
   const size = bytes([...texts, JSON.stringify(body)]);
-  return size > MOST_BYTES ? Result.fail("too_big") : Result.succeed(line.success);
+  // node:sqlite answers what workerd would (flag 13).
+  return size > ROW_BYTES ? Result.fail("too_big") : Result.succeed(line.success);
 };
 
 /** What decides an append. The writer's clock and trace never decide (D3, S1). */
