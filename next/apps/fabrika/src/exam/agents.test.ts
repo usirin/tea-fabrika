@@ -103,12 +103,12 @@ const declarationSets = (inputs: ReadonlyArray<InputDeclaration>) => [
 ];
 
 const inputSchema = (input: InputDeclaration) =>
-  Schema.toJsonSchemaDocument(Schema.Struct({ value: input.schema })).schema;
+  Schema.toJsonSchemaDocument(Schema.Struct({ value: input.schema }), { onExcessProperty: "error" }).schema;
 
 const tools = (actual: ReadonlyArray<Tool>, declarations: ReadonlyArray<InputDeclaration> = standard) => {
   const publicInputs = declarations.filter((d) => !d.personOnly);
   expect(actual.map((t) => t.name)).toEqual(["ps", ...publicInputs.map((d) => `notes_${d.name}`)]);
-  expect(actual[0]?.inputSchema).toEqual({ type: "object" });
+  expect(actual[0]?.inputSchema).toEqual({ type: "object", additionalProperties: false });
   expect(actual[0]?.annotations?.readOnlyHint).toBe(true);
 
   for (const [i, d] of publicInputs.entries()) {
@@ -399,7 +399,7 @@ it.effect.prop(
 );
 
 const cleanTools = (declarations: ReadonlyArray<InputDeclaration> = standard): ReadonlyArray<Tool> => [
-  { name: "ps", inputSchema: { type: "object" }, annotations: { readOnlyHint: true } },
+  { name: "ps", inputSchema: { type: "object", additionalProperties: false }, annotations: { readOnlyHint: true } },
   ...declarations
     .filter((d) => !d.personOnly)
     .map((d) => ({
