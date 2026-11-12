@@ -596,3 +596,23 @@ Review keeps these parts of 0046:
 
 The syntax rule misses aliases of `Machine.make`, destructuring, re-exports and imported helpers
 that make machines. Each new written form needs review. It has no type information.
+
+### Plant replay, 2026-11-11
+
+Ticket 509 replayed these temporary breaks against the existing laws. Each change was restored
+by copying its saved original before the next run. No planted implementation remains.
+Paths below are relative to `oxlint-plugins/`, except `.oxlintrc.json`.
+
+| Law and check | Injected break | Observed result |
+|---|---|---|
+| L1, `one-machine-per-file.test.ts:59` and `:80` | In `one-machine-per-file.ts:192`, count private calls too; separately, at `:194`, count only one call per export | Both L1 properties fail for each break. The reduced cases contain a private helper, or a factory with two calls. |
+| L2, `one-machine-per-file.test.ts:112` | At `one-machine-per-file.ts:223`, accept imported models; separately, reject calls that build a schema from imported fields | L2 fails on an imported model, then on `Schema.Struct({ f: Imported })`. |
+| L3, `one-machine-per-file.test.ts:206` | At `one-machine-per-file.ts:234`, require an exported call before checking imports; separately, at `:239`, check type-only declarations too | L3 fails on a private machine with a `workerd` import, then on a type-only import. |
+| L4, `one-machine-per-file.test.ts:247` | Remove `next/**/*Test.ts` from `.oxlintrc.json`'s shared-test override | L4 gets line 3 for `next/ExampleTest.ts`, where it expects no fire. |
+| L5, `one-machine-per-file.test.ts:290` | At `one-machine-per-file.ts:102`, skip `.agents/`; separately, at `:141`, ignore exports whose declaration is a factory | L5 misses the added second export in the flow machine, then in `processTable.ts`. |
+| L6, `plants.test.ts:628` | Add this rule to `lint.ts:14`'s `ADVICE` set | L6 gets exit 0 instead of exit 1 for its second-machine input. |
+| L7, registration lint | Remove the import and registration from `index.ts:35` and `:78` | `lint.ts` exits 2 because the configured rule is missing. `pnpm lint:dead` stays green, contrary to the plan's prediction; it does not enforce registration here. |
+| A1, `one-machine-per-file.test.ts:112` | At `one-machine-per-file.ts:124`, allow every imported Schema member as `msg`; separately, at `:224`, remove the exception, or allow `Schema.Never` in every part | L2 fails on `msg: Schema.String`, the pinned `msg: Schema.Never`, or `update: Schema["Never"]`, respectively. |
+
+All property replays used seed 119120. Every replay ran on Node 26.13.0 with one Vitest worker.
+The box refused `nice`'s priority change, so subsequent test commands ran without it.
