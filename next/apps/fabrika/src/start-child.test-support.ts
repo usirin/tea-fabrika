@@ -1,4 +1,4 @@
-// P42 slice 1 (ticket 770), next/: the one helper L9 and L10 share. It builds two test programs into a
+// P42 slice 1 (ticket 770), next/: the helpers L9, L10 and L11 share. They build two test programs into a
 // real local instance in a scope, as ticket 402's supervision test does: `starter` asks the host to
 // start a child with the built-in `start_child`, and `child` counts `inc` and throws on `throw`. The
 // instance takes its start grants from its caller (`starts`), as the app's own wiring hands in its
@@ -162,6 +162,9 @@ export const letter = (pid: string, id: string, m: unknown) => ({ pid, letter: i
 const remote = <A>(work: Effect.Effect<A>) => Effect.runPromise(work);
 const Written = Schema.TaggedStruct("written", {});
 
+/** The platform operation that fails during a child start or its recovery. */
+export type ChildFailure = "owner" | "descriptor" | "exists" | "pending" | "configure" | "ack";
+
 /** The real Project service on scoped SQLite, with only the platform handles supplied by the test. */
 export const childProject = Effect.fnUntraced(function* () {
   const db = yield* Effect.acquireRelease(
@@ -172,11 +175,36 @@ export const childProject = Effect.fnUntraced(function* () {
   const key = identity();
   const configured: Array<{ descriptor: Descriptor; wake: boolean }> = [];
   const descriptors = new Map<string, Descriptor>();
+  const recorded: Array<unknown> = [];
+  let failure: { point: ChildFailure; error: Error; process?: string } | undefined;
   let armed = false;
   let hit = false;
+  const trip = (point: ChildFailure, process?: string) => {
+    if (failure?.point === point && (failure.process === undefined || failure.process === process)) {
+      const error = failure.error;
+      failure = undefined;
+      hit = true;
+      // The platform's synchronous SQL API throws; its RPC double rejects with the same value.
+      throw error;
+    }
+  };
   const storage = {
     sql: {
       exec: (query: string, ...params: Array<string | number | null>) => {
+        const process = typeof params[0] === "string" ? params[0] : undefined;
+
+        if (query === "SELECT value FROM dev_descriptors WHERE process=?") {
+          trip("owner");
+        } else if (/INSERT.*dev_descriptors/.test(query)) {
+          trip("descriptor", process);
+        } else if (query === "SELECT process FROM dev_descriptors WHERE process=?") {
+          trip("exists", process);
+        } else if (query === "SELECT value, pending FROM dev_descriptors WHERE process=? AND pending>0") {
+          trip("pending", process);
+        } else if (query === "UPDATE dev_descriptors SET pending=0 WHERE process=?") {
+          trip("ack", process);
+        }
+
         if (armed && /INSERT.*dev_descriptors/.test(query)) {
           armed = false;
           hit = true;
@@ -211,6 +239,7 @@ export const childProject = Effect.fnUntraced(function* () {
           configure: (descriptor: Descriptor, wake = false) =>
             remote(
               Effect.sync(() => {
+                trip("configure", descriptor.id);
                 descriptors.set(registered, descriptor);
                 configured.push({ descriptor, wake });
               }),
@@ -226,7 +255,17 @@ export const childProject = Effect.fnUntraced(function* () {
         probe: () => remote(Effect.succeed(42)),
       }),
     },
-    RECORD: { getByName: () => ({ write: () => remote(Effect.succeed(Written.make({}))) }) },
+    RECORD: {
+      getByName: () => ({
+        write: (_chain: unknown, _part: number, rows: unknown) =>
+          remote(
+            Effect.sync(() => {
+              recorded.push(rows);
+              return Written.make({});
+            }),
+          ),
+      }),
+    },
     MEASUREMENTS: {},
     LOADER: {
       get: (id: string) => ({
@@ -265,6 +304,17 @@ export const childProject = Effect.fnUntraced(function* () {
     acquire,
     from,
     configured,
+    recorded,
+    rows: () =>
+      sql
+        .exec("SELECT name FROM sqlite_master WHERE type='table'")
+        .flatMap(({ name }) =>
+          typeof name === "string" ? sql.exec(`SELECT * FROM "${name.replaceAll('"', '""')}"`) : [],
+        ),
+    fail: (point: ChildFailure, error: Error, process?: string) => {
+      failure = { point, error, ...(process === undefined ? {} : { process }) };
+      hit = false;
+    },
     cut: () => {
       armed = true;
     },
