@@ -55,6 +55,14 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+*2026-11-12:* P17b, the rest of Tier 1's chaos row, is cut in three slices on tracker ticket 287.
+Slice 1 in `next/`, the history checker and the off contract, is
+[PR 1037](https://github.com/usirin/tea-fabrika/pull/1037): the fault and report schemas, the
+`Nemesis` contract with its off layer and its ledger layer, and `ProcessHistory`, the bounded read
+the check uses. It is useful without a chaos program and starts no fault. Slice 2, the bounded
+chaos program, and slice 3, the checklist faults and the real local p90 revoke, come next; P17
+stays open until all three land ([its row](./tier-1.md#the-pull-requests-one-at-a-time)).
+
 Ticket 731's first slice in `next/` separates ClientManager's contract from its sibling
 ClientManagerLedger layer and migrates its callers. ProcessManager and SpanSink remain
 later slices; this changes no Tier 1 row. The final contract bundle measures 259 loaded

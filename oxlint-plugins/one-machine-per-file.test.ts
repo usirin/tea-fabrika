@@ -244,6 +244,133 @@ it("L3: each closed-list value import fires only when a machine call exists, inc
   );
 });
 
+const file = (...lines: readonly string[]) => [TEA, ...lines].join("\n");
+
+it("vector: an inline type import or type export is not a value, so it makes no machine, part or I/O hit", () => {
+  // vector: `import {type Machine}` has no runtime value, so its two calls are not tea machines.
+  check(
+    file(
+      'import {type Machine as M} from "@demlik/tea";',
+      "export const a = M.make({});",
+      "export const b = M.make({});",
+    ),
+    [],
+  );
+  // vector: a part read from an inline type import is not an imported value.
+  check(file('import {type Imported} from "./parts.ts";', "export const m = Machine.make({ model: Imported });"), []);
+  // vector: `export {type a}` exports no value, so the private machine `a` is not reached.
+  check(file("const a = Machine.make({});", "export const b = Machine.make({});", "export { type a };"), []);
+  // vector: the same file with a value export reaches both, which shows the line above is the type's doing.
+  check(file("const a = Machine.make({});", "export const b = Machine.make({});", "export { a };"), [
+    { line: 3, message: COUNT },
+  ]);
+  // vector: one value name beside a type name decides the hit, for the closed list of names.
+  check(file('import {type Effect, Schema} from "effect";', "const m = Machine.make({});"), []);
+  check(file('import {type Schema, Effect} from "effect";', "const m = Machine.make({});"), [{ line: 2, message: IO }]);
+  // vector: an I/O module whose every name is an inline type brings no code in; one value name does.
+  check(file('import {type Stats} from "node:fs";', "const m = Machine.make({});"), []);
+  check(file('import {type Stats, readFileSync} from "node:fs";', "const m = Machine.make({});"), [
+    { line: 2, message: IO },
+  ]);
+});
+
+it("vector: a bare import of an I/O module fires, and a bare import of any other module does not", () => {
+  // vector: `import "node:fs"` runs the module for its side effects, which is input or output.
+  check(file('import "node:fs";', "const m = Machine.make({});"), [{ line: 2, message: IO }]);
+  check(file('import "@effect/platform-node";', "export const m = Machine.make({});"), [{ line: 2, message: IO }]);
+  // vector: `effect` and a relative file are not on the module list, so their bare imports pass.
+  check(file('import "effect";', 'import "./setup.ts";', "const m = Machine.make({});"), []);
+  // vector: without a machine call the file is not a machine file, so the bare import passes.
+  check(file('import "node:fs";', "export const m = 1;"), []);
+});
+
+it("vector: a name is read where it is bound, so a shadowing parameter hides the import or the machine", () => {
+  // vector: the parameter `m` shadows the private machine `m`, so the export does not reach it.
+  check(file("const m = Machine.make({});", "export const f = (m) => m;", "export const g = Machine.make({});"), []);
+  // vector: the same file without the shadow reaches it, which shows the line above is the shadow's doing.
+  check(file("const m = Machine.make({});", "export const f = () => m;", "export const g = Machine.make({});"), [
+    { line: 4, message: COUNT },
+  ]);
+  // vector: a parameter that shadows an imported part makes the part local to the factory.
+  check(
+    file(
+      'import {Imported} from "./parts.ts";',
+      "export const m = (Imported) => Machine.make({ model: Imported, update: Imported.update });",
+    ),
+    [],
+  );
+  // vector: a shadowed `Schema` is not Effect's, and it is not an import either.
+  check(
+    file('import {Schema} from "effect";', "export const m = (Schema) => Machine.make({ model: Schema.Never });"),
+    [],
+  );
+});
+
+it("vector: a computed access with a string reads as its dotted form, and any other computed access does not", () => {
+  // vector: `Schema["Struct"]` alone is an imported member; called, its result is built in this file.
+  check(
+    file(
+      'import {Schema} from "effect";',
+      "export const m = Machine.make({",
+      'model: Schema["Struct"],',
+      'msg: Schema["Struct"]({}),',
+      "});",
+    ),
+    [{ line: 4, message: OWN }],
+  );
+  // vector: `Schema[Never]` reads a variable, not the name Never, so A1's pass does not apply.
+  check(
+    file(
+      'import {Schema} from "effect";',
+      'const Never = "String";',
+      "export const m = Machine.make({",
+      "msg: Schema[Never],",
+      "});",
+    ),
+    [{ line: 5, message: OWN }],
+  );
+  // vector: `Machine[make]` reads a variable, so the rule cannot say it is `make`.
+  check(file('const make = "make";', "export const a = Machine[make]({});", "export const b = Machine[make]({});"), []);
+  // vector: a namespace's `["Machine"]` is the dotted `.Machine`.
+  check(
+    file(
+      'import * as T from "@demlik/tea/effect";',
+      'export const a = T["Machine"].make({});',
+      'export const b = T["Machine"].make({});',
+    ),
+    [{ line: 4, message: COUNT }],
+  );
+  // vector: a quoted key is the same key; a computed key that reads a variable is unknown.
+  check(
+    file(
+      'import {Imported} from "./parts.ts";',
+      'const model = "other";',
+      "export const m = Machine.make({",
+      '"model": Imported,',
+      '["update"]: Imported,',
+      "[model]: Imported,",
+      "});",
+    ),
+    [
+      { line: 5, message: OWN },
+      { line: 6, message: OWN },
+    ],
+  );
+});
+
+it("vector: a machine bound by destructuring is reached through its exported name", () => {
+  // vector: object and array patterns bind `a` and `b` to machines, and both names are exported.
+  check(file("const { a } = { a: Machine.make({}) };", "const [b] = [Machine.make({})];", "export { a, b };"), [
+    { line: 3, message: COUNT },
+  ]);
+  // vector: one exported pattern holding two machines counts two.
+  check(file("export const { a, b } = { a: Machine.make({}), b: Machine.make({}) };"), [{ line: 2, message: COUNT }]);
+  // vector: a private destructured machine nothing exports is not counted.
+  check(file("const { a } = { a: Machine.make({}) };", "export const b = Machine.make({});"), []);
+  // pinned: the rule's header lists a destructured `make` as a miss that review keeps.
+  check(file("const { make } = Machine;", "export const a = make({});", "export const b = make({});"), []);
+});
+
 const DOUBLE = `${TEA}\nexport const first = Machine.make({});\nexport const second = Machine.make({});\n`;
 
 it("pinned: L4 the two product blocks enforce the rule; the five test globs leave fixture machines alone", async () => {
