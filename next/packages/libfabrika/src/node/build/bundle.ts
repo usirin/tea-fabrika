@@ -50,7 +50,17 @@ export const bundle = Effect.fn("build.bundle")(function* (
 ) {
   const path = yield* Path.Path.pipe(Effect.provide(Path.layer));
   const root = options.cwd ?? path.resolve();
-  const relative = (file: string) => (path.isAbsolute(file) ? path.relative(root, file) : file);
+  const relative = (file: string) => {
+    const url = URL.parse(file);
+    let local = file;
+
+    if (url?.protocol === "file:") {
+      // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Rolldown's onLog callback is synchronous
+      local = Effect.runSync(path.fromFileUrl(url).pipe(Effect.catch(() => Effect.succeed(url.pathname))));
+    }
+
+    return path.isAbsolute(local) ? path.relative(root, local) : local;
+  };
   // The installed tools' own versions, so a build report says what really ran.
   yield* Effect.annotateCurrentSpan({
     phase: options.phase ?? "bundle",
@@ -68,7 +78,7 @@ export const bundle = Effect.fn("build.bundle")(function* (
 
         // Rolldown has already embedded file names in the message before calling onLog.
         for (const file of [log.id, log.loc?.file, log.exporter, log.reexporter, ...(log.ids ?? [])]) {
-          if (file !== undefined && path.isAbsolute(file)) {
+          if (file !== undefined) {
             message = message.replaceAll(file, relative(file));
           }
         }
