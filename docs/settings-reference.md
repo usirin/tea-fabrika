@@ -58,6 +58,32 @@ The oldest fabrika this repo works with. It is read before every other setting.
 | Reload | restart |
 | Since | 0.0.0 |
 
+### `gateway.limit`
+
+The most routed attempts one signed\-in key may make in one gateway window.
+
+| Field | Value |
+|---|---|
+| Scope | person |
+| Environment | `FABRIKA_GATEWAY_LIMIT` |
+| Flag | `--gateway.limit` |
+| Default | `600` |
+| Reload | restart |
+| Since | 0.0.0 |
+
+### `gateway.window`
+
+The gateway window in milliseconds.
+
+| Field | Value |
+|---|---|
+| Scope | person |
+| Environment | `FABRIKA_GATEWAY_WINDOW` |
+| Flag | `--gateway.window` |
+| Default | `60000` |
+| Reload | restart |
+| Since | 0.0.0 |
+
 ### `instance.port`
 
 The port the local instance listens on.

@@ -119,6 +119,7 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
           founder: key.line,
           window: key.raw,
           port: at.port,
+          rateLimit: { limit: 100_000, window: 60_000 },
         });
         const from: From = {
           by: key.fingerprint,
@@ -335,6 +336,7 @@ const worldScoped = Effect.gen(function* () {
     founder: key.line,
     window: key.raw,
     port: at.port,
+    rateLimit: { limit: 100_000, window: 60_000 },
   }).pipe(Effect.provideContext(context));
   const from: From = {
     by: key.fingerprint,

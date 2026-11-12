@@ -189,6 +189,7 @@ const projectWalk = Effect.fnUntraced(function* (
           window: raw.toString("base64url"),
           port: 0,
           build: BUILD,
+          rateLimit: { limit: 100_000, window: 60_000 },
         },
         programs: { counter: { hash: BUILD, source: "" } },
         bootstrap: { name: NAME, id: "project-start", program: "counter" },

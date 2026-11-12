@@ -607,6 +607,7 @@ it.effect("U8 Process and rebuilt Project runtimes bind every load to its own pr
               window: null,
               port: 18787,
               build: "fixture-build",
+              rateLimit: { limit: 100_000, window: 60_000 },
             },
             programs: { "usage-fixture": { hash: "fixture-build", source: "fixture" } },
             bootstrap: { name: "bootstrap:1", id: "bootstrap", program: "usage-fixture" },

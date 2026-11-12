@@ -159,6 +159,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
     founder: line,
     window: raw.toString("base64url"),
     port: held.port,
+    rateLimit: { limit: 100_000, window: 60_000 },
   });
   const project = instance.project("p13-recording");
   const fingerprint = `SHA256:${createHash("sha256").update(raw).digest("base64").replace(/=+$/, "")}`;

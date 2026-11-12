@@ -194,9 +194,6 @@ if (cmd === "gh") {
     process.stdout.write(got.stdout || ""); process.stderr.write(got.stderr || "");
     process.exit(got.status ?? 1);
   }
-} else if (cmd === "node" && args[0].endsWith("/freshmain.ts")) {
-  // The last look at main passes here; its own laws are in freshmain.test.ts.
-  process.exit(0);
 } else if (cmd === "node" && args[0].endsWith("/box.ts")) {
   // box.sh rm itself runs box.ts on the real Node.
   process.exit(spawnSync(process.execPath, args, {stdio: "inherit"}).status ?? 1);

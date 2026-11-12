@@ -3,6 +3,7 @@ import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous S
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, Predicate, type Scope } from "effect";
+import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -10,6 +11,7 @@ import type { Envelope } from "../access/SessionManager.ts";
 import * as ProjectAuditTest from "../cloudflare/ProjectAuditTest.ts";
 import type { ProjectDoorOptions } from "../cloudflare/runtime.ts";
 import { Gateway } from "../gateway/Gateway.ts";
+import * as RateLimiterSql from "../gateway/RateLimiterSql.ts";
 import * as Id from "../Id.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -25,6 +27,8 @@ import { BRAIN, type Harness } from "../runtime/RunnerRepliesTest.ts";
 import { Written } from "../telemetry/Records.ts";
 
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
+// T843: the gateway needs a sender budget; this one is far above what the audit laws send.
+const RATE_LIMIT = { limit: 100_000, window: 60_000 };
 
 const files = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -150,6 +154,7 @@ const door: ProjectAuditTest.Harness["door"] =
           ping: { min: 10_000, max: 60_000 },
           inputCap: 1000,
           spentCap: 1000,
+          rateLimit: RATE_LIMIT,
           deliver: (
             pid: Parameters<ProjectDoorOptions["deliver"]>[0],
             _envelope: Envelope<typeof input.Type>,
@@ -163,7 +168,13 @@ const door: ProjectAuditTest.Harness["door"] =
             name: (m: typeof input.Type) => m.type,
           },
           events: { personOnly: [] },
-        }),
+        }).pipe(
+          Layer.provide(
+            RateLimiter.layer.pipe(
+              Layer.provide(RateLimiterSql.layer(options.sql, { build: "build-a", policy: RATE_LIMIT })),
+            ),
+          ),
+        ),
       ),
     );
 
