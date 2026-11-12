@@ -99,6 +99,7 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
                       due: () => Effect.void,
                       mailed: Effect.void,
                       restart: () => Effect.void,
+                      swap: () => Effect.sync(unexpected),
                     });
                   }),
                 ),
