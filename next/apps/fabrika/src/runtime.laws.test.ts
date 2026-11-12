@@ -33,6 +33,10 @@ vi.mock("effect", async (importOriginal) => {
   return { ...actual, ManagedRuntime: { ...actual.ManagedRuntime } };
 });
 
+const built = (source: string) => ({ hash: createHash("sha256").update(source).digest("hex"), source });
+const counterCode = built("counter");
+const approvalCode = built("approvals");
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const SENT = "2026-11-08T04:00:00.000Z";
@@ -142,8 +146,8 @@ const storage = (db: DatabaseSync) => {
 
 const world = async (trace = TRACE, build = "counter-b") => {
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
-  table.programs["fabrika/counter"] = { hash: "counter-a", source: "counter" };
-  table.programs.approvals = { hash: "approvals-a", source: "approvals" };
+  table.programs["fabrika/counter"] = counterCode;
+  table.programs.approvals = approvalCode;
   const home = mkdtempSync(join(tmpdir(), "p12-r-")),
     key = identity();
   const db = new DatabaseSync(join(home, "project.db"));
@@ -201,7 +205,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
       get: (id: string) => ({
         getEntrypoint: () => ({
           describe: async () =>
-            id.startsWith("approvals-")
+            id.startsWith(`${approvalCode.hash}/`)
               ? {
                   name: "approvals",
                   v: 1,
@@ -296,7 +300,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
             Start.cases.first.make({
               id: "approvals:1",
               name: "approvals:1",
-              code: { program: "approvals", hash: "approvals-a" },
+              code: { program: "approvals", hash: approvalCode.hash },
             }),
             from,
           ),
@@ -323,7 +327,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
     },
     reopen: async () => {
       await runtime.dispose();
-      table.programs["fabrika/counter"] = { hash: build, source: "changed counter" };
+      table.programs["fabrika/counter"] = built(`changed counter:${build}`);
       runtime = projectRuntime(ctx, env);
       return run(ProjectService);
     },
@@ -366,7 +370,7 @@ const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<nu
   expect(JSON.stringify(started)).toContain('"fabrika/counter"');
 
   for (const [i, n] of tape.entries()) {
-    const code = { program: "fabrika/counter", hash: "counter-a" };
+    const code = { program: "fabrika/counter", hash: counterCode.hash };
 
     if (i % 2 === 0) {
       const name = n % 2 === 0 ? `counter:${names.length + 1}` : `tally-${n % 97}.${names.length}`;
@@ -518,7 +522,7 @@ describe("P12 Project authority", () => {
               Start.cases.first.make({
                 id: `nested:${write}`,
                 name: `nested:${write}`,
-                code: { program: "fabrika/counter", hash: "counter-a" },
+                code: { program: "fabrika/counter", hash: counterCode.hash },
               }),
               w.from,
             )

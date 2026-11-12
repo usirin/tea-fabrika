@@ -109,6 +109,11 @@ const processObject = (ctx: DurableObjectState, env: Env) => {
 
 type ProcessObject = ReturnType<typeof processObject>;
 
+const built = (source: string) => ({ hash: createHash("sha256").update(source).digest("hex"), source });
+const counterCode = built("counter");
+const approvalCode = built("approvals");
+const poisonCode = built("poison");
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-08T04:00:00.000Z";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -299,9 +304,9 @@ const world = (
   flow: { readonly limit: number | null; readonly lost: Lost } = { limit: null, lost: null },
 ) => {
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
-  table.programs["fabrika/counter"] = { hash: "counter-a", source: "counter" };
-  table.programs.approvals = { hash: "approvals-a", source: "approvals" };
-  table.programs.poison = { hash: "poison-a", source: "poison" };
+  table.programs["fabrika/counter"] = counterCode;
+  table.programs.approvals = approvalCode;
+  table.programs.poison = poisonCode;
   const key = identity(),
     db = new DatabaseSync(":memory:");
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the platform handles used by the real Project service
@@ -495,9 +500,9 @@ const world = (
     LOADER: {
       get: (id: string) => ({
         getEntrypoint: () => {
-          if (id.startsWith("poison-")) {
+          if (id.startsWith(`${poisonCode.hash}/`)) {
             // The real box: its declaration carries the program's own maxDeliveries.
-            const Box = programBox(poisonProgram(flow.limit), "poison-a");
+            const Box = programBox(poisonProgram(flow.limit), poisonCode.hash);
             const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
             return {
               describe: () => box.describe(),
@@ -522,7 +527,7 @@ const world = (
             };
           }
 
-          const approval = id.startsWith("approvals-"),
+          const approval = id.startsWith(`${approvalCode.hash}/`),
             program = approval ? approvals : counter,
             execution = nodeExecution(program);
           return {
@@ -639,15 +644,18 @@ const world = (
     },
     startPoison: async (name: string) =>
       (
-        await project.start(Start.cases.first.make({ id: name, name, code: { program: "poison", hash: "poison-a" } }), {
-          by: key.fingerprint,
-          for: PERSON,
-          sentAt: SENT,
-          seen: 0,
-          parent: null,
-          traceId: TRACE,
-          build: "brain-test",
-        })
+        await project.start(
+          Start.cases.first.make({ id: name, name, code: { program: "poison", hash: poisonCode.hash } }),
+          {
+            by: key.fingerprint,
+            for: PERSON,
+            sentAt: SENT,
+            seen: 0,
+            parent: null,
+            traceId: TRACE,
+            build: "brain-test",
+          },
+        )
       ).process,
     interrupt: async () => {
       await project.runtime.dispose();
@@ -655,7 +663,7 @@ const world = (
     },
     reopen: async () => {
       await project.runtime.dispose();
-      table.programs["fabrika/counter"] = { hash: "counter-b", source: "changed counter" };
+      table.programs["fabrika/counter"] = built("changed counter");
       project = projectObject(ctx, env);
       return project.info();
     },
@@ -688,7 +696,7 @@ const world = (
         Start.cases.first.make({
           id: "approvals:1",
           name: "approvals:1",
-          code: { program: "approvals", hash: "approvals-a" },
+          code: { program: "approvals", hash: approvalCode.hash },
         }),
         {
           by: key.fingerprint,
@@ -972,7 +980,7 @@ const runFlow = async (flow: RecoveryFlow) => {
       tries: limit,
       limit,
       m: letter,
-      build: "poison-a",
+      build: poisonCode.hash,
       errors: Array.from({ length: limit }, () => "TypeError"),
       // The brain writes the row; `asked` keeps the key that asked for it (process-manager.ts).
       asked: expect.stringMatching(/^SHA256:/),
@@ -1070,7 +1078,7 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
         });
         // A trusted restart with a generated request ID, asked twice: one replacement.
         const before = (await restarts()).length;
-        const request = { id: `r${flow.restart}`, build: "poison-a" };
+        const request = { id: `r${flow.restart}`, build: poisonCode.hash };
         const object = w.process(current).object;
         await Reflect.apply(Reflect.get(object, "restart"), object, [request]);
         await Reflect.apply(Reflect.get(object, "restart"), object, [request]);
@@ -1090,7 +1098,7 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
         // that checked refusal crosses the Project RPC and stays a ProcessError.
         const reused = await w
           .process(String(next))
-          .object.restart({ id: NAME, build: "poison-a" })
+          .object.restart({ id: NAME, build: poisonCode.hash })
           .then(
             () => ({ answer: "ok" }),
             (error: unknown) => ({ error }),
