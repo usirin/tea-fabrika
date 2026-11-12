@@ -1,7 +1,7 @@
 ---
 id: 0338
 title: In next/, email recovery on the cloud sends a 6-digit code typed on the asking device and waits 24 hours that any live device can cancel, then one brain-held key signs the `added`
-status: accepted
+status: amended-in-part by [0138](0138-email-recovery-lets-in-at-once.md)
 date: 2026-11-06
 tags: [security, recovery, email, cloudflare, next, p36]
 ---
