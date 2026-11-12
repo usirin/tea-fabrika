@@ -35,6 +35,7 @@ const config = (port: number): BrainOptions => ({
   founder: "public-test",
   window: null,
   build: "test",
+  rateLimit: { limit: 100_000, window: 60_000 },
 });
 
 /** An environment whose every stub call is written down, so the law can say none was made. */

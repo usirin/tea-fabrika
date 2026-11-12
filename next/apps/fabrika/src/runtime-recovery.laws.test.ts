@@ -526,6 +526,7 @@ const world = (
       founder: key.line,
       window: key.raw,
       port: 18787,
+      rateLimit: { limit: 100_000, window: 60_000 },
       build: "brain-test",
       mail: { grants: { "requester:1": ["responder:1"], "responder:1": ["requester:1"] } },
     }),

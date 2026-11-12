@@ -55,6 +55,7 @@ const world = (port: number, name: string) => {
     founder: "public-test",
     window: null,
     build: "build-test",
+    rateLimit: { limit: 100_000, window: 60_000 },
   };
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only the RPC members the public routes call
   const env = {
