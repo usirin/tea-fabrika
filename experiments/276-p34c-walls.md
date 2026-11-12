@@ -37,11 +37,11 @@ All 16 of 16 rows reported CPU 0 and wall time 0. The spinning step used 40,000,
 its enclosing-span readings were 37 ms and 272 ms. Local platform CPU therefore remains an
 unusable measurement. The Node pure-step timing source is still needed.
 
-This was a product check, not a passing U9 run. U9 stopped before its tail assertions because
-its direct `msg` call supplied an envelope no gateway had delivered. The inbox refused it.
-The tests step has changed U9 to send through the signed door and separated row checks from
-the CPU comparison. Only that comparison is an expected failure, with its assertion unchanged.
-The lead still owes a host rerun of that corrected test, including replay-fold rows.
+The corrected U9 sends through the signed door and separates row checks from the CPU
+comparison. The lead's 2026-11-12 08:40 host record reports 1 passing test and 1 expected
+failure. The passing test covers checklist steps and successor replay folds. Only the CPU
+comparison is an expected failure, with its assertion unchanged and local CPU still 0.
+The lead also confirmed that removing the loader tail makes U9 fail.
 
 ## What the product records
 
@@ -140,8 +140,8 @@ sample location are **not yet run**. Later slices cannot pin measured limits fro
 
 ## What this cannot tell us
 
-The host product check proves local Process-object tail wiring. The corrected U9 still needs
-its host rerun, including replay-fold rows. Neither host check gives usable local CPU or wall
-timing. Node elapsed timings are still owed and will not establish cloud CPU. Neither the full
+The host product check and corrected U9 prove local Process-object tail wiring, including
+successor replay-fold rows. Neither gives usable local CPU or wall timing. Node elapsed
+timings are still owed and will not establish cloud CPU. Neither the full
 run nor eviction and duplicate-delivery checks have run. The extra cloud RPC cost and whether
 ten times p99 is enough remain unmeasured.

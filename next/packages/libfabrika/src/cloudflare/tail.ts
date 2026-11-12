@@ -18,7 +18,7 @@ import { processStub, type Env } from "./runtime.ts";
 /**
  * Schema for attribution fixed when a program isolate is loaded.
  *
- * @stability experimental
+ * @stability stable
  * @category schemas
  */
 export const Props = Schema.Struct({ project: Schema.String, name: Schema.String, process: Schema.String });
