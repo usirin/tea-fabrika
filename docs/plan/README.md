@@ -67,8 +67,13 @@ Slice 1 in `next/`, the history checker and the off contract, is
 [PR 1037](https://github.com/usirin/tea-fabrika/pull/1037): the fault and report schemas, the
 `Nemesis` contract with its off layer and its ledger layer, and `ProcessHistory`, the bounded read
 the check uses. It is useful without a chaos program and starts no fault. Slice 2, the bounded
-chaos program, and slice 3, the checklist faults and the real local p90 revoke, come next; P17
-stays open until all three land ([its row](./tier-1.md#the-pull-requests-one-at-a-time)).
+chaos program, is [PR 1046](https://github.com/usirin/tea-fabrika/pull/1046): the `@kampus/chaos`
+package, one saved machine that draws one fault per timer from a seeded schedule, and `fire` owned
+only by the exact name `fabrika/chaos`. Its fire handler is a controlled one in tests, so no live
+fault fires and the app selects no chaos program. Slice 3, the checklist faults and the real local
+p90 revoke, comes next; P17 stays open until all three land
+([its row](./tier-1.md#the-pull-requests-one-at-a-time)). It finishes no Tier 1 row, so the count
+stays 20.
 
 Ticket 731's first slice in `next/` separates ClientManager's contract from its sibling
 ClientManagerLedger layer and migrates its callers. ProcessManager and SpanSink remain
