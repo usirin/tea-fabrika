@@ -59,7 +59,8 @@ const open = Effect.gen(function* () {
     record,
     read: starts.read,
     entries: Effect.suspend(() => Effect.forEach([...known], starts.read, { concurrency: 1 })),
-    loseReply: (work) => work.pipe(Effect.andThen(Effect.fail("reply lost after commit"))),
+    loseReply: (work: Effect.Effect<StartsTest.Saved, unknown>) =>
+      work.pipe(Effect.andThen(Effect.fail("reply lost after commit"))),
     counts: () => ({ reads, appends, consumers: 0 }),
   } satisfies StartsTest.Driver;
 }).pipe(Effect.provide(Digest.layerWebCrypto));

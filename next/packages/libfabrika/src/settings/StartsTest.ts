@@ -17,10 +17,10 @@ export const law = <A>(
   check: (value: A) => Effect.Effect<unknown, unknown, Scope.Scope | Digest.Digest>,
   examples?: Array<[A]>,
 ) => {
-  const scoped = (value: A) => Effect.scoped(check(value)).pipe(Effect.provide(Digest.layerWebCrypto));
+  const scoped = (value: A) => Effect.scoped(check(value)).pipe(Effect.asVoid, Effect.provide(Digest.layerWebCrypto));
   // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each generated Effect walk
-  const property = fc.asyncProperty(arbitrary, (value) => Effect.runPromise(scoped(value)));
-  const options = { seed: 119120, numRuns: 100, examples };
+  const property = fc.asyncProperty(arbitrary, (value: A) => Effect.runPromise(scoped(value)));
+  const options = { seed: 119120, numRuns: 100, ...(examples === undefined ? {} : { examples }) };
   it.effect(name, () =>
     // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's asynchronous property runner enters Effect
     Effect.tryPromise({ try: () => fc.assert(property, options), catch: (cause: unknown) => cause }),

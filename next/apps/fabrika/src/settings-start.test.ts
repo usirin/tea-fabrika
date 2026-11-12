@@ -392,15 +392,15 @@ it.live("scenario: T753 L13 real Worker retries the same HTTP owner, shares warm
     const record = Effect.fnUntraced(function* (method: "write" | "read" | "content" | "deleteContent") {
       const chain = Chain.cases.spans.make({});
 
-      return yield* Effect.promise(() =>
-        method === "write"
-          ? part.write(chain, 57, [])
-          : method === "read"
-            ? part.read(chain, 57, 0)
-            : method === "content"
-              ? part.content(chain, 57, "absent")
-              : part.deleteContent(chain, 57, "absent", { by: "test-person", at: 0, reason: "requested" }),
-      );
+      return yield* method === "write"
+        ? Effect.promise(() => part.write(chain, 57, []))
+        : method === "read"
+          ? Effect.promise(() => part.read(chain, 57, 0))
+          : method === "content"
+            ? Effect.promise(() => part.content(chain, 57, "absent"))
+            : Effect.promise(() =>
+                part.deleteContent(chain, 57, "absent", { by: "test-person", at: 0, reason: "requested" }),
+              );
     });
 
     for (const method of ["write", "read", "content", "deleteContent"] as const) {

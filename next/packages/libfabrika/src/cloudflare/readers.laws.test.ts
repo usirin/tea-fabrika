@@ -149,36 +149,49 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
                 consumers++;
                 return [];
               },
-              storage: {
-                ...w.ctx.storage,
-                get: (...args: Parameters<typeof w.ctx.storage.get>) => {
-                  consumers++;
-                  return Reflect.apply(w.ctx.storage.get, w.ctx.storage, args);
+              storage: new Proxy(w.ctx.storage, {
+                get: (target, key) => {
+                  if (key === "get") {
+                    return (...args: unknown[]) => {
+                      consumers++;
+                      return Reflect.apply(target.get, target, args);
+                    };
+                  }
+
+                  if (key === "sql") {
+                    return new Proxy(sql, {
+                      get: (target, key) =>
+                        key === "exec"
+                          ? (...args: unknown[]) => {
+                              consumers++;
+                              return Reflect.apply(target.exec, target, args);
+                            }
+                          : Reflect.get(target, key),
+                    });
+                  }
+
+                  return Reflect.get(target, key);
                 },
-                sql: new Proxy(sql, {
-                  get: (target, key) =>
-                    key === "exec"
-                      ? (...args: unknown[]) => {
-                          consumers++;
-                          return Reflect.apply(target.exec, target, args);
-                        }
-                      : Reflect.get(target, key),
-                }),
-              },
+              }),
             };
             const env = {
               ...w.env,
               INSTANCE: JSON.stringify(bad),
-              PROJECT: {
-                ...w.env.PROJECT,
-                getByName: () => ({
-                  ...w.env.PROJECT.getByName("settings-law"),
-                  settingsStart: async (wire: StartsTest.Input) => {
-                    settingsCalls++;
-                    return StartsTest.reply(wire);
-                  },
-                }),
-              },
+              PROJECT: new Proxy(w.env.PROJECT, {
+                get: (target, key) =>
+                  key === "getByName"
+                    ? () =>
+                        new Proxy(target.getByName("settings-law"), {
+                          get: (stub, method) =>
+                            method === "settingsStart"
+                              ? async (wire: StartsTest.Input) => {
+                                  settingsCalls++;
+                                  return StartsTest.reply(wire);
+                                }
+                              : Reflect.get(stub, method),
+                        })
+                    : Reflect.get(target, key),
+              }),
             };
             const publicKey = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x;
             const local = {
