@@ -10,8 +10,8 @@ import { heldPort } from "./port.test-support.ts";
 
 const PROJECT = "scheduled-job-alarm";
 const NAME = "beat:1";
-// Build table keys allow identifiers and hyphens; the fixture still declares schedules/beat.
-const PROGRAM = "schedules-beat";
+// P40: a build table key is `pack/program`, the name the fixture pack declares.
+const PROGRAM = "schedules/beat";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const WAIT = 25_000;
 

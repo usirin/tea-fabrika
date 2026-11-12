@@ -9,6 +9,8 @@
     "dev": "node dev.ts",
     "build": "node build.ts",
     "grant": "node grant.ts",
+    "settings": "node cli.ts settings",
+    "settings:generate": "node settings-generate.ts",
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
@@ -26,6 +28,9 @@
     "rolldown": "catalog:",
     "fast-check": "catalog:",
     "playwright": "catalog:",
+    "react-dom": "catalog:",
+    "@kampus/checklist": "workspace:*",
+    "@kampus/chaos": "workspace:*",
     "@kampus/counter": "workspace:*",
     "@alchemy.run/cloudflare": "catalog:",
     "alchemy": "catalog:",

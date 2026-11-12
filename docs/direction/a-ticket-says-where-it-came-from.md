@@ -5,6 +5,9 @@ a ticket records where it came from, at filing, and tickets stay without a type 
 shape of `from` below is **proposed**: the plan for its ticket settles it. Today's version
 first; `next/`'s tracker carries the same key when it is built. Walked when Tier 2 starts (owner, 2026-11-08): filing tickets with their source kept.
 
+Its decided rules are in: [0348](../../.decisions/0348-a-filing-records-its-source.md),
+[0369](../../.decisions/0369-no-kind-label-ships-or-routes.md).
+
 ```ts
 // A sketch, not built. A filing says where it came from. Effect Schema writes `_tag`.
 {type: "filed", title: "Mutation runner: sandbox links node_modules ...", body: "...",

@@ -1,44 +1,5 @@
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./mutbox.ts?raw";
-import "./mutbox-entry.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./mutbox.Dockerfile?raw";
-import "../../mutation/scripts/run.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/limit.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/sample.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/scope.ts?raw";
-import "./box.sh?raw";
-import "./keepruns.sh?raw";
-import "./leakgrep.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./drive.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./pgrep.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./agents.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./codexexec.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./boxnode.ts?raw";
-import "./fieldrow.py?raw";
-import "./runplan.sh?raw";
-import "./env.sh?raw";
-import "./redact.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./botpush.mjs?raw";
-import "./clauderow.py?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./lane.ts?raw";
-import "../../plan/scripts/plancheck.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./sizecap.ts?raw";
-import "../../step-commit/scripts/exam.py?raw";
-import "../../step-commit/scripts/stepcommit.sh?raw";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import fc from "fast-check";
@@ -47,15 +8,18 @@ import {
   backupsOf,
   deadFacts,
   decide,
+  decidePin,
   decideWorktree,
   dirtyIn,
-  IDLE,
+  keepFiles,
   lastTouched,
   type Seen,
   type SeenWorktree,
   STUCK,
   worktreePrs,
 } from "./gc.ts";
+import { IDLE } from "./lane.ts";
+import { PgrepAnswer } from "./pgrep.ts";
 
 // Today's tooling. The decision is pure; the world (lsof, git, gh, botpush) is not run here.
 const sha = fc.stringMatching(/^[0-9a-f]{40}$/);
@@ -122,16 +86,48 @@ describe("box gc, today's tooling", () => {
   });
 
   // Plants: back up or remove a box with uncommitted files, or one git could not read. A backup
-  // pushes HEAD only (field note 2026-11-09-42: a box went with 10 uncommitted product files).
-  it("never removes or backs up a box holding uncommitted files, or one it could not read", () => {
+  // pushes HEAD only (field note 2026-11-09-42: a box went with 10 uncommitted product files). Once
+  // its lane merged, a box with files goes only as "merged", after keepFiles saved them (main()).
+  it("never removes or backs up a box it could not read, or one holding uncommitted files before its lane merged", () => {
     fc.assert(
       fc.property(seen, sha, fc.option(fc.integer({ min: 1, max: 12 }), { nil: null }), (s, head, dirty) => {
         const idle = { ...s, git: { head, branch: s.git?.branch ?? null }, busy: [] };
         const v = decide({ ...idle, idle: IDLE + s.idle, stuck: null, dirty });
-        expect(v._tag).toBe("keep");
+        expect(v._tag).toBe(dirty !== null && s.merged ? "remove" : "keep");
+        expect(v._tag === "remove" && v.reason).toBe(dirty !== null && s.merged ? "merged" : false);
       }),
       options,
     );
+  });
+
+  // scenario: a drive box never commits, so a landed lane's box holds its step's files uncommitted,
+  // tracked and new. Plants: stash without -u; fetch from the tree's `.git` file; report a failed
+  // stash as kept.
+  it("scenario: keepFiles keeps every uncommitted and untracked file in the main checkout, ignored ones not", () => {
+    const dir = mkdtempSync(join(tmpdir(), "gc-keep-"));
+    const main = join(dir, "main");
+    const box = join(dir, "box");
+    const data = join(dir, "box-gitdata");
+    const git = (...a: string[]) =>
+      spawnSync("git", ["-c", "user.email=t@example.com", "-c", "user.name=t", ...a], { encoding: "utf8" });
+    git("init", "-q", main);
+    git("init", "-q", "--separate-git-dir", data, box);
+    writeFileSync(join(box, ".gitignore"), "node_modules\n");
+    writeFileSync(join(box, "a.ts"), "1\n");
+    git("-C", box, "add", ".");
+    git("-C", box, "commit", "-qm", "base");
+    writeFileSync(join(box, "a.ts"), "2\n");
+    writeFileSync(join(box, "new.ts"), "3\n");
+    mkdirSync(join(box, "node_modules"));
+    writeFileSync(join(box, "node_modules", "big.js"), "4\n");
+    expect(dirtyIn(data, box)).toBe(2);
+    expect(keepFiles(data, box, main, "refs/keep/box/b-files")).toBe(true);
+    const shown = (path: string, rev: string) => git("-C", main, "show", `refs/keep/box/b-files${rev}:${path}`).stdout;
+    expect(shown("a.ts", "")).toBe("2\n");
+    expect(shown("new.ts", "^3")).toBe("3\n");
+    expect(git("-C", main, "show", "refs/keep/box/b-files^3:node_modules/big.js").status).not.toBe(0);
+    expect(keepFiles(data, join(dir, "gone"), main, "refs/keep/box/c-files")).toBe(false);
+    rmSync(dir, { recursive: true, force: true });
   });
 
   // Plants: back up to a branch the bot may not push; drop the -wip; double the -wip.
@@ -325,4 +321,29 @@ describe("dirtyIn reads a real box, today's tooling", () => {
     utimesSync(join(data, "logs", "HEAD"), new Date(), new Date());
     expect(lastTouched(box, data)).toBe(before);
   });
+});
+
+describe("decidePin", () => {
+  const idle = fc.integer({ min: 0, max: 10 * IDLE });
+
+  it("a process list pgrep cannot read always keeps the pin", () =>
+    fc.assert(
+      fc.property(idle, (i) => {
+        expect(decidePin(PgrepAnswer.cases.refused.make({}), i)._tag).toBe("keep");
+      }),
+    ));
+
+  it("a pin a running process names is always kept, however old", () =>
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 50 }), idle, (count, i) => {
+        expect(decidePin(PgrepAnswer.cases.listed.make({ count }), i)._tag).toBe("keep");
+      }),
+    ));
+
+  it("a pin no process names goes exactly when it is IDLE old or older", () =>
+    fc.assert(
+      fc.property(idle, (i) => {
+        expect(decidePin(PgrepAnswer.cases.listed.make({ count: 0 }), i)._tag).toBe(i < IDLE ? "keep" : "remove");
+      }),
+    ));
 });

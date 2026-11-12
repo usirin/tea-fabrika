@@ -13,7 +13,31 @@ Run oxlint and oxfmt through `lint.ts` and `format.ts`, not on their own. These 
 
 They began as GritQL rules in the `biome-plugins/` folder of [kamp-us/phoenix](https://github.com/kamp-us/phoenix), the pipeline this repo rebuilds, copied here unchanged. On 2026-10-31 they became TypeScript rules here, so this folder is where they change now. Each one fired on the same lines as its GritQL rule, on the whole tree and on a set of odd spellings; the note above has the numbers. The counts below are from when the GritQL rules were added and are kept as history. A name like `no-secret-env.grit` in them means the rule that is now `no-secret-env.ts`, and a mention of `biome-ignore` means what is now `oxlint-disable-next-line`.
 
-Four rules only advise: `law-shape`, `no-effect-promise`, `no-raw-try-catch` and `prefer-schema-arbitrary`. Their messages start with "Advice, does not block". Oxlint has no level below `warn`, so `lint.ts` runs oxlint once and decides: it prints every fire, and fails on any fire but these four. Experiment 125 found the first two wrong far too often to block: 8 of 8 and 21 of 21 fires kept their code. Under Biome the same two gave their diagnostics at `"info"`, which `pnpm lint` (`biome check --error-on-warnings`) printed and did not fail on.
+Six rules only advise: `law-shape`, `no-effect-promise`, `no-raw-try-catch`, `prefer-schema-arbitrary`, and since ticket 737 oxlint's own `no-restricted-properties` (a bare `JSON.parse` in `next/`) and `service-id`. Their messages start with "Advice, does not block". Oxlint has no level below `warn`, so `lint.ts` runs oxlint once and decides: it prints every fire, and fails on any fire but these six. Experiment 125 found the first two wrong far too often to block: 8 of 8 and 21 of 21 fires kept their code. Under Biome the same two gave their diagnostics at `"info"`, which `pnpm lint` (`biome check --error-on-warnings`) printed and did not fail on.
+
+## Decode and service-ID advice
+
+Ticket 737 builds decision 0023 in `next/`: input is decoded with Effect Schema, and a service ID carries the package and its file's path, as Effect's own guide asks. Two guards keep it so, both advice until their false alarms are counted.
+
+```ts
+JSON.parse(text);                                            // advice: Schema.fromJsonString(S) instead
+class Doorbell extends Context.Service<Doorbell, Shape>()(
+  "@kampus/libfabrika/ledger/Ledger.Doorbell",               // passes in ledger/Ledger.ts
+) {}
+```
+
+`no-restricted-properties` is oxlint's built-in, set for object `JSON`, property `parse`, on `next/**`. It fires on `JSON.parse(x)`, `JSON["parse"](x)`, `JSON?.parse(x)`, a reference `const f = JSON.parse` and `const { parse } = JSON`. It does not fire on another object's `parse`, a comment, a string, `typeof JSON.parse` or code outside `next/`. It does not read scope: a local `JSON` fires too (a false alarm), and an alias (`const J = JSON; J.parse(x)`) is missed. A test oracle that must parse as the old code did keeps it with `// oxlint-disable-next-line eslint/no-restricted-properties -- <why>`. `decode-guards.test.ts` holds each of these cases.
+
+`service-id` is ours: oxlint's selectors cannot resolve a renamed import or a shadowed name, or compare an ID with its file (0040). Its options name the package and its source folder; outside that folder it says nothing. A class's ID is exactly `<package>/<path>`, or `<package>/<path>.<Class>` when the class is not named as its file. A Reference or a direct Service names nothing the rule trusts, so `<path>` or `<path>.<Name>` for one name passes. An ID that is not a literal is reported as unproved. The rule's head comment lists the import forms it resolves and what it misses (a local alias of `Context.Service`, a helper). `service-id.test.ts` plants each form, holds the plan's old-to-new mapping as a vector, and replays the rule over libfabrika.
+
+Replay on 2026-11-11, at `8594eebc6` with this ticket's laws, before its build:
+
+| Guard | Fires | True | False alarms | Unresolved | Reviewed misses |
+|---|---|---|---|---|---|
+| `service-id`, libfabrika `src/` | 35 | 35: 33 services, 1 Reference, `ProgramRunner` (next slice) | 0 | 0 | the app's `t502/RecordLaws.Wire` test service, outside the rule's folder |
+| `JSON.parse`, `next/` | 75 | 2 in product code: `transport/Connection.ts` (this ticket) and `Testing.ts` (its round trip, outside it); 73 in tests and test kits, not yet read one by one | none in the 2 product hits; the 73 are unread, and the shadow case is possible | 0 | aliases |
+
+After the build, `service-id` should find only Runner's ID, which the next slice renames; it is a named hit, not an exemption. Promotion to blocking needs about 0% false alarms on main (Google, CACM 2018), measured by a fresh replay; up to 10% may keep advising, and above that the rule is repaired first. `decode-guards.test.ts` runs `lint.ts` itself: a report of only these two passes, and any blocking diagnostic beside them still fails.
 
 ## Effect property data advice
 
@@ -216,7 +240,7 @@ Count on 2026-11-10, on main at `33a282f8` with this change, in that day's words
 
 The old words do not come back as names in `next/`: oxlint's own `eslint/id-denylist` ([rule](https://oxc.rs/docs/guide/usage/linter/rules/eslint/id-denylist)), in a `next/**` override, refuses `room`, `rooms`, `floor` and `floors` in lower, title and upper case, and `otherRoom`, `floorsByName`, `floorRank`, `floored` and `unfloored`. Tests in `next/` are held too, and nothing outside `next/` is. It reads names only: a declaration, a reference to one, an object key and a type member. A property read (`row.floor`), a call through a member (`Math.floor`), a comment and a string pass, so the words' other meanings (a conversation room, a minimum, spare space) stay review work. A conversation room, which 0091 keeps, takes `// oxlint-disable-next-line eslint/id-denylist -- <why>` on its one line. `terminology.test.ts` plants each case at a real path with the repo's config. Count on 2026-11-11, on main at `0bb25969` after ticket 688's rename: 0 fires in `next/`, `.agents/` and `oxlint-plugins/`; the one fire before it, a local `room` meaning spare bytes in `transport/internal/connection.test.ts`, became `space`.
 
-Eight rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md`, "The exam PR", items 1, 2, 4, 5 and 13, P35, and ticket 337). `.oxlintrc.json` turns them on in `next/**` and nowhere else, so today's code is untouched. Their planted tests use `next/apps/fabrika/src/exam/plant.ts` and lint each planted file at the `next/` path it names, in a temp folder with this repo's config, so the edge paths and globs meet it as they meet a real file.
+Nine rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md`, "The exam PR", items 1, 2, 4, 5 and 13, P35, and ticket 337). `.oxlintrc.json` turns them on in `next/**` and nowhere else, so today's code is untouched. Their planted tests use `next/apps/fabrika/src/exam/plant.ts` and lint each planted file at the `next/` path it names, in a temp folder with this repo's config, so the edge paths and globs meet it as they meet a real file.
 
 | Rule | Refuses | Edges | Tests |
 |---|---|---|---|
@@ -224,9 +248,10 @@ Eight rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md
 | `no-effect-run-outside-edge` | any of Effect's twelve run functions, on `Effect` or a runtime, and `runtimePromise` and `makeRuntimePromise`; `NodeRuntime.runMain` passes | a line under an edge comment | left out |
 | `edge-comment` | an ignore comment naming either rule above that is not `// oxlint-disable-next-line <rule> -- edge: <why>`: another form, another rule named beside them, or no `edge: ` reason | none | on |
 | `no-of` | a declared name `of` or ending in `Of`, a named import of `of`; a module's top-level exported `of` and a use pass (0029) | none | on |
-| `no-why-key` | a statically named `why` key in an object, class or type declaration; use `reason` | none | on |
+| `no-question-word-key` | a quoted, escaped, computed or template key named `where`, `why`, `what`, `who` or `how` in an object, class or type declaration; oxlint's own `eslint/id-denylist` holds the same names written as identifiers (0081) | none | on |
 | `no-hand-tag` | an object key, class field or type member named `_tag`; a read passes | the log, `next/packages/libfabrika/src/data/log.ts` | left out |
 | `one-store-hook` | `useSyncExternalStore` imported or read as a plain member anywhere in `next/`; a store hook's value dropped | none | left out |
+| `no-wall-clock` | `Date.now()`, `new Date()` and `Date()` in a `next/` `.ts` file; `new Date(at)` passes | none | left out, test helpers too |
 | `no-clock-in-view` | `Date.now()`, `new Date()`, `Date()`, `performance.now()`, `Math.random()`, `crypto.randomUUID()` in a `.tsx` file, handlers included | none | left out |
 
 React's own `react/refs`, `react/immutability`, `react/display-name` and `react/purity` block in `next/**/*.tsx`, tests left out (`docs/direction/react-compiler.md`). `react/purity` refuses a clock or random read in render and lets a handler pass, as React means it; `no-clock-in-view` refuses the same reads anywhere in a `next/` `.tsx` file, handlers included, since the time comes through a Cmd (C1; owner, 2026-11-05). oxc-transform-react 0.157.0 stopped refusing a clock read in a handler a view passes down, which 0.156.0 did, so this rule holds that case now. `pnpm lint:compiler` runs the Compiler's compile step, `next/apps/fabrika/src/exam/compiler.ts`, over every `.tsx` file in `next/`, against `compiler-ledger.json`, which starts empty.
@@ -240,41 +265,58 @@ and `Effect.promise` and the run functions by their written names. P12 adds the 
 check below for Promises passed through helpers. `no-hand-tag` misses `x._tag = "a"`,
 which the plan does not name. Report any miss.
 
-### Ticket 337: reason keys in next/
+### Ticket 682: question words are never names
 
-`no-why-key` checks object fields, shorthand, methods, getters and setters; class fields,
-methods and accessors, including static and abstract declarations; constructor parameter
-properties with access or readonly modifiers, including defaults; and type or interface
-property and method signatures. Effect Schema field maps use the same object syntax. Quoted
-and escaped names, computed string literals and expression-free templates count by their
-decoded value. The match is exactly `why`, including readonly members.
+A question word names the question, not the answer, so `where`, `why`, `what`, `who` and `how`
+are never a key, field, option, parameter or binding in `next/` or `.agents/`, tests included
+([0081](../.decisions/0081-no-question-word-names.md)). Two rules hold it, with the same five
+words in both governed override blocks of `.oxlintrc.json`, and neither offers an autofix, since
+a rule cannot pick the noun for a value and one renamed declaration alone can break its readers.
 
-Reads, destructuring reads, local variables, plain constructor parameters without property
-modifiers, comments, string values and dynamic keys pass.
-`whyNot`, `Why` and `reason` pass. Member assignments, SQL and JSON inside strings need the
-separate sweep audit. Today's paths keep their spelling. There is no autofix, since changing
-one declaration alone can break readers and saved formats. The glossary is not parsed as policy.
+- **oxlint's own `eslint/id-denylist`** (0040) holds every name written as an identifier, escaped
+  identifiers decoded: variables, parameters, rest parameters, defaults, catch and loop bindings,
+  destructured bindings, tuple labels, object keys and shorthand, methods and accessors, class
+  fields, methods and accessors (static, abstract and accessor ones too), constructor parameters
+  with or without modifiers, type and interface members (optional and readonly ones too), Schema
+  field maps and a member assignment such as `row.why = x`. It also reports a read of such a
+  binding. Its diagnostic is oxlint's own, `Identifier 'why' is restricted.`
+- **`no-question-word-key`** holds what the native rule does not decode: a quoted or escaped
+  string key, a computed string key and an expression-free template key, in the same object,
+  class and type declarations. Its diagnostic asks for the noun of the value and names all five
+  words. It no longer checks identifier keys or constructor parameter properties, since the
+  native rule reports those; the generated matrix checks that each line is reported by exactly
+  one of the two.
 
-The tests checkpoint on 2026-11-09 used base and unchanged product head
-`9b48d622b5d4cfe54ca6d0a8a53f0ac03d3f2c03`, with the tests changes in this commit.
-The standard wrapper, `node oxlint-plugins/lint.ts next`, scanned the 197 TypeScript files
-under `next/`. It reported 294 `no-why-key` diagnostics across 44 build-owned files.
-Every diagnostic was read against its declaration: 294 useful findings, 0 false findings,
-0 unclassified findings. No tests-owned file has a remaining declaration. Raw output is private
-under `runs/reason337/next-lint.log`. Product still uses `why`, so this is deliberately red.
+What passes: reads such as `a.why` and `a["why"]`, `"why" in a`, an outside key destructured
+into a good local (`const { why: reason } = row`), an import renamed on the way in, dynamic and
+interpolated keys, string values, comments, SQL text, and exact-name neighbors such as `Who`,
+`WHY`, `whyNot` and `whereé`. Neither rule sees an index-signature parameter
+(`[who: string]: T`), a computed member assignment (`a["why"] = x`) or a key built at run time,
+and neither reads shell or Python. Today's paths keep their words. An outside format keeps its
+key at the edge, under an `oxlint-disable-next-line <rule> -- <why>` or an existing
+`agents-ledger.json` entry.
 
-`no-why-key.test.ts` uses generated Unicode names, generated filenames and declaration forms
-through the real config, with seed 119120 and 12 runs per property. Every syntax run includes
-the exact retired key. Fixed format checks pin escaped spellings and the diagnostic.
-The final post-build scan on 2026-11-09 used base
-`9b48d622b5d4cfe54ca6d0a8a53f0ac03d3f2c03` and code head
-`d6f62819a3585252a3bb08a63837029c088934ad`, including review 1's class declaration fixes.
-The same wrapper scanned all 197 TypeScript files under `next/`: 0 `no-why-key`
-diagnostics, 0 useful findings, 0 false findings and 0 unresolved findings. It passed with
-0 blocking findings and 42 advice messages. Raw output is private at the same path above.
-A zero-hit scan has no false-alarm percentage denominator. The generated positive and
-negative plants check both sides separately; they cover parameter modifiers, default values,
-instance/static/abstract accessors, decoded key spellings and permitted plain parameters.
+`no-question-word-key.test.ts` generates, with seed 119120 and 12 runs per property: every
+declaration and binding form for all five words in every run, in every spelling, with a
+generated Unicode key, identifier and near neighbor beside them; the real config at generated
+`next/`, exam, test, test-support and skill paths, and today's paths off; and generated values,
+dynamic keys, outside reads, comments, SQL and neighbors that must pass. Two `format:` checks pin
+the decoded spellings and the diagnostic with no fix. Plants, each run once on 2026-11-11 and
+undone: dropping `how` from the config's list failed the matrix and path laws; skipping literal
+keys failed the matrix, path and both format laws; matching substrings failed the matrix and the
+passing law; turning both rules off for `next/**/*.test.ts` failed the path law; and a partial
+autofix failed all four laws that read the rule's report.
+
+The tests step's scan on 2026-11-11, at base `14513706e` with the tests changes, ran the real
+config over `next/`, `.agents/` and `oxlint-plugins/`. Before the test renames both rules
+reported 446 diagnostics, all from `eslint/id-denylist`; `no-question-word-key` reported 0, since
+no literal-spelled question-word key exists on the tree. After them, 93 remain in 20 files: 89 in
+the 18 product files the ticket's plan gives to the builder, and 4 in tests (`drive.test.ts:207`,
+`box.test.ts:250,1534,1551`) that read today's outside formats and are named in
+`agents-ledger.json` under the old rule's ID, which the build translates. Product still uses the old names, so this is deliberately red.
+
+Ticket 337's earlier rule, `no-why-key`, checked `why` alone; its scans on 2026-11-09 found 294
+diagnostics in 44 build-owned files before its build and 0 after, all read by hand.
 
 ### Ticket 681: instance, not stage, in next/
 
@@ -452,3 +494,125 @@ one tree; zero false alarms here does not prove every future shape.
 
 `effectFnOpportunity` remains off. Its earlier 11 false alarms among 17 findings
 are not evidence for enabling it.
+
+## Rules that joined with findings: `next-ledger.json`
+
+Four laws joined `next/` on 2026-11-11 with findings already in the tree. Each blocks every new
+finding. What each met on its first day is named in `next-ledger.json`, in `agents-ledger.json`'s
+shape and under its laws (`ledger.ts`, `ledger.test.ts`): keyed by file, rule and line of code, read
+only for `next/`, and written back by a whole-repo `pnpm lint` with the entries a finding still
+matched, so it only shrinks. CI fails until that pruned file is committed. An entry leaves when its
+line is fixed under its own ticket; nothing adds one but the owner. Advice was not used: it is this
+repo's level for a rule that is often wrong (experiment 125), and these were never wrong in the read.
+
+| Law | Rule | Files | Found | Read by hand |
+|---|---|---|---|---|
+| A question word is never a name (0081) | oxlint's `eslint/id-denylist` with the five words, and `no-question-word-key` | the `next/**` and `.agents/` blocks, tests too | 451: `next/packages/libfabrika` 159, `next/apps/fabrika` 168, `.agents` 124; `no-question-word-key` 0 | 30 at seed 119120: 30 real |
+| `runtime/`, `access/` and `gateway/` never import `ledger/` (0043, rule 11; 0062) | oxlint's `eslint/no-restricted-imports`, one more pattern group | an override for the three modules | 69, all in `next/packages/libfabrika`: 16 product, 53 test | 30 at seed 119120: 30 real |
+| A clock is read through Effect | `no-wall-clock` | `next/**/*.ts`, tests and test helpers left out | 8: `next/packages/libfabrika` 7, `next/apps/fabrika` 1 | all 8: 8 real |
+| An after-hook does not release a resource (0061) | oxlint's `vitest/no-hooks`, allowing `beforeAll` and `beforeEach` | any `next/` file | 44: `next/packages/libfabrika` 27, `next/apps/fabrika` 16, `next/programs/counter` 1 | all 44: each closes a database, a socket, a browser or a child, or removes a folder |
+
+The `.agents/` findings went into `agents-ledger.json`. The two edge comments in `flow/host.ts`
+stay as comments, naming `eslint/id-denylist` as ticket 682 left them.
+
+After the merge with main at `31810c83c` on 2026-11-11, where ticket 682 renamed the question
+words, lint pruned what main fixed. `next-ledger.json` holds 115 entries: `id-denylist` 0,
+`no-restricted-imports` 71, `no-wall-clock` 1 (`next/apps/fabrika`) and `no-hooks` 43.
+`agents-ledger.json` holds main's 12 `id-denylist` entries and none from this rule set. The one
+clock read whose line the rename changed, `cloudflare/connection.ts`'s `p.join`, now reads
+`Clock.currentTimeMillis`.
+
+The counts are of the tree merged with main at `1d2b3a5c` on 2026-11-11, after the noun sweep (ticket
+682), the module rename (ticket 688) and the `stage` to `instance` rename. The first count, on the
+older main, was 428, 57, 8 and 44: that lint run pruned 22 entries whose line was gone or renamed,
+and 57 findings on main that the first count never saw were added the day the rules joined (29 and 7
+`id-denylist` in `next/` and `.agents/`, 17 `no-restricted-imports`, 4 `no-hooks`). The hand reads
+below were of the first count's findings.
+
+**Why oxlint's rules, and where ours stay** ([0040](../.decisions/0040-existing-tools-before-hand-written.md)):
+
+- [`eslint/id-denylist`](https://oxc.rs/docs/guide/usage/linter/rules/eslint/id-denylist), as 0081
+  asked. On oxlint 1.90.0 it reports a name written as a word wherever it is declared or read:
+  object, class and type members, accessors, parameters, parameter properties, locals and their
+  reads. It does not report a member read (`a.why`), a renamed destructure (`{why: r}`) or an
+  import's outside name. It cannot see a key written as a string: `{"why": 1}`, `["how"]`,
+  `` [`what`] ``. `no-question-word-key` holds those alone, so no key is reported twice.
+- [`eslint/no-restricted-imports`](https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-restricted-imports).
+  The group names `ledger/`'s PascalCase front files (`../ledger/[A-Z]*`), so a `ledger/internal/`
+  import is the `internal/` group's alone. A `!` pattern cannot carve that out: oxlint 1.90.0 reads
+  a `!` in one group as a pass for every group, which the modules test caught. It does not see a
+  package specifier.
+- [`eslint/no-restricted-properties`](https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-restricted-properties)
+  sees `Date.now` but not `new Date()`, and
+  [`eslint/no-restricted-globals`](https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-restricted-globals)
+  refuses every `Date`, `Date.parse` and `new Date(at)` too. oxlint has no `no-restricted-syntax`.
+  So `no-wall-clock` is `no-clock-in-view`'s rule with `Date.now` alone (`clockReads` in
+  `no-clock-in-view.ts`). Three `new Date(at)` calls in product code format a time they were
+  given and pass, as in `no-clock-in-view`.
+- [`vitest/no-hooks`](https://oxc.rs/docs/guide/usage/linter/rules/vitest/no-hooks) refuses the
+  call. An after-hook imported and never called is an unused import, which
+  `eslint/no-unused-vars` refuses. `onTestFinished` is not refused.
+
+The laws are in `no-question-word-key.test.ts`, the last describe of `modules.test.ts`,
+`no-wall-clock.test.ts` and `after-hooks.test.ts`, each through the real config at generated paths.
+
+
+## One machine per file, decision 0046
+
+`fabrika/one-machine-per-file` blocks in `next/` and `.agents/`. Tests and shared law suites
+are left out by `*.test.ts`, `*.test.tsx`, `*Test.ts` and `*.test-support.ts` under `next/`,
+and `*.test.ts` under `.agents/`.
+
+It counts exported tea `Machine.make` calls, including one inside an exported factory, object or
+program. A second call fires. A private top-level helper used inside another machine's arguments
+passes; a private machine wrapped by an exported program counts. Two calls in one exported factory
+count twice. Named and namespace imports from `@demlik/tea` and `@demlik/tea/effect`, renamed
+imports and literal `["make"]` access are recognized. Local shadows and type-only imports pass.
+
+For each reached call, an imported value or imported member used directly as `model`, `msg` or
+`update` fires. A local value, inline expression or schema built from imported fields passes.
+Effect's `Schema.Never` as `msg` passes too: it says the machine has no messages, as approved
+in plan amendment A1. Other imported Schema members still fire, and `Schema.Never` used as
+`model` or `update` still fires.
+Every file with a machine call, even a private call, also refuses imports from the closed I/O
+list in the rule. That list covers the named Effect runtime, clock, storage and stream modules,
+Effect's process/http/cli/unstable subpaths, `@effect/*`, `node:`, tea runners, and the platform
+imports named in 0042. Pure `effect/encoding` and `effect/crypto` imports pass. Type-only imports
+pass, both whole declarations and individual specifiers.
+
+The approved plan measured 13 files with exported machines or factories and expected zero hits.
+The first replay on 2026-11-11 found one false alarm, `msg: Schema.Never` in lead tooling's
+`flow/machine.ts:101`. Amendment A1 allows that exact case. The corrected replay finds **0 hits**
+over `next/` and `.agents/`, and all 13 measured file copies pass. Each copy with a second
+exported call fires once for that added call. No disable or ledger entry hides a hit. This
+zero-hit measurement says nothing about the false-alarm rate of forms not yet written.
+
+Review keeps these parts of 0046:
+
+- Whether changing data is control state and must be a tea machine.
+- Input or output through relative/workspace imports, globals or dynamic imports.
+- Building or editing another file's Model by hand.
+- Whether a factory returns its machine and whether its config carries a service.
+
+The syntax rule misses aliases of `Machine.make`, destructuring, re-exports and imported helpers
+that make machines. Each new written form needs review. It has no type information.
+
+### Plant replay, 2026-11-11
+
+Ticket 509 replayed these temporary breaks against the existing laws. Each change was restored
+by copying its saved original before the next run. No planted implementation remains.
+Paths below are relative to `oxlint-plugins/`, except `.oxlintrc.json`.
+
+| Law and check | Injected break | Observed result |
+|---|---|---|
+| L1, `one-machine-per-file.test.ts:59` and `:80` | In `one-machine-per-file.ts:192`, count private calls too; separately, at `:194`, count only one call per export | Both L1 properties fail for each break. The reduced cases contain a private helper, or a factory with two calls. |
+| L2, `one-machine-per-file.test.ts:112` | At `one-machine-per-file.ts:223`, accept imported models; separately, reject calls that build a schema from imported fields | L2 fails on an imported model, then on `Schema.Struct({ f: Imported })`. |
+| L3, `one-machine-per-file.test.ts:206` | At `one-machine-per-file.ts:234`, require an exported call before checking imports; separately, at `:239`, check type-only declarations too | L3 fails on a private machine with a `workerd` import, then on a type-only import. |
+| L4, `one-machine-per-file.test.ts:247` | Remove `next/**/*Test.ts` from `.oxlintrc.json`'s shared-test override | L4 gets line 3 for `next/ExampleTest.ts`, where it expects no fire. |
+| L5, `one-machine-per-file.test.ts:290` | At `one-machine-per-file.ts:102`, skip `.agents/`; separately, at `:141`, ignore exports whose declaration is a factory | L5 misses the added second export in the flow machine, then in `processTable.ts`. |
+| L6, `plants.test.ts:628` | Add this rule to `lint.ts:14`'s `ADVICE` set | L6 gets exit 0 instead of exit 1 for its second-machine input. |
+| L7, registration lint | Remove the import and registration from `index.ts:35` and `:78` | `lint.ts` exits 2 because the configured rule is missing. `pnpm lint:dead` stays green, contrary to the plan's prediction; it does not enforce registration here. |
+| A1, `one-machine-per-file.test.ts:112` | At `one-machine-per-file.ts:124`, allow every imported Schema member as `msg`; separately, at `:224`, remove the exception, or allow `Schema.Never` in every part | L2 fails on `msg: Schema.String`, the pinned `msg: Schema.Never`, or `update: Schema["Never"]`, respectively. |
+
+All property replays used seed 119120. Every replay ran on Node 26.13.0 with one Vitest worker.
+The box refused `nice`'s priority change, so subsequent test commands ran without it.

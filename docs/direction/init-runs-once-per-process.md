@@ -2,6 +2,8 @@
 
 **Decided 2026-11-08.** `next/` only.
 
+Its decided rules are in: [0253](../../.decisions/0253-init-cmds-run-once-per-process.md).
+
 ```ts
 // A sketch: a made-up program whose init asks for setup work.
 import {Cmd, Machine} from "@demlik/tea/effect";

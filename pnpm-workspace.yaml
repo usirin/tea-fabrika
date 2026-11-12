@@ -94,6 +94,7 @@ catalog:
   electron: 45.2.1
   esbuild: 0.28.2
   fast-check: 4.10.2
+  pure-rand: 8.4.2
   # The fabrika app's terminal (apps/fabrika). MIT, no dependencies. Held exact: it is young.
   ghostty-web: 0.4.0
   # The markdown program's reader (programs/markdown): micromark, the CommonMark parser remark
@@ -153,6 +154,7 @@ patchedDependencies:
   '@manti-ui/react@0.13.0': patches/@manti-ui__react@0.13.0.patch
   # Draw on change, and a hollow cursor when a tile is unfocused (experiment 142).
   ghostty-web@0.4.0: patches/ghostty-web@0.4.0.patch
+  '@manti-ui/styles@0.13.0': patches/@manti-ui__styles@0.13.0.patch
   # demlik#905: a non-exported const beside an exported type of its name is not an unused export;
   # drop at the release that has the fix.
   '@demlik/code-graph@0.15.0': patches/@demlik__code-graph@0.15.0.patch

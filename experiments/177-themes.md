@@ -354,7 +354,7 @@ type Msg = { type: "theme_chosen"; theme: Theme | null } | { type: "theme_change
   window today. A per-window override is one nullable field, left for later since it loses no data.
 
 **A clash to name:** where a person's object lives is written as "one per person" in
-[we use the tools we build](../docs/direction/we-use-the-tools-we-build.md), and nothing yet says a
+the note "we use the tools we build" (since removed; its rules are [0349](../.decisions/0349-we-build-and-use-our-tools.md)), and nothing yet says a
 program may store a setting there.
 
 ## 4. Third-party programs

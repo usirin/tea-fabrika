@@ -37,7 +37,7 @@ const row = Effect.fnUntraced(function* (entry: Entry) {
   const event = decodeEvent(valueFor(entry));
 
   if (Result.isFailure(event)) {
-    return yield* new LedgerError({ reason: "bad_row" });
+    return yield* new LedgerError({ reason: "bad_row", cause: event.failure });
   }
 
   return { entry, event: event.success } satisfies Row;

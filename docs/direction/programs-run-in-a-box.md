@@ -21,7 +21,7 @@ test:
 | A bad ticket can... | A: key inside | B: key outside |
 |---|---|---|
 | steal the keys | yes | no, nothing real is there |
-| push code | anywhere, as the owner | only to its own branch, and only after review passes ([push after review](./push-after-review.md)) |
+| push code | anywhere, as the owner | only to its own branch, and only after review passes ([push after review](../../.decisions/0392-push-is-a-step-after-review.md)) |
 | spend on the model account | from anywhere, later | only inside this job, under the box's limit |
 
 ## What was decided
@@ -72,7 +72,7 @@ test:
     rule.
 - **Tools are served inside the box, and each tool call is a Cmd.**
   - The agent's tools, the one "ask" tool and the typed reads of
-    [helpers](./helpers-and-the-supervisor.md), run in the program's own
+    [helpers](../../.decisions/0416-a-step-calls-a-helper.md), run in the program's own
     process inside the box. A tool that needs the outside writes a Cmd, and
     the Cmd is passed out.
   - The agent sees no change: it calls the same tools.

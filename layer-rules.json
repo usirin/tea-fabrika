@@ -87,9 +87,24 @@
       "paths": ["next/packages/libfabrika/src/jobs"]
     },
     {
+      "name": "next-packs",
+      "layer": 3,
+      "paths": ["next/packages/libfabrika/src/packs"]
+    },
+    {
       "name": "next-ledger",
       "layer": 2,
       "paths": ["next/packages/libfabrika/src/ledger"]
+    },
+    {
+      "name": "next-codehost",
+      "layer": 2,
+      "paths": ["next/packages/libfabrika/src/codehost"]
+    },
+    {
+      "name": "next-ci",
+      "layer": 2,
+      "paths": ["next/packages/libfabrika/src/ci"]
     },
     {
       "name": "next-transport",
@@ -116,6 +131,7 @@
       "paths": [
         "next/packages/libfabrika/src/Id.ts",
         "next/packages/libfabrika/src/ProcessId.ts",
+        "next/packages/libfabrika/src/SpanTag.ts",
         "next/packages/libfabrika/src/Sql.ts",
         "next/packages/libfabrika/src/Rev.ts"
       ]
@@ -377,12 +393,6 @@
       "reason": "until ticket 641, 2026-11-10: This test opens a real SQLite database through the Node driver in ledger/NodeSqlite.ts, which sits on a higher layer. Ticket 641 turns the database laws into a suite that takes a Sql maker, so this test stops importing the driver."
     },
     {
-      "from": "next/packages/libfabrika/src/telemetry/RecordPart.test.ts",
-      "to": "next/packages/libfabrika/src/ledger/NodeSqlite.ts",
-      "sites": 1,
-      "reason": "until ticket 641, 2026-11-10: This test opens a real SQLite database through the Node driver in ledger/NodeSqlite.ts, which sits on a higher layer. Ticket 641 turns the database laws into a suite that takes a Sql maker, so this test stops importing the driver."
-    },
-    {
       "from": "next/packages/libfabrika/src/telemetry/Records.test.ts",
       "to": "next/packages/libfabrika/src/ledger/NodeSqlite.ts",
       "sites": 1,
@@ -405,6 +415,12 @@
       "to": "next/packages/libfabrika/src/processes/Process.test-support.ts",
       "sites": 1,
       "reason": "until ticket 641, 2026-11-10: this test reaches for storage() in processes/Process.test-support.ts, which is another module on the same layer. Ticket 641 moves storage() down beside the ledger test support."
+    },
+    {
+      "from": "next/packages/libfabrika/src/telemetry/internal/sums.test.ts",
+      "to": "next/packages/libfabrika/src/ledger/NodeSqlite.ts",
+      "sites": 1,
+      "reason": "until ticket 641, 2026-11-11: this law opens real SQLite through the Node driver, as measurements.test.ts does. Ticket 641 moves the laws into a suite that takes a Sql maker."
     }
   ]
 }

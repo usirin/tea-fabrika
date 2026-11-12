@@ -2,6 +2,7 @@
 // The repo's `fabrika-version` is read first. Each file's Struct is derived from the declarations
 // in its scope; a failure is explained at its key, with the line the Toml service gave.
 import { Effect, Order, Predicate, Schema, SchemaAST, SchemaIssue } from "effect";
+import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
 import type * as Setting from "./Setting.ts";
 import type { TomlDocument } from "./Toml.ts";
@@ -81,17 +82,27 @@ const distance = (a: string, b: string) => {
   return cell(a.length, b.length);
 };
 
-/** The Struct a file is decoded with: every table and leaf optional, each leaf as JSON. */
+/** The Struct a file is decoded with: every table and leaf optional. */
 const struct = (declarations: ReadonlyArray<Declaration>, depth: number): Schema.Codec<unknown, unknown> =>
   Schema.Struct(
     Object.fromEntries(
       [...new Set(declarations.flatMap((d) => d.segments[depth] ?? []))].map((key) => {
         const below = declarations.filter((d) => d.segments[depth] === key);
         const own = below.find((d) => d.segments.length === depth + 1);
-        return [key, Schema.optionalKey(own === undefined ? struct(below, depth + 1) : Schema.toCodecJson(own.schema))];
+        return [key, Schema.optionalKey(own === undefined ? struct(below, depth + 1) : Codec.file(own))];
       }),
     ),
   );
+
+/**
+ * The schema of one file, shared by validation and the editor's JSON Schema. Declarations are
+ * sorted by path, so their order never shows. A file no declaration may be set in refuses every
+ * key: Effect's empty Struct would take any object.
+ */
+export const schema = <A>(group: Setting.Group<A>, file: Setting.File): Schema.Codec<unknown, unknown> => {
+  const own = group.declarations.filter((d) => d.scope.includes(file)).sort((a, b) => (a.path < b.path ? -1 : 1));
+  return own.length === 0 ? Schema.Record(Schema.String, Schema.Never) : struct(own, 0);
+};
 
 /** The one message for the first issue in `file`. Unknown keys are named; their values never are. */
 const explain = (
@@ -144,7 +155,10 @@ const triple = (version: string) => {
   return [major, minor, patch] as const;
 };
 
-const newer = Order.isGreaterThan(Order.Tuple([Order.Number, Order.Number, Order.Number]));
+const greater = Order.isGreaterThan(Order.Tuple([Order.Number, Order.Number, Order.Number]));
+
+/** Whether release `a` is newer than `b`, compared as three whole numbers, never as text. */
+export const newer = (a: string, b: string) => greater(triple(a), triple(b));
 
 /** Refuse a repo that needs a newer fabrika, before anything else in either file is read. */
 export const supported = Effect.fnUntraced(function* (repo: Place, version: string) {
@@ -159,7 +173,7 @@ export const supported = Effect.fnUntraced(function* (repo: Place, version: stri
     return yield* refused(located(repo, d.segments), d, shape(wanted));
   }
 
-  if (newer(triple(wanted), triple(version))) {
+  if (newer(wanted, version)) {
     return yield* new SettingsError({
       reason: "version",
       message: `${located(repo, d.segments)}: This repo needs fabrika ${wanted} or newer. You have ${version}.\n  ${STOP}`,
@@ -175,12 +189,8 @@ export const validate = Effect.fnUntraced(function* <A>(
   yield* supported(files.repo, options.version);
 
   for (const file of ["repo", "person"] as const) {
-    const schema = struct(
-      group.declarations.filter((d) => d.scope.includes(file)),
-      0,
-    );
-    yield* Schema.decodeUnknownEffect(schema)(files[file].document.value, { onExcessProperty: "error" }).pipe(
-      Effect.mapError((error) => explain(group.declarations, files, file, error.issue)),
-    );
+    yield* Schema.decodeUnknownEffect(schema(group, file))(files[file].document.value, {
+      onExcessProperty: "error",
+    }).pipe(Effect.mapError((error) => explain(group.declarations, files, file, error.issue)));
   }
 });

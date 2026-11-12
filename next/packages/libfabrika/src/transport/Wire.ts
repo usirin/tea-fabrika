@@ -20,7 +20,7 @@ export const Who = Schema.Struct({
 });
 
 export const Admission = Schema.TaggedUnion({
-  admitted: { who: Who },
+  admitted: { identity: Who },
   refused: { reason: Schema.Literal("not_granted") },
 });
 
@@ -41,7 +41,7 @@ export const Attached = Schema.TaggedUnion({
   waiting: { client: Schema.String, key: Schema.String, hello: Hello, nonce: Schema.String },
   online: {
     client: Schema.String,
-    who: Who,
+    identity: Who,
     version: Schema.Int,
     waits: Schema.Array(Wait),
     watching: Schema.Boolean,

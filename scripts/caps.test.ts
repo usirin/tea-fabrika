@@ -3,6 +3,7 @@ import {
   chmodSync,
   readdirSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -84,6 +85,30 @@ describe("T325 K9 machine caps, today's tooling", () => {
     const ran = probe(root, ["run", "--maxWorkers=1", "scripts/caps.test.ts"]);
     expect(ran.status, ran.stderr).toBe(0);
     expect(JSON.parse(ran.stdout).shared).toEqual(JSON.parse(JSON.stringify(testConfig)));
+  });
+
+  // Vitest reads a config only from the folder it starts in (vitest 5.0.5's findConfigFile), so a
+  // run started in `.agents/` got its 5 s default limit, not the 60 s above: 9 to 12 false
+  // timeouts in catchup.test.ts on 2026-11-11. Plant: delete `.agents/vitest.config.ts`.
+  it("scenario: a run started in .agents/ refuses before any test and names the root", () => {
+    const ran = spawnSync(
+      process.execPath,
+      [
+        join(dirname(createRequire(import.meta.url).resolve("vitest/package.json")), "vitest.mjs"),
+        "run",
+        "--maxWorkers=1",
+        "skills/lead/scripts/catchup.test.ts",
+      ],
+      {
+        cwd: join(root, ".agents"),
+        encoding: "utf8",
+        timeout: 30_000,
+        env: { ...process.env, CI: undefined },
+      },
+    );
+    expect(ran.status).not.toBe(0);
+    expect(ran.stderr).toContain("Run vitest from the repo root, not .agents/");
+    expect(ran.stdout + ran.stderr).not.toMatch(/Test Files/);
   });
 
   // No domain Schema for runtime versions. Plant: omit the check or refuse CI too.
@@ -753,32 +778,52 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
     }
   });
 
-  // scenario: a worktree that links node_modules to the main checkout. pnpm -r refuses it with
-  // ERR_PNPM_UNSAFE_TASK_RUN_STATE_PATH, so the wrapper says what to run before pnpm starts.
-  // Plant: drop the check, or check only `-L` and miss a plain file.
-  for (const [shape, refused] of [
-    ["link", true],
-    ["broken link", true],
-    ["file", true],
-    ["folder", false],
-    ["missing", false],
+  // scenario: a worktree that links node_modules to another checkout's. pnpm -r refuses a link
+  // (ERR_PNPM_UNSAFE_TASK_RUN_STATE_PATH), and the patch or an install would write through it into
+  // the other checkout. So the wrapper removes only the link, installs this worktree's own modules
+  // offline, then runs; what the link pointed at is never written. A plain file is not ours to
+  // remove: it is refused with one line before pnpm starts. A failed install ends the run there.
+  // Plant: patch or install before the link goes, remove the link's target, or go on after a
+  // failed install.
+  for (const [shape, outcome] of [
+    ["link", "installed"],
+    ["broken link", "installed"],
+    ["link, install fails", "install failed"],
+    ["file", "refused"],
+    ["folder", "ran"],
+    ["missing", "ran"],
   ] as const) {
-    it(`scenario: a ${shape} node_modules ${refused ? "is refused with one line" : "runs"}`, () => {
+    it(`scenario: a ${shape} node_modules ends as ${outcome}`, () => {
       const dir = mkdtempSync(join(tmpdir(), "tc-nm-"));
 
       try {
         const bin = join(dir, "bin"),
           work = join(dir, "work"),
+          real = join(dir, "real"),
           events = join(dir, "events");
         mkdirSync(bin);
         mkdirSync(work);
-        mkdirSync(join(dir, "real"));
+        mkdirSync(real);
         writeFileSync(events, "");
-        writeFileSync(join(bin, "pnpm"), `#!/bin/sh\necho "pnpm $*" >> '${events}'\n`, { mode: 0o755 });
+        // The stand-in pnpm writes each call and where node_modules pointed when it ran. Its install
+        // makes the folder, as a real one does, or fails when the scenario says so.
+        writeFileSync(
+          join(bin, "pnpm"),
+          `#!/bin/sh
+echo "pnpm $*" >> '${events}'
+[ -L node_modules ] && echo "through a link" >> '${events}'
+if [ "$1" = install ]; then
+  [ -n "\${INSTALL_FAILS:-}" ] && exit 7
+  mkdir node_modules
+fi
+exit 0
+`,
+          { mode: 0o755 },
+        );
         const modules = join(work, "node_modules");
 
-        if (shape === "link") {
-          symlinkSync(join(dir, "real"), modules);
+        if (shape === "link" || shape === "link, install fails") {
+          symlinkSync(real, modules);
         }
 
         if (shape === "broken link") {
@@ -797,14 +842,44 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
           cwd: work,
           encoding: "utf8",
           timeout: 10_000,
-          env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, TYPESAFE_API_KEY: undefined },
+          env: {
+            ...process.env,
+            PATH: `${bin}:${process.env.PATH}`,
+            TYPESAFE_API_KEY: undefined,
+            INSTALL_FAILS: outcome === "install failed" ? "1" : undefined,
+          },
         });
-        const line = "typecheck: needs its own node_modules; run pnpm install --offline --frozen-lockfile\n";
+        const install = "pnpm install --offline --frozen-lockfile\n";
+        const run = "pnpm exec effect-tsgo patch --typescript\npnpm -r typecheck\n";
+        const shapeNow = !existsSync(modules) ? "missing" : lstatSync(modules).isDirectory() ? "folder" : "other";
 
-        expect({ status: result.status, stderr: result.stderr, ran: readFileSync(events, "utf8") }).toEqual(
-          refused
-            ? { status: 1, stderr: line, ran: "" }
-            : { status: 0, stderr: "", ran: "pnpm exec effect-tsgo patch --typescript\npnpm -r typecheck\n" },
+        expect({
+          status: result.status,
+          stderr: result.stderr,
+          ran: readFileSync(events, "utf8"),
+          modules: shapeNow,
+          target: readdirSync(real),
+        }).toEqual(
+          {
+            installed: { status: 0, stderr: "", ran: install + run, modules: "folder", target: [] },
+            "install failed": {
+              status: 7,
+              stderr:
+                "typecheck: node_modules was a link and is removed, but the offline install failed; run pnpm install --frozen-lockfile\n",
+              ran: install,
+              modules: "missing",
+              target: [],
+            },
+            refused: {
+              status: 1,
+              stderr:
+                "typecheck: node_modules is no folder; remove it and run pnpm install --offline --frozen-lockfile\n",
+              ran: "",
+              modules: "other",
+              target: [],
+            },
+            ran: { status: 0, stderr: "", ran: run, modules: shape === "folder" ? "folder" : "missing", target: [] },
+          }[outcome],
         );
       } finally {
         rmSync(dir, { recursive: true, force: true });

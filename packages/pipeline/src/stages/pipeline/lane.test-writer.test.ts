@@ -21,6 +21,7 @@ import {
   WRITES_REDONE,
   REDO,
   SEE,
+  answeredWith,
 } from "./lane-harness.ts";
 
 // A test writer's restart and redo when a stopped lane is typed again, and a writer whose run on the
@@ -271,7 +272,8 @@ describe("a stopped lane, typed again", () => {
     // The other way through `writtenAgain`'s `passed`: a redo that tests one Property and says no
     // test can check the other ends `cannot_test`, and every test it wrote did as the plan says.
     // The person lets the rest through, and the redo goes on the head as a `done` one does.
-    it("exam_touched, `test_wrong`, and the redo ends ask:owner:cannot_test: after the owner's `go_on`, the redo is on the build's head and nothing is touched", async () => {
+    // scenario: the real test writer process reopens a temporary checkout and refuses a redo there.
+    it("scenario: exam_touched, `test_wrong`, and the redo ends ask:owner:cannot_test: after the owner's `go_on`, the redo is on the build's head and nothing is touched", async () => {
       const SECOND = {
         ...property("new"),
         when: "a name is in lower case already",
@@ -329,10 +331,7 @@ describe("a stopped lane, typed again", () => {
       expect(asked, said).toBeGreaterThan(-1);
       const redo = ran.facts.slice(asked).find((f) => f.type === "ended" && f.stage === "test_writer");
       expect(redo?.outcome, said).toEqual({ kind: "ask", who: "owner", for: "cannot_test" });
-      expect(
-        ran.facts.filter((f) => f.type === "answered" && f.pick === "go_on"),
-        said,
-      ).toHaveLength(1);
+      expect(answeredWith(ran, "go_on"), said).toHaveLength(1);
       const { head, touched } = Schema.decodeUnknownSync(
         Schema.Struct({ head: Schema.String, touched: Schema.Array(Schema.String) }),
       )(redo?.carry);

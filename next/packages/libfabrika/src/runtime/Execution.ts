@@ -1,6 +1,6 @@
 import { type AnyCmdDef, type Tagged } from "@demlik/tea";
 import { Cause, Context, Effect, Option, Result, Schema } from "effect";
-import { Deliveries } from "./internal/recovery.ts";
+import { Deliveries, Policy } from "./internal/recovery.ts";
 import { type Input, ProgramDown, stepper, Step, type Stepper } from "./Program.ts";
 import { Saved } from "./State.ts";
 
@@ -31,11 +31,20 @@ const Failure = {
 
 export const ExecutionFailure = Schema.TaggedStruct("ProgramDown", Failure);
 
+/** A program's own throw rides in deletable content; a cause the runtime kept for diagnosis,
+ *  which may hold the input that failed, never leaves memory. */
+const shown = (error: ProgramDown): unknown =>
+  !Object.hasOwn(error, "cause")
+    ? error
+    : error.error === "ProgramDown"
+      ? new ProgramDown({ reason: error.reason, error: error.error })
+      : error.cause;
+
 export const executionFailure = (error: ProgramDown) =>
   ExecutionFailure.make({
     reason: error.reason,
     error: error.errorClass,
-    content: Cause.pretty(Cause.fail(Object.hasOwn(error, "cause") ? error.cause : error)).slice(0, MOST_CONTENT),
+    content: Cause.pretty(Cause.fail(shown(error))).slice(0, MOST_CONTENT),
   });
 
 const programFailure = (failure: typeof ExecutionFailure.Type) => {
@@ -55,6 +64,7 @@ export const Declaration = Schema.Struct({
   name: Schema.String,
   v: Schema.Int,
   maxDeliveries: Schema.optionalKey(Deliveries),
+  policy: Schema.optionalKey(Policy),
   writes: Schema.Record(Schema.String, Schema.Struct({ personOnly: Schema.Boolean })),
   /** Each input port: whether it takes writes, and whether only a person may send it. */
   inputs: Schema.Record(Schema.String, Schema.Struct({ write: Schema.Boolean, personOnly: Schema.Boolean })),
@@ -148,7 +158,9 @@ const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Sche
 };
 
 export const nodeExecution = (declared: unknown, build = "node"): Execution => {
-  const pure = Effect.fromResult(stepper(declared)).pipe(Effect.mapError(() => new ProgramDown({ reason: "load" })));
+  const pure = Effect.fromResult(stepper(declared)).pipe(
+    Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
+  );
   const run = <A>(reason: ProgramDown["reason"], f: (pure: Stepper) => A) =>
     pure.pipe(Effect.flatMap((loaded) => attempt(reason, () => f(loaded))));
   return {
@@ -176,7 +188,7 @@ class ExecutionClient extends Context.Service<
   {
     readonly [K in keyof Execution]: (...args: Parameters<Execution[K]>) => Effect.Effect<unknown, ProgramDown>;
   }
->()("fabrika/ExecutionClient") {
+>()("@kampus/libfabrika/runtime/Execution.ExecutionClient") {
   static make(rpc: ExecutionCalls): ExecutionClient["Service"] {
     return {
       init: (saved) => {

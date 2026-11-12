@@ -1,8 +1,14 @@
-import { Dialog } from "@manti-ui/react";
+import { runIn } from "@demlik/tea/effect";
+import { useMachine } from "@demlik/tea/react";
+import { ASK_COMMANDS } from "@kampus/pipeline/tickets/ask";
+import { Button, Dialog, Kbd } from "@manti-ui/react";
+import { AskActions, type AskKeys, AskStatus, AskView } from "@tea-fabrika/tracker/ask-window";
+import { Layer, ManagedRuntime } from "effect";
 import {
   type ReactNode,
   type RefObject,
   useCallback,
+  useContext,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
@@ -17,17 +23,21 @@ import type { Editor, EditorMsg } from "../keys/machine.ts";
 import type { Snapshot } from "../keys/program.ts";
 import { KeysWindow } from "../keys/window.tsx";
 import type { FromPage, HostNow, LinkNow, SummonedOn, ToApp } from "../messages.ts";
+import type { Project, ProjectRow } from "../projects.ts";
 import {
   agentsWord,
+  asksMenuMachine,
   asksSections,
   asksWord,
   bottomLineShows,
+  asksHead,
   type Command,
   clockWord,
   commandsOf,
   fileWord,
   type Frame,
   type FrameMsg,
+  frameUpdate,
   hereWord,
   holdsWord,
   hostWord,
@@ -44,6 +54,7 @@ import {
   opensOf,
   type Part,
   prefixLine,
+  projectRowsFor,
   questionWord,
   restartedWord,
   type Shapes,
@@ -53,7 +64,8 @@ import {
   workspaceName,
 } from "./frame.ts";
 import { type Cap, type Hint, type Row, sentence, type Words } from "./pop.ts";
-import { type Empty, IconOf, Lines, Menu, Palette, Panel, useTip, WordsOf } from "./pop.tsx";
+import { type Empty, Foot, IconOf, Lines, Menu, Palette, Panel, useTip, WordsOf } from "./pop.tsx";
+import { PROJECTS_BOX, Projects } from "./projects.tsx";
 
 // The window's frame, drawn: the top bar, the bottom line, and what opens over the desk (the
 // asks list, the jobs list, the palette, an item's few lines). Its words are frame.ts's; this file only lays
@@ -93,6 +105,11 @@ export interface FrameProps {
   /** One of a run's own inputs, as its window would send it: `{type: "query", value: {ticket: 2}}`. */
   readonly toRun: (run: string, msg: unknown) => void;
   readonly step: (m: FrameMsg) => void;
+  /** The project this window shows, and its name as the title says it (ticket 276). */
+  readonly project?: Project | undefined;
+  readonly name?: string | undefined;
+  /** The projects box's rows: every other recent project, and Open Folder… last. */
+  readonly projectRows?: readonly ProjectRow[];
 }
 
 /** ` · `, between two words of the frame. */
@@ -177,6 +194,89 @@ function Item(props: {
   );
 }
 
+/**
+ * A name as the bar draws it: the folder's name, which may be cut, and the parent folders that tell
+ * two of the same name apart (project.ts, `titles`), which never are.
+ *
+ *   twinOf("repo · left")   {name: "repo", twin: "left"}
+ */
+const twinOf = (full: string): { readonly name: string; readonly twin: string | null } => {
+  const at = full.lastIndexOf(" · ");
+  return at < 0 ? { name: full, twin: null } : { name: full.slice(0, at), twin: full.slice(at + 3) };
+};
+
+/**
+ * The project this window shows, first in the top bar: a button by the ARIA APG's dialog button,
+ * whose full name says what it is and does, with a chevron since it opens the projects box. Long
+ * names are cut by the bar's width; the title keeps the whole one. It is never a drag region.
+ */
+function ProjectButton(props: FrameProps & { readonly name: string }): ReactNode {
+  const open = props.frame.over.kind === "palette" && props.frame.over.source._tag === "projects";
+  const shown = twinOf(props.name);
+  return (
+    <button
+      type="button"
+      className="fb project"
+      data-info={INFO.project}
+      data-item="project"
+      aria-label={`Project ${props.name}, switch project`}
+      aria-haspopup="dialog"
+      aria-expanded={open}
+      aria-controls={PROJECTS_BOX}
+      title={props.name}
+      onClick={() =>
+        props.step(
+          open
+            ? { type: "close" }
+            : { type: "projects", rows: props.projectRows ?? [], focus: "button:project", press: "button" },
+        )
+      }
+    >
+      <span className="project-name">{shown.name}</span>
+      {shown.twin !== null && <span className="project-twin">{` · ${shown.twin}`}</span>}
+      <span className="chevron" aria-hidden="true">
+        ▾
+      </span>
+    </button>
+  );
+}
+
+/** The projects box over the desk: picking a row closes it, then the app opens that project. */
+function ProjectsBox(props: FrameProps): ReactNode {
+  const { frame, step } = props;
+  const close = useCallback(() => step({ type: "close" }), [step]);
+
+  if (frame.over.kind !== "palette") {
+    return null;
+  }
+
+  const { rows, query, selected } = frame.over;
+  return (
+    <Projects
+      rows={projectRowsFor(rows, query)}
+      query={query}
+      selected={selected}
+      onQuery={(q) => step({ type: "query", query: q })}
+      onMove={(by) => step({ type: "move", by, of: rows.length })}
+      onOpen={(id) => {
+        // The app is told what the frame's own step opened, with the press that showed the box.
+        const enter = { type: "project_enter", id } as const;
+        const opening = frameUpdate(frame, enter).opening;
+        step(enter);
+
+        if (opening !== null && opening !== frame.opening) {
+          props.toApp(
+            opening.id === "folder"
+              ? { type: "folder", source: opening.source }
+              : { type: "open", key: opening.id, source: opening.source },
+          );
+        }
+      }}
+      onClose={close}
+    />
+  );
+}
+
 /** The host's own words are its own: while the app is not attached, they may be old, and are not shown. */
 const onHost = (link: LinkNow): boolean => link.kind === "up" || link.kind === "build";
 
@@ -212,6 +312,7 @@ export function TopBar(props: FrameProps): ReactNode {
   return (
     <header className="topbar" ref={bar}>
       <div className="lights-room" aria-hidden="true" />
+      {props.project !== undefined && props.name !== undefined && <ProjectButton {...props} name={props.name} />}
       {desk !== null && (
         <nav className="workspaces" aria-label="workspaces">
           {desk.workspaces.map((w, i) => (
@@ -425,7 +526,7 @@ export function Over(props: FrameProps): ReactNode {
     case "item":
       return <ItemLines {...props} what={over.what} />;
     case "palette":
-      return <CommandPalette {...props} />;
+      return over.source._tag === "projects" ? <ProjectsBox {...props} /> : <CommandPalette {...props} />;
   }
 }
 
@@ -434,21 +535,38 @@ export function Band(): ReactNode {
   return <div className="band" data-info={INFO.drag} />;
 }
 
-/** The asks list's footer: the keys no row shows. */
-const ASKS_FOOT: readonly Hint[] = [
+/** The asks list's footer: the keys no row shows, with Later's from the person's key map. None: no hint. */
+const asksFoot = (later: readonly string[]): readonly Hint[] => [
   { caps: ["↑", "↓"], name: "Move" },
   { caps: ["↵"], name: "Open" },
-  { caps: ["H"], name: "Later" },
+  ...(later.length === 0 ? [] : [{ caps: later.map((k) => k.toUpperCase()), name: "Later" }]),
   { caps: ["Esc"], name: "Close" },
 ];
 
-/**
- * The asks list, a menu: one row per ask, the ones set aside under `Later`. Enter opens the
- * ticket: its tile, else the tracker turned to it (frame.ts, `opensOf`). H sets an ask aside, or
- * brings it back. You answer in the ticket's own tile, never here.
- */
+/** The asks menu's selection runs on the Effect engine, with nothing to provide. */
+const menuRun = runIn(ManagedRuntime.make(Layer.empty));
+
+/** Today's menu keeps its opening and Later behavior, with the shared answer controls. */
 function AsksList(props: FrameProps & { readonly asks: AsksNow }): ReactNode {
   const { asks, desk, step, toHost, toRun, tickets } = props;
+  const [menu, select] = useMachine(asksMenuMachine, { run: menuRun, ctx: undefined });
+  const actions = useContext(AskActions);
+  // Later is the menu's own action, on the key the person's map gives it; unbound, no key.
+  const laterKeys = actions?.keys.later ?? [ASK_COMMANDS.later.keys];
+  const grid = useRef<HTMLDivElement>(null);
+  /** The selected ask's view: the grid keeps the focus and passes it the answer keys. */
+  const view = useRef<AskKeys>(null);
+  useEffect(() => {
+    grid.current?.focus();
+  }, []);
+  const rows = [...asks.asks, ...asks.later];
+  const waiting = asks.asks.filter((ask) => ask.kind === "ask");
+  const labels = new Map(
+    asksSections(asks, desk, tickets, Date.now())
+      .flatMap((s) => s.rows)
+      .map((r) => [r.id, r]),
+  );
+  const active = rows.find((a) => a.key === menu.selected) ?? rows[0];
   // Opened, every ask in it is seen: the dot in the top bar goes. By the asks' keys, not their
   // count: one ask leaving as another arrives keeps the count, and the new one is seen too.
   const shown = asks.asks.map((a) => a.key).join("\n");
@@ -457,11 +575,17 @@ function AsksList(props: FrameProps & { readonly asks: AsksNow }): ReactNode {
     sayAsksSeen();
   }, [shown]);
   const close = useCallback(() => step({ type: "close" }), [step]);
-  const open = (row: Row) => {
+  const open = (row: { id: string }) => {
     const ask = [...asks.asks, ...asks.later].find((a) => a.key === row.id);
 
     if (ask === undefined) {
       return;
+    }
+
+    // A stop opens its lane, as its button says: the host finds or opens the lane's tile.
+    if (ask.kind === "stuck" && actions !== null) {
+      actions.openLane(ask.ticket);
+      return close();
     }
 
     const to = opensOf(desk, ask.ticket, tickets);
@@ -478,21 +602,166 @@ function AsksList(props: FrameProps & { readonly asks: AsksNow }): ReactNode {
         return step({ type: "say", note: nowhereNote(ask.ticket) });
     }
   };
-  const aside = (row: Row) =>
+  const aside = (row: { id: string }) =>
     toHost(asks.later.some((a) => a.key === row.id) ? { type: "back", key: row.id } : { type: "later", key: row.id });
+  /**
+   * A row's own two actions. On an ask they end the ask's toolbar (`toolbar`), so all its actions
+   * share one row and the toolbar keeps its one tab stop; a stuck row draws them alone.
+   */
+  const rowActs = (row: (typeof rows)[number], toolbar: boolean) => (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        tabIndex={toolbar ? -1 : undefined}
+        aria-keyshortcuts="Enter"
+        onClick={() => open({ id: row.key })}
+      >
+        {row.kind === "stuck" ? "Open lane" : "Open ticket"}
+        <Kbd size="sm">↵</Kbd>
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        tabIndex={toolbar ? -1 : undefined}
+        aria-keyshortcuts={laterKeys.length === 0 ? undefined : laterKeys.join(" ")}
+        onClick={() => aside({ id: row.key })}
+      >
+        {asks.later.some((a) => a.key === row.key) ? "Bring back" : "Later"}
+        {laterKeys.length > 0 && <Kbd size="sm">{laterKeys.join(" / ")}</Kbd>}
+      </Button>
+    </>
+  );
   return (
-    <Menu
-      id={POP.asks}
-      label="Asks"
-      from="top"
-      count={asks.asks.length}
-      sections={asksSections(asks, desk, tickets, Date.now())}
-      foot={ASKS_FOOT}
-      empty={{ title: "Nothing waits on you", sub: "A new ask shows here and in the top bar." }}
-      onAct={open}
-      onSecond={aside}
-      onClose={close}
-    />
+    <Panel id={POP.asks} label="Asks" onClose={close}>
+      <AskStatus
+        asks={waiting.map((ask) => ({ ticket: ask.ticket, ask: ask.sealed?.ask ?? ask.key }))}
+        left={waiting.length}
+      >
+        <p className="pop-head">{asksHead(waiting.length, asks.asks.filter((a) => a.kind === "stuck").length)}</p>
+        {asks.reach === "failed" && <p role="alert">{asks.why ?? "The ledger is disconnected"}</p>}
+        {rows.length === 0 ? (
+          <p className="pop-empty">Nothing waits on you.</p>
+        ) : (
+          <div
+            role="grid"
+            aria-label="Waiting asks"
+            tabIndex={0}
+            ref={grid}
+            aria-activedescendant={active === undefined ? undefined : `ask-row-${rows.indexOf(active)}`}
+            onKeyDown={(e) => {
+              if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) {
+                return;
+              }
+
+              // Later, from the row or its view: the key the person's map gives it.
+              const command = actions?.command({ key: e.key, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey }, false);
+              const later =
+                actions === null
+                  ? e.key === ASK_COMMANDS.later.keys && !e.ctrlKey && !e.altKey && !e.metaKey
+                  : command?.value._tag === "later" && !actions.blocked();
+
+              if (later && active !== undefined) {
+                e.preventDefault();
+                aside({ id: active.key });
+                return;
+              }
+
+              // A key inside the selected ask's view is the view's own.
+              if (e.target !== e.currentTarget && (e.target as Element).closest(".ask-view")) {
+                return;
+              }
+
+              // The selected ask's keys come first, as if pressed on its view: a key the
+              // person mapped to an answer wins over the built-in j and k (review 5).
+              if (e.target === e.currentTarget && view.current?.press(e) === true) {
+                return;
+              }
+
+              const by = e.key === "ArrowDown" || e.key === "j" ? 1 : e.key === "ArrowUp" || e.key === "k" ? -1 : 0;
+
+              if (by !== 0) {
+                e.preventDefault();
+                const at = active === undefined ? -1 : rows.indexOf(active);
+                const next = rows[(at + by + rows.length) % rows.length];
+
+                if (next !== undefined) {
+                  select({ type: "select", key: next.key });
+                }
+
+                return;
+              }
+
+              if (e.key === "Enter" && active !== undefined) {
+                e.preventDefault();
+                open({ id: active.key });
+                return;
+              }
+            }}
+            onFocus={(e) => {
+              if (e.target === e.currentTarget) {
+                view.current?.focus(true);
+              }
+            }}
+            onBlur={(e) => {
+              if (e.target === e.currentTarget) {
+                view.current?.focus(false);
+              }
+            }}
+          >
+            {rows.map((row, i) => (
+              <div
+                role="row"
+                aria-selected={row.key === active?.key}
+                id={`ask-row-${i}`}
+                key={row.key}
+                className="asks-row"
+              >
+                <div role="gridcell">
+                  {asks.later[0]?.key === row.key && <p>Later</p>}
+                  <Button
+                    className="asks-title"
+                    variant="tertiary"
+                    tabIndex={-1}
+                    // A pointer target only: the grid keeps the focus through
+                    // aria-activedescendant, so the answer keys still reach the ask.
+                    onClick={() => {
+                      select({ type: "select", key: row.key });
+                      grid.current?.focus();
+                    }}
+                  >
+                    <WordsOf words={labels.get(row.key)?.title ?? row.what} />
+                  </Button>
+                  <p>
+                    <WordsOf words={labels.get(row.key)?.sub ?? ""} />
+                  </p>
+                  {row.key !== active?.key ? null : row.kind === "ask" && row.sealed !== undefined ? (
+                    <AskView
+                      key={row.key}
+                      ticket={row.ticket}
+                      ask={row.sealed}
+                      place="menu"
+                      keys={view}
+                      acts={rowActs(row, true)}
+                    />
+                  ) : (
+                    <>
+                      {row.kind === "stuck" && (
+                        <p>
+                          {row.why ?? "State not recorded"} · resume at {row.resume ?? "the saved step"}
+                        </p>
+                      )}
+                      <div className="asks-acts">{rowActs(row, false)}</div>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {rows.length > 0 && <Foot hints={asksFoot(laterKeys)} />}
+      </AskStatus>
+    </Panel>
   );
 }
 
@@ -1022,7 +1291,7 @@ export function BottomLine(props: FrameProps): ReactNode {
           opens={{
             popup: "dialog",
             id: POP.palette,
-            open: frame.over.kind === "palette" && frame.over.title === "keys",
+            open: frame.over.kind === "palette" && frame.over.source._tag === "keys",
           }}
           onClick={() => props.step({ type: "show", what: "keys" })}
         >
@@ -1137,9 +1406,9 @@ function CommandPalette(props: FrameProps): ReactNode {
     return null;
   }
 
-  const { title, query, at } = frame.over;
+  const { source, query, at } = frame.over;
 
-  if (title === "keys" && props.keysEditor != null && props.editKeys !== undefined) {
+  if (source._tag === "keys" && props.keysEditor != null && props.editKeys !== undefined) {
     return (
       <Dialog
         id={POP.palette}
@@ -1167,7 +1436,7 @@ function CommandPalette(props: FrameProps): ReactNode {
     );
   }
 
-  const keys = title === "keys";
+  const keys = source._tag === "keys";
   const shown = matching(commandsOf(props.keys, desk?.workspaces.length ?? 0), query);
   const run = (i: number) => {
     const c = shown[i];

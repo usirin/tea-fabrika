@@ -1,0 +1,16 @@
+{
+  "id": "2026-11-09-projectwin-main-merge-broke-typecheck",
+  "date": "2026-11-09",
+  "lanes": [
+    "projectwin"
+  ],
+  "stage": "lead",
+  "kind": "friction",
+  "what": "Merging main into the lane conflicted in start-host.ts and broke the typecheck: main's unused-export sweep dropped the export of HostStart, MAX_SOCKET_PATH and Caps, which the lane's laws and projects.tsx import. After the merge, pnpm lint fails on four lane exports the new dead-code check finds: Palette and PaletteSource in window/frame.ts, platform in project.test-support.ts, and settingsFile in host/settings.ts called only from tests.",
+  "cause": "The lane sat on a main from early 2026-11-09 while main gained the dead-export check.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "The lead's merge keeps the three exports. The four findings go to build (frame.ts, settings.ts) and tests (project.test-support.ts).",
+  "test": "pnpm typecheck and pnpm lint on the merged head.",
+  "links": []
+}

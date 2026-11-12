@@ -40,4 +40,12 @@ Once the table passes about a dozen rows, split it into sections by area.
 | [effect-services-and-layers.md](./effect-services-and-layers.md) | next/ | Adding a service or its Layer, deciding which file a Layer or adapter goes in, or giving an object class its runtime |
 | [effect-state-and-time.md](./effect-state-and-time.md) | next/ host code | Keeping state that changes between calls, adding a limit, reading the time, or writing a retry or a loop that repeats |
 | [effect-swallowed-failures-leave-a-trace.md](./effect-swallowed-failures-leave-a-trace.md) | next/ | Reaching for `Effect.ignore`, a catch-all, or a finalizer |
+| [durable-objects-sleep.md](./durable-objects-sleep.md) | next/ Durable Objects | Adding work, a loop, a timer, a socket, telemetry or saved state to code that runs in a Durable Object |
 | [doc-comments.md](./doc-comments.md) | next/packages | Adding or changing a public export of a library, or its module file |
+| [effect-reach-for-what-ships.md](./effect-reach-for-what-ships.md) | next/ | About to write a helper, a guard, a parser, a retry, a loop or a wrapper |
+| [effect-long-body-is-a-shelf.md](./effect-long-body-is-a-shelf.md) | next/ | Writing or growing a long Effect body or a layer's `Effect.gen` |
+| [effect-platform-wrapped-once.md](./effect-platform-wrapped-once.md) | next/ platform edges | Calling a Promise, callback or throwing API from a platform or a library |
+| [effect-crypto-through-services.md](./effect-crypto-through-services.md) | next/ | Hashing, signing, an HMAC, random bytes or a random id |
+| [effect-pure-domain-returns-result.md](./effect-pure-domain-returns-result.md) | next/ domain code | Writing a rule, a fold or a tea `update` that can refuse |
+| [effect-differences-say-why.md](./effect-differences-say-why.md) | next/ | Doing something differently from Effect's own module or guide |
+| [settings.md](./settings.md) | next/ settings | Adding a setting, or reading or writing a settings file, a settings snapshot or the settings reference |

@@ -32,6 +32,8 @@ import { Mailbox, type From } from "../processes/Mailbox.ts";
 import { Owner, ProcessError, Recipient, recoverActivity, Start } from "../processes/Process.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 import { ProcessManager, remoteProcessManager, type ProcessCalls } from "../processes/ProcessManager.ts";
+import { ProgramMail, type ProgramMailError, type Delivery, type Grants } from "../processes/ProgramMail.ts";
+import * as ProgramMailLedger from "../processes/ProgramMailLedger.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import { Alarm, CheckedWriter, Recording, WatcherManager, type Incoming } from "../runtime/Entry.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
@@ -42,8 +44,11 @@ import { Archive, type BucketCalls } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { SinkError } from "../telemetry/Trace.ts";
+import { Answer } from "../transport/Wire.ts";
 import {
   CommitReply,
+  MailReplies,
+  type MailReply,
   ProcessReplies,
   SigningReply,
   type ConnectionId,
@@ -56,6 +61,7 @@ import {
 } from "./bindings.ts";
 import { cloudflareSql } from "./CloudflareSql.ts";
 import { workerLoader, type ProgramSource } from "./index.ts";
+import { mailLayer } from "./mail.ts";
 import type { RecordShape } from "./objects.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient } from "./platform.ts";
 
@@ -106,6 +112,7 @@ export interface ProjectDoorOptions {
 }
 
 export interface ProjectOptions {
+  readonly mail?: { readonly grants: Grants };
   readonly config: BrainOptions;
   readonly programs: Readonly<Record<string, ProgramSource>>;
   readonly bootstrap: { readonly name: string; readonly id: string; readonly program: string };
@@ -172,7 +179,7 @@ const processValue = Effect.fnUntraced(function* <A>(reply: ProcessReply<A>) {
   }
 
   const refused = yield* Schema.decodeUnknownEffect(ProcessReplies.cases.ProcessError)(reply).pipe(
-    Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+    Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
   );
   return yield* new ProcessError({ reason: refused.reason });
 });
@@ -215,7 +222,7 @@ export const savedAlarm = Effect.fn("process.savedAlarm")(function* (ctx: Durabl
 export const processDescriptor = Effect.fn("process.descriptor")(function* (ctx: DurableObjectState) {
   const descriptor = yield* rpc(StorageClient.make(ctx.storage).get("descriptor"));
   return yield* Schema.decodeUnknownEffect(SavedDescriptor)(descriptor).pipe(
-    Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+    Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
   );
 });
 
@@ -230,7 +237,7 @@ export const checkedPut = Effect.fnUntraced(function* (
   sha256: string,
 ) {
   const copy = new Uint8Array(body);
-  const fail = () => new LedgerError({ reason: "crypto" });
+  const fail = (cause: unknown) => new LedgerError({ reason: "crypto", cause });
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", copy), catch: fail });
   const digest = yield* work;
@@ -264,12 +271,17 @@ const flushed = SpanSink.use((sink) => sink.flush);
 export const complete = Effect.fn(function* <A, E, R>(work: Effect.Effect<A, E, R>) {
   return yield* work.pipe(
     Effect.exit,
-    Effect.flatMap((exit) =>
-      flushed.pipe(
+    Effect.flatMap((exit) => {
+      // Counted refusals have nothing to send. Retrying an old archive here would add a row per refusal.
+      if (Exit.isSuccess(exit) && Schema.is(Answer.cases.refused)(exit.value) && exit.value.reason === "reserved") {
+        return exit;
+      }
+
+      return flushed.pipe(
         Effect.flatMap(() => exit),
         Effect.catch((error) => (Exit.isFailure(exit) ? exit : Effect.fail(error))),
-      ),
-    ),
+      );
+    }),
   );
 });
 
@@ -281,11 +293,11 @@ const fingerprint = Effect.fnUntraced(function* (value: string) {
   const blob = ssh ? Base64.decode(value.trim().split(/\s+/)[1] ?? "") : Base64Url.decode(value);
 
   if (Result.isFailure(blob)) {
-    return yield* new LedgerError({ reason: "bad_row" });
+    return yield* new LedgerError({ reason: "bad_row", cause: blob.failure });
   }
 
   const bytes = blob.success.slice(-32);
-  const fail = () => new LedgerError({ reason: "crypto" });
+  const fail = (cause: unknown) => new LedgerError({ reason: "crypto", cause });
   // SSH Ed25519 blobs end with the 32 public bytes. P10 uses this same key fingerprint.
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail });
@@ -299,7 +311,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     sql = cloudflareSql(ctx.storage);
   const turn = yield* Semaphore.make(1);
   const notifications = Context.Reference<Array<Effect.Effect<void, LedgerError>> | null>(
-    "fabrika/WriteNotifications",
+    "@kampus/libfabrika/cloudflare/runtime.WriteNotifications",
     { defaultValue: () => null },
   );
   const write = Effect.fnUntraced(function* <A, E, R>(work: Effect.Effect<A, E, R>) {
@@ -359,6 +371,13 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     ),
   ).pipe(Layer.provideMerge(base));
   const services = yield* Layer.build(managers);
+  const mail = yield* ProgramMail.pipe(
+    Effect.provide(
+      ProgramMailLedger.layer({ grants: options.mail?.grants ?? {} }).pipe(
+        Layer.provide(Layer.succeedContext(services)),
+      ),
+    ),
+  );
   const ledger = Context.get(services, Ledger),
     referee = Context.get(services, Referee),
     members = Context.get(services, ClientManager),
@@ -382,7 +401,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     }
 
     return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(saved.value).pipe(
-      Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
     );
   });
   // The object's init may call back into this Project, so the build never waits on a delivery.
@@ -401,7 +420,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   const resolved = (pid: string) =>
     processes
       .resolve(pid)
-      .pipe(Effect.catchTag("ProcessError", () => Effect.fail(new LedgerError({ reason: "refused" }))));
+      .pipe(Effect.catchTag("ProcessError", (cause) => Effect.fail(new LedgerError({ reason: "refused", cause }))));
   /** The registered name whose object stores this process ID. */
   const processObject = (pid: string) => Effect.map(resolved(pid), (life) => life.name);
   type InputPolicy = { inputs: Array<string>; events: Array<string> };
@@ -444,7 +463,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
 
     const program = yield* loader
       .load(life.state.code.program, life.state.process)
-      .pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
+      .pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
     return remember(life.name, program.declaration);
   });
   const notify = Effect.fnUntraced(function* (client: string, news: unknown) {
@@ -476,7 +495,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
           Effect.flatMap((owner) => rpc(ProcessClient.make(processStub(env, name, owner)).open(client))),
           Effect.flatMap((value) =>
             Schema.decodeUnknownEffect(Schema.Json)(value).pipe(
-              Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+              Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
             ),
           ),
         ),
@@ -554,7 +573,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   // Project RPC input is untrusted: the reason is decoded before the turn or the retirement.
   const exit = Effect.fnUntraced(function* (pid: string, input: ExitReason, origin: From) {
     const reason = yield* Effect.fromResult(decodeExitReason(input)).pipe(
-      Effect.mapError(() => new ProcessError({ reason: "bad_text" })),
+      Effect.mapError((cause) => new ProcessError({ reason: "bad_text", cause })),
     );
     yield* Effect.gen(function* () {
       yield* processes.exit(pid, reason, origin);
@@ -571,7 +590,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     original !== undefined
       ? {
           process: (yield* Schema.decodeUnknownEffect(Bootstrap)(original.body).pipe(
-            Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+            Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
           )).process,
           rev: original.rev,
         }
@@ -614,7 +633,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     }
 
     const body = yield* Schema.decodeUnknownEffect(Event)(event).pipe(
-      Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
     );
     const [saved] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", pid);
 
@@ -624,7 +643,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
 
     const descriptor = yield* Schema.decodeUnknownEffect(
       Schema.fromJsonString(Schema.Struct({ owner: Writer, build: Schema.String })),
-    )(saved.value).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
+    )(saved.value).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
     const origin = yield* fromHere({
       by: descriptor.owner.key,
       for: descriptor.owner.for,
@@ -639,6 +658,17 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   });
   yield* flushed.pipe(Effect.provideContext(services));
   return {
+    mail: (delivery: Delivery, trace?: { traceId: string; spanId: string }) => {
+      const work: Effect.Effect<MailReply, ProgramMailError> = write(mail.deliver(delivery)).pipe(
+        Effect.map((receipt): MailReply => MailReplies.cases.ok.make({ receipt })),
+        Effect.catchTag("ProgramMailError", (error) =>
+          error.reason === "storage"
+            ? Effect.fail(error)
+            : Effect.succeed(MailReplies.cases.refused.make({ reason: error.reason })),
+        ),
+      );
+      return wrapped(trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace))));
+    },
     target: door.target,
     register: (client: string, gateway: string, session: string) =>
       Effect.sync(() => {
@@ -717,7 +747,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
               },
               Schema.TaggedStruct("send", { m: Schema.Json }).make({
                 m: yield* Schema.decodeUnknownEffect(Schema.Json)(input.envelope.input).pipe(
-                  Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+                  Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
                 ),
               }),
             ),
@@ -750,7 +780,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
 });
 
 export class ProjectService extends Context.Service<ProjectService, Effect.Success<ReturnType<typeof projectLogic>>>()(
-  "fabrika/Project",
+  "@kampus/libfabrika/cloudflare/runtime.ProjectService",
 ) {}
 
 export const projectLayer = (ctx: DurableObjectState, env: Env, options: ProjectOptions) =>
@@ -774,7 +804,7 @@ const processLogic = Effect.fnUntraced(function* (
   // The object is its registered name's; its first process's descriptor names its storage.
   const [project] = yield* Schema.decodeUnknownEffect(
     Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
-  )(ctx.id.name).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
+  )(ctx.id.name).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
   const stub = projectStub(env, project),
     p = ProjectClient.make(stub),
     storage = StorageClient.make(ctx.storage),
@@ -831,11 +861,12 @@ const processLogic = Effect.fnUntraced(function* (
     yield* rpc(p.publish(client, update));
   });
   const dependencies = Layer.mergeAll(
+    mailLayer(env, project),
     Layer.succeed(CheckedWriter, {
       sign: (id, parent, kind) =>
         Effect.suspend(() => rpc(p.sign(active, id, parent, kind))).pipe(
           Effect.flatMap(Schema.decodeUnknownEffect(SigningReply)),
-          Effect.mapError(() => new LedgerError({ reason: "unreachable" })),
+          Effect.mapError((cause) => new LedgerError({ reason: "unreachable", cause })),
           Effect.flatMap(checkedValue),
         ),
       append: (input) => Effect.suspend(() => rpc(p.inbox(active, input))),
@@ -844,7 +875,7 @@ const processLogic = Effect.fnUntraced(function* (
           rpc(p.commit(active, { id, parent: session.parent, kind: event._tag, stream, event })),
         ).pipe(
           Effect.flatMap(Schema.decodeUnknownEffect(CommitReply)),
-          Effect.mapError(() => new LedgerError({ reason: "unreachable" })),
+          Effect.mapError((cause) => new LedgerError({ reason: "unreachable", cause })),
           Effect.flatMap(checkedValue),
         ),
       own: Effect.fn("process.own")(function* (id: string, stream: string, event: unknown) {
@@ -860,7 +891,7 @@ const processLogic = Effect.fnUntraced(function* (
       set: (at) =>
         (at === null
           ? rpc(storage.delete("wake")).pipe(Effect.andThen(rpc(storage.deleteAlarm())))
-          : rpc(storage.put("wake", at)).pipe(Effect.andThen(rpc(storage.setAlarm(Math.max(at, 1)))))
+          : rpc(storage.put("wake", at)).pipe(Effect.andThen(rpc(storage.setAlarm(Math.max(1, at)))))
         ).pipe(Effect.orDie),
     }),
     // Recording captures its sink's services itself (main's P11); the runner no longer provides them.
@@ -876,7 +907,7 @@ const processLogic = Effect.fnUntraced(function* (
   ).pipe(Layer.provide(dependencies), Layer.provide(Layer.succeedContext(services)));
   const runner = yield* ProgramRunner.pipe(Effect.provide(runnerLayer));
   yield* sink.flush.pipe(Effect.provideContext(services));
-  const attributed = <A, E>(work: Effect.Effect<A, E>) =>
+  const attributed = <A, E, R>(work: Effect.Effect<A, E, R>) =>
     Effect.suspend(() => work.pipe(Effect.annotateSpans({ "fab.process": active }), Effect.provideContext(services)));
   return {
     msg: (input: unknown) => {
@@ -885,12 +916,16 @@ const processLogic = Effect.fnUntraced(function* (
       const sent = Schema.decodeUnknownOption(Delivered)(input);
       return Option.isSome(sent) ? work.pipe(Effect.withParentSpan(Tracer.externalSpan(sent.value.span))) : work;
     },
+    mailed: (trace?: { traceId: string; spanId: string }) => {
+      const work = attributed(complete(runner.mailed));
+      return trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace)));
+    },
     open: (client: string) => attributed(runner.open(client)),
     due: (at: number) => attributed(runner.due(at)),
     init: () => attributed(runner.init()),
     restart: (request: unknown) =>
       Schema.decodeUnknownEffect(RestartRequest)(request).pipe(
-        Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+        Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
         Effect.flatMap((checked) => attributed(runner.restart(checked))),
       ),
     // A platform alarm delivers the saved due time, so a repeated alarm is the same letter.
@@ -905,7 +940,7 @@ const processLogic = Effect.fnUntraced(function* (
 });
 
 export class ProcessService extends Context.Service<ProcessService, Effect.Success<ReturnType<typeof processLogic>>>()(
-  "fabrika/Process",
+  "@kampus/libfabrika/cloudflare/runtime.ProcessService",
 ) {}
 
 export const processRuntime = (ctx: DurableObjectState, env: Env, programs: Readonly<Record<string, ProgramSource>>) =>

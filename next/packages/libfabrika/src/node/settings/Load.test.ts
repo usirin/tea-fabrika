@@ -8,12 +8,18 @@
 //   `{ values, snapshot }`. A missing file is an empty one; any other read failure is a
 //   `SettingsError` with reason `read`, and broken TOML one with reason `syntax`.
 // - Its requirements are met by `NodeServices.layer`, `TomlParser.layer` and `Digest.layerWebCrypto`.
+// - T730, P38 slice 2: the result also holds `repo`, `{ minimum }`, when a repo place is given: the
+//   `fabrika-version` the repo's file states, or that declaration's default when it states none,
+//   read before any source overrides it. With no repo place there is no `repo` field.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Layer, Path, Ref } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
+import * as Declarations from "../../settings/Declarations.ts";
 import { SettingsError } from "../../settings/Files.ts";
+import * as Print from "../../settings/Print.ts";
+import * as Reference from "../../settings/Reference.ts";
 import * as TomlParser from "../../settings/TomlParser.ts";
 import * as Load from "./Load.ts";
 
@@ -187,6 +193,135 @@ describe("L11, no failed load reaches build, Alchemy startup or the settings-sta
             if (tag === "file") {
               expect(origin).toEqual({ _tag: "file", file: PERSON, line: 4 });
             }
+          }
+        },
+      ),
+      check,
+    );
+  });
+});
+
+it("T753 L8 one load reads each source once, checks the repo first and reports saved values", async () => {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.record({
+        value: port,
+        override: fc.boolean(),
+        all: fc.boolean(),
+        selected: fc.boolean(),
+        newer: fc.boolean(),
+        equal: fc.boolean(),
+        personPresent: fc.boolean(),
+      }),
+      async (v) => {
+        const touched: Array<string> = [];
+        const fileValue = v.equal ? Declarations.port.default : v.value;
+        const fs = FileSystem.layerNoop({
+          readFileString: (path) => {
+            touched.push(path);
+
+            if (path === REPO) {
+              return Effect.succeed(`fabrika-version = "${v.newer ? "1.0.0" : "0.0.0"}"\n`);
+            }
+
+            // A second read changes the value, proving the report uses the first snapshot.
+            return Effect.succeed(
+              v.personPresent
+                ? `[instance]\nport = ${touched.filter((p) => p === PERSON).length === 1 ? fileValue : (fileValue % 65535) + 1}\n`
+                : "",
+            );
+          },
+        });
+        const exit = await Effect.runPromise(
+          Load.load({
+            person: { path: PERSON, name: PERSON },
+            ...(v.selected ? { repo: { path: REPO, name: REPO } } : {}),
+            version: "0.0.0",
+            flags: v.override ? { "instance.port": String(fileValue) } : {},
+            env: {},
+          }).pipe(Effect.exit, Effect.provide(Layer.mergeAll(fs, TomlParser.layer, Digest.layerWebCrypto))),
+        );
+        expect(Exit.isSuccess(exit)).toBe(!(v.selected && v.newer));
+
+        if (v.selected && v.newer) {
+          expect(reason(exit)).toBe("version");
+          expect(touched).toEqual([REPO]);
+        } else {
+          expect(Exit.isSuccess(exit)).toBe(true);
+          expect(touched).toEqual(v.selected ? [REPO, PERSON] : [PERSON]);
+
+          if (Exit.isSuccess(exit)) {
+            const wanted = v.override || v.personPresent ? fileValue : Declarations.port.default;
+            expect(exit.value.values.port).toBe(wanted);
+            expect(exit.value.snapshot.values["instance.port"]).toBe(wanted);
+            const rows = Reference.rows(Declarations.all, exit.value.snapshot);
+            const row = rows.find((r) => r.path === Declarations.port.path)!;
+            expect(row.value).toBe(wanted);
+            expect(row.origin._tag).toBe(v.override ? "flag" : v.personPresent ? "file" : "default");
+            const report = Print.report(rows, { all: v.all });
+            expect(report.includes(`${row.path} =`)).toBe(v.all || row.origin._tag !== "default");
+            expect(touched).toEqual(v.selected ? [REPO, PERSON] : [PERSON]);
+          }
+        }
+      },
+    ),
+    check,
+  );
+});
+
+// T730 L6 and L7: the repo context a load returns, for the version warnings. A repo's minimum is
+// the version its own file states, or the declaration's default when the file states none; a flag
+// or an environment value for `fabrika-version` changes the resolved value, never that minimum.
+describe("T730, a load keeps the repo file's own minimum, and invents none without a repo", () => {
+  const part = fc.oneof(fc.integer({ min: 0, max: 12 }), fc.integer({ min: 90, max: 110 }));
+  const release = fc.tuple(part, part, part).map((t) => t.join("."));
+  const repoFile = fc.oneof(
+    fc.constant({ _tag: "none" as const }),
+    fc.constant({ _tag: "missing" as const }),
+    fc.constant({ _tag: "unstated" as const }),
+    release.map((minimum) => ({ _tag: "stated" as const, minimum })),
+  );
+
+  it("repo.minimum is the file's stated version or the default, whatever flag or env says; no repo gives none", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        repoFile,
+        fc.option(release, { nil: undefined }),
+        fc.option(release, { nil: undefined }),
+        async (repo, flag, env) => {
+          const d = Declarations.version;
+          const { exit } = await Effect.runPromise(
+            Effect.scoped(
+              Effect.gen(function* () {
+                const places = yield* lay(
+                  repo._tag === "stated"
+                    ? text(`fabrika-version = "${repo.minimum}"\n`)
+                    : repo._tag === "unstated"
+                      ? text("# no version\n")
+                      : { _tag: "missing" },
+                  text(""),
+                );
+                const exit = yield* Load.load({
+                  person: places.person,
+                  ...(repo._tag === "none" ? {} : { repo: places.repo }),
+                  flags: flag === undefined ? {} : { [d.path]: flag },
+                  env: env === undefined ? {} : { [d.env]: env },
+                  // Newer than every generated release, so no stated minimum refuses the load.
+                  version: "200.0.0",
+                }).pipe(Effect.exit);
+                return { exit };
+              }),
+            ).pipe(Effect.provide(services)),
+          );
+          expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+
+          if (Exit.isSuccess(exit)) {
+            const stated = repo._tag === "stated" ? repo.minimum : d.default;
+            expect(exit.value.repo).toEqual(repo._tag === "none" ? undefined : { minimum: stated });
+            // The resolved value still follows the sources' order.
+            expect(exit.value.snapshot.values[d.path]).toBe(
+              flag ?? env ?? (repo._tag === "stated" ? repo.minimum : d.default),
+            );
           }
         },
       ),

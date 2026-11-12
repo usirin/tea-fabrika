@@ -33,7 +33,7 @@ import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Hello } from "@kampus/libfabrika/transport/Wire";
-import { Deferred, Effect, Fiber, Layer, Logger, Option, Schema, Stream } from "effect";
+import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -41,9 +41,9 @@ const runs = (numRuns: number) => ({ seed: SEED, endOnFailure: true, numRuns });
 const SpanPage = Schema.Struct({ spans: Schema.Array(SpanRow), next: Schema.Int });
 
 const ADD_SAW = {
-  how: "device",
+  method: "device",
   check: "touch",
-  where: "test",
+  location: "test",
   has: ["verify"],
   typed: false,
   kept: null,
@@ -59,8 +59,8 @@ const PROCESS = processId();
 const SAW = {
   code: "1234",
   label: "Browser",
-  where: "test",
-  how: "compare",
+  location: "test",
+  method: "compare",
   check: "touch",
   has: ["verify", "seal"],
 } as const;
@@ -69,7 +69,7 @@ const SENT = "2026-11-08T04:00:00.000Z";
 /** A fresh step's crash, as the runner reports one: P34c slice 1's structured exit reason. */
 const CRASHED = { _tag: "crashed", phase: "step", error: "Error" } as const;
 const START = processId();
-const TOOK = { label: "Browser", where: "test", how: "panel", check: "touch" } as const;
+const TOOK = { label: "Browser", location: "test", method: "panel", check: "touch" } as const;
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const SPACE = "fabrika-client";
 const utf8 = (text: string) => new TextEncoder().encode(text);
@@ -389,6 +389,24 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
   const clients = ClientManagerLedger.layer(founder).pipe(Layer.provideMerge(ledger));
   // P37's records.test.ts uses 64 KiB, above SQLite's empty table/index overhead.
   const records = RecordManager.sql(part, options.recordCap ?? 64 * 1024);
+  const usedInputs: Array<string> = [];
+  const observedIds = Layer.effect(
+    Id.Generator,
+    Id.Generator.pipe(
+      Effect.map((real) => ({
+        next: <P extends string>(schema: Id.IdSchema<P>) =>
+          real.next(schema).pipe(
+            Effect.tap((id) =>
+              Effect.sync(() => {
+                if (schema === Id.Input) {
+                  usedInputs.push(id);
+                }
+              }),
+            ),
+          ),
+      })),
+    ),
+  ).pipe(Layer.provide(Id.Generator.layer));
   const env = Layer.mergeAll(
     clients,
     LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet)),
@@ -397,7 +415,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
     records,
     Archive.memory,
     ProcessIdGenerator.layer,
-    Id.Generator.layer,
+    observedIds,
   );
   const layer = Gateway.layer(settings).pipe(Layer.provideMerge(env));
   const reopen = (storage: ReturnType<typeof nodeSql>) => {
@@ -437,6 +455,8 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
     layer,
     provide: Effect.provide(layer),
     reopen,
+    usedInputs,
+    databases: () => new Map([["object", db], ...partFiles]),
     partCount: () => partFiles.size,
     bytes: () => readdirSync(dir).map((file) => readFileSync(join(dir, file))),
   };
@@ -473,6 +493,49 @@ const request = (letter: string, m: unknown = comment()) => ({
   sentAt: SENT,
   seen: 0,
 });
+
+const HOUR = 3_600_000;
+const REFUSED_HOUR = 1_790_002_800_000;
+
+const SpoofedWrite = Schema.Struct({
+  method: Schema.Union([Schema.Literal("process.send"), Schema.String]),
+  key: Schema.Literals(["id", "by", "for", "arrivedAt"]),
+  inner: Schema.Boolean,
+  value: Schema.Union([Schema.Json, Schema.Undefined]),
+  marker: Schema.String,
+});
+
+const GoodWrite = Schema.Struct({ letter: Schema.NonEmptyString, id: Schema.String, text: Schema.String });
+
+const WriteMix = Schema.Array(
+  Schema.Struct({
+    spoof: Schema.Boolean,
+    hour: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3 })),
+    write: SpoofedWrite,
+    text: Schema.String,
+  }),
+).check(Schema.isMinLength(1), Schema.isMaxLength(30));
+
+const spoofedParams = (write: typeof SpoofedWrite.Type, letter: string) => {
+  const marker = `t844-forged:${write.marker}`;
+  const m = {
+    ...comment(marker),
+    ...(write.inner && write.method === "process.send" ? { [write.key]: write.value } : {}),
+  };
+  return {
+    ...request(letter, m),
+    marker,
+    ...(!write.inner || write.method !== "process.send" ? { [write.key]: write.value } : {}),
+  };
+};
+
+const allObjectRows = (db: DatabaseSync): Record<string, Array<Record<string, unknown>>> =>
+  Object.fromEntries(
+    db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+      .all()
+      .map(({ name }) => [String(name), db.prepare(`SELECT * FROM "${String(name).replaceAll('"', '""')}"`).all()]),
+  );
 
 const online = Effect.fnUntraced(function* (
   d: typeof Gateway.Service,
@@ -567,7 +630,7 @@ const sheet = Effect.fnUntraced(function* (d: typeof Gateway.Service, w: World) 
     to: "project-a",
     adds: Adds.cases.recovery.make({ key: w.sheet.line, v: 1 }),
     drops: [],
-    saw: { ...ADD_SAW, how: "sheet", typed: true, kept: "print" },
+    saw: { ...ADD_SAW, method: "sheet", typed: true, kept: "print" },
     sentAt: SENT,
   });
   expect((yield* d.grant({ text, armored: yield* w.root.sign(text) }))._tag).toBe("applied");
@@ -602,7 +665,7 @@ const enrolled = Effect.fnUntraced(function* (
       },
     }),
     drops: [],
-    saw: { ...ADD_SAW, how: signer === w.sheet ? "recovery" : "device" },
+    saw: { ...ADD_SAW, method: signer === w.sheet ? "recovery" : "device" },
     sentAt: SENT,
   } satisfies typeof Add.Type;
   const text = addText(add),
@@ -649,7 +712,7 @@ describe("P10 review regressions", () => {
       fc.asyncProperty(
         fc.array(
           fc.record({
-            who: fc.nat(3),
+            keyIndex: fc.nat(3),
             tab: fc.nat(1),
             pass: fc.oneof(fc.constant(undefined), fc.constant(null), fc.string()),
           }),
@@ -665,14 +728,14 @@ describe("P10 review regressions", () => {
                 const keys = [w.otherWindow, w.agent, w.otherRoot, w.sheet] as const;
                 const clients = new Map<string, Effect.Success<ReturnType<typeof d.connect>>>();
 
-                for (const { who, tab, pass } of knocks) {
-                  const k = keys[who]!;
-                  const name = `${who}-${tab}`;
+                for (const { keyIndex, tab, pass } of knocks) {
+                  const k = keys[keyIndex]!;
+                  const name = `${keyIndex}-${tab}`;
                   const client = clients.get(name) ?? (yield* pendingHello(d, k, `tab-${name}`)).client;
                   clients.set(name, client);
                   // The door keeps the newest `most` pending connections.
                   const kept = [...clients.keys()].slice(-w.settings.waiting.most);
-                  const label = `browser ${who}`;
+                  const label = `browser ${keyIndex}`;
                   const reply = yield* d.knock(client, pass === undefined ? { label } : { label, pass });
 
                   if (!kept.includes(name)) {
@@ -1546,11 +1609,11 @@ const DoorMove = fc.record({
 
 type DoorMove = typeof DoorMove extends fc.Arbitrary<infer A> ? A : never;
 
-// The saved value's row, field by field in its stored order: the legacy `where` and `tabs`.
-const legacyRow = (r: WatchRow) => ({
+// The saved value's row, field by field in its stored order: its `location` and `tabs`.
+const savedRow = (r: WatchRow) => ({
   key: r.key,
   label: r.label,
-  where: r.where,
+  location: r.location,
   code: r.code,
   until: r.until,
   tabs: r.tabs,
@@ -1585,7 +1648,7 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
         assert(owner);
         const reply = yield* d.watch(owner);
         expect(reply._tag).toBe("watching");
-        const flat = reply.rows.map(legacyRow);
+        const flat = reply.rows.map(savedRow);
         // format: watch replies and the saved value keep the stored row bytes, and the saved
         // value keeps its flat rows-and-settings shape under the same gateway_state key.
         expect(JSON.stringify(reply.rows)).toBe(JSON.stringify(flat));
@@ -1750,7 +1813,7 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
             {
               key: connection.key,
               label,
-              where: "test-instance",
+              location: "test-instance",
               code: row.code,
               until: now + ttl,
               tabs: 1,
@@ -1773,7 +1836,7 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
     // An old row: the value as a door before ticket 707 wrote it, by hand, then a fresh door.
     w.db
       .prepare("UPDATE gateway_state SET value=? WHERE name='waiting'")
-      .run(JSON.stringify({ rows: rows.map(legacyRow), most, ttl }));
+      .run(JSON.stringify({ rows: rows.map(savedRow), most, ttl }));
     layer = w.reopen(nodeSql(open(join(w.dir, "project.db"))));
   }
 });
@@ -1819,7 +1882,7 @@ describe("P10 signed membership changes", () => {
               to: "project-a",
               adds: Adds.cases.person.make({ key: winnerKey.line, window: winnerWindow.raw }),
               drops: [],
-              saw: { ...ADD_SAW, how: "recovery" },
+              saw: { ...ADD_SAW, method: "recovery" },
               sentAt: SENT,
             } satisfies typeof Add.Type;
             const text = addText(winner),
@@ -2307,43 +2370,322 @@ describe("P10 inputs, retries and signer", () => {
     }),
   );
 
-  for (const field of ["id", "by", "for", "arrivedAt"] as const) {
-    for (const where of ["outer", "wrapper"] as const) {
-      it.effect.prop(
-        `p67 spoof: ${where} ${field} is refused before decoding, with the real sender recorded`,
-        { generated: Schema.String },
-        ({ generated }) =>
-          Effect.forEach(
-            ["forged-writer-marker", generated],
-            (value) =>
-              Effect.gen(function* () {
-                const marker = value === "forged-writer-marker" ? value : `forged-writer-marker:${value}`;
-                const w = yield* world();
-                yield* Effect.gen(function* () {
-                  const d = yield* Gateway;
-                  const { client } = yield* online(d, w);
-                  const params =
-                    where === "outer"
-                      ? { ...request("spoof"), [field]: marker }
-                      : request("spoof", { ...comment(), [field]: marker });
-                  expect(yield* d.route(client, "process.send", params)).toMatchObject({
-                    _tag: "refused",
-                    reason: where === "outer" ? "reserved" : "bad_input",
-                  });
-                  expect(w.deliveries).toEqual([]);
-                  const row = (yield* stamped()).at(-1)!;
-                  expect(row._tag).toBe("refused");
-                  expect(row.by).toBe(w.window.fingerprint);
-                  expect(JSON.stringify(row)).not.toContain(marker);
-                  expect(JSON.stringify(row)).not.toContain(JSON.stringify(marker).slice(1, -1));
-                }).pipe(w.provide);
-              }),
-            { concurrency: 1, discard: true },
+  // 0140 replaces the old assertion of a stored `refused` input event.
+  it.effect.prop(
+    "p67 spoof: stamped writes are refused whole before any input id or stored body",
+    { write: SpoofedWrite },
+    ({ write }) =>
+      Effect.gen(function* () {
+        const w = yield* world();
+        const archives: Array<{ name: string; body: string }> = [];
+        const archive = Layer.effect(
+          Archive,
+          Archive.pipe(
+            Effect.map((real) => ({
+              put: (name: string, body: Uint8Array) => {
+                archives.push({ name, body: new TextDecoder().decode(body) });
+                return real.put(name, body);
+              },
+            })),
           ),
-        { arbitrary: { seed: 119120, runs: 12 } },
+        ).pipe(Layer.provide(w.env));
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          const { client } = yield* online(d, w);
+          const before = w.usedInputs.length;
+          const forged = `t844-forged-value:${write.marker}`;
+
+          // Keep arbitrary values, including undefined, and also mark the forged field itself.
+          for (const value of [write.value, forged]) {
+            const params = spoofedParams({ ...write, value }, "spoof");
+            expect(yield* d.route(client, write.method, params)).toEqual({ _tag: "refused", reason: "reserved" });
+            expect(w.deliveries).toEqual([]);
+            expect(w.usedInputs.length).toBe(before);
+            expect(yield* stamped()).toEqual([]);
+            const saved = JSON.stringify([...w.databases()].map(([name, db]) => [name, allObjectRows(db)]));
+            expect(saved).not.toContain(`t844-forged:${write.marker}`);
+            expect(saved).not.toContain(JSON.stringify(`t844-forged:${write.marker}`).slice(1, -1));
+            expect(saved).not.toContain(forged);
+            expect(saved).not.toContain(JSON.stringify(forged).slice(1, -1));
+          }
+
+          yield* TestClock.adjust("16 days");
+          yield* d.route(client, "ledger.read", { stream: "x", after: 0 });
+          yield* SpanSink.use((sink) => sink.flush);
+          const saved = JSON.stringify({
+            databases: [...w.databases()].map(([name, db]) => [name, allObjectRows(db)]),
+            archives,
+          });
+
+          for (const marker of [`t844-forged:${write.marker}`, forged]) {
+            expect(saved).not.toContain(marker);
+            expect(saved).not.toContain(JSON.stringify(marker).slice(1, -1));
+          }
+        }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, archive)))));
+      }),
+    { arbitrary: { seed: SEED, runs: 100 } },
+  );
+
+  const MalformedStampedWrite = (() => {
+    const schema = Input.cases.comment;
+    const Broken = Schema.TaggedUnion({
+      wrong: {},
+      missing: {},
+      junk: { reason: Schema.Literals(["wrong", "missing"]) },
+    });
+    type MessageState = { readonly schema: typeof schema; readonly m: Readonly<Record<string, unknown>> };
+    const editMessage = (state: MessageState, edit: typeof Broken.Type): Arbitrary.Arbitrary<MessageState> => {
+      const missing = edit._tag === "missing" || (edit._tag === "junk" && edit.reason === "missing");
+      const fields = Object.entries(state.schema.fields).filter(
+        ([key, field]) =>
+          Object.hasOwn(state.m, key) &&
+          (!missing || Schema.decodeUnknownResult(Schema.Struct({ [key]: field }))({})._tag === "Failure"),
       );
-    }
-  }
+      assert(fields.length > 0, "the current message must have a field that can be broken");
+      return Arbitrary.schema(Schema.Literals(fields.map(([key]) => key))).pipe(
+        Arbitrary.flatMap((key) => {
+          const field = fields.find(([name]) => name === key)![1];
+          const replacement = missing
+            ? Arbitrary.Constant(undefined)
+            : Arbitrary.schema(SpoofedWrite.fields.value).pipe(
+                Arbitrary.filter((value) => Schema.decodeUnknownResult(field)(value)._tag === "Failure"),
+              );
+          const junk =
+            edit._tag === "junk"
+              ? Arbitrary.all({
+                  key: Arbitrary.schema(Schema.String).pipe(
+                    Arbitrary.filter(
+                      (key) =>
+                        !Object.hasOwn(state.schema.fields, key) &&
+                        !Object.hasOwn(state.m, key) &&
+                        !Schema.is(SpoofedWrite.fields.key)(key),
+                    ),
+                  ),
+                  value: Arbitrary.schema(Schema.Json),
+                })
+              : Arbitrary.Constant(null);
+          return Arbitrary.all({ value: replacement, junk }).pipe(
+            Arbitrary.map(({ value, junk }) => {
+              const m = { ...state.m };
+
+              if (missing) {
+                delete m[key];
+              } else {
+                m[key] = value;
+              }
+
+              return { schema: state.schema, m: { ...m, ...(junk === null ? {} : { [junk.key]: junk.value }) } };
+            }),
+          );
+        }),
+      );
+    };
+    return Arbitrary.all({
+      m: Arbitrary.schema(schema),
+      edits: Arbitrary.array(Arbitrary.schema(Broken), { minLength: 1, maxLength: Object.keys(schema.fields).length }),
+      key: Arbitrary.schema(SpoofedWrite.fields.key),
+      inner: Arbitrary.schema(SpoofedWrite.fields.inner),
+      value: Arbitrary.schema(SpoofedWrite.fields.value),
+    }).pipe(
+      Arbitrary.flatMap(({ m, edits, ...stamp }) =>
+        edits
+          .reduce(
+            (current, edit) => current.pipe(Arbitrary.flatMap((state) => editMessage(state, edit))),
+            Arbitrary.Constant<MessageState>({ schema, m }),
+          )
+          .pipe(Arbitrary.map((state) => ({ ...stamp, m: state.m }))),
+      ),
+    );
+  })();
+
+  it.effect.prop(
+    "p67 spoof: malformed stamped process.send is reserved without a request row and counts once",
+    { write: MalformedStampedWrite },
+    ({ write }) =>
+      Effect.gen(function* () {
+        yield* TestClock.setTime(REFUSED_HOUR + 1000);
+        const w = yield* world();
+        const archives: Array<{ name: string; body: string }> = [];
+        const archive = Layer.effect(
+          Archive,
+          Archive.pipe(
+            Effect.map((real) => ({
+              put: (name: string, body: Uint8Array) => {
+                archives.push({ name, body: new TextDecoder().decode(body) });
+                return real.put(name, body);
+              },
+            })),
+          ),
+        ).pipe(Layer.provide(w.env));
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          const { client } = yield* online(d, w);
+          const sink = yield* SpanSink;
+          yield* sink.flush;
+          const snapshot = () => [...w.databases()].map(([name, db]) => [name, allObjectRows(db)] as const);
+          const nonSums = (databases: ReturnType<typeof snapshot>) =>
+            databases.map(([name, tables]) => [
+              name,
+              Object.fromEntries(Object.entries(tables).filter(([table]) => name !== "object" || table !== "sums")),
+            ]);
+          const before = snapshot();
+          const usedInputs = [...w.usedInputs];
+          const deliveries = [...w.deliveries];
+          const uploaded = [...archives];
+          const beforeSums = before.find(([name]) => name === "object")![1].sums!;
+          const target = { piece: "gateway.route", hour: REFUSED_HOUR, refused: "reserved" };
+          const had = beforeSums.find(
+            (row) => row.piece === target.piece && row.hour === target.hour && row.refused === target.refused,
+          );
+          const expectedSums =
+            had === undefined
+              ? [...beforeSums, { ...target, count: 1 }]
+              : beforeSums.map((row) => (row === had ? { ...row, count: Number(row.count) + 1 } : row));
+          const inner = { ...write.m, [write.key]: write.value };
+          expect(Schema.decodeUnknownResult(w.settings.inputs.schema)(write.m)._tag).toBe("Failure");
+          expect(Schema.decodeUnknownResult(w.settings.inputs.schema)(inner)._tag).toBe("Failure");
+          const params = write.inner
+            ? request("t860", inner)
+            : { ...request("t860", write.m), [write.key]: write.value };
+
+          expect(yield* d.route(client, "process.send", params)).toEqual({ _tag: "refused", reason: "reserved" });
+          yield* sink.flush;
+          expect(w.usedInputs).toEqual(usedInputs);
+          expect(w.deliveries).toEqual(deliveries);
+          const after = snapshot();
+          expect(nonSums(after)).toEqual(nonSums(before));
+          expect(after.find(([name]) => name === "object")![1].sums).toEqual(expectedSums);
+          expect(archives).toEqual(uploaded);
+          yield* TestClock.setTime(REFUSED_HOUR + HOUR);
+          expect(yield* sink.sums("gateway.route", REFUSED_HOUR, REFUSED_HOUR + HOUR)).toEqual([
+            { _tag: "sum", ...target, count: 1 },
+          ]);
+        }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, archive)))));
+      }),
+    { arbitrary: { seed: SEED, runs: 100 } },
+  );
+
+  it.effect.prop(
+    "0140 bound: N stamped writes occupy exactly the rows of one and count N",
+    {
+      writes: Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 500 }))).pipe(
+        Arbitrary.flatMap((n) => Arbitrary.array(Arbitrary.schema(SpoofedWrite), { minLength: n, maxLength: n })),
+      ),
+    },
+    ({ writes }) =>
+      Effect.gen(function* () {
+        const w = yield* world();
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          const { client } = yield* online(d, w);
+          yield* TestClock.setTime(REFUSED_HOUR + 1000);
+          let first: Record<string, number> | undefined;
+
+          for (const [i, write] of writes.entries()) {
+            expect((yield* d.route(client, write.method, spoofedParams(write, `bound-${i}`)))._tag).toBe("refused");
+            const counts = Object.fromEntries(
+              [...w.databases()].flatMap(([name, db]) =>
+                Object.entries(allObjectRows(db)).map(([table, rows]) => [`${name}/${table}`, rows.length]),
+              ),
+            );
+            first ??= counts;
+            expect(counts).toEqual(first);
+          }
+
+          expect(w.deliveries).toEqual([]);
+          expect(w.usedInputs).toEqual([]);
+          yield* TestClock.setTime(REFUSED_HOUR + HOUR);
+          const sink = yield* SpanSink;
+          expect(yield* sink.sums("gateway.route", REFUSED_HOUR, REFUSED_HOUR + HOUR)).toEqual([
+            { _tag: "sum", piece: "gateway.route", hour: REFUSED_HOUR, refused: "reserved", count: writes.length },
+          ]);
+        }).pipe(w.provide);
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
+
+  it.effect.prop(
+    "0140 hours: only spoofed writes count, in their closed referee hour",
+    { mix: WriteMix },
+    ({ mix }) =>
+      Effect.gen(function* () {
+        const w = yield* world();
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          const { client } = yield* online(d, w);
+          const counts = new Map<number, number>();
+
+          for (const [i, write] of mix.entries()) {
+            const hour = REFUSED_HOUR + write.hour * HOUR;
+            yield* TestClock.setTime(hour + 1000);
+            const answer = yield* d.route(
+              client,
+              write.spoof ? write.write.method : "process.send",
+              write.spoof ? spoofedParams(write.write, `mix-${i}`) : request(`mix-${i}`, comment(write.text)),
+            );
+            expect(answer._tag).toBe(write.spoof ? "refused" : "ok");
+
+            if (write.spoof) {
+              counts.set(hour, (counts.get(hour) ?? 0) + 1);
+            }
+          }
+
+          const sink = yield* SpanSink;
+          expect(sink.sums).toBeTypeOf("function");
+          const openHour = REFUSED_HOUR + 3 * HOUR;
+          yield* TestClock.setTime(openHour + 2000);
+          const expected = [...counts]
+            .sort(([a], [b]) => a - b)
+            .map(([hour, count]) => ({
+              _tag: "sum",
+              piece: "gateway.route",
+              hour,
+              refused: "reserved",
+              count,
+            }));
+          expect(yield* sink.sums("gateway.route", REFUSED_HOUR, openHour + HOUR)).toEqual(
+            expected.filter((point) => point.hour < openHour),
+          );
+          yield* TestClock.setTime(openHour + HOUR);
+          expect(yield* sink.sums("gateway.route", REFUSED_HOUR, openHour + HOUR)).toEqual(expected);
+          expect(yield* sink.sums("gateway.route", REFUSED_HOUR + HOUR, REFUSED_HOUR + 2 * HOUR)).toEqual(
+            expected.filter((point) => point.hour === REFUSED_HOUR + HOUR),
+          );
+        }).pipe(w.provide);
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
+
+  it.effect.prop(
+    "0140 good: nested ids are delivered once with stamps, received entry and saved spans",
+    { write: GoodWrite },
+    ({ write }) =>
+      Effect.gen(function* () {
+        const w = yield* world();
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          const { client } = yield* online(d, w);
+          yield* TestClock.setTime(REFUSED_HOUR + 1000);
+          const m = Input.cases.comment.make({ ticket: { id: write.id }, text: write.text });
+          expect((yield* d.route(client, "process.send", request(write.letter, m)))._tag).toBe("ok");
+          expect(w.deliveries).toHaveLength(1);
+          const envelope = w.deliveries[0]!.envelope;
+          expect(Object.keys(envelope).sort()).toEqual(["arrivedAt", "by", "id", "input"]);
+          expect(envelope.id).toMatch(/^input_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
+          expect(envelope.by).toEqual({ _tag: "person", key: w.window.fingerprint, for: PERSON });
+          expect(envelope.arrivedAt).toBe(REFUSED_HOUR + 1000);
+          expect(envelope.input).toEqual(m);
+          const received = yield* stamped();
+          expect(received).toHaveLength(1);
+          expect(received[0]).toMatchObject({ _tag: "received", id: envelope.id });
+          expect(w.db.prepare("SELECT count(*) AS n FROM measurements WHERE piece='gateway.route'").get()?.n).toBe(1);
+          const rows = yield* RecordManager.use((records) => Stream.runCollect(records.read({ _tag: "spans" })));
+          expect(rows.filter((row) => row.name === "gateway.route")).toHaveLength(1);
+          expect(rows.filter((row) => row.name === "gateway.input")).toHaveLength(1);
+        }).pipe(w.provide);
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
 
   it.effect("p67: logical retries retain parent/trace and have one real mailbox placing", () =>
     Effect.gen(function* () {

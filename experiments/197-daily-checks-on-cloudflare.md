@@ -327,7 +327,7 @@ Measured later in [experiment 199](./199-box-live-run.md): a box worker is about
   boxes share it.
 - **The laptop takes cost off.** Each batch a person's hands take is free, and the queue offers
   them first. A day when the laptop is up most of the time costs close to nothing.
-- **This pushes the bill past $5.** [We use the tools we build](../docs/direction/we-use-the-tools-we-build.md)
+- **This pushes the bill past $5.** [We use the tools we build](../.decisions/0349-we-build-and-use-our-tools.md)
   says such a piece says so, with the number. The number is above: about $6 to $42 a month with no
   cap, or a cap the owner sets.
 

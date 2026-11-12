@@ -139,21 +139,21 @@ const members = ClientManager.use((clients) => clients.members);
 const SAW = {
   code: "4417",
   label: "Firefox",
-  where: "Istanbul",
-  how: "compare",
+  location: "Istanbul",
+  method: "compare",
   check: "touch",
   has: [],
 } as const;
 
-const TOOK = { label: "Mac A", where: "Istanbul", how: "panel", check: "touch" } as const;
+const TOOK = { label: "Mac A", location: "Istanbul", method: "panel", check: "touch" } as const;
 
-const addSaw = (how: "sheet" | "recovery" | "device", old: "lost" | "kept" | null = null) => ({
-  how,
+const addSaw = (method: "sheet" | "recovery" | "device", old: "lost" | "kept" | null = null) => ({
+  method,
   check: "touch" as const,
-  where: "Istanbul",
+  location: "Istanbul",
   has: [],
-  typed: how === "sheet",
-  kept: how === "sheet" ? ("print" as const) : null,
+  typed: method === "sheet",
+  kept: method === "sheet" ? ("print" as const) : null,
   old,
 });
 

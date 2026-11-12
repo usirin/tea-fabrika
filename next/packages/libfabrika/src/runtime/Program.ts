@@ -2,9 +2,9 @@
 // A program gets no sender, key, ledger or service. `stepper` steps it by hand, as Elm's runtime
 // would, and never runs a Cmd: the runner does that, after the input is saved.
 import { applyCell, msgKeysOf, type AnyCmdDef } from "@demlik/tea";
-import { Effect, Option, Result, Schema, type SchemaIssue } from "effect";
+import { Effect, Option, Predicate, Result, Schema, type SchemaIssue } from "effect";
 import { ParentText } from "../coordination/index.ts";
-import { Deliveries } from "./internal/recovery.ts";
+import { Deliveries, Policy } from "./internal/recovery.ts";
 
 /** A function type whose parameters TypeScript checks both ways, as it does a method's: a program
  *  declares `(model: Model) => …`, and the runner calls it with the model it decoded. */
@@ -13,7 +13,7 @@ type Code<A extends ReadonlyArray<unknown>, R> = { call(...args: A): R }["call"]
 /** A schema a program declares. It decodes and encodes without services. */
 type Declared = Schema.Codec<unknown, unknown>;
 const isDeclared = (u: unknown): u is Declared => Schema.isSchema(u);
-const isCode = <F>(u: unknown): u is F => typeof u === "function";
+const isCode = <F>(u: unknown): u is F => Predicate.isFunction(u);
 
 const code = <F>(expected: string) => Schema.declare((u: unknown): u is F => isCode<F>(u), { expected });
 
@@ -24,14 +24,16 @@ type Steps = {
   readonly init: Code<[loaded: unknown, ctx: unknown], readonly [unknown, ReadonlyArray<unknown>]>;
 };
 
+/** `typeof` says "object": null too, but no function. The null check is a second read, as it was. */
+const isObjectOrNull = (u: unknown): u is object | null => Predicate.isObjectOrArray(u) || Predicate.isNull(u);
+
 const isSteps = (u: unknown): u is Steps =>
-  typeof u === "object" &&
-  u !== null &&
-  "update" in u &&
-  typeof u.update === "object" &&
-  u.update !== null &&
-  "init" in u &&
-  typeof u.init === "function";
+  Predicate.isObjectOrArray(u) &&
+  Predicate.hasProperty(u, "update") &&
+  isObjectOrNull(u.update) &&
+  Predicate.isNotNull(u.update) &&
+  Predicate.hasProperty(u, "init") &&
+  Predicate.isFunction(u.init);
 
 const Schemas = Schema.declare(isDeclared, { expected: "a schema" });
 
@@ -126,8 +128,10 @@ export type EventPolicy = typeof EventPolicy.Type;
 
 const Declaration = Schema.Struct({
   name: Schema.NonEmptyString,
-  /** How many times one letter is tried before it is dead. Absent: the wiring's limit, else 3. */
+  /** How many times one letter is tried before it is dead. Absent: the selected policy's limit. */
   maxDeliveries: Schema.optionalKey(Deliveries),
+  /** Restart rules for a new recovery journal; existing journals keep their saved policy. */
+  policy: Schema.optionalKey(Policy),
   machine: Schema.declare(isSteps, { expected: "a tea machine" }),
   state: State,
   msg: Schemas,
@@ -196,6 +200,7 @@ type Policies<W> = {
 type Spec<T extends ProgramMachine, V extends Schema.Json, I, O, W> = {
   readonly name: string;
   readonly maxDeliveries?: number;
+  readonly policy?: Policy;
   readonly machine: T;
   readonly state: Omit<State, "schema"> & { readonly schema?: never };
   readonly msg?: never;
@@ -226,6 +231,7 @@ export type Program<
 > = {
   readonly name: string;
   readonly maxDeliveries?: number;
+  readonly policy?: Policy;
   readonly machine: T;
   readonly state: Omit<State, "schema"> & { readonly schema: T["model"] & Declared };
   readonly msg: T["msg"] & Declared;
@@ -243,6 +249,7 @@ export type Program<
 const Authoring = Schema.Struct({
   name: Declaration.fields.name,
   maxDeliveries: Declaration.fields.maxDeliveries,
+  policy: Declaration.fields.policy,
   machine: Schema.declare(
     (u): u is ProgramMachine & { readonly model: Declared; readonly msg: Declared } =>
       isSteps(u) && "model" in u && isDeclared(u.model) && "msg" in u && isDeclared(u.msg),
@@ -294,9 +301,8 @@ const typedProgram = <T extends ProgramMachine, V extends Schema.Json, I, O, W>(
   Schema.declare(
     (u): u is Program<T, V, I, O, W> =>
       Result.isSuccess(decodeDeclaration(u)) &&
-      typeof u === "object" &&
-      u !== null &&
-      "machine" in u &&
+      Predicate.isObjectOrArray(u) &&
+      Predicate.hasProperty(u, "machine") &&
       u.machine === spec.machine,
     { expected: "the checked program" },
   );
@@ -367,7 +373,8 @@ export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown"
   reason: Schema.Literals(["load", "no_program", "step", "saved_state", "saved_letter"]),
   /** An RPC or reply decode failure decided nothing about the input. It must be retried. */
   source: Schema.optionalKey(Schema.Literals(["rpc", "decode"])),
-  /** The thrown class, preserved as checked data across Worker RPC. */
+  /** The thrown class, preserved as checked data across Worker RPC. A failure the runtime
+   *  translates names ProgramDown itself: the cause it keeps is for diagnosis in memory only. */
   error: Schema.optionalKey(Schema.String),
   cause: Schema.optionalKey(Schema.Unknown),
 }) {
@@ -395,13 +402,17 @@ const decodeRefusal = Schema.decodeUnknownResult(Schema.NullOr(Refusal));
 const decodeJson = Schema.decodeUnknownResult(Schema.Json);
 
 const isTyped = (u: unknown): u is Typed =>
-  typeof u === "object" && u !== null && "type" in u && typeof u.type === "string";
+  Predicate.isObjectOrArray(u) && Predicate.hasProperty(u, "type") && Predicate.isString(u.type);
 
 const decodeTyped = (u: unknown): Option.Option<Typed> => (isTyped(u) ? Option.some(u) : Option.none());
 
 const decodeWake = Schema.decodeUnknownResult(Schema.NullOr(Schema.Number));
 
 /** Runs `f`, turning any throw into ProgramDown with `reason`. */
+/** What each failed result failed with, in order: a check that meets several keeps them all. */
+const failures = (results: ReadonlyArray<Result.Result<unknown, unknown>>): ReadonlyArray<unknown> =>
+  results.flatMap((result) => (Result.isFailure(result) ? [result.failure] : []));
+
 const guard = <A>(reason: ProgramDown["reason"], f: () => A): A => {
   const done = Result.try({
     try: f,
@@ -420,6 +431,10 @@ const guard = <A>(reason: ProgramDown["reason"], f: () => A): A => {
 const accepts = (schema: unknown, value: unknown): boolean =>
   isDeclared(schema) && Result.isSuccess(Schema.decodeUnknownResult(schema)(value));
 
+/** An error a Cmd settles with carries a string `_tag`. */
+const isTagged = (u: unknown): boolean =>
+  Predicate.isObjectOrArray(u) && Predicate.hasProperty(u, "_tag") && Predicate.isString(u._tag);
+
 /** A settled Cmd Msg (`<name>_ok` or `<name>_err`) of a declared Cmd, checked by its schemas. */
 const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<boolean> => {
   const typed = decodeTyped(msg);
@@ -431,23 +446,23 @@ const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<bo
   const type = typed.value.type;
   const def = defs.find((d) => d.okType === type || d.errType === type);
 
-  if (def === undefined || typeof msg !== "object" || msg === null) {
+  if (def === undefined || !Predicate.isObjectOrArray(msg)) {
     return Option.none();
   }
 
-  const cmd = "cmd" in msg ? msg.cmd : undefined;
+  const cmd = Predicate.hasProperty(msg, "cmd") ? msg.cmd : undefined;
   const sameCmd = Option.exists(decodeTyped(cmd), (c) => c.type === def.cmdType);
 
-  if (!sameCmd || !("at" in msg) || typeof msg.at !== "number") {
+  if (!sameCmd || !Predicate.hasProperty(msg, "at") || !Predicate.isNumber(msg.at)) {
     return Option.some(false);
   }
 
   if (type === def.okType) {
-    return Option.some("value" in msg && accepts(def.schema.ok, msg.value));
+    return Option.some(Predicate.hasProperty(msg, "value") && accepts(def.schema.ok, msg.value));
   }
 
-  const error = "error" in msg ? msg.error : undefined;
-  return Option.some(typeof error === "object" && error !== null && "_tag" in error && typeof error._tag === "string");
+  const error = Predicate.hasProperty(msg, "error") ? msg.error : undefined;
+  return Option.some(isTagged(error));
 };
 
 export const stepper = (declared: unknown): Result.Result<Stepper, Schema.SchemaError> => {
@@ -471,7 +486,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     const decoded = decodeModel(raw);
 
     if (Result.isFailure(decoded)) {
-      throw new ProgramDown({ reason });
+      throw new ProgramDown({ reason, error: "ProgramDown", cause: decoded.failure });
     }
 
     return decoded.success;
@@ -526,14 +541,14 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     const json = cmds.map((cmd) => (cmdOk(cmd) ? decodeJson(cmd) : Result.fail(null)));
 
     if (Result.isFailure(encoded) || Result.isFailure(view) || Result.isFailure(wake) || json.some(Result.isFailure)) {
-      throw new ProgramDown({ reason });
+      throw new ProgramDown({ reason, error: "ProgramDown", cause: failures([encoded, view, wake, ...json]) });
     }
 
     const model = decodeJson(encoded.success);
     const shown = decodeJson(view.success);
 
     if (Result.isFailure(model) || Result.isFailure(shown)) {
-      throw new ProgramDown({ reason });
+      throw new ProgramDown({ reason, error: "ProgramDown", cause: failures([model, shown]) });
     }
 
     return Step.cases.stepped.make({
@@ -562,7 +577,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       const refusal = guard("step", () => decodeRefusal(program.refuse(now, m.value)));
 
       if (Result.isFailure(refusal)) {
-        throw new ProgramDown({ reason: "step" });
+        throw new ProgramDown({ reason: "step", error: "ProgramDown", cause: refusal.failure });
       }
 
       if (refusal.success !== null) {

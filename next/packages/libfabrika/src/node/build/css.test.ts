@@ -30,9 +30,9 @@ type Build = {
   }) => Effect.Effect<unknown, unknown, FileSystem.FileSystem | Path.Path>;
 };
 
-const product = async <A>(file: string, what: string) => {
+const product = async <A>(file: string, name: string) => {
   const path = join(import.meta.dirname, file);
-  assert(existsSync(path), `P16 not built: ${what} absent`);
+  assert(existsSync(path), `P16 not built: ${name} absent`);
   return vi.importActual<A>(pathToFileURL(path).href);
 };
 
@@ -191,7 +191,7 @@ const refusedBuild = async (home: string) => {
     root: home,
     out: join(home, "dist"),
     entry: join(home, "brain.ts"),
-    programs: [{ name: "css", package: "@p16/css", export: "program" }],
+    programs: [{ name: "p16/css", package: "@p16/css", export: "program" }],
     files: [],
     ledger: [],
     chaos: false,

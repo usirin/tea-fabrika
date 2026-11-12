@@ -41,9 +41,13 @@ const PACKAGE = join(import.meta.dirname, "..", "..");
 const SCRIPT = join(import.meta.dirname, "tokens.ts");
 const COLOR = join(PACKAGE, "tokens", "color");
 
-/** Every color token tokens.css defines today, one file each, by group. Nothing is renamed. */
+/**
+ * Every color token tokens.css defines today, one file each, by group. Nothing is renamed. The
+ * ask desk adds surface-card, slate 3 (docs/direction/ask-desk.md).
+ */
 const TOKENS = [
-  ...["surface-sunken", "surface", "surface-raised", "surface-hover", "surface-selected"],
+  ...["surface-sunken", "surface", "surface-raised", "surface-card", "surface-hover"],
+  "surface-selected",
   ...["border-faint", "border", "border-strong", "wire", "focus"],
   ...["text-primary", "text-faint"],
   ...["turn-text", "turn-fill", "turn-fill-hover", "turn-fg"],
@@ -68,7 +72,10 @@ const EXTENDS: Record<string, string> = {
 /** The type of each token with values of its own: surface and fill are background, line is border. */
 const TYPES: Record<string, string> = {
   ...Object.fromEntries(
-    ["surface-sunken", "surface", "surface-raised", "surface-hover", "surface-selected"].map((t) => [t, "background"]),
+    ["surface-sunken", "surface", "surface-raised", "surface-card", "surface-hover", "surface-selected"].map((t) => [
+      t,
+      "background",
+    ]),
   ),
   ...Object.fromEntries(["border-faint", "border", "border-strong", "wire", "focus"].map((t) => [t, "border"])),
   ...Object.fromEntries(
@@ -156,7 +163,8 @@ const writeByHand = (dir: string, line: string) => {
 // ---- the files themselves ----------------------------------------------------------------------
 
 describe("one TOML file per color token, flat in tokens/color/", () => {
-  it("holds exactly today's 29 color tokens, under today's names", () => {
+  // format: the committed tokens/color/*.toml file names are the public token names, exactly.
+  it("format: holds exactly today's 30 color tokens, under today's names", () => {
     const files = readdirSync(COLOR).sort();
     expect(files).toEqual(TOKENS.map((t) => `${t}.toml`).sort());
   });
@@ -168,7 +176,10 @@ describe("one TOML file per color token, flat in tokens/color/", () => {
   it("names the tile's stylesheet as the one place the tile's tokens may appear", async () => {
     const { parse } = await toml();
     const parts = parse(readFileSync(join(PACKAGE, "tokens", "parts.toml"), "utf8"));
-    expect(tableIn(parts, "tile")["stylesheets"]).toEqual(["apps/fabrika/src/window/window.css"]);
+    expect(tableIn(parts, "tile")["stylesheets"]).toEqual([
+      "apps/fabrika/src/window/window.css",
+      "next/packages/tuval/src/window/style.css",
+    ]);
   });
 
   it("names the design's own tokens as readable anywhere", async () => {
@@ -302,7 +313,8 @@ describe("tokens.css keeps one :root, with two marked regions the build writes",
     }).toEqual({ inside: true, ordered: true, colors: 1, manti: 1 });
   });
 
-  it("writes the 29 color tokens in the colors region, and no color outside it", () => {
+  // format: the generated CSS region writes each public custom-property name exactly once.
+  it("format: writes the 30 color tokens in the colors region, and no color outside it", () => {
     const css = TOKENS_CSS();
     const colors = declarationsIn(regionOf(css, "colors"));
     const rest = rootOf(css).replace(regionOf(css, "colors"), "").replace(regionOf(css, "manti"), "");
@@ -353,11 +365,12 @@ describe("theme-colors.ts is generated, and themes.ts reads it", () => {
     expect(Object.keys(generated).sort()).toEqual(["dark", "light"]);
   });
 
-  it("gives the themes their fifteen colors, both looks", async () => {
+  // format: the generated module's exact sixteen-field records are what both theme files read.
+  it("format: gives the themes their sixteen colors, both looks", async () => {
     const { dark, light } = await import("../theme-colors.ts");
     const { fabrika, fabrikaLight } = await import("../themes.ts");
     expect({ dark, light }).toEqual({ dark: fabrika.colors, light: fabrikaLight.colors });
-    expect(Object.keys(dark)).toHaveLength(15);
+    expect(Object.keys(dark)).toHaveLength(16);
   });
 });
 
@@ -392,7 +405,9 @@ describe("token-names.json lists what the stylelint rules read", () => {
 
   // Only a part with stylesheets limits where its tokens appear; the design's are read anywhere.
   it("gives the parts as parts.toml names them", () => {
-    expect(names()["parts"]).toEqual({ tile: ["apps/fabrika/src/window/window.css"] });
+    expect(names()["parts"]).toEqual({
+      tile: ["apps/fabrika/src/window/window.css", "next/packages/tuval/src/window/style.css"],
+    });
   });
 
   // Rule 3 reads this list, never a pattern: every Radix 3.0.0 scale and step, in each spelling a

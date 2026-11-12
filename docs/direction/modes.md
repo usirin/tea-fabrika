@@ -9,6 +9,8 @@ refuses a mode with no way out (WCAG 2.1.2); and a command's field is called `mo
 as the program's `mode`. The shape, which the owner shaped and now approved: a program gets one
 new field, `commands`, and one `mode` read from state, and no mode is `null`.
 
+Its decided rules are in: [0267](../../.decisions/0267-commands-and-one-mode-field.md), [0268](../../.decisions/0268-a-mode-is-the-last-tool.md), [0269](../../.decisions/0269-a-mode-is-shown-in-words.md), [0270](../../.decisions/0270-escape-always-leaves-a-mode.md), [0271](../../.decisions/0271-one-mode-per-program.md), [0272](../../.decisions/0272-a-press-finds-its-command.md), [0273](../../.decisions/0273-mode-keys-live-in-their-section.md).
+
 Keys renamed 2026-11-03 (short words keep one meaning): the info Msg's `on` became `active`, the
 word Zed's key binding docs use for a context that holds.
 
@@ -48,7 +50,10 @@ escape   global, mode "info"        did {does: "desk.exit", ...}; info off; mode
 
 - **`next/`:** all of it. Tier 1 has one real mode, the notes tile's reading and editing
   ([Tier 1's detail](../plan/tier-1-detail.md)), and it is the first test. The desk, its info mode
-  and a resize mode arrive with the desk in Tier 2.
+  and a resize mode arrive with the desk in Tier 2. *Changed 2026-11-11
+  ([0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): the notes tile left Tier 1
+  with notes, Tier 2's first real app, so this first test moves to Tier 2; Tier 1's program is the
+  checklist.*
 - **Today's version (`apps/fabrika`):** not changed by this note. Its info mode is the running
   example, read on main. Four small fixes are offered at
   [a tryout in today's version](#a-tryout-in-todays-version), none filed.

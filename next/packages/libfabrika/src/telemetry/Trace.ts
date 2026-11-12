@@ -96,6 +96,21 @@ export const MetricPoint = Schema.TaggedStruct("metric", {
 });
 export type MetricPoint = typeof MetricPoint.Type;
 
+/** A refusal counted instead of keeping the span or its measurement. */
+export { REFUSED } from "../SpanTag.ts";
+
+export const Refused = Schema.Literals(["reserved", "other"]);
+export type Refused = typeof Refused.Type;
+
+/** One piece's hourly count, split by a closed refusal value. */
+export const SumPoint = Schema.TaggedStruct("sum", {
+  piece: Schema.String,
+  hour: Schema.Int,
+  refused: Refused,
+  count: Schema.Int,
+});
+export type SumPoint = typeof SumPoint.Type;
+
 /** The object's own size, at most once an hour while it is awake, forever. */
 export const Size = Schema.TaggedStruct("size", { at: Schema.Int, bytes: Schema.Int });
 
@@ -120,7 +135,7 @@ export class SinkError extends Schema.TaggedError<SinkError>()("SinkError", {
 
 /** A thrown error as a typed one: a row that does not decode is `bad_row`, the rest `storage`. */
 export const sinkError = (error: unknown): SinkError =>
-  new SinkError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", held: 0 });
+  new SinkError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", held: 0, cause: error });
 
 /** The class of a thrown or failed value, for `error.type`. */
 export const errorClass = (error: unknown): string => (error instanceof Error ? error.name : typeof error);

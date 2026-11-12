@@ -156,7 +156,8 @@ const settled = (db: DatabaseSync) =>
 const CALLBACK_GIVES_UP = "6 seconds";
 
 const world = async (trace = TRACE, build = "counter-b", options: { readonly callback?: boolean } = {}) => {
-  table.programs.counter = { hash: "counter-a", source: "counter" };
+  // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
+  table.programs["fabrika/counter"] = { hash: "counter-a", source: "counter" };
   table.programs.approvals = { hash: "approvals-a", source: "approvals" };
   const home = mkdtempSync(join(tmpdir(), "p12-r-")),
     key = identity();
@@ -241,7 +242,7 @@ const world = async (trace = TRACE, build = "counter-b", options: { readonly cal
                   cmds: [],
                 }
               : {
-                  name: "counter",
+                  name: "fabrika/counter",
                   v: 1,
                   writes: {},
                   inputs: { inc: { write: true, personOnly: false } },
@@ -340,7 +341,7 @@ const world = async (trace = TRACE, build = "counter-b", options: { readonly cal
         key: key.raw,
         for: PERSON,
         to: "project-test",
-        saw: { label: "fixture", where: "local", how: "command", check: "none" },
+        saw: { label: "fixture", location: "local", method: "command", check: "none" },
         sentAt: SENT,
       });
       return run(p.grant({ text, armored: key.proof(text) }));
@@ -353,7 +354,7 @@ const world = async (trace = TRACE, build = "counter-b", options: { readonly cal
     },
     reopen: async () => {
       await runtime.dispose();
-      table.programs.counter = { hash: build, source: "changed counter" };
+      table.programs["fabrika/counter"] = { hash: build, source: "changed counter" };
       runtime = projectRuntime(ctx, env);
       const reopened = await run(ProjectService);
       await settled(db);
@@ -366,6 +367,79 @@ const world = async (trace = TRACE, build = "counter-b", options: { readonly cal
     },
   };
 };
+
+// The L4/L8 world is a scoped resource: its release closes what `world()` opened (0061).
+const opened = Effect.acquireRelease(
+  Effect.promise(() => world()),
+  () =>
+    Effect.promise(async () => {
+      for (const close of closers.splice(0).reverse()) {
+        await close();
+      }
+    }),
+);
+
+// Ways to bend a registered name toward a program identity. Each holds a slash.
+const bends: ReadonlyArray<(name: string) => string> = [
+  () => "fabrika/counter",
+  (name) => `fabrika/${name}`,
+  (name) => `${name}/x`,
+  (name) => name.replace(/[:.]/, "/"),
+];
+
+// The walk: from the brain's own bootstrap, each step starts the core code under a fresh valid
+// registered name, or tries a current name bent into a slashed one, which is refused.
+const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<number>) => {
+  const names = ["counter:1"];
+  let refused = 0;
+  expect(w.configured.map((d) => ({ name: d.name, program: d.program }))).toEqual([
+    { name: "counter:1", program: "fabrika/counter" },
+  ]);
+  const [started] = await w.run(w.p.read("processes/counter:1", 0, "audit"));
+  expect(JSON.stringify(started)).toContain('"fabrika/counter"');
+
+  for (const [i, n] of tape.entries()) {
+    const code = { program: "fabrika/counter", hash: "counter-a" };
+
+    if (i % 2 === 0) {
+      const name = n % 2 === 0 ? `counter:${names.length + 1}` : `tally-${n % 97}.${names.length}`;
+      await w.run(w.p.start(Start.cases.first.make({ id: `p40-${i}`, name, code }), w.from));
+      names.push(name);
+    } else {
+      const bent = bends[n % bends.length]!(names[Math.floor(n / bends.length) % names.length]!);
+      const result = await w.run(
+        Effect.result(w.p.start(Start.cases.first.make({ id: `p40-${i}`, name: bent, code }), w.from)),
+      );
+      expect(result, `${bent} is refused`).toMatchObject({ _tag: "Failure" });
+      refused++;
+    }
+
+    const info = await w.run(w.p.info);
+    expect(info.map((p) => p.name).sort()).toEqual([...names].sort());
+    expect(info.every((p) => p.program === "fabrika/counter")).toBe(true);
+    expect(w.configured.every((d) => d.program === "fabrika/counter" && !d.name.includes("/"))).toBe(true);
+  }
+
+  expect(refused).toBeGreaterThan(0);
+};
+
+describe("P40 the core counter's identity in the brain", () => {
+  it("L4 and L8: the bootstrap runs fabrika/counter as counter:1, and no start turns a program identity into a registered name", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.array(fc.nat(), { minLength: 2, maxLength: 8 }), (tape) =>
+        Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const w = yield* opened;
+              yield* Effect.promise(() => walk(w, tape));
+            }),
+          ),
+        ),
+      ),
+      { seed: 119120, numRuns: 10 },
+    );
+  });
+});
 
 describe("P12 Project authority", () => {
   law("the bootstrap entry keeps the caller's span trace", async ({ trace }) => {
@@ -477,7 +551,7 @@ describe("P12 Project authority", () => {
               Start.cases.first.make({
                 id: `nested:${write}`,
                 name: `nested:${write}`,
-                code: { program: "counter", hash: "counter-a" },
+                code: { program: "fabrika/counter", hash: "counter-a" },
               }),
               w.from,
             )
@@ -691,19 +765,23 @@ describe("P12 WebCrypto failures", () => {
   }
 });
 
+// A window's socket, attached online with the world's key, as the gateway stores it.
+const online = (w: Awaited<ReturnType<typeof world>>, client: string): typeof Attached.Type =>
+  Attached.cases.online.make({
+    client,
+    identity: { key: w.key.fingerprint, person: PERSON, as: "window" },
+    version: 1,
+    waits: [],
+    watching: false,
+    busy: false,
+  });
+
 describe("P12 Connection recording", () => {
   for (const operation of ["ring", "probe", "close", "notify"] as const) {
     law(`an authenticated ${operation} records through the project's sink`, async ({ letter, rev }) => {
       const w = await world(),
         db = new DatabaseSync(":memory:");
-      let attached: typeof Attached.Type = Attached.cases.online.make({
-        client: letter,
-        who: { key: w.key.fingerprint, person: PERSON, as: "window" },
-        version: 1,
-        waits: [],
-        watching: false,
-        busy: false,
-      });
+      let attached = online(w, letter);
       const ws = {
         deserializeAttachment: () => attached,
         serializeAttachment: (a: typeof Attached.Type) => {
@@ -757,4 +835,103 @@ describe("P12 Connection recording", () => {
       }
     });
   }
+
+  // Ticket 646: a call whose project route rejects answers its sender at once, and the cause is kept
+  // on a failed span, never on the wire.
+  class WireFault extends Error {
+    override name = "WireFault";
+  }
+
+  const rejected = fc.constantFrom(
+    { name: "Error", make: (message: string): Error => new Error(message) },
+    { name: "TypeError", make: (message: string): Error => new TypeError(message) },
+    { name: "WireFault", make: (message: string): Error => new WireFault(message) },
+  );
+  const FRAME = JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    error: { code: -32000, message: "unreachable", data: { reason: "unreachable" } },
+  });
+
+  const refusedCall = async (fault: Error) => {
+    const w = await world(),
+      db = new DatabaseSync(":memory:"),
+      sent: string[] = [];
+    let attached = online(w, "client-test");
+    const ws = {
+      deserializeAttachment: () => attached,
+      serializeAttachment: (a: typeof Attached.Type) => {
+        attached = a;
+      },
+      send: (text: string) => {
+        sent.push(text);
+      },
+      close: () => {},
+    };
+    // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture supplies the hibernating socket and SQL members consumed by Gateway
+    const ctx = {
+      id: { name: "gateway-test" },
+      storage: storage(db),
+      getWebSockets: () => [ws],
+      getTags: () => ["session-test", "tab-a", w.key.fingerprint],
+      getWebSocketAutoResponseTimestamp: () => new Date(42),
+    } as unknown as DurableObjectState;
+    // oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand
+    const project = {
+      getByName: () => ({
+        route: async () => {
+          throw fault;
+        },
+      }),
+    } as unknown as Env["PROJECT"];
+    // oxlint-disable-next-line fabrika/no-type-assertions -- Node socket double implements attachment, send and close without workerd's socket brand
+    const socket = ws as unknown as WebSocket;
+    const runtime = connectionRuntime(ctx, { ...w.env, PROJECT: project }, await Effect.runPromise(settings(w.env)));
+
+    try {
+      const gateway = await runtime.runPromise(ConnectionService),
+        before = w.recorded.length;
+      const frame = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ledger.read", params: { stream: "x", after: 0 } });
+      await runtime.runPromise(gateway.message(socket, frame));
+      return { sent, spans: w.recorded.slice(before) };
+    } finally {
+      await runtime.dispose();
+      db.close();
+
+      for (const close of closers.splice(0).reverse()) {
+        await close();
+      }
+    }
+  };
+
+  it("a call whose project route fails answers exactly refused unreachable, and none of the failure's text reaches the client", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        rejected,
+        fc.string({ minLength: 8, maxLength: 64 }).filter((text) => !FRAME.includes(text)),
+        async (kind, text) => {
+          const { sent } = await refusedCall(kind.make(text));
+          expect(sent).toEqual([FRAME]);
+          expect(sent.join("")).not.toContain(text);
+        },
+      ),
+      { seed: 119120, numRuns: 20 },
+    );
+  });
+
+  it("that call records one failed gateway.refused span whose error.type is the rejected error's name, and no text of it in a tag", async () => {
+    await fc.assert(
+      fc.asyncProperty(rejected, fc.string({ minLength: 8, maxLength: 64 }), async (kind, text) => {
+        const { spans } = await refusedCall(kind.make(text));
+        const refused = spans.filter((row) => row.name === "gateway.refused");
+        expect(refused).toHaveLength(1);
+        expect(refused[0]).toMatchObject({ ok: false, attributes: { "error.type": kind.name } });
+        // Failure text is deletable content (P37), never a span tag.
+        expect(
+          Object.values(refused[0]!.attributes).filter((tag) => typeof tag === "string" && tag.includes(text)),
+        ).toEqual([]);
+      }),
+      { seed: 119120, numRuns: 20 },
+    );
+  });
 });

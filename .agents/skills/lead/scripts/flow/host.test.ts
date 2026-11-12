@@ -1,58 +1,6 @@
 // The host step's parts, on Node in a temp folder: the brief's commands, the Electron lock, the
 // time limit, what a failed command answers, and the lane's state file. Commands here are plain
 // `sh` lines; no git, Electron, network or agent runs.
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../agents.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../codexexec.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../botpush.mjs?raw";
-import "../box.sh?raw";
-import "../catchup.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../chain.ts?raw";
-import "../clauderow.py?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../drive.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../pgrep.ts?raw";
-import "../env.sh?raw";
-import "../fieldrow.py?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../freshmain.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../gc.ts?raw";
-import "../keepruns.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../lane.ts?raw";
-import "../leakgrep.sh?raw";
-import "../loosening.sh?raw";
-import "../mutbox-entry.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../mutbox.Dockerfile?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../mutbox.ts?raw";
-import "../redact.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../sizecap.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./Outcome.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./Beat.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./Runners.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./typecheck.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../../mutation/scripts/limit.ts?raw";
-import "../../../mutation/scripts/run.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../../mutation/scripts/sample.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../../mutation/scripts/scope.ts?raw";
-import "../../../plan/scripts/plancheck.sh?raw";
-import "../../../step-commit/scripts/exam.py?raw";
-import "../../../step-commit/scripts/stepcommit.sh?raw";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Fiber, FileSystem, Option, Ref, type Scope } from "effect";
 import fc from "fast-check";
@@ -94,7 +42,7 @@ const args = (commands: ReadonlyArray<string>) => ({
   branch: "fabrikalfa/lane",
   plan: "/nowhere/plan.md",
   head: sha,
-  round: 3,
+  name: "lane-host3",
   commands,
   minutes: 1,
 });
@@ -288,7 +236,7 @@ describe("the lane's state file", () => {
         const state = `${boxes}/state/lane.json`;
         const before = { lane: "lane", ticket: "7", head: sha, steps: [{ step: "build", outcome: "done", head: sha }] };
         yield* fs.writeFileString(state, JSON.stringify(before));
-        const at = { boxes, lane: "lane", ticket: "7", round: 3, head: sha };
+        const at = { boxes, lane: "lane", name: "lane-host3", head: sha };
         const sent = { _tag: "send", to: "build", reason: "red" } as const;
         yield* recordInLane(at, { outcome: sent, head: sha, log: "x.log" }, "t1");
         const done = { _tag: "done", reason: "ok" } as const;

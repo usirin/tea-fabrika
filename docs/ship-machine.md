@@ -892,7 +892,7 @@ Three things to know before a real run. None of them came up in the first:
   close the ticket by mistake. What happens next is read from the ticket, never
   asked of a person: closed meanwhile, a named stop the ledger already holds,
   or criteria still open, which go to a new build of only those. See
-  [`direction/ask-for-decisions-not-facts.md`](./direction/ask-for-decisions-not-facts.md).
+  [0415](../.decisions/0415-ask-a-person-for-decisions.md).
 - **A branch behind main ships as it is.** The machine trusts the code host's
   own answer to "can this merge". A branch that is behind but has no conflict
   goes into the merge queue, which tests it on top of main. The gate has no

@@ -35,6 +35,12 @@ const here = Ci.local;             // today's [[checks.run]], in this process
 const hosts = Ci.ownHosts;         // a job is a lease on the ledger; our machines pull it
 ```
 
+*2026-11-12: the merge queue left `CodeHost`. fabrika provides the queue itself, as its own
+programs ([0107](../../.decisions/0107-fabrika-provides-the-merge-queue.md)), so in `next/`
+`CodeHost` holds no queue and `CodeHostWrites` has no `enqueue`: the contract is `change`, `update`
+and `merge` (`next/packages/libfabrika/src/codehost/CodeHost.ts`). It said, in the block above:
+`CodeHost`, "the merge queue", and `CodeHostWrites`, "enqueue".*
+
 ## Decided 2026-10-25: every edge is a service, even with one Layer
 
 ```ts
@@ -152,7 +158,7 @@ desk and every window are views.
     GitHub's and its own today.
 - **`Blobs` exists because the ledger holds no big bytes.** A log, a
   screenshot or a patch goes in by its hash; the ledger keeps the hash. That is
-  the claim-check pattern [push after review](./push-after-review.md) already
+  the claim-check pattern [0391](../../.decisions/0391-the-ledger-holds-the-commit-hash.md) already
   uses for commits.
 - **`Keys` grows because a fact that crosses machines must say who wrote it,
   and prove it.** The [sync engine note](./a-local-first-sync-engine.md) names
@@ -357,7 +363,7 @@ needs = "macos"
   its queue off, and ship merges straight in on a proof tested on main
   ([ship stage rules](./ship-stage-rules.md)). Open.
 - **The order stays as decided:** push, PR, CI
-  ([push after review](./push-after-review.md)). The runner fetches from the
+  ([push after review](../../.decisions/0392-push-is-a-step-after-review.md)). The runner fetches from the
   code host. CI before the push is possible later, since our machines are our
   own; that would change the decided order, so it is not proposed here.
 
@@ -427,7 +433,7 @@ the app people open, so it does not change.
   can run code on them
   ([GitHub](https://docs.github.com/en/actions/reference/security/secure-use)).
   It also ties CI to GitHub, and safety must not rest on one code host
-  ([north star first](./north-star-first-harden-later.md)). It stays a fine
+  ([north star first](../../.decisions/0324-security-follows-the-goal.md)). It stays a fine
   backend for a private repo that lives on GitHub: it is `Ci.githubActions`
   with a different machine.
 - **Why not a Bazel farm?** It runs actions of a build graph. `pnpm test` is
@@ -482,7 +488,7 @@ the app people open, so it does not change.
   With runners, a scheduled job that reads code can be filed as a CI job and
   taken by an always-on machine. Its other rules (it reads, judges and files
   a ticket; it never changes code) stay.
-- **No contradiction** with [push after review](./push-after-review.md) (the
+- **No contradiction** with [push after review](../../.decisions/0392-push-is-a-step-after-review.md) (the
   order stays), [Electron first](./the-gui-is-electron-first.md) (the runner
   has no window) or the [sync engine](./a-local-first-sync-engine.md) (this
   uses its leases, and its "no new lease during a split").

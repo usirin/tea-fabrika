@@ -24,9 +24,9 @@
 //
 // The step is a tea machine on the Effect engine:
 //
-//   (before)           box.sh gc (at most once in 30 min across starts, always on a nearly full
-//                      disk: gcDue), then a refusal when the data volume has under 20 GB free, or
-//                      when a worktree of the main checkout holds the lane's branch. Each start
+//   (before)           a refusal when the data volume has under 20 GB free, or when a worktree
+//                      of the main checkout holds the lane's branch. No start runs or waits for
+//                      box.sh gc: its own timer and each merge do (gcloop.ts, 0101). Each start
 //                      phase's time goes on the step's entry in state/<lane>.json as `phases`
 //   starting   Act     box.sh new, at the lane's head
 //   drafting   Sub     one turn of the agent in the box (`runTurn`), waited on; its typed answer
@@ -36,7 +36,8 @@
 //                      (a manifest the lockfile must follow, changed with the lockfile left alone,
 //                      is an ask: a box has no network, so the lead refreshes it outside)
 //   pushing    Act     botpush the backup branch, <branch>-wip (a -wip branch as it is), when
-//                      the step committed
+//                      the step committed, then the branch itself, with a draft pull request
+//                      when it has none (pr/Publish.ts, 0134); a refused push or draft is stuck
 //   recording  Act     the field row (with the plants the typed answer named, 0093),
 //                      state/<lane>.json and .md, and the box removed unless stuck
 //                      or it still holds work no branch has (uncommitted files, commits off the
@@ -46,8 +47,10 @@
 // Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (a question for
 // the lead, in `reason`), 30 stuck, 40 skip (nothing here for the step, such as a mutation step
 // whose diff has no product lines; the why is in `reason`), 2 usage, 3 refused to start, before
-// any agent ran: `refused:<check>`, one of agent_cap (8 agents running: the ACP harnesses drive
-// started), low_disk (under 20 GB free after box.sh gc), branch_checked_out (the lane's
+// any agent ran: `refused:<check>`, one of lane_running (another live process drives this lane:
+// a chain, or a step run alone; state/<lane>.lock holds its pid), agent_cap (12 agents running,
+// 0012: the ACP harnesses drive started), low_disk (under 20 GB free, with gcloop.ts's status
+// line), branch_checked_out (the lane's
 // branch checked out in a worktree, which the fetch could not update), docker_busy (a mutation step
 // while another run holds the one Docker box), or a box.sh new start check
 // (plan_unapproved, base_not_signed, shared_ticket, root_not_ancestor). It never retries. A stuck step
@@ -65,6 +68,7 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   readlinkSync,
   realpathSync,
@@ -81,7 +85,7 @@ import { Cmd, run } from "@demlik/tea/effect";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
-import { Cause, Effect, FileSystem, Option, Schema, Stream } from "effect";
+import { Cause, Effect, FileSystem, Layer, Option, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import {
   type Agents,
@@ -99,8 +103,24 @@ import {
   stepRow,
   type Turned,
 } from "./agents.ts";
-import { checkHolds, heldRules, laneRoot, lockfileBehind, startHead, stepOf, wipOf, workspaceGlobs } from "./lane.ts";
+import {
+  boxTree,
+  boxTrees,
+  boxView,
+  checkHolds,
+  heldRules,
+  laneRoot,
+  lockfileBehind,
+  startHead,
+  stepOf,
+  wipOf,
+  workspaceGlobs,
+} from "./lane.ts";
 import { pgrepAnswer, skipLine } from "./pgrep.ts";
+import * as Publish from "./pr/Publish.ts";
+import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
+import * as PushesProcess from "./pr/PushesProcess.ts";
+import * as RunId from "./runid.ts";
 
 const HERE = import.meta.dirname;
 export const STEPS = ["plan", "tests", "build", "mutation", "review"] as const;
@@ -244,7 +264,7 @@ export const faultFrom = (outcome: string, reason: string): Fault | null => {
  */
 const BOX_CHECKS = ["plan_unapproved", "base_not_signed", "shared_ticket", "root_not_ancestor"] as const;
 
-const CHECKS = [...BOX_CHECKS, "agent_cap", "low_disk", "branch_checked_out", "docker_busy"] as const;
+const CHECKS = [...BOX_CHECKS, "lane_running", "agent_cap", "low_disk", "branch_checked_out", "docker_busy"] as const;
 type Check = (typeof CHECKS)[number];
 type Refused = { readonly kind: "refused"; readonly check: Check };
 /** How a drive ends: the step's outcome, or a start check that refused before the step ran. */
@@ -456,9 +476,22 @@ const readAnswer = (report: string): typeof Said.Type => {
   return Said.cases.one.make({ verb, to: m[2]?.toLowerCase() ?? "", reason });
 };
 
+const AnswerAlone = Schema.fromJsonString(Schema.Struct({ verb: Schema.String, reason: Schema.String }));
+
+/**
+ * The text a review's verdict is read from: the report, or, when the report is the typed answer
+ * alone, that answer's `reason`. A review sometimes puts its whole report there (tickets 869 and
+ * 871, 2026-11-12), and a correct merge-ready was refused.
+ */
+const verdictText = (report: string) =>
+  Option.match(Schema.decodeUnknownOption(AnswerAlone)(report.trim()), {
+    onNone: () => report,
+    onSome: (answer) => answer.reason,
+  });
+
 /** A review is merge-ready only when its first line says so and no line says `changes: <n>`, n above 0. */
 const mergeReady = (report: string) => {
-  const lines = outsideFences(report).map((l) => l.replace(/^[`*#\s]+/, ""));
+  const lines = outsideFences(verdictText(report)).map((l) => l.replace(/^[`*#\s]+/, ""));
   return /^merge-ready\b/i.test(lines[0] ?? "") && !lines.some((l) => /^changes:\s*0*[1-9]/i.test(l));
 };
 
@@ -479,8 +512,8 @@ const greenOf = (report: string) => {
 type Judged = { readonly outcome: Outcome; readonly reason: string };
 type Ended = { readonly outcome: End; readonly reason: string };
 
-const stuck = (why: Extract<Outcome, { kind: "stuck" }>["why"], text: string): Judged => ({
-  outcome: { kind: "stuck", why },
+const stuck = (reason: Extract<Outcome, { kind: "stuck" }>["why"], text: string): Judged => ({
+  outcome: { kind: "stuck", why: reason },
   reason: text,
 });
 
@@ -528,6 +561,7 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
   // A box has no network, so it cannot refresh the lockfile; the lead does, outside it (ticket 385).
   if (read.manifests.length > 0) {
     return {
+      // oxlint-disable-next-line eslint/id-denylist -- today's outcome shape, as outcomesOf writes it
       outcome: { kind: "ask", who: "lead", for: "lockfile" },
       reason:
         `pnpm-lock.yaml is behind ${read.manifests.join(" ")}, and a box has no network. ` +
@@ -576,7 +610,18 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
       }
 
       if (ask.step === "tests" && read.commits === 0) {
-        return stuck("no_commit", "answered done with no commit");
+        // A review may ask only for plant records that already ran (ticket 850): the answer's
+        // plants are the work, and the chain hands them to the next review's brief.
+        const plants = answer?.plants ?? [];
+
+        if (plants.length === 0 || read.changed > 0) {
+          return stuck("no_commit", "answered done with no commit");
+        }
+
+        return {
+          outcome: { kind: "done", part: false, head: read.head },
+          reason: `no commit: ${plants.length} plant records at ${read.head.slice(0, 8)}. ${said.reason}`,
+        };
       }
 
       if (ask.step === "review" && !mergeReady(read.report)) {
@@ -589,40 +634,12 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
       return { outcome: { kind: "send", to, why: "step_said" }, reason: said.reason };
     }
     case "ask":
+      // oxlint-disable-next-line eslint/id-denylist -- today's outcome shape, as outcomesOf writes it
       return { outcome: { kind: "ask", who: "lead", for: "question" }, reason: said.reason };
     case "skip":
       return { outcome: { kind: "skip", why: "step_said" }, reason: said.reason };
     default:
       return stuck("step_said", said.reason);
-  }
-};
-
-/** Every file drive keeps for one box, by suffix. A box name is fresh only when none exists. */
-const BOX_FILES = [
-  "",
-  "-gitdata",
-  "-view",
-  "-mutbox",
-  "-prompt.md",
-  ".md",
-  ".jsonl",
-  ".err",
-  ".log",
-  "-plan.md",
-  "-plan.jsonl",
-];
-
-/**
- * The first box `<lane>-<step><n>`, from `n` up, that no file of an older run holds. A refused run
- * once returned an older run's `<box>.md` as its report (p12 review5, 2026-11-09, ticket 383).
- */
-export const freshBox = (lane: string, step: string, n: number, taken: (name: string) => boolean): string => {
-  for (let i = n; ; i += 1) {
-    const box = `${lane}-${step}${i}`;
-
-    if (!BOX_FILES.some((suffix) => taken(`${box}${suffix}`))) {
-      return box;
-    }
   }
 };
 
@@ -949,7 +966,7 @@ const boxGit = (env: Pick<Env, "BOXES">, box: string, ...args: string[]) => {
     "git",
     [
       `--git-dir=${join(env.BOXES, `${box}-gitdata`)}`,
-      `--work-tree=${join(env.BOXES, box)}`,
+      `--work-tree=${boxTree(env.BOXES, box)}`,
       "-c",
       "status.renames=false",
       ...args,
@@ -969,8 +986,8 @@ const boxGit = (env: Pick<Env, "BOXES">, box: string, ...args: string[]) => {
  * file: it reads the box's own data (`boxGit`). Returns what failed, or `null`.
  */
 const gitView = (env: Env, ask: Ask): string | null => {
-  const work = join(env.BOXES, ask.box);
-  const view = join(env.BOXES, `${ask.box}-view`);
+  const work = boxTree(env.BOXES, ask.box);
+  const view = boxView(env.BOXES, ask.box);
   const own = join(view, "worktrees", ask.box);
   const clone = sh("git", ["clone", "-q", "--mirror", "--local", env.MAIN, view]);
 
@@ -989,8 +1006,8 @@ const gitView = (env: Env, ask: Ask): string | null => {
 
 /** The view goes when the step ends, and a box that stays gets its own `.git` line back. */
 const dropView = (env: Env, box: string) => {
-  const work = join(env.BOXES, box);
-  rmSync(join(env.BOXES, `${box}-view`), { recursive: true, force: true });
+  const work = boxTree(env.BOXES, box);
+  rmSync(boxView(env.BOXES, box), { recursive: true, force: true });
 
   if (box !== "" && existsSync(join(env.BOXES, `${box}-gitdata`)) && existsSync(work)) {
     writeFileSync(join(work, ".git"), `gitdir: ${join(env.BOXES, `${box}-gitdata`)}\n`);
@@ -1057,7 +1074,7 @@ export const boxChanges = (env: Pick<Env, "BOXES">, box: string) => {
     return { ...listed, changes: [] as Change[] };
   }
 
-  const moved = caseRenames(join(env.BOXES, box), listed.out.split("\0").filter(Boolean));
+  const moved = caseRenames(boxTree(env.BOXES, box), listed.out.split("\0").filter(Boolean));
   const old = new Set(moved.map((m) => m.from));
   const changes: Change[] = [
     ...changedFiles(status.out).filter((c) => !old.has(c.path)),
@@ -1105,7 +1122,7 @@ const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
   }
 
   try {
-    const box = join(env.BOXES, ask.box);
+    const box = boxTree(env.BOXES, ask.box);
 
     for (const { xy, path, from: old } of changes) {
       const to = join(wt, path);
@@ -1293,10 +1310,10 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         }
 
         const head = ask.step === "review" ? ask.base : git("rev-parse", ref).out.trim();
-        const failed = (what: string, r: { code: number; err: string }) => ({
+        const failed = (message: string, r: { code: number; err: string }) => ({
           ...empty,
           head,
-          problem: `${what}: ${tail(r.err)}`,
+          problem: `${message}: ${tail(r.err)}`,
         });
         const count = git("rev-list", "--count", `${ask.base}..${head}`);
 
@@ -1381,13 +1398,25 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           problem: null,
         };
       }),
+    // The step's commit came out of the box: the backup first, then the lane's own branch and its
+    // draft pull request, opened at the lane's first commit (0134). A box cannot push: no key, no
+    // network (0045), so this host part does, the moment drive commits.
     backup_push: (cmd: { ask: Ask; head: string }) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         const r = sh("node", [join(HERE, "botpush.mjs"), env.MAIN, wipOf(cmd.ask.branch), cmd.head]);
-        return {
-          ok: r.code === 0,
-          detail: r.code === 0 ? tail(r.out, 1) : `botpush: ${tail(r.out + r.err, 1)}`,
-        };
+
+        if (r.code !== 0) {
+          return { ok: false, detail: `botpush: ${tail(r.out + r.err, 1)}` };
+        }
+
+        const { ask } = cmd;
+        const text = { title: `T${ask.ticket} ${ask.lane}: the lane's steps are running`, body: Publish.DRAFT_BODY };
+        const services = Layer.mergeAll(PushesProcess.layer(HERE), PullRequestsGh.layer(env.GH_REPO, env.MAIN));
+        return yield* Publish.publish({ dir: env.MAIN, branch: ask.branch, head: cmd.head, text }).pipe(
+          Effect.map((p) => ({ ok: true, detail: `${tail(r.out, 1)}; ${Publish.line(ask.branch, p)}` })),
+          Effect.catch((e) => Effect.succeed({ ok: false, detail: `publish ${ask.branch}: ${e.reason}` })),
+          Effect.provide(Layer.provide(services, nodeServices)),
+        );
       }),
     record: (e: typeof Entry.Type) =>
       Effect.sync(() => {
@@ -1449,6 +1478,8 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           fault: faultFrom(outcome, e.reason),
           exit: ok ? e.exit : 30,
           report: writtenReport(ask),
+          // The plants the answer named, so a later review's brief carries them (ticket 850).
+          ...(e.plants === undefined ? {} : { plants: e.plants }),
           kept: keep,
           ended,
           phases: first === null || ready === null ? phases : [...phases, { name: "agent_start", ms: first - ready }],
@@ -1470,7 +1501,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         );
 
         if (!keep && ask.step !== "plan" && ask.box) {
-          rmSync(join(env.BOXES, ask.box), { recursive: true, force: true });
+          rmSync(boxTree(env.BOXES, ask.box), { recursive: true, force: true });
           rmSync(join(env.BOXES, `${ask.box}-gitdata`), { recursive: true, force: true });
           // Its facts go with it, so no later stepcommit reads a dead box's plan hash.
           rmSync(join(env.BOXES, "state", `${ask.box}.box`), { force: true });
@@ -1493,13 +1524,21 @@ export const agentTail = (ask: Pick<Ask, "step" | "ticket">, electron: boolean) 
   const lock = holdsElectron(ask.step, electron)
     ? "drive.ts holds the laptop's Electron lock (state/electron.lock) for you for this whole step, so do not take it or wait on it. Start at most one Electron app at a time, and close it before you answer.\n"
     : "";
-  return `\n\n---\n${skill}${commit}${lock}${ask.step === "plan" ? "" : FINISH}`;
+  return `\n\n---\n${skill}${commit}${lock}${NO_ESCALATION}${ask.step === "plan" ? "" : FINISH}`;
 };
 
+/** The rule that keeps a refused command from ending a turn (2026-11-11: in the boxes folder,
+ * every Codex ask, 15 of 15, ended its turn `cancelled` within 15 ms. A command the box refused
+ * (`volta run`, `docker info`, `pgrep`) made Codex ask to run it outside, and its only "no" for
+ * that ask is the one that cancels the turn). */
+export const NO_ESCALATION =
+  "Never ask to run a command outside your box (Codex's `require_escalated`): nobody answers, and the ask ends your turn with no answer. A command your box refuses stays refused: go on without it and name it in your report.\n";
+
 /** The rule that lets a boxed step answer done (2026-11-11: a tests step sent itself round after
- * round, listing as unfinished the parts no tests box can do). */
+ * round, listing as unfinished the parts no tests box can do; then two build rounds of p42s1 each
+ * answered `stuck` after a minute or three, with most of the planned code still to write). */
 export const FINISH =
-  'Work until every part this box allows is done. A part that needs another step\'s code, a typecheck or `--changed` is written, named in the report as "after build" or "lead runs it", and does not block `done`.\n';
+  'Work until every part this box allows is done. A part that needs another step\'s code, a typecheck or `--changed` is written, named in the report as "after build" or "lead runs it", and does not block `done`. `stuck` is for a blocker this box cannot get past, never for work still to do: a law that is red because code this step owns is missing is the work.\n';
 
 /**
  * The approved plan, whole, for a step in a box. The harness closes home around the box (Claude's
@@ -1575,7 +1614,7 @@ const turn = (env: Env, agents: Agents, ask: Ask, prompt: string) =>
   runTurn(agents, {
     provider: stepProvider(ask.agent, ask.step),
     session: ask.box,
-    folder: ask.step === "plan" ? env.MAIN : join(env.BOXES, ask.box),
+    folder: ask.step === "plan" ? env.MAIN : boxTree(env.BOXES, ask.box),
     prompt,
     system: `You are the ${ask.step} step for ticket ${ask.ticket}, run by drive.ts; answer with the JSON object the prompt asks for.`,
     answer: answerFor(ask.step),
@@ -1742,7 +1781,7 @@ type Lane = {
   readonly branch?: string;
   readonly root?: string;
   readonly head?: string;
-  readonly steps: readonly { readonly step: string; readonly report?: string | null }[];
+  readonly steps: readonly { readonly step: string; readonly box?: string; readonly report?: string | null }[];
 };
 
 // ---------------------------------------------------------------- the command
@@ -1762,6 +1801,12 @@ drive.ts reads your report, then one JSON object at its very end (its schema fol
 
 const MIN_FREE_GB = 20;
 
+/** At most this many code agents run at once on the laptop (decision 0012). */
+export const AGENT_CAP = 12;
+
+/** A step's start is refused once the agents running reach the cap. */
+export const agentCapFull = (agents: number): boolean => agents >= AGENT_CAP;
+
 /** One timed part of a step's start, in ms, kept on the step's entry in state/<lane>.json, so the
  * lead reads where a start's time goes (ticket 673: 100 to 180 s before the agent acted). */
 const Phase = Schema.Struct({ name: Schema.String, ms: Schema.Number });
@@ -1778,28 +1823,6 @@ export const firstEventAt = (events: string): number | null => {
   const first = Schema.decodeUnknownOption(FirstEvent)(events.split("\n", 1)[0] ?? "");
   const at = first._tag === "Some" ? Date.parse(first.value.at) : Number.NaN;
   return Number.isFinite(at) ? at : null;
-};
-
-/** How long after one sweep a step's start skips box.sh gc. A box is removable only after 2 h idle
- * (gc's IDLE), so a sweep every 30 min frees a box at most 30 min later; the ticket cites Ramp's
- * 30-minute rebuild for the same trade. One sweep took about 22 s of reads on 2026-11-11. */
-export const GC_EVERY = 30 * 60_000;
-
-/** Whether a step's start sweeps the boxes (gcDue), and why. */
-export const Sweep = Schema.TaggedUnion({ run: { reason: Schema.String }, skip: { reason: Schema.String } });
-
-/** Whether this start runs box.sh gc: always on a nearly full or unreadable disk, so the low_disk
- * refusal always follows a fresh sweep; else when no sweep started in the last GC_EVERY. */
-export const gcDue = (now: number, last: number | null, free: number | null): typeof Sweep.Type => {
-  if (free === null || free < MIN_FREE_GB) {
-    return Sweep.cases.run.make({ reason: free === null ? "df could not read the free space" : `${free} GB free` });
-  }
-
-  if (last === null || now - last >= GC_EVERY || now < last) {
-    return Sweep.cases.run.make({ reason: last === null ? "no sweep recorded" : "the last sweep is old" });
-  }
-
-  return Sweep.cases.skip.make({ reason: `the last sweep started ${Math.round((now - last) / 60_000)} min ago` });
 };
 
 /** Whole GB free on the volume that holds `path`, from `df -k`; `null` when df says nothing usable. */
@@ -1885,26 +1908,85 @@ const lockTaken = (lock: string): boolean => {
   }
 };
 
-/** One Electron step at a time: a lock file holding the owner's pid, taken over when it is dead. */
+/**
+ * A pid lock file, the one kind the lead's tools keep: `null` once this process holds it (taken
+ * now, or already its own), else the pid of the live process that holds it. A lock whose owner is
+ * dead is taken over.
+ */
+const holdLock = (lock: string): number | null => {
+  for (;;) {
+    if (lockTaken(lock)) {
+      return null;
+    }
+
+    const owner = Number(readFileSync(lock, "utf8").trim());
+
+    if (owner === process.pid) {
+      return null;
+    }
+
+    if (alive(owner)) {
+      return owner;
+    }
+
+    rmSync(lock, { force: true });
+  }
+};
+
+/** One Electron step at a time: the lock file, waited for while another live process holds it. */
 const takeElectron = (env: Env) =>
   Effect.gen(function* () {
     const lock = join(env.BOXES, "state", "electron.lock");
 
-    for (;;) {
-      if (lockTaken(lock)) {
-        process.on("exit", () => rmSync(lock, { force: true }));
-        return;
-      }
-
-      const owner = Number(readFileSync(lock, "utf8").trim());
-
-      if (alive(owner)) {
-        yield* Effect.sleep("20 seconds");
-      } else {
-        rmSync(lock, { force: true });
-      }
+    while (holdLock(lock) !== null) {
+      yield* Effect.sleep("20 seconds");
     }
+
+    process.on("exit", () => rmSync(lock, { force: true }));
   });
+
+/** The lock one live process holds while it drives a lane: a chain, or a step drive.ts runs alone. */
+const laneLock = (boxes: string, lane: string) => join(boxes, "state", `${lane}.lock`);
+
+/**
+ * Take the lane for this process: `null` once it holds it, else the pid of the live process that
+ * drives the lane now. Two launches of one lane once both took `p39s1-tests2` (2026-11-11).
+ */
+export const holdLane = (boxes: string, lane: string): number | null => {
+  mkdirSync(join(boxes, "state"), { recursive: true });
+  return holdLock(laneLock(boxes, lane));
+};
+
+/** Give the lane back, only when this process holds it. */
+export const freeLane = (boxes: string, lane: string): void => {
+  const lock = laneLock(boxes, lane);
+
+  if (existsSync(lock) && Number(readFileSync(lock, "utf8").trim()) === process.pid) {
+    rmSync(lock, { force: true });
+  }
+};
+
+/**
+ * The names a lane's next run id must pass, for `RunId.next`: every file in the boxes folder and
+ * every box the lane's state file records. A run id names its box and every file the run leaves,
+ * so an older run's file is never read as a new run's: a refused run once returned an older run's
+ * `<box>.md` as its report (p12 review5, 2026-11-09, ticket 383). A box's tree and its view sit
+ * in `boxTrees`, every other file of the run beside the boxes, so both folders are read.
+ */
+export const runNames = (boxes: string, lane: string): string[] => {
+  const state = join(boxes, "state", `${lane}.json`);
+  const saved: Lane | null = existsSync(state) ? (JSON.parse(readFileSync(state, "utf8")) as Lane) : null;
+  const trees = boxTrees(boxes);
+  return [
+    ...readdirSync(boxes),
+    ...(existsSync(trees) ? readdirSync(trees) : []),
+    ...(saved?.steps ?? []).flatMap((e) => (e.box === undefined ? [] : [e.box])),
+  ];
+};
+
+/** What a second launch of a lane is told. */
+export const laneRunning = (lane: string, pid: number): string =>
+  `lane ${lane} is already running in process ${pid}; wait for it to end, or stop it, before starting it again`;
 
 /** What one step is asked for, as the command line or the chain gives it. */
 export interface StepArgs {
@@ -1937,9 +2019,10 @@ const refusal = Start.cases.refused.make;
 const usageError = (reason: string): Refusal => refusal({ outcome: "usage", reason, exit: 2 });
 
 /**
- * Everything before the agent: the usage checks, the base and the lane's root, a fresh box name,
- * the agent cap, the disk, the lane's branch not held by a worktree, and the prompt file. Pure
- * reads of the main checkout and the laptop; nothing it does needs undoing.
+ * Everything before the agent: the usage checks, the lane taken for this process, the base and the
+ * lane's root, a fresh run id, the agent cap, the disk, the lane's branch not held by a worktree,
+ * and the prompt file. Reads of the main checkout and the laptop, beside the lane's lock, which
+ * the process that took it gives back (`freeLane`).
  */
 export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   const { lane, step, agent, electron } = p;
@@ -1966,7 +2049,17 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     return usageError("--model is for --agent claude; a Codex box reads CODEX_MODEL");
   }
 
-  mkdirSync(join(env.BOXES, "state"), { recursive: true });
+  // A chain holds its lane already; a step run alone takes it here, before any box is made.
+  const running = holdLane(env.BOXES, lane);
+
+  if (running !== null) {
+    return refusal({
+      outcome: endName({ kind: "refused", check: "lane_running" }),
+      reason: laneRunning(lane, running),
+      exit: 3,
+    });
+  }
+
   const statePath = join(env.BOXES, "state", `${lane}.json`);
   const saved: Lane | null = existsSync(statePath) ? (JSON.parse(readFileSync(statePath, "utf8")) as Lane) : null;
   const ticket = p.ticket ?? saved?.ticket;
@@ -2021,10 +2114,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     return usageError(`${base.slice(0, 8)} shares no history with origin/main`);
   }
 
-  const box = freshBox(lane, step, (saved?.steps.filter((e) => e.step === step).length ?? 0) + 1, (name) =>
-    existsSync(join(env.BOXES, name)),
-  );
-  const n = Number(box.slice(`${lane}-${step}`.length));
+  const box = RunId.next(lane, step, runNames(env.BOXES, lane));
   const at = (suffix: string) => join(env.BOXES, `${box}${suffix}`);
   const claude = agent === "claude";
   const ask: Ask = {
@@ -2039,7 +2129,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     base,
     root,
     box,
-    run: `t${ticket}-${step}${n === 1 ? "" : n}`,
+    run: box,
     prompt: at("-prompt.md"),
     report: step === "plan" ? at("-plan.md") : at(".md"),
     events: step === "plan" ? at("-plan.jsonl") : at(".jsonl"),
@@ -2058,47 +2148,27 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
 
   if (refused) {
     console.error(skipLine("agent cap"));
-  } else if (agents >= 8) {
+  } else if (agentCapFull(agents)) {
     return refusal({
       outcome: endName({ kind: "refused", check: "agent_cap" }),
-      reason: `${agents} agents running (the ACP harnesses drive started); the cap is 8`,
+      reason: `${agents} agents running (the ACP harnesses drive started); the cap is ${AGENT_CAP}`,
       exit: 3,
     });
   }
 
-  // Dead boxes filled the disk once (2026-11-09): sweep them, then refuse on a nearly full disk,
-  // naming what gc kept and why, so the lead fixes the cause and never asks the owner for space.
-  // The sweep runs at most once in GC_EVERY across all starts, and always on a nearly full disk
-  // (gcDue); its start time is stamped first, so starts beside it skip it (ticket 673).
-  const stamp = join(env.BOXES, "state", "gc.last");
-  const before = freeGb(env.BOXES);
-  const swept = Date.parse(existsSync(stamp) ? readFileSync(stamp, "utf8").trim() : "");
-  const due = gcDue(Date.now(), Number.isFinite(swept) ? swept : null, before);
-  let gcOut = "";
-
-  if (due._tag === "run") {
-    const gcStart = Date.now();
-    writeFileSync(stamp, `${new Date(gcStart).toISOString()}\n`);
-    const gc = spawnSync("sh", [join(HERE, "box.sh"), "gc"], {
-      stdio: ["ignore", "pipe", 2],
-      encoding: "utf8",
-      maxBuffer: 16 * 1024 * 1024,
-    });
-    gcOut = gc.stdout ?? "";
-    process.stderr.write(gcOut);
-    phases.push({ name: "gc", ms: Date.now() - gcStart });
-  } else {
-    process.stderr.write(`box.sh gc skipped: ${due.reason}\n`);
-  }
-
-  const free = due._tag === "run" ? freeGb(env.BOXES) : before;
+  // Dead boxes filled the disk once (2026-11-09). The cleanup is no step's job any more: a timer and
+  // each merge run it (gcloop.ts, 0101; a hung one held 12 starts over 6 minutes each on
+  // 2026-11-10). A nearly full disk refuses here and starts no cleanup of its own: the reason says
+  // when the loop last swept and what it kept, so the lead fixes the cause and never asks the owner
+  // for space. A standing box name never refuses: RunId.next above takes the first free one.
+  const free = freeGb(env.BOXES);
 
   if (free === null || free < MIN_FREE_GB) {
     const said = free === null ? "df could not read the free space" : `${free} GB free`;
-    const keeps = gcOut.split("\n").filter((l) => l.startsWith("keep "));
+    const loop = sh(process.execPath, [join(HERE, "gcloop.ts"), "status", "--keeps"]);
     return refusal({
       outcome: endName({ kind: "refused", check: "low_disk" }),
-      reason: `${said} on the boxes' volume after box.sh gc; drive needs ${MIN_FREE_GB}; gc kept ${keeps.length}: ${keeps.map((l) => l.slice(5)).join("; ") || "nothing"}`,
+      reason: `${said} on the boxes' volume; drive needs ${MIN_FREE_GB}; ${loop.out.trim() || `gcloop.ts status failed: ${tail(loop.err)}`}`,
       exit: 3,
     });
   }
@@ -2297,6 +2367,8 @@ const main = () => {
   }
 
   const env = loadEnv();
+  // prepare takes the lane for this process; it is given back however the process ends.
+  process.on("exit", () => freeLane(env.BOXES, lane));
   const prepared = prepare(env, {
     lane,
     step: step as StepName,

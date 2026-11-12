@@ -2,6 +2,35 @@
 // patches and the runner that steps a process. Browser-safe: it reaches no platform.
 export * as Id from "./Id.ts";
 export { IdError, type IdSchema, type IdValue } from "./Id.ts";
+/**
+ * @stability unstable
+ */
+export * as Chaos from "./runtime/Chaos.ts";
+/**
+ * Saved bounded experiments and their command definitions.
+ * @stability unstable
+ */
+export * as ChaosMachine from "./runtime/ChaosMachine.ts";
+/**
+ * @stability unstable
+ */
+export * as Nemesis from "./runtime/Nemesis.ts";
+/**
+ * @stability unstable
+ */
+export * as NemesisLedger from "./runtime/NemesisLedger.ts";
+/**
+ * @stability unstable
+ */
+export * as NemesisNone from "./runtime/NemesisNone.ts";
+/**
+ * @stability unstable
+ */
+export * as ProcessHistory from "./processes/ProcessHistory.ts";
+/**
+ * @stability unstable
+ */
+export * as ProcessHistoryLedger from "./processes/ProcessHistoryLedger.ts";
 export {
   Alarm,
   CheckedWriter,
@@ -37,3 +66,30 @@ export {
   workerExecution,
 } from "./runtime/Execution.ts";
 export { Gateway, type ConnectionId } from "./gateway/Gateway.ts";
+// A program window's typed contract, and the rows a client records (P14).
+export {
+  ClientRecord,
+  ClientRow,
+  commandMsg,
+  defineWindow,
+  type WindowData,
+  type WindowMsg,
+  type WindowProps,
+  type WindowRegistration,
+} from "./runtime/Window.ts";
+/**
+ * @stability unstable
+ */
+export * as Ci from "./ci/Ci.ts";
+/**
+ * @stability unstable
+ */
+export * as CodeHost from "./codehost/CodeHost.ts";
+/**
+ * @stability unstable
+ */
+export * as Send from "./runtime/Send.ts";
+/**
+ * @stability unstable
+ */
+export * as Setting from "./settings/Setting.ts";

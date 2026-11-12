@@ -27,8 +27,47 @@ The app is a client. The host is its own process, as the tmux server is: it hold
 tsh, the programs, the history, the jobs, `ledger.sqlite` and the desk. Cmd-Q quits only the
 app. The next start attaches to the same host.
 
+## Projects
+
+A window is one project: one git working tree, with a host of its own
+([project window](../../docs/direction/project-window.md), ticket 276). Cmd-O, File > Open
+Project… and the top bar's project button open the projects box: recent projects by name, their
+place in faint text, when each was last opened, and Open Folder… last. A project already open
+comes to the front; any other opens in a new window. A window with no project yet shows the
+welcome page, with no tiles and no host.
+
+```text
+Cmd-O, or the project button   the projects box: type to filter, Enter opens, Esc closes
+Open Folder…                   the system's folder sheet; a folder outside git is refused, in words
+two folders named the same     each title gains its parent's name: "repo · left", "repo · right"
+```
+
 ```ts
-// Between the app and the host (src/link.ts): NDJSON on a Unix socket, `<home>/host/sock`.
+// src/project.ts: the root git names for the folder picked, links resolved; the key is its SHA-256.
+type Project = {root: string; key: string};
+// The durable state of one project, in today's formats.
+`<home>/projects/<key>/`     // desk.json, asks.json, history, storage, records, ledger.sqlite, host/log
+// Its sockets, pid and start lock: short and private, outside the home (src/host/socket.ts).
+`/tmp/fabrika-<uid>/<id>/`   // sock, mcp, pid, lock
+```
+
+- **The project travels in the hello.** The link's version is 3: an app hello names the project
+  key, and a host for another project refuses it (`wire.ts`). `host/main.ts` starts only on a
+  project's folder, with its `project.json`.
+- **The old desk moves once** (`project-migration.ts`): the first project opened on a home that
+  still has a desk at its top copies it under `projects/<key>/`, checks every file by its digest,
+  then publishes it by one rename. `migration.json` keeps the rule it chose and its phase. A move
+  that fails leaves the old files and a running old host alone, and the welcome page says why,
+  with Try Again.
+- **The windows are a tea machine in main** (`projects.ts`): which project each window shows,
+  what is opening and closing, the recent list (`session.json`) and the Dock badge. Its own
+  records go to `<home>/records/projects.jsonl`.
+- `keybindings.toml` is shared by every project's host: each edit is read, checked and renamed
+  under a lock across processes (`host/keybindings.ts`), and each host hears every save.
+- Restoring last session's windows at launch comes in the next pull request.
+
+```ts
+// Between the app and the host (src/link.ts): NDJSON on a Unix socket, the project's `sock`.
 type Up = {type: "hello"; version: number} | {type: "page"} | {type: "away"}
 	| {type: "on"; port: string; m: unknown};
 // The host's hello names its build too; one built before builds names none.
@@ -74,11 +113,11 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
   none, and let go. No second runtime ships, and Electron's Node is the one the app was built and
   tested on. It holds the tiles (tsh and the line editor, one of each per tile), the ledger, the
   history and the desk.
-- **One host per home.** Apps that find no host at the same moment each start one. The hosts
-  take turns under `<home>/host/lock`, from the look at the socket until they listen, as tmux's
+- **One host per project.** Apps that find no host at the same moment each start one. The hosts
+  take turns under the project's start `lock`, from the look at the socket until they listen, as tmux's
   `<socket>.lock` does: one listens, the rest find it answering and step aside, and every app
   attaches to it. No host removes a socket another one listens on.
-- **The link is a Unix socket,** `<home>/host/sock`, mode 0600 in a 0700 folder. No TCP and no
+- **The link is a Unix socket,** `sock` in the project's runtime folder (above), mode 0600 in a 0700 folder. No TCP and no
   secret: the file's mode is the lock, as tmux's is. One JSON line a message (NDJSON), each read
   with an Effect Schema at both ends. A version handshake first (`link.ts`): an app of another
   version is not attached, says so, and leaves that host running.
@@ -94,7 +133,11 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 
 | File | What it does |
 |---|---|
-| `src/main.ts` | The Electron edge, a thin relay. One copy at a time; at most one window, sandboxed, on the app's own scheme; every way out refused, and a link's URL handed to the person's own browser (`outside.ts`). Attaches to the host, or starts it. A port per tile, per run and one for the desk, handed only to the window's own top frame on its own page, and lines passed between them and the host. On macOS the window hides its title bar and keeps the system's buttons in the page's top bar. It sets the Dock badge to the asks count, and notifies a new ask only when the window is not focused. |
+| `src/main.ts` | The Electron edge, a thin relay. One copy at a time; a window per project and a welcome window, each sandboxed, on the app's own scheme; every way out refused, and a link's URL handed to the person's own browser (`outside.ts`). Attaches to the host, or starts it. A port per tile, per run and one for the desk, handed only to the window's own top frame on its own page, and lines passed between them and the host. On macOS the window hides its title bar and keeps the system's buttons in the page's top bar. It sets the Dock badge to the asks count, and notifies a new ask only when the window is not focused. |
+| `src/project.ts` | A project: the folder checked with git, its key, its paths, and window titles that tell equal folder names apart. |
+| `src/projects.ts` | The windows' tea machine in main: open, focus, close and quit, the recent list, the rows the welcome page and the projects box show, and the File menu. |
+| `src/project-migration.ts` | Moves an old home's desk under its first project, checked by digest and published by one rename. |
+| `src/window/projects.tsx` | The welcome page and the projects box. |
 | `src/outside.ts` | What leaves the window: a link's URL, to the person's own browser (`Browser`, which main gives `shell.openExternal`). Only http and https, and only from the desk page; any other scheme is refused. |
 | `src/launch.ts` | How this start shows itself, decided once from the environment: the owner's, quiet (a home of its own), or in the foreground on a home (`FABRIKA_FOREGROUND=1`). |
 | `src/attach.ts` | The app's side: reach the socket; if no host answers, start one and wait for it to listen; then the link and its handshake. A host that says no hello within 10 s fails the try (`NoHello`), and the try closes its socket. A host it started that steps aside for another is no failure: it attaches to the one that answers. |
@@ -118,6 +161,7 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `table.ts` | Writes `src/editor/cells.table.ts`: asks ghostty-web's wasm the width and grapheme class of every code point (`cells.probe.ts`). Run it with `pnpm table` after a new ghostty-web; `cells.test.ts` fails until then. |
 | `shots.ts` | The page alone in headless Chromium, with no Electron and no host: the built `dist/`, handed a desk and the tracker, ticket and map views of the stand-in ticket #7, the trace of that ticket's lanes, and the trace of `seq --to 3 | tally` (as it opens, and opened down to the step add 2), as the host would send them. Two of its desks come from the desk machine's own steps: `tracker | ticket | trace` opened beside the map, and in a spot too tight, its extra windows folded. Writes `docs/round-6/*.png`. No window, no network. Not in `pnpm test`. |
 | `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, the asks list and the palette (focus in, no key through to the tile under them, Escape and a click outside giving focus back, one open at a time), a covered run, the close question, `&` and `attach`, a link in a ticket clicked, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit with the host and counter running on, open again on the same desk, a split through the host, the last tile closing the window, a host of another version, one ask taking another's place with the asks list open, and the link dropping: the socket cut, the host killed, and no host until Try again. It stops its own hosts by their pids and checks with `pgrep`. Not in `pnpm test`. macOS only: CI runs it on a macOS runner (the check workflow's `e2e` job). It swaps main's `shell.openExternal` for a list first, so it never opens a real browser. `node e2e.ts --keys` runs only the keys editor: search, record, save, clash and Undo, focus after each, a bad file and a failed save, with its shots in `docs/keybindings/` at five layouts in both looks. |
+| `test-window.ts` | The one door for a test window: every e2e script launches the app through it, on a short home of its own and never `FABRIKA_FOREGROUND`, and sizes it with `size`. The app's quiet start hides the window (opacity 0, click-through, the work area's corner), and `close` fails if any window took OS focus or showed above opacity 0. The watch behind `close` is loaded with Electron's `-r`, before the app's own code, so it sees the first window from the moment it is made. |
 
 ## Keys
 
@@ -564,7 +608,7 @@ claude mcp add --transport stdio --env FABRIKA_HOME=<home> fabrika -- \
 ```
 
 - `fabrika mcp` is a stdio bridge: it passes MCP's lines to the running host on
-  `<home>/host/mcp`, a socket only you can open (mode 0600). The host serves MCP itself, with the
+  the project's `mcp`, a socket only you can open (mode 0600). The host serves MCP itself, with the
   official SDK (`@kampus/fabrika-old/mcp`, spec 2026-07-28). With no host running, the bridge says so
   on stderr and ends: open the app first.
 - **The bridge outlives the host.** When the host ends (the window's "Stop the old host and start
@@ -688,13 +732,16 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app-old e2e
 - The first run downloads Electron's binary, about 6 seconds. Electron 45 has no install script:
   it downloads on first use, so pnpm needs no `allowBuilds` entry for it.
 - `FABRIKA_HOME=<folder>` puts the app's own files there instead of Electron's folder:
-  `desk.json`, `asks.json`, `storage/jobs/`, `history`, `ledger.sqlite`, `agent_ed25519` (the
-  agents' key, on a home connected to a ledger server), the one-copy lock, and the host's
-  `host/sock`, `host/mcp` (agents), `host/pid`, `host/log` (`key=value` lines: what the host did, each job's begin and end, each
-  lane step's begin and end, and a lag line when its thread is starved), `host/restart.json`
-  between a restart and the next host's start, and `host/lock` while a host starts. A test on its own home can never reach another
-  home's host. macOS caps a socket's path at 103 bytes; a home too deep stops the host with a
-  plain message.
+  `session.json`, `records/projects.jsonl`, `keybindings.toml`, `migration.json` once a desk has
+  moved, the one-copy lock, and one `projects/<key>/` per project. That folder holds
+  `project.json`, `desk.json`, `asks.json`, `storage/jobs/`, `history`, `ledger.sqlite`,
+  `agent_ed25519` (the agents' key, on a home connected to a ledger server), `host/log`
+  (`key=value` lines: what the host did, each job's begin and end, each lane step's begin and
+  end, and a lag line when its thread is starved), and `host/restart.json` between a restart and
+  the next host's start. The host's `sock`, `mcp` (agents), `pid` and start `lock` are in the
+  project's runtime folder, named by the home and the key together, so a test on its own home can
+  never reach another home's host, and a socket path stays under macOS's 103 bytes however deep
+  the home is.
 - **A start with `FABRIKA_HOME` is quiet** (`src/launch.ts`): no Dock icon, and its window shows
   without taking focus and keeps drawing when covered, so an agent's test never takes the
   person's keys. `FABRIKA_FOREGROUND=1` shows it as a normal window.
