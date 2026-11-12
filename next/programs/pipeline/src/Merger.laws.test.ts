@@ -201,7 +201,7 @@ const guided = (p: Program, w: World) => {
       const msgs: Array<Msg> = [];
 
       for (const event of raw) {
-        let msg: Msg = event;
+        let msg: Msg = Schema.decodeUnknownSync(p.msg)(event);
 
         if (event.type === "timer") {
           const due = p.wake(model);

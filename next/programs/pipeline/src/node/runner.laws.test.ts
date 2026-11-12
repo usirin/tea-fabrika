@@ -183,9 +183,7 @@ const life = Effect.fnUntraced(function* (
         Effect.provide(RepliesSql.layer(store.sql("recovery"), { capacity: 1024 ** 3 })),
       ),
     model: Effect.map(checkpoint, (saved) =>
-      saved === null
-        ? null
-        : Schema.decodeUnknownSync<typeof program.machine.model>(program.machine.model)(saved.saved.model),
+      saved === null ? null : Schema.decodeUnknownSync(program.state.schema)(saved.saved.model),
     ),
   };
 });
