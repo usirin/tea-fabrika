@@ -947,6 +947,7 @@
           {
             "src": "next/packages/libfabrika/src",
             "modules": [
+              "desktop",
               "codehost",
               "ci",
               "telemetry",
@@ -1335,6 +1336,10 @@
       // on `i`, slips past both, and that gap is accepted (0065).
       "files": ["programs/trace/src/**/*.ts"],
       "rules": { "typescript/prefer-for-of": "error" }
+    },
+    {
+      "files": ["next/packages/libfabrika/src/desktop/**"],
+      "rules": { "fabrika/service-contract": "error" }
     }
   ]
 }

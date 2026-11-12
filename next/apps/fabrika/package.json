@@ -35,7 +35,8 @@
     "@alchemy.run/cloudflare": "catalog:",
     "alchemy": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "electron": "45.2.1"
   },
   "volta": {
     "extends": "../../../package.json"

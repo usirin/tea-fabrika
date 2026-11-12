@@ -366,6 +366,10 @@ const FRONTS: ReadonlyArray<string> = [
   "gateway/Gateway",
   "gateway/GatewayNonce",
   "gateway/GatewayStore",
+  "desktop/BrainService",
+  "desktop/BrainControl",
+  "desktop/BrainProbe",
+  "desktop/BrainSpec",
 ];
 
 /** The detail's list, the top level of the library, of tuval and of notes, plus the library's front
@@ -687,6 +691,7 @@ describe("a module's front files and its internal/ in the exports map", () => {
     "access",
     "runtime",
     "gateway",
+    "desktop",
   ] as const;
   const module = fc.constantFrom(...MODULES);
   const name = fc.stringMatching(/^[A-Za-z][A-Za-z0-9]{0,8}$/);
@@ -765,4 +770,25 @@ describe("a module's front files and its internal/ in the exports map", () => {
       },
     );
   });
+});
+
+it("format: L12 desktop contracts bundle for a browser without their implementations", async () => {
+  // The three public contracts are a client import protocol. Loading one must not load its driver.
+  // After build plant: route a contract through BrainServiceManaged; this must fail even if all
+  // platform imports were tree-shaken from the emitted bytes.
+  const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
+  expect(library).toBeDefined();
+  const implementation =
+    /packages\/libfabrika\/src\/(?:desktop\/(?:BrainServiceManaged|internal\/)|node\/launchd\/|cloudflare\/)/;
+
+  for (const name of ["BrainService", "BrainControl", "BrainProbe"]) {
+    const entry = exportAt(exportMap(library!), `./desktop/${name}`);
+    expect(entry.kind).toBe("file");
+    const file = entry.kind === "file" ? entry.file : "";
+    expect(existsSync(file)).toBe(true);
+    const { loaded, output } = await bundleContents(NEXT, file);
+    expect(loaded).toContain(shown(NEXT, file));
+    expect(loaded.filter((path) => implementation.test(path))).toEqual([]);
+    expect(output.filter((path) => implementation.test(path))).toEqual([]);
+  }
 });

@@ -2,6 +2,44 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
+    "desktop": {
+      "type": "object",
+      "properties": {
+        "brain-poll": {
+          "type": "integer",
+          "maximum": 9007199254740991,
+          "exclusiveMinimum": 0,
+          "title": "a positive whole number",
+          "description": "Milliseconds between brain readiness and stop checks.",
+          "default": 100
+        },
+        "brain-start-timeout": {
+          "type": "integer",
+          "maximum": 9007199254740991,
+          "exclusiveMinimum": 0,
+          "title": "a positive whole number",
+          "description": "Milliseconds to wait for the local brain to become ready.",
+          "default": 60000
+        },
+        "brain-stop-timeout": {
+          "type": "integer",
+          "maximum": 9007199254740991,
+          "exclusiveMinimum": 0,
+          "title": "a positive whole number",
+          "description": "Milliseconds to confirm the brain and its children have stopped.",
+          "default": 5000
+        },
+        "brain-throttle": {
+          "type": "integer",
+          "maximum": 9007199254740991,
+          "exclusiveMinimum": 0,
+          "title": "a positive whole number",
+          "description": "Seconds launchd waits between failed brain starts.",
+          "default": 2
+        }
+      },
+      "additionalProperties": false
+    },
     "instance": {
       "type": "object",
       "properties": {

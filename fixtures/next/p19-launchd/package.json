@@ -1,0 +1,8 @@
+{
+  "name": "p19-launchd-fixture",
+  "productName": "P19 isolated launchd check",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "main": "brain.mjs"
+}

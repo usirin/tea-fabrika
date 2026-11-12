@@ -13,7 +13,7 @@
 //   read before any source overrides it. With no repo place there is no `repo` field.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit, FileSystem, Layer, Path, Ref } from "effect";
+import { Effect, Exit, FileSystem, Layer, Path, Ref, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Declarations from "../../settings/Declarations.ts";
@@ -329,3 +329,39 @@ describe("T730, a load keeps the repo file's own minimum, and invents none witho
     );
   });
 });
+
+// P19 L14: this is the actual loader boundary. No brain, file write or build follows a bad timing.
+it.effect.prop(
+  "P19 L14 every timing is strict through real loading before start",
+  [
+    Schema.Literals(["brain-throttle", "brain-poll", "brain-start-timeout", "brain-stop-timeout"]),
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100_000 })),
+    Schema.Boolean,
+  ],
+  ([key, value, invalid]) =>
+    Effect.gen(function* () {
+      const path = `desktop.${key}`;
+      const body = `[desktop]\n${key} = ${invalid ? 0 : value}\n`;
+      const places = yield* lay(text(""), text(body));
+      let starts = 0;
+      const exit = yield* Load.load({ ...places, flags: {}, env: {}, version: "0.0.0" }).pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            starts++;
+          }),
+        ),
+        Effect.exit,
+      );
+      expect(Exit.isSuccess(exit)).toBe(!invalid);
+      expect(starts).toBe(invalid ? 0 : 1);
+
+      if (Exit.isSuccess(exit)) {
+        expect(exit.value.snapshot.values[path]).toBe(value);
+
+        for (const d of Declarations.all.declarations) {
+          expect(exit.value.snapshot.values[d.path]).toBeDefined();
+        }
+      }
+    }).pipe(Effect.provide(services)),
+  { arbitrary: { seed: 119120, numRuns: 100 } },
+);

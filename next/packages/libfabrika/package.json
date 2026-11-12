@@ -55,7 +55,11 @@
     "./codehost/internal/*": null,
     "./ci/*": "./src/ci/*.ts",
     "./ci/internal/*": null,
-    "./node/Chaos.test-support": "./src/node/Chaos.test-support.ts"
+    "./node/Chaos.test-support": "./src/node/Chaos.test-support.ts",
+    "./desktop/*": "./src/desktop/*.ts",
+    "./desktop/internal/*": null,
+    "./node/launchd/*": "./src/node/launchd/*.ts",
+    "./node/launchd/internal/*": null
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p ."
