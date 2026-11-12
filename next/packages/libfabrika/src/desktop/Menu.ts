@@ -95,7 +95,7 @@ const Msg = Schema.Union([
 ]);
 
 const check = Cmd.make("check", {
-  input: Schema.Struct({ cmd: Id.Cmd, reason: Schema.String }),
+  input: Schema.toType(Schema.Struct({ cmd: Id.Cmd, reason: Schema.String })),
   ok: Schema.Null,
   err: [],
 });
@@ -118,7 +118,7 @@ const deny = Cmd.make("deny", {
   err: [],
 });
 
-const open = Cmd.make("open", { input: Schema.Struct({ cmd: Id.Cmd }), ok: Schema.Null, err: [] });
+const open = Cmd.make("open", { input: Schema.toType(Schema.Struct({ cmd: Id.Cmd })), ok: Schema.Null, err: [] });
 const openWindow = Cmd.make("open_window", { input: Schema.Struct({}), ok: Schema.Null, err: [] });
 const quit = Cmd.make("quit", { input: Schema.Struct({}), ok: Schema.Null, err: [] });
 
@@ -135,7 +135,7 @@ export const Item = Schema.TaggedUnion({
   action: { id: Schema.Literals(["open_window", "open_browser", "quit"]), words: Schema.String },
 });
 
-const safe = (text: string) => text.toWellFormed().replace(/[\p{Cc}\p{Cf}]/gu, "");
+const safe = (text: string) => text.replace(/[\uD800-\uDFFF]/gu, "\uFFFD").replace(/[\p{Cc}\p{Cf}]/gu, "");
 
 // The brain-line text cap is 256 UTF-16 units. Keep a pair whole at its boundary.
 const label = (text: string) => {
