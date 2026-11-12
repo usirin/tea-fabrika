@@ -1,8 +1,10 @@
 // P36, next/: Challenge persistence is tested through the real store and service, including reopen.
-import { applyCell } from "@demlik/tea";
+import { acceptedTypes, applyCell } from "@demlik/tea";
 import { expect, it } from "@effect/vitest";
-import { Effect, Redacted, Schema } from "effect";
+import { Effect, Redacted, Result, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
 import { TestClock } from "effect/testing";
+import * as fc from "fast-check";
 import {
   EPOCH,
   EFFECT,
@@ -20,6 +22,7 @@ import {
   expectRefused,
   tags,
   pureModule,
+  harness,
   type Harness,
 } from "./Email.test-support.ts";
 
@@ -30,37 +33,90 @@ it.effect.prop(
   "P36.02 P36.03 P36.13 every saved Challenge state survives JSON and init without resetting",
   { flow: RetryFlow },
   ({ flow }) =>
-    Effect.sync(() => {
+    Effect.gen(function* () {
+      const h = yield* harness(flow);
       const machine = module().challenge;
-      const add = added(flow);
-      const states = [
-        ...["setup", "recovery"].flatMap((purpose) =>
-          Array.from({ length: 5 }, (_, n) => ({
-            _tag: "open",
-            id: add.id,
-            purpose,
-            hash: `hash-${flow.code}`,
-            until: EPOCH + TEN_MINUTES,
-            tries: n + 1,
-          })),
-        ),
-        { _tag: "redeeming", id: add.id, add },
-        { _tag: "used", id: add.id, added: add.id },
-        ...["expired", "exhausted", "replaced"].map((reason) => ({ _tag: "ended", id: add.id, reason })),
-      ];
+      const reached: Array<typeof machine.model.Type> = [];
+      const capture = Effect.gen(function* () {
+        const states: Array<typeof machine.model.Type> = [];
+        const visit = (value: unknown): void => {
+          const decoded = Schema.decodeUnknownResult(machine.model)(value);
 
-      for (const state of states) {
-        const saved = Schema.decodeUnknownSync(machine.model)(state);
-        const bytes = Schema.encodeSync(machine.model)(saved);
-        const back = Schema.decodeUnknownSync(machine.model)(JSON.parse(JSON.stringify(bytes)));
-        const [restored] = machine.init(back, {});
-        expect(restored).toEqual(saved);
+          if (Result.isSuccess(decoded)) {
+            states.push(decoded.success);
+          } else if (Array.isArray(value)) {
+            value.forEach(visit);
+          } else if (value !== null && typeof value === "object") {
+            Object.values(value).forEach(visit);
+          }
+        };
+        visit(yield* h.dependencies.store.snapshot);
+        expect(states.length, "the real store exposes its saved Challenge rows").toBeGreaterThan(0);
+        reached.push(...states);
+      });
+      yield* setup(h);
+      yield* capture;
 
-        for (const now of [EPOCH, EPOCH + TEN_MINUTES, EPOCH + TEN_MINUTES + 1]) {
-          const message = Schema.decodeUnknownSync(machine.msg)({ type: "tick", now });
-          expect(applyCell(machine, restored, message)).toEqual(applyCell(machine, saved, message));
+      for (let n = 0; n < flow.requests; n++) {
+        let challenge = yield* h.recovery.issueRecovery(binding());
+        let value = Redacted.value(h.mails.at(-1)!.code);
+        yield* capture;
+
+        for (let attempt = 0; attempt < flow.attempts; attempt++) {
+          yield* Effect.exit(
+            h.recovery.redeem(challenge.id, Redacted.make(wrong(value)), added(flow), signed(binding().person)),
+          );
+          yield* capture;
+        }
+
+        for (const operation of flow.ops) {
+          if (operation === "issue" || operation === "replace") {
+            challenge = yield* h.recovery.issueRecovery(binding());
+            value = Redacted.value(h.mails.at(-1)!.code);
+          } else if (operation === "reopen") {
+            yield* h.reopen;
+            yield* TestClock.setTime(EPOCH + flow.time);
+          } else {
+            if (operation === "refuse") {
+              h.fixture.fail("append", flow.failureText);
+            }
+
+            yield* Effect.exit(
+              h.recovery.redeem(
+                challenge.id,
+                Redacted.make(
+                  operation === "right" || operation === "refuse"
+                    ? value
+                    : operation === "malformed"
+                      ? flow.malformed
+                      : wrong(value),
+                ),
+                added(flow),
+                signed(binding().person),
+              ),
+            );
+          }
+
+          yield* capture;
         }
       }
+
+      // Only states written by the real service enter this check. No saved state is invented.
+      fc.assert(
+        fc.property(Arbitrary.schema(machine.msg), (message) => {
+          for (const saved of reached) {
+            const codec = Schema.fromJsonString(machine.model);
+            const back = Schema.decodeUnknownSync(codec)(Schema.encodeSync(codec)(saved));
+            const [restored] = machine.init(back, {});
+            expect(restored).toEqual(saved);
+
+            if (acceptedTypes(machine, saved).includes(message.type)) {
+              expect(applyCell(machine, restored, message)).toEqual(applyCell(machine, saved, message));
+            }
+          }
+        }),
+        { seed: 119120 },
+      );
     }),
   EFFECT,
 );

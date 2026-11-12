@@ -146,6 +146,26 @@ export const added = (flow: Flow, n = 0): typeof Add.Type => ({
   sentAt: new Date(EPOCH + flow.skew).toISOString(),
 });
 
+// Every signed field is varied separately, including fields that still name the same device.
+export const changedAdditions = (add: typeof Add.Type): ReadonlyArray<typeof Add.Type> => [
+  { ...add, id: `${add.id}-changed` },
+  { ...add, for: `${add.for}-changed` },
+  { ...add, to: `${add.to}-changed` },
+  { ...add, adds: Add.fields.adds.cases.person.make({ key: "another-person", window: "another-window" }) },
+  { ...add, adds: Add.fields.adds.cases.person.make({ key: add.adds.key, window: "another-window" }) },
+  { ...add, drops: [...add.drops, "another-root"] },
+  { ...add, verified: `${add.verified}-changed` },
+  { ...add, saw: { ...add.saw, old: add.saw.old === "lost" ? "kept" : "lost" } },
+  { ...add, saw: { ...add.saw, location: `${add.saw.location}-changed` } },
+  { ...add, saw: { ...add.saw, label: `${add.saw.label}-changed` } },
+  { ...add, saw: { ...add.saw, method: "device" } },
+  { ...add, saw: { ...add.saw, check: "click" } },
+  { ...add, saw: { ...add.saw, has: [...add.saw.has, "another-capability"] } },
+  { ...add, saw: { ...add.saw, typed: !add.saw.typed } },
+  { ...add, saw: { ...add.saw, kept: "print" } },
+  { ...add, sentAt: new Date(Date.parse(add.sentAt) + 1).toISOString() },
+];
+
 export const founded = (flow: Flow): MemberEvent =>
   MemberEvent.cases.founded.make({
     id: PERSON,
@@ -385,6 +405,7 @@ export const OUTPUTS = [
 
 export type Output = (typeof OUTPUTS)[number];
 export type Captures = Record<Output, unknown[]>;
+type Observations = { readonly [K in Output]: ReadonlyArray<unknown> };
 
 export const captures = (): Captures => ({
   ledger: [],
@@ -412,7 +433,7 @@ export const encodings = (secret: string): ReadonlyArray<string> => [
   ]),
 ];
 
-export function assertSecret(out: Captures, secret: string, outputs: ReadonlyArray<Output> = OUTPUTS) {
+export function assertSecret(out: Observations, secret: string, outputs: ReadonlyArray<Output> = OUTPUTS) {
   for (const name of outputs) {
     const raw = JSON.stringify(out[name]);
 
@@ -446,7 +467,7 @@ export function assertSecret(out: Captures, secret: string, outputs: ReadonlyArr
   }
 }
 
-export function assertPrivate(out: Captures, bytes: ReadonlyArray<number> | Uint8Array) {
+export function assertPrivate(out: Observations, bytes: ReadonlyArray<number> | Uint8Array) {
   const sequence = [...bytes];
 
   for (const output of OUTPUTS) {
@@ -567,7 +588,7 @@ export const testKey = (seed: ReadonlyArray<number>) =>
     };
   });
 
-export const harness = (flow: Flow, beforeAppend: IO<void> = Effect.void) =>
+export const harness = (flow: Flow, beforeAppend: IO<void> = Effect.void, afterAppend: IO<void> = Effect.void) =>
   Effect.gen(function* () {
     const storeModule = yield* loadStore;
     const serviceModule = yield* loadService;
@@ -654,6 +675,7 @@ export const harness = (flow: Flow, beforeAppend: IO<void> = Effect.void) =>
             const at = yield* Clock.currentTimeMillis;
             rows.push({ ...row, arrivedAt: at });
             out.ledger.push(rows.at(-1));
+            yield* afterAppend;
             return Written.cases.applied.make({
               rev: Schema.decodeUnknownSync(Written.cases.applied.fields.rev)(rows.length),
             });

@@ -2,7 +2,7 @@
 import { Effect, FileSystem, Path, Schema } from "effect";
 import type { Page } from "playwright";
 import { launch as launchWindow, type TestWindow } from "../test-window.ts";
-import { startWorker } from "./email-worker.test-support.ts";
+import { startWorker, type EmailFixture } from "./email-worker.test-support.ts";
 
 export const EPOCH = 1_800_000_000_000;
 
@@ -44,14 +44,28 @@ export interface Instance {
   readonly home: string;
   readonly url: string;
   readonly call: <A>(path: string, body?: unknown) => Effect.Effect<A, unknown>;
+  readonly outputs: { readonly urls: unknown[]; readonly replies: unknown[]; readonly errors: unknown[] };
 }
 
 // The response boundary is private to this exam; the law checks every observed result.
-const request = Effect.fn("emailExam.request")(function* <A>(url: string, path: string, body?: unknown) {
+const request = Effect.fn("emailExam.request")(function* <A>(
+  url: string,
+  path: string,
+  outputs: Instance["outputs"],
+  body?: unknown,
+) {
+  const target = new URL(path, url);
+  // Mail and private-store reads belong to the exam, not a client-visible reply.
+  const publicReply = !target.pathname.startsWith("/__test/");
+
+  if (publicReply) {
+    outputs.urls.push(target.href);
+  }
+
   // oxlint-disable-next-line fabrika/no-promises -- edge: the HTTP fetch boundary returns a Promise
   const response = yield* Effect.tryPromise(() =>
     fetch(
-      new URL(path, url),
+      target,
       body === undefined
         ? undefined
         : {
@@ -61,21 +75,37 @@ const request = Effect.fn("emailExam.request")(function* <A>(url: string, path: 
           },
     ),
   );
+  // Inspect bytes before decoding or refusing, so a raw error body cannot escape the law.
+  // oxlint-disable-next-line fabrika/no-promises -- edge: a web Response reads text through a Promise
+  const raw = yield* Effect.tryPromise(() => response.text());
+
+  if (publicReply) {
+    outputs.replies.push(raw);
+  }
 
   if (!response.ok) {
+    if (publicReply) {
+      outputs.errors.push(raw);
+    }
+
     return yield* Effect.fail(new Error("P36 instance refused request"));
   }
 
-  // oxlint-disable-next-line fabrika/no-promises -- edge: a web Response decodes JSON through a Promise
-  const value: unknown = yield* Effect.tryPromise(() => response.json());
+  const value = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(raw);
   return value as A;
 });
 
-export const openInstance = Effect.fn("emailExam.openInstance")(function* () {
+export const openInstance = Effect.fn("emailExam.openInstance")(function* (fixture?: EmailFixture) {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ directory: "/tmp", prefix: "fh." });
-  const url = yield* startWorker(home);
-  return { home, url, call: <A>(path: string, body?: unknown) => request<A>(url, path, body) } satisfies Instance;
+  const url = yield* startWorker(home, fixture);
+  const outputs: Instance["outputs"] = { urls: [], replies: [], errors: [] };
+  return {
+    home,
+    url,
+    outputs,
+    call: <A>(path: string, body?: unknown) => request<A>(url, path, outputs, body),
+  } satisfies Instance;
 });
 
 export const mailCode = Effect.fn("emailExam.mailCode")(function* (instance: Instance) {
@@ -99,10 +129,14 @@ export const device = (instance: Instance, label: string) => instance.call<Sessi
 export const snapshot = (instance: Instance) => instance.call<Snapshot>("/__test/snapshot");
 export const clock = (instance: Instance, at: number) => instance.call("/__test/clock", { at });
 
-export const checkedAddress = Effect.fn("emailExam.checkedAddress")(function* (instance: Instance, session: Session) {
+export const checkedAddress = Effect.fn("emailExam.checkedAddress")(function* (
+  instance: Instance,
+  session: Session,
+  address = "p36@example.test",
+) {
   const challenge = yield* instance.call<{ id: string }>("/email/setup", {
     device: session,
-    address: "p36@example.test",
+    address,
   });
   return yield* instance.call("/email/verify", {
     device: session,

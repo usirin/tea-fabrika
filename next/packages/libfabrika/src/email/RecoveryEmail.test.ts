@@ -39,32 +39,52 @@ const messages: MsgArbitraryTable<Msg> = {
 
 const msg = arbMsg(messages);
 
-// Plant after build: init resets a saved failed/asking/checking/in state.
-pureLaw(
-  "P36.10 RecoveryEmail restores every saved state without admitting another device",
-  RecoveryFlow,
-  email,
-  (flow) => {
-    const machine = email().recoveryEmail;
-    const states = [
-      { _tag: "off" },
-      { _tag: "asking", challenge: input(1), until: EPOCH + 600000 + flow.skew },
-      { _tag: "checking", challenge: input(1) },
-      { _tag: "in", added: input(100) },
-      ...["wrong_code", "expired", "exhausted", "send", "storage"].map((reason) => ({ _tag: "failed", reason })),
-    ];
+// The answers are chosen only for commands the real child has sent, including failures.
+const walk = (cloud: boolean) =>
+  arbGuidedSequence(
+    email().recoveryEmail,
+    { cloud, binding: binding() },
+    {
+      outside: { recover: messages.recover, code: messages.code, tick: messages.tick },
+      answers: {
+        issue: { draw: fc.oneof(messages.issued, messages.failed), make: (_command, answer) => answer },
+        old: { draw: fc.oneof(messages.old, messages.failed), make: (_command, answer) => answer },
+        check: { draw: fc.oneof(messages.checked, messages.failed), make: (_command, answer) => answer },
+        redeem: { draw: fc.oneof(messages.redeemed, messages.failed), make: (_command, answer) => answer },
+      },
+    },
+  );
 
-    for (const state of states) {
-      const saved = Schema.decodeUnknownSync(machine.model)(state);
-      const encoded = Schema.encodeSync(machine.model)(saved);
-      const back = Schema.decodeUnknownSync(machine.model)(JSON.parse(JSON.stringify(encoded)));
-      const [restored] = machine.init(back, { cloud: true, binding: binding() });
-      expect(restored).toEqual(saved);
-      const message = { type: "tick" as const, now: EPOCH + flow.time };
-      expect(applyCell(machine, restored, message)).toEqual(applyCell(machine, saved, message));
-    }
-  },
-);
+// Plant after build: init resets a reachable failed/asking/checking/in state.
+it("P36.10 RecoveryEmail restores every saved state without admitting another device", () => {
+  const machine = email().recoveryEmail;
+  fc.assert(
+    fc.property(
+      fc.boolean().chain((cloud) => walk(cloud).map((sequence) => ({ cloud, sequence }))),
+      ({ cloud, sequence }) => {
+        const ctx = { cloud, binding: binding() };
+        let [saved] = machine.init(null, ctx);
+        const restore = () => {
+          const codec = Schema.fromJsonString(machine.model);
+          const back = Schema.decodeUnknownSync(codec)(Schema.encodeSync(codec)(saved));
+          const [restored] = machine.init(back, ctx);
+          expect(restored).toEqual(saved);
+          return restored;
+        };
+        restore();
+
+        for (const message of sequence) {
+          const restored = restore();
+          const expected = applyCell(machine, saved, message);
+          expect(applyCell(machine, restored, message)).toEqual(expected);
+          [saved] = expected;
+          restore();
+        }
+      },
+    ),
+    { seed: 119120 },
+  );
+});
 
 // Plants after build: enter in on checked alone; on issued alone; or on a timer.
 it("P36.10 no generated Msg makes RecoveryEmail in without an appended added", () => {

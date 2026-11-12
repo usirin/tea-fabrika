@@ -15,19 +15,47 @@ import { Settings } from "../src/settings.ts";
 
 // P24/P26's email injection and observation contracts are carried from P36's exam.
 // Reconcile them with the real Project at build; never answer these paths with fake membership.
-const wrapper = (brain: string) => `
+export type EmailFixture = { readonly seed: ReadonlyArray<number>; readonly code: number };
+
+const wrapper = (brain: string, fixture: EmailFixture, publicKey: string) => `
 import base, {Project as BaseProject} from ${JSON.stringify(brain)};
 export {Process, Connection, RecordPart, Control} from ${JSON.stringify(brain)};
 import {Effect, Redacted} from "effect";
+import {writeSshsig} from "@kampus/libfabrika/transport/Sshsig";
 let now = 1800000000000;
 const mails = [];
+let sendFailure = null;
+const raw = Uint8Array.from(${JSON.stringify(fixture.seed)});
+const emailKey = {
+  public: ${JSON.stringify(publicKey)}, private: Redacted.make(raw),
+  sign: (text) => writeSshsig({text, space: "fabrika-client", line: ${JSON.stringify(publicKey)},
+    sign: (bytes) => Effect.gen(function* () {
+      const pkcs8 = new Uint8Array([48,46,2,1,0,48,5,6,3,43,101,112,4,34,4,32,...raw]);
+      // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto imports the made-up test key through a Promise
+      const key = yield* Effect.tryPromise(() => crypto.subtle.importKey("pkcs8", pkcs8, "Ed25519", false, ["sign"]));
+      // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto signs with the made-up test key through a Promise
+      return new Uint8Array(yield* Effect.tryPromise(() => crypto.subtle.sign("Ed25519", key, new Uint8Array(bytes))));
+    })})
+};
 export class Project extends BaseProject {
   constructor(ctx, env) {
     super(ctx, {...env, emailClock: Effect.sync(() => now),
-      emailSender: {send: (mail) => Effect.sync(() => {
+      emailKey,
+      emailEntropy: {bytes: () => Effect.sync(() => {
+        const bytes = new Uint8Array(4);
+        new DataView(bytes.buffer).setUint32(0, ${fixture.code});
+        return bytes;
+      })},
+      emailSender: {send: (mail) => Effect.suspend(() => {
+        if (sendFailure !== null) {
+          const message = sendFailure;
+          sendFailure = null;
+          return Effect.fail({reason: "send", message});
+        }
+        return Effect.sync(() => {
         // oxlint-disable-next-line fabrika/no-redacted-value -- edge: the stand-in sender captures only made-up mail
         mails.push({to: Redacted.value(mail.to), raw: Redacted.value(mail.code)});
-      })}, personCheck: Effect.succeed("touch")});
+      });})}, personCheck: Effect.succeed("touch")});
   }
 }
 // oxlint-disable-next-line import/no-default-export -- edge: Alchemy loads this generated Worker entry
@@ -41,6 +69,11 @@ export default {fetch(request, env, ctx) {
     return Response.json({ok:true});
   }
   if (url.pathname === "/__test/mail") return Response.json(mails);
+  if (url.pathname === "/__test/fail-send") {
+    // oxlint-disable-next-line fabrika/no-promises -- edge: HTTP request JSON is a Promise API
+    sendFailure = (yield* Effect.tryPromise(() => request.json())).message;
+    return Response.json({ok:true});
+  }
   const project = env.PROJECT.getByName("p36-test");
   if (url.pathname === "/__test/snapshot") {
     // oxlint-disable-next-line fabrika/no-promises -- edge: the carried P24/P26 observation contract returns a Promise
@@ -76,7 +109,10 @@ const environment = (key: "DO_NOT_TRACK" | "ALCHEMY_HOME", value: string) =>
       }),
   );
 
-export const startWorker = Effect.fn("emailExam.startWorker")(function* (home: string) {
+export const startWorker = Effect.fn("emailExam.startWorker")(function* (
+  home: string,
+  fixture: EmailFixture = { seed: Array.from({ length: 32 }, (_, n) => n + 32), code: 7 },
+) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   // Missing P36 code is checked before opening a socket in the box.
@@ -87,7 +123,8 @@ export const startWorker = Effect.fn("emailExam.startWorker")(function* (home: s
   const port = yield* Effect.acquireRelease(heldPort(), (port) => port.release);
   const built = yield* build({ out: path.join(home, "build") });
   const main = path.join(home, "email-worker.mjs");
-  yield* fs.writeFileString(main, wrapper(built.brain));
+  const emailKey = yield* testKey(fixture.seed);
+  yield* fs.writeFileString(main, wrapper(built.brain, fixture, emailKey.line));
   const founder = yield* testKey(Array.from({ length: 32 }, (_, n) => n));
   const settings = Settings.make({
     name: "p36-test",

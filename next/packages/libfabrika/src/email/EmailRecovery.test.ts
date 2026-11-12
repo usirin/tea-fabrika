@@ -1,6 +1,6 @@
 // P36, next/: the right code appends one added during redemption, before replying.
 import { expect, it } from "@effect/vitest";
-import { Deferred, Effect, Fiber, Redacted, Schema } from "effect";
+import { Deferred, Effect, Exit, Fiber, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import {
   EPOCH,
@@ -11,6 +11,7 @@ import {
   address,
   added,
   binding,
+  changedAdditions,
   effectLaw,
   expectRefused,
   harness,
@@ -170,34 +171,93 @@ it.effect.prop(
   EFFECT,
 );
 
-// Plants after build: strand a redeeming row; allocate a new id or spend another try on retry.
+// Plants after build: strand a redeeming row; accept a changed retry; allocate another add id;
+// lose a durable append when the write succeeded but its acknowledgement failed.
 it.effect.prop(
   "P36.13 failed append, lost replies, retries and reopen keep one added and one add id",
   { flow: RetryFlow },
   ({ flow }) =>
     Effect.gen(function* () {
-      const h = yield* harness(flow);
-      yield* setup(h);
-      const challenge = yield* h.recovery.issueRecovery(binding());
-      const value = Redacted.value(h.mails.at(-1)!.code);
-      const redeem = () => h.recovery.redeem(challenge.id, Redacted.make(value), added(flow), signed(binding().person));
-      h.fixture.fail("append", "append failed once");
-      yield* expectRefused(redeem());
-      expect(tags(h, "added")).toEqual([]);
-      const snapshot = JSON.stringify(yield* h.dependencies.store.snapshot);
-      expect(snapshot).toContain("redeeming");
-      yield* h.reopen;
-      yield* TestClock.setTime(EPOCH + 600001); // A durable redemption resumes even after code expiry.
-      const receipt = yield* redeem();
+      // Both failure points run in every generated flow, preserving the old pre-append reach.
+      for (const persisted of [false, true]) {
+        let loseReply = false;
+        const h = yield* harness(
+          flow,
+          Effect.void,
+          Effect.suspend(() => {
+            if (!loseReply) {
+              return Effect.void;
+            }
 
-      for (let n = 0; n <= flow.reopens; n++) {
+            loseReply = false;
+            return Effect.fail({ reason: "storage" });
+          }),
+        );
+        yield* setup(h);
+        const challenge = yield* h.recovery.issueRecovery(binding());
+        const value = Redacted.value(h.mails.at(-1)!.code);
+        const add = added(flow);
+        const redeem = () => h.recovery.redeem(challenge.id, Redacted.make(value), add, signed(binding().person));
+        const refuseChanges = Effect.gen(function* () {
+          const stored = yield* h.dependencies.store.snapshot;
+          const rows = structuredClone(h.rows);
+          const signatures = [...h.out.signed];
+
+          for (const changed of changedAdditions(add)) {
+            yield* expectRefused(
+              h.recovery.redeem(challenge.id, Redacted.make(value), changed, signed(binding().person)),
+            );
+            expect(yield* h.dependencies.store.snapshot).toEqual(stored);
+            expect(h.rows).toEqual(rows);
+            expect(h.out.signed).toEqual(signatures);
+          }
+        });
+
+        if (persisted) {
+          loseReply = true;
+        } else {
+          h.fixture.fail("append", "append failed once");
+        }
+
+        const first = yield* Effect.exit(redeem());
+
+        if (!persisted) {
+          expect(Exit.isFailure(first)).toBe(true);
+        }
+
+        const written = structuredClone(tags(h, "added"));
+        expect(written).toHaveLength(persisted ? 1 : 0);
+        expect(JSON.stringify(yield* h.dependencies.store.snapshot)).toContain(
+          Exit.isSuccess(first) ? "used" : "redeeming",
+        );
+        yield* refuseChanges;
         yield* h.reopen;
-        expect(yield* redeem()).toEqual(receipt);
-      }
+        yield* refuseChanges;
+        yield* TestClock.setTime(EPOCH + 600001); // A durable redemption resumes even after code expiry.
+        const receipt = yield* redeem();
+        expect(receipt.add).toEqual(add);
 
-      expect(tags(h, "added")).toHaveLength(1);
-      expect(tags(h, "added")[0]).toMatchObject({ fact: { add: { id: added(flow).id } } });
-      expect(JSON.stringify(yield* h.dependencies.store.snapshot)).toContain("used");
+        if (Exit.isSuccess(first)) {
+          expect(receipt).toEqual(first.value);
+        }
+
+        yield* refuseChanges;
+
+        for (let n = 0; n <= flow.reopens; n++) {
+          yield* h.reopen;
+          yield* refuseChanges;
+          expect(yield* redeem()).toEqual(receipt);
+        }
+
+        expect(tags(h, "added")).toHaveLength(1);
+        expect(tags(h, "added")[0]).toMatchObject({ fact: { add: { id: add.id } } });
+
+        if (persisted) {
+          expect(tags(h, "added")).toEqual(written);
+        }
+
+        expect(JSON.stringify(yield* h.dependencies.store.snapshot)).toContain("used");
+      }
     }),
   EFFECT,
 );

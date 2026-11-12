@@ -1,7 +1,16 @@
 // P36, next/: real local cloud instance, then three independent Electron homes.
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import {
+  OUTPUTS,
+  SecretFlow,
+  address,
+  assertPrivate,
+  assertSecret,
+  code,
+  testKey,
+} from "@kampus/libfabrika/email/Email.test-support";
+import { Effect, Exit, Schema } from "effect";
 import * as Arbitrary from "effect/Arbitrary";
 import {
   EPOCH,
@@ -27,6 +36,92 @@ type Notice = {
   readonly at: number;
   readonly actions: ReadonlyArray<unknown>;
 };
+
+const RecordedOutputs = Schema.Record(Schema.Literals(OUTPUTS), Schema.Array(Schema.Unknown));
+
+// P36.19/P36.20/P36.21 also cover outputs that a service alone cannot emit.
+// Plants after build: leak the generated code/address/key into each output, including URL encodings.
+it.effect.prop(
+  "P36.19 P36.20 P36.21 [secrets] generated app flows inspect URLs, frames, models, health and every named output",
+  { flow: SecretFlow },
+  ({ flow }) =>
+    Effect.gen(function* () {
+      const instance = yield* openInstance({ seed: flow.seed, code: flow.code });
+      const original = yield* device(instance, "original");
+      yield* checkedAddress(instance, original, address(flow));
+      const newcomer = yield* device(instance, flow.label);
+      const checkpoint = Effect.gen(function* () {
+        const read = yield* snapshot(instance);
+        // No fallback to []: the real instance must supply every observation contract.
+        const recorded = yield* Schema.decodeUnknownEffect(RecordedOutputs)(read.outputs);
+        const outputs = {
+          ...recorded,
+          urls: [...recorded.urls, ...instance.outputs.urls],
+          replies: [...recorded.replies, ...instance.outputs.replies],
+          errors: [...recorded.errors, ...instance.outputs.errors],
+        };
+
+        for (const name of ["urls", "frames", "models", "health"] as const) {
+          expect(outputs[name].length, `real ${name} observations`).toBeGreaterThan(0);
+        }
+
+        assertSecret(outputs, code(flow));
+        assertSecret(
+          outputs,
+          address(flow),
+          OUTPUTS.filter((name) => name !== "snapshots" && name !== "reopened"),
+        );
+
+        for (const encoding of ["hex", "base64", "base64url"] as const) {
+          assertSecret(outputs, Buffer.from(flow.seed).toString(encoding));
+        }
+
+        assertPrivate(outputs, flow.seed);
+        return read;
+      });
+      // Exercise the live client before inspecting its saved state and outbound data.
+      yield* instance.call("/initialize", { device: original });
+      yield* redeem(instance, newcomer, flow.old);
+      yield* instance.call("/email/notices", { device: original, reconnect: true });
+      const first = yield* checkpoint;
+      expect(JSON.stringify(first.outputs.ledger)).toContain((yield* testKey(flow.seed)).line);
+
+      let challenge: { readonly id: string } | undefined;
+
+      for (const operation of flow.ops) {
+        if (operation === "reopen") {
+          yield* instance.call("/watch/disconnect", { device: newcomer });
+          yield* instance.call("/email/notices", { device: newcomer, reconnect: true });
+        } else if (operation === "issue" || operation === "replace" || operation === "refuse") {
+          if (operation === "refuse") {
+            yield* instance.call("/__test/fail-send", {
+              message: `${address(flow)} ${code(flow)} ${flow.failureText}`,
+            });
+          }
+
+          const issued = yield* Effect.exit(instance.call<{ id: string }>("/email/recovery", { device: newcomer }));
+
+          if (Exit.isSuccess(issued)) {
+            challenge = issued.value;
+          }
+        } else {
+          challenge ??= yield* instance.call<{ id: string }>("/email/recovery", { device: newcomer });
+          yield* Effect.exit(
+            instance.call("/email/redeem", {
+              device: newcomer,
+              challenge: challenge.id,
+              code: operation === "right" ? code(flow) : flow.malformed,
+              old: flow.old,
+              check: "touch",
+            }),
+          );
+        }
+
+        yield* checkpoint;
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  INTEGRATION,
+);
 
 // Plants after build: tell only the asking device; keep the notice only in memory; skip reconnect.
 it.effect.prop(
