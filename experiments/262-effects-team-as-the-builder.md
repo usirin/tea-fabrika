@@ -252,6 +252,161 @@ Shipped checks against the audit's gaps:
   supervisor as a saved tea machine, the span sink that keeps every span for a sleeping object, the
   stateless HMAC nonce, synchronous SQL and ledger steps, and `access/Access.ts` as a pure fold.
 
+## Added 2026-11-11: per-file findings
+
+The four reads behind this write-up, file by file, as one bullet per finding. All `next/`. **Lines
+are as of `5eb5fd0ee`; 6 of 10 sampled still match on main at `a0a94519e`.** Of the other four, three
+moved (`Runner.ts:1344` is now `:1250`, `Runner.ts:1763` is now `:1648`, `settings/Files.ts:142` is
+now `:158`) and one is fixed (`GatewayStore.ts:27` keeps its cause now). Two pull requests merged
+since the read change whole groups below: [PR 924](https://github.com/usirin/tea-fabrika/pull/924)
+(an error keeps its cause, slice 1 of 2) gave `LedgerError` a `cause` and made `platform.ts`'s
+`unreachable` keep it, and [PR 926](https://github.com/usirin/tea-fabrika/pull/926) (P34c slice 2)
+moved the runner's recovery journal into its own tea machine, so the 15 hand `saveRecovery` spreads
+are gone (0 on main). The rest is not rechecked. Counts are `rg` patterns, as above.
+
+### `runtime/` (21 product files read in full)
+
+- `Patch.ts` (83 lines) is `JsonPatch.get` (`JsonPatch.ts:184-238`): same index-wise arrays, removes
+  from the end. Ours adds a deep-equal pre-check and `structuredClone`; Effect sorts keys. About 85%
+  sure it can go; a law that pins key order is the doubt.
+- `Program.ts`: `make` throws a decode failure (`:315-317`) and patches a schema's `make` with
+  `Object.defineProperty` (`:114-115`); the stepper throws `ProgramDown` from pure code (`:405-416`,
+  `:474`, `:529`) while half the file uses `Result`. Effect names the throwing form `makeUnsafe`.
+- `Execution.ts`: seven near-identical `tryPromise` blocks (`:182-230`) and a hand decoder (`:237-255`),
+  where an `RpcGroup` declares each call once (70% sure: the Worker Loader stub may need a patch).
+  `ExecutionClient` is a service never provided as one (`:174-233`), with id `"fabrika/ExecutionClient"`.
+- `ProcessStore.ts`: `select` builds a new layer per call (`:127-131`); `LayerMap` or a plain
+  `make(process)` fits. Static layer (`:88`).
+- `RecoveryStore.ts`: no module comment and no doc on its four methods; a parameter named `who` (`:39`).
+- `Entry.ts`: five services in a file named for none (`:74`, `:137`, `:157`, `:163`, `:168`).
+- `State.ts`: `Saved.upgrade` throws (`:36`, `:52`, `:59`) where it could return `Result`.
+- `BrainLife.ts`: `terminal(s) || s._tag === "stopping"` three times (`:42`, `:46`, `:52`), no comments.
+  `BrainEvent.ts`, `BrainLife.ts` and `Built.ts` are about the brain and the build, not the runner.
+- `internal/recovery.ts:9-10`: two doc blocks on one export; only `@internal` attaches.
+- `internal/supervisor.ts:122`: backoff by hand, fair, since a `Schedule` cannot be saved.
+- Doc coverage: 34 of 85 public exports (40%); 0 `@since`. Inline comments: `Runner.ts` 2% of
+  lines, `entityManager.ts` 8%, `Sharding.ts` 11%.
+- Good: `MailDeliveryLive.ts:16-22` is textbook `Effect.fn(name)(body, mapError)`; no `Date.now` in any
+  product file; Promise edges each carry a reason (`Execution.ts:184-229`).
+
+### `gateway/`, `access/`, `transport/`, `presence/` (20 files, 4,358 lines)
+
+- `Gateway.ts`: one 1,355-line closure (`:265-1619`), 2 exports, 12 comment lines; each method named
+  in three places (`:210-220`, `:1014-1054`, `:1250-1393`) and checked with `Schema.is` then decoded
+  again (`:1020`, `:1326`); `InputId` decoded twice in one call (`:1278`, `:1289`).
+- Hand WebCrypto in 3 files with 7 Promise edges where `effect/crypto` covers it: `Gateway.ts:1637-1661`,
+  `GatewayNonce.ts:19,38,45,48,75`, `binary.ts:76-84`, `Hello.ts:98`, `Sshsig.ts:169-170`,
+  `Webauthn.ts:123-129`. The app already uses `effect/crypto` (`next/apps/fabrika/dev.ts:7`). The
+  fingerprint is computed twice (`Hello.ts:98-99`, `Gateway.ts:1639-1652`). The 6-digit code
+  `String(u32).slice(-6)` (`Gateway.ts:606-608`) is very slightly biased; `SecureRandom.intBetween`
+  is exact. 85% sure; whether `Signature.publicKey` takes our P-256 point is a one-hour spike.
+- The "decode and fold `gateway/access`" step is written three times: `Gateway.ts:292-310`,
+  `Authorization.ts:21-35`, `ClientManagerLedger.ts:17-44`.
+- `online(client)` repeated at the top of `watch` (`:620`), `deny` (`:979`), `route` (`:1007`); one
+  `Caller` service provided in `route` would hold it (75%).
+- `Options` has 22 fields, 8 callbacks, 4 type parameters (`Gateway.ts:222-263`) (70% on a split).
+- A hand cancel token per client (`:283`, `:386-388`, `:413-434`) where `FiberMap.run` fits (60%).
+- `let start` (`:674-698`) is outside the `turn` permit, so two first calls may both allocate. Read
+  only: 70% sure it can interleave, 40% sure it matters.
+- `EnvelopeState` (`:69-75`) moved by hand spreads (`:1224`, `:1268`, `:1305`, `:1311`), and
+  `Attached` set by hand (`:507`, `:557`, `:635`) beside its own machine: against 0046.
+- Small: `rawObject` (`:54-55`); `JSON.stringify` equality (`:811-820`, `:1603-1604`,
+  `SessionManager.ts:234`); a hand no-op tracer (`:46-50`); `Effect.fn` made and run once inside a call
+  (`:526`, `:843`, `:1085`, `:1242`); `new Date(at).toISOString()` (`:1151`, `:1523`); "door", the
+  old name, at `:1401`.
+- `transport/Answer.ts`'s `answerFrame` has only its test as a reader, and `Connection.ts:52-61`
+  builds the same frame again. `Connection.ts:80-83` fishes out `reason` by hand.
+- Static layers: `Gateway.ts:1624`, `SessionManager.ts:102`, `Connections.ts:40`.
+- Docs: 43 of 92 exports (47%), 24 of 73 outside `internal/`. Plan codes in comments: `Access.ts:1-3`,
+  `:60`, `:365`, `ClientManagerLedger.ts:82`.
+- Good: `Access.ts` (a pure fold, `Result` per rule); the SSHSIG and passkey parsers
+  (`Sshsig.ts:79-100`, `Webauthn.ts:9-18`); the stateless HMAC nonce (`GatewayNonce.ts`), which a
+  sleeping object needs; waits saved in the socket attachment (`Connection.ts:111-113`).
+
+### `processes/`, `ledger/`, `telemetry/`, `settings/` (39 files)
+
+- `LedgerError` had no `cause` (`Ledger.ts:15-17`, `ledgerStore.ts:282-285`); `ProcessError` had
+  neither (`Process.ts:136-149`). PR 924 has since added `cause` to `LedgerError`.
+- `ProgramMailLedger.ts:146`: `for (;;)` with no bound; Effect would retry a tagged "changed" error
+  with a `Schedule` (80%).
+- `ProcessTable.read` (`Process.ts:212-221`) replays every lifecycle stream on every call, inside every
+  `ProcessManager` transaction (`:76`); `put` copies a `Map` per event (`processTable.ts:112-113`), so
+  the fold is O(n squared). Not measured; a guess that it is fine for Tier 1.
+- `processTable.ts:120` throws and `:153` uses `decodeUnknownSync` inside a tea `update`.
+- `Records.ts` (462) and `Sink.ts` (385) mix contract, rules and SQL (0095's clearest cases).
+- `Sink.ts`: no `span.sampled` check; an interrupt counts as a failure (`:157`); dropped tags go in
+  `fab.sink.dropped` (`:41`) where OTLP has `droppedAttributesCount`.
+- `settings/Files.ts`: a hand version compare (`:142-147` then, `:158-166` now) where `SemVer` and
+  `Schema.SemVerFromString` exist (85%); `SettingsError` lives here. `Declarations.ts:11`'s regex is
+  the same case. `Sources.ts:65` has a local named `where`.
+- `Mailbox.send(to, id, m, from)` (`:117`) is four positional arguments; `Rev` (`Rev.ts:6`) and
+  `ProcessId` (`ProcessId.ts:7`) are unbranded.
+- `ProcessManager` takes `nextId` as an argument (`:68-71`) while `ProcessIdGenerator` exists.
+- `Process.test-support.ts:160-171`: `mkdtempSync` and `afterAll`, against 0061; `node:sqlite` at `:7`.
+- Doubled doc blocks: `processMail.ts:9-14`, `ledgerPages.ts:7-8`, `ledgerTrace.ts:3-4`,
+  `measurements.ts:115-116`, `:149-150`, `:162-163`, `:290-293`. 28 plan codes in product comments.
+- `measurements.ts:201` uses `new Date`; `RecordPart.ts` is a one-line re-export.
+- Docs: 98 of 165 exports (59%, an upper bound: bare `@internal` counts).
+- Good: the sink keeps every span where Effect's exporter drops them on a failed send
+  (`OtlpExporter.ts:241-245`); idempotency checks the body, not only the id (`ledgerStore.ts:115-120`,
+  `ProgramMailLedger.ts:61-70`); `settings/Toml.ts:27` is the one service id with its folder.
+
+### `cloudflare/`, `node/` and `next/apps/fabrika/src` (47 files)
+
+- About 113 error maps dropped their cause (92 in `cloudflare/`, 11 in `node/`, 10 in the app), first
+  `runtime.ts:213-215`. `platform.ts`'s 57 wrappers now keep it (PR 924); the rest not rechecked.
+- `platform.ts:20-124`: one wrapper and one edge comment per stub method, where Effect wraps once
+  (`NodeFileSystem.ts:65-70`). The lint rule's one-comment-per-Promise-line pushes the copy-paste.
+- `runtime.ts`: `projectLogic` (`:292-713`) mixes SQL setup, RPC, loading and bootstrap in one
+  421-line closure, its type inferred (`:715`, also `:869`, `connection.ts:235-238`); a hand migration
+  (`:364-370`); `let active` (`:757`) where a `Ref` says it in the type; `Layer.build` inside a layer
+  (`:357`, `connection.ts:18`); an identity `rpc` wrapper (`:131-133`).
+- `control.ts`: plain objects as errors (`:56`, `:74`, `:78`, `:88`), `Reflect.apply` dispatch
+  (`:101`), and a ternary whose two branches are the same (`:132-136`, still on main).
+- `connection.ts`: `Date.now()` (`:97`, still on main); three unmarked `as ConnectionId` casts (`:43`,
+  `:60`, `:138`); `Effect.catchCause` turns every failure into `refused` or `unreachable` with no trace
+  (`:123`).
+- `record.ts:32`, `:42`, `:52`, `:62`: `Effect.fn` with no name. `bindings.ts:45-86`: 40+ methods typed
+  by hand with `unknown` errors (the Alchemy port, ticket 502, replaces it).
+- `node/dev/dev.ts`: raw `fetch` (`:132`); `let cause` from a callback (`:103`); a `Proxy` faking
+  Promise stubs (`:383-401`); an unmarked `process.kill` (`:369`).
+- `BrainError` is defined twice with different reasons (`local-dev.ts:4-6`, `local-instance.ts:3-5`).
+- `exam/commits.ts`: argv by hand (`:562-573`, `:1013-1033`) where `effect/cli` exists; a hand glob
+  (`:170-195`) where `Glob.make` exists, though the two differ on dot names and `{[?`; `JSON.parse` and
+  a cast (`:760-769`); a field named `what` (`:382`). A split must keep every file on the exam list.
+- `exam/promise-types.ts:298-327`: `try/finally` against 0061, `console.*` at `:317`, `:320`.
+  `exam/twin.ts`: one 610-line closure (`:11-622`), `type Tree = any` (`:7`). `exam/plant.ts:33-49`
+  hands vitest a Promise. `port.test-support.ts:56` returns a `release` to remember.
+- Docs: 17 of 90 library exports; Effect's platform-node-shared plus D1, 86 of 86.
+- Good: the build (`build.ts:205-243`, `bundle.ts:57-64`, `runPromiseWith` at the Rolldown edge);
+  `local-dev.ts:43-64`'s durable write; `dev.ts:93`'s `Ref` holding a tea machine; `dev.fixture.ts`
+  testing through `ChildProcessSpawner.make`.
+
+### Effect's checker, by name
+
+- **The 17 off checks with 0 hits,** which can block today: `abortControllerInEffect`,
+  `allOfMapToForEach`, `cryptoRandomUUID`, `cryptoRandomUUIDInEffect`, `effectFnOpportunity`,
+  `errorPayloadShadowsName`, `flatMapToTap`, `globalRandom`, `mapConstToAs`, `multipleCatchTag`,
+  `optionMatchToFromOption`, `preferBarrelImport` (needs `barrelImportPackages`),
+  `promiseInEffectSuccess`, `provideLayerSucceedToProvideService`, `raceFirstWithSleepToTimeout`,
+  `serviceNotAsClass`, `unsafeEffectTypeAssertion`.
+- **Block after a small sweep** (every sampled hit right, product / tests): `instanceOfSchema` (20/8),
+  `globalFetchInEffect` (3/2), `globalDateInEffect` (2/4), `schemaSyncInEffect` (6/31),
+  `unnecessaryFailYieldableError` (3/2), `catchToIgnore` (4/0), `catchToOrElseSucceed` (3/0),
+  `catchConditionalRefailToCatchIf` (2/0), `effectSucceedWithVoid` (2/0), `flatMapIgnoredParamToAndThen`
+  (1/0), `nestedEffectGenYield` (1/0), `preferSucceedSomeOrNone` (1/0), `mapMapErrorToMapBoth` (4/0),
+  `runOfExitToRunExit` (0/3), `preferUnsafeConstructor` (0/7), `unnecessaryEffectGen` (0/2),
+  `flatMapConditionalToFilterOrFail` (0/2), `deterministicKeys` (40/2, 5 of 42 read). 75% sure.
+- **Leave off, 0 or 1 right of 5:** `preferEffectArray` (358/1,640), `unstableApiUsage` (112/1,314),
+  `preferEffectString`, `preferEffectRecord`, `newSchemaClass`, `missingPipeableSignature`,
+  `strictBooleanExpressions`, `schemaSync` (0050), `schemaClassMissingBrand`, `preferSchemaOverJson`,
+  `nodeBuiltinImport`, and the test-only Promise checks.
+- **Our rules against theirs:** replace `fabrika/no-data-taggederror` with `preferSchemaTaggedError`
+  (90%) and `fabrika/no-raw-try-catch` with `tryCatchInEffectGen` (70%); `fabrika/no-context-tag`
+  only gives a clearer message, since 4.1.2 has no `Context.Tag` (75%); keep the rest.
+- **The oxlint presets** give the same counts within 1 to 3%; `strict` leaves out 44 checks, among
+  them every `global*` check.
+
 ## What it cannot tell us
 
 - **No fix was run.** Every "Effect would write" is a reading. `JsonPatch.get` sorts object keys,

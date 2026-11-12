@@ -81,3 +81,10 @@ write-up a scratch folder holds that the repo does not.**
   loss first.
 - Not decided here: whether the check ever blocks anything. It advises until its false alarms are
   measured.
+
+## Amendments
+
+- 2026-11-11: the branch is pushed and a draft pull request is opened in the same turn the file is
+  started, so the write-up also lives on the code host, and a lost laptop or a lost session loses
+  nothing. More draft pull requests are open at any time; the lead's round lands or closes them,
+  and a draft never enters the merge line.

@@ -102,4 +102,4 @@ be up to date with main (owner, 2026-11-11).**
 - A role the ruleset lets bypass still merges past it: 0049 saw the rule suites record `bypass`.
   Whether that bypass stays is the owner's ruleset call.
 - Not decided here: which jobs CI runs, or when (`changes.mjs` decides that). Paid CI stays out
-  (0112, not on main yet).
+  ([0112](0112-checks-run-on-free-ci.md)).
