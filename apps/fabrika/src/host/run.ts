@@ -1,24 +1,26 @@
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import * as NodeSocketServer from "@effect/platform-node/NodeSocketServer";
 import { keepJobs, layerRecordTraces, openJobs, stepsInto, writerText } from "@kampus/fabrika-old";
-import { summonManager } from "@kampus/fabrika-old/agents/summon";
+import { type SummonRecord, summonManager } from "@kampus/fabrika-old/agents/summon";
 import { RestartRefused } from "@kampus/fabrika-old/mcp";
 import { recordTracing } from "@kampus/fabrika-old/otel";
 import { sqliteRecords } from "@kampus/fabrika-old/records";
 import { fileStorage } from "@kampus/fabrika-old/storage/node";
 import { Author } from "@tea-fabrika/tracker";
-import { Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope } from "effect";
+import { Clock, Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope } from "effect";
 import { SocketServer } from "effect/socket";
 import { BUILD } from "../build-id.ts";
 import { fileHistory, sharedHistory } from "../editor/history.ts";
+import { Project } from "../project.ts";
 import { agentSessions } from "./agent-session.ts";
 import { connectionOf, hostLedger } from "./connection.ts";
 import { KeybindingManager } from "./keybindings.ts";
 import { holdLock } from "./lock.ts";
 import { logSteps, sampleLag } from "./log.ts";
+import { appendRecord } from "./records.ts";
 import { leaveNote, takeNote } from "./restart.ts";
 import { serve } from "./serve.ts";
-import { pathsOf, reach } from "./socket.ts";
+import { type HostPaths, pathsOf, reach } from "./socket.ts";
 
 // The host on a home: its socket, its files and its services, around the server (serve.ts).
 // host/main.ts runs it as a process of its own; a test runs it in its own process, on a home of
@@ -92,18 +94,40 @@ export const runHost = (options: {
    * the host keeps no summoned agents, and tsh's `summon` says how to give it one.
    */
   readonly repo?: string | undefined;
+  /**
+   * The checked project this host serves (project.ts): its hello names it, its summoned agents
+   * work in its root, and its records say which repository it served. Not said: a test's host,
+   * or a home from before projects.
+   */
+  readonly project?: Project | undefined;
+  /**
+   * Where its sockets, pid, lock and log are: `Project.paths` for a project's host, whose
+   * runtime files are in a short private folder outside the home. Not said: `<home>/host/`.
+   */
+  readonly paths?: HostPaths | undefined;
+  /** Why this host started, for its record: the app started it, or it was restarted. */
+  readonly reason?: string | undefined;
 }) =>
   Effect.gen(function* () {
-    const { home, pid, ours, build, settings = home, mac = false, repo } = options;
+    const { home, pid, ours, build, settings = home, mac = false, project } = options;
+    // A project's agents work in its root, whatever else was said.
+    const repo = project?.root ?? options.repo;
     /** The build this host names: `BUILD`, but in a test of an older host. */
     const named = build === undefined ? BUILD : build;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const paths = yield* pathsOf(home);
+    const paths = options.paths ?? (yield* pathsOf(home));
     const outer = yield* Effect.scope;
-    yield* fs.makeDirectory(paths.dir, { recursive: true, mode: 0o700 });
-    // A folder made before, by hand or by an older build, gets the narrow mode too.
-    yield* fs.chmod(paths.dir, 0o700);
+
+    if (options.paths === undefined) {
+      yield* fs.makeDirectory(paths.dir, { recursive: true, mode: 0o700 });
+      // A folder made before, by hand or by an older build, gets the narrow mode too.
+      yield* fs.chmod(paths.dir, 0o700);
+    } else {
+      yield* Project.prepare(paths);
+    }
+
+    yield* fs.makeDirectory(path.dirname(paths.log), { recursive: true, mode: 0o700 });
     // Under the start lock (host/lock.ts), from the look at the socket until this host listens
     // on it: a host started at the same moment waits, then finds this one answering.
     const connection = yield* connectionOf(home);
@@ -169,10 +193,25 @@ export const runHost = (options: {
     // One job table for the host process, for every tile's tsh, open until the host stops. After
     // a restart, each tile's tsh names who restarted it beside its jobs from an earlier tsh.
     // The agents the person summons, in their repository, kept in the home for the next start.
+    // Each summon and turn is kept as a record of its own, with the project it was for: what a
+    // reused agent name meant at that time.
+    const files = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
+    const agentRecord = (kind: "summon" | "turn", row: SummonRecord) =>
+      appendRecord(at("records", "agents.jsonl"), {
+        kind,
+        project: project?.key ?? null,
+        ...row,
+      }).pipe(Effect.provideContext(files));
     const summons =
       repo === undefined
         ? Context.empty()
-        : yield* Layer.build(summonManager({ storage: fileStorage(at("storage", "summon")), folder: repo }));
+        : yield* Layer.build(
+            summonManager({
+              storage: fileStorage(at("storage", "summon")),
+              folder: repo,
+              record: agentRecord,
+            }),
+          );
     const jobs = {
       ...keepJobs(yield* openJobs(fileStorage(at("storage", "jobs"), stepsInto(records))), records, "laptop"),
       ...(before === null ? {} : { restarted: { by: before.by } }),
@@ -185,6 +224,18 @@ export const runHost = (options: {
       by: writerText(Context.get(ledger, Author)),
     });
     yield* Effect.logInfo(`fabrika host: listening, pid ${pid}`);
+    // Which repository this host served, from which build, for which settings, and why it
+    // started: a host that outlives its window is still named by it.
+    yield* appendRecord(at("records", "host.jsonl"), {
+      kind: "host",
+      project: project?.key ?? null,
+      root: repo ?? null,
+      build: named,
+      pid,
+      settings: settings === home ? "home" : "shared",
+      reason: before === null ? (options.reason ?? "started") : "restart",
+      at: yield* Clock.currentTimeMillis,
+    });
     // Every start's line: its build, and after a restart who restarted the host before it, and why.
     yield* Effect.logInfo("host_began").pipe(
       Effect.annotateLogs({
@@ -224,6 +275,7 @@ export const runHost = (options: {
       },
       jobs,
       pid,
+      project: project?.key,
       ledger: Option.isNone(connection)
         ? ({ kind: "own" } as const)
         : ({

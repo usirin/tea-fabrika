@@ -1,0 +1,16 @@
+{
+  "id": "2026-11-09-projectwin-review-refused-low-disk",
+  "date": "2026-11-09",
+  "lanes": [
+    "projectwin"
+  ],
+  "stage": "lead",
+  "kind": "friction",
+  "what": "Review 1 was refused by drive.ts: 14 to 15 GB free on the boxes' volume, under its 20 GB floor. Box gc kept 48 boxes, many from lanes already merged (p12, ci375), since their tips live only in the box.",
+  "cause": "Cleanup after a merge removes a box only when its tip is retained in MAIN; a step box whose commit drive re-signed keeps an unsigned tip nobody retains.",
+  "person": true,
+  "primitive": "Act",
+  "fix": null,
+  "test": null,
+  "links": []
+}

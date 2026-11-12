@@ -11,6 +11,7 @@ import { SEVEN, SEVEN_TITLE } from "@tea-fabrika/tracker/seven";
 import { Effect } from "effect";
 import type { ElectronApplication, Locator, Page } from "playwright";
 import { askDesk } from "./e2e/ask-desk.ts";
+import { builtLaws, openFixtureProject, runProjectChecks, testProject } from "./projects-e2e.ts";
 import { PROTOCOL } from "./src/link.ts";
 import * as TestWindow from "./test-window.ts";
 
@@ -56,18 +57,18 @@ import * as TestWindow from "./test-window.ts";
 //
 // Then the window's own close button, as macOS has it:
 //
-//   9 reopened       the window closed, the app runs on with no window; the dock icon (`activate`)
-//                    brings a new window on the same desk, with counter and the tracker still up
+//   9 reopened       the window closed; activate shows welcome. Pick its recent project to find
+//                    the same desk, with counter and the tracker still up
 //
 // Then y on t2, covered by the tracker: the tracker gets the end of its inputs, ends, and t2 goes.
 // The app quits with counter up in a tile. The host it started runs on, apart from the app, as
 // the tmux server outlives its client: its pid (in `<home>/host/pid`) is alive, and counter with
-// it. The app is started again on the same home, and attaches to that host:
+// it. The app starts on welcome again. Picking the recent project attaches to that host:
 //
-//   10 restored      the same desk, with counter still up in its tile, at 1: nothing restarted
+//   10 reopened-from-recent   the same desk, counter still at 1. Nothing restarted
 //
 // Ctrl-B | splits there, through the host. Done ends counter; closing the last tile closes the
-// window, not the app; the dock icon then opens one fresh tile. Then the app quits.
+// window, not the app; pick the recent project from welcome for a fresh tile. Then quit.
 //
 // Then a host of another version, on a home of its own: a small Node server on that home's
 // socket that says hello with version 0. The app does not attach, and says so:
@@ -116,7 +117,9 @@ const here = import.meta.dirname;
 
 const shots = process.env.SHOTS ?? (await mkdtemp(join(tmpdir(), "fabrika-e2e-")));
 await mkdir(shots, { recursive: true });
-const home = await mkdtemp(join(tmpdir(), "fabrika-home-"));
+const home = await mkdtemp("/tmp/fh.");
+/** The parent env of every test window, less any API key, so no launch can spend money. */
+const parentEnv = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/API_KEY$/.test(name)));
 
 const saved: string[] = [];
 
@@ -879,8 +882,20 @@ const systemKeys = async (app: ElectronApplication, page: Page) => {
   });
   const chords = accelerators.map(chordFor).filter((chord) => chord !== "Meta+w");
   check("the menu has Quit on Cmd-Q", chords.includes("Meta+q"), chords);
+  // Cmd-O is the page's own, as Cmd-K is (ticket 276's plan): File > Open Project… shows it, and the
+  // page takes it before any tile hears it, so it opens the projects box and types nothing.
+  check("the menu has Open Project… on Cmd-O", chords.includes("Meta+o"), chords);
+  // `onKey` swallows it before the spy hears it, as with Cmd-W: a key that ended "free" fails.
+  await page.evaluate(() => delete document.documentElement.dataset.keyEnd);
+  await page.keyboard.press("Meta+o");
+  await page.getByRole("dialog", { name: "Open a project…", exact: true }).waitFor();
+  const end = await page.evaluate(() => document.documentElement.dataset.keyEnd);
+  check("Cmd-O is the page's own: it never goes free to the menu", end !== "free", end);
+  await page.keyboard.press("Escape");
+  await page.getByRole("dialog", { name: "Open a project…", exact: true }).waitFor({ state: "detached" });
+  check("Cmd-O goes by t1 and types nothing", lastRow(await screen(page, "t1")) === "tsh$");
 
-  for (const chord of [...chords, "Meta+,", "Meta+`", "Meta+t"]) {
+  for (const chord of [...chords.filter((chord) => chord !== "Meta+o"), "Meta+,", "Meta+`", "Meta+t"]) {
     await pressEnds(page, chord, "free");
     const row = lastRow(await screen(page, "t1"));
     check(`${chord} goes by t1 and types nothing`, row === "tsh$", row);
@@ -1249,11 +1264,14 @@ const reopen = async (app: ElectronApplication, left: string) => {
   const alive = await app.evaluate(({ app }) => app.isReady());
   check("the close button closes the window only: the app runs on, with no window", alive);
 
-  const page = await activate(app);
+  const welcome = await activate(app);
+  await welcome.getByRole("heading", { name: "Open a folder to start" }).waitFor();
+  await welcome.getByRole("option").filter({ hasText: "fixture-project" }).click();
+  const page = await app.firstWindow();
   await tilesAre(page, ["t2", left]);
   await countIn(page, left).filter({ hasText: /^1$/ }).waitFor();
   await tile(page, "t2").getByLabel("tracker view").waitFor();
-  check("the dock icon brings a window on the same desk: counter at 1 and the tracker run on", true);
+  check("choosing the recent project returns to its kept desk: counter at 1 and tracker running", true);
   await shot(page, "9-reopened");
 
   await tile(page, "t2").click();
@@ -1277,7 +1295,7 @@ const again = async (app: ElectronApplication, left: string) => {
     before,
   );
   await focusIs(page, left);
-  await shot(page, "10-restored");
+  await shot(page, "10-reopened-from-recent");
 
   await tile(page, left).getByRole("button", { name: "done" }).click();
   const back = await shows(page, left, "counter's count", (t) => t.includes("tsh$ counter\n1\n"));
@@ -1312,7 +1330,10 @@ const again = async (app: ElectronApplication, left: string) => {
   );
   await new Promise((resolve) => setTimeout(resolve, 500));
   check("closing the last tile closes the window, and the app runs on", await app.evaluate(({ app }) => app.isReady()));
-  const fresh = await activate(app);
+  const empty = await activate(app);
+  await empty.getByRole("heading", { name: "Open a folder to start" }).waitFor();
+  await empty.getByRole("option").filter({ hasText: "fixture-project" }).click();
+  const fresh = await app.firstWindow();
   await tilesAre(fresh, ["t1"]);
   const first = await prompted(fresh, "t1");
   check("the next window opens on one fresh tile with a fresh tsh", !first.includes("earlier tsh"), first);
@@ -1322,12 +1343,27 @@ if (process.platform !== "darwin") {
   throw new Error("this run checks macOS's window rules: run it on a Mac");
 }
 
-const launch = async (on: string) => {
-  const win = await TestWindow.launch({ home: on });
-  await noBrowser(win.app).catch(async (e: unknown) => {
+/** `shows` is what says the fixture project is up, as `openFixtureProject` takes it. */
+const launch = async (on: string, shows?: (page: Page) => Locator) => {
+  const win = await TestWindow.launch({ home: on, env: parentEnv });
+  const { app } = win;
+  await noBrowser(app).catch(async (e: unknown) => {
     await win.close().catch(() => {});
     throw e;
   });
+  // Ticket 276, PR 1: the app launches on welcome, and the run opens its fixture project there.
+  const welcome = await app.firstWindow();
+  await welcome.getByRole("heading", { name: "Open a folder to start", exact: true }).waitFor();
+  check("PR 1 launches on welcome without a tile", (await welcome.locator("[data-tile]").count()) === 0);
+  const selected = await testProject(on);
+  const recent = welcome.getByRole("option").filter({ hasText: "fixture-project" });
+
+  if (await recent.count()) {
+    await recent.click();
+  } else {
+    await openFixtureProject(app, welcome, selected.project.root, shows);
+  }
+
   return win;
 };
 
@@ -1381,7 +1417,7 @@ const alive = (pid: number) => {
 
 /** The pid the host wrote in its home, or none. */
 const hostPid = async (on: string) => {
-  const text = await readFile(join(on, "host", "pid"), "utf8").catch(() => "");
+  const text = await readFile((await testProject(on)).paths.pid, "utf8").catch(() => "");
   const pid = Number.parseInt(text, 10);
   return Number.isInteger(pid) ? pid : null;
 };
@@ -1394,6 +1430,7 @@ const hostPid = async (on: string) => {
  * that does not read fails the run, so a change to that layout is seen here.
  */
 const keptJobs = async (on: string): Promise<readonly Shell.Job[]> => {
+  on = (await testProject(on)).home;
   const slots = await Promise.all(
     ["a", "b"].map((slot) =>
       readFile(join(on, "storage", "jobs", encodeURIComponent(`run/tsh/machine/jobs/table/${slot}`)), "utf8").then(
@@ -1436,17 +1473,20 @@ const stop = async (pid: number) => {
 
 /**
  * A host of another version: a Node server on the home's socket, in a 0700 folder as the host
- * keeps it, that says hello with version 0 to whoever connects.
+ * keeps it, that says hello with version 0 to whoever connects. The app's look at the socket
+ * (host/socket.ts, `reach`) connects and closes at once, so the hello's write can meet a closed
+ * peer: that EPIPE is heard and dropped, or the fake host dies and leaves a stale socket.
  */
 const oldHost = async (on: string) => {
-  const dir = join(on, "host");
+  const { paths } = await testProject(on);
+  const dir = paths.dir;
   await mkdir(dir, { recursive: true, mode: 0o700 });
-  const sock = join(dir, "sock");
+  const sock = paths.sock;
   const child = spawn(
     process.execPath,
     [
       "-e",
-      `require("node:net").createServer((c) => c.write('{"type":"hello","version":0}\\n')).listen(process.argv[1])`,
+      `require("node:net").createServer((c) => { c.on("error", () => {}); c.write('{"type":"hello","version":0}\\n'); }).listen(process.argv[1])`,
       sock,
     ],
     { stdio: "ignore" },
@@ -1465,11 +1505,12 @@ const oldHost = async (on: string) => {
 
 /** The app on a home whose host speaks version 0: it does not attach, says so, and stops nothing. */
 const mismatch = async () => {
-  const other = await mkdtemp(join(tmpdir(), "fabrika-old-"));
+  const other = await mkdtemp("/tmp/fh.");
   const old = await oldHost(other);
 
   try {
-    const win = await launch(other);
+    // A window that does not attach shows the alert in place of the desk and its top bar.
+    const win = await launch(other, (p) => p.getByRole("alert").filter({ hasText: "Not attached" }));
     const { app } = win;
 
     try {
@@ -1512,7 +1553,8 @@ const mismatch = async () => {
  * ledger can do that, but nothing can make it do so on cue.
  */
 const askingHost = async (on: string) => {
-  const dir = join(on, "host");
+  const { paths, project } = await testProject(on);
+  const dir = paths.dir;
   await mkdir(dir, { recursive: true, mode: 0o700 });
   const heard: { readonly type: string; readonly m?: { readonly type: string } }[] = [];
   const links: Socket[] = [];
@@ -1528,14 +1570,14 @@ const askingHost = async (on: string) => {
         const m = JSON.parse(line);
 
         if (m.type === "hello") {
-          link.write(`${JSON.stringify({ type: "hello", version: PROTOCOL })}\n`);
+          link.write(`${JSON.stringify({ type: "hello", version: PROTOCOL, project: project.key })}\n`);
         } else {
           heard.push(m);
         }
       }
     });
   });
-  await new Promise<void>((resolve) => server.listen(join(dir, "sock"), resolve));
+  await new Promise<void>((resolve) => server.listen(paths.sock, resolve));
   return {
     heard,
     toPage: (m: unknown) => {
@@ -1558,7 +1600,7 @@ const askingHost = async (on: string) => {
  * ask is seen, so the page says so, or the dot in the top bar stays on with the ask in plain view.
  */
 const asksSwap = async () => {
-  const other = await mkdtemp(join(tmpdir(), "fabrika-asks-"));
+  const other = await mkdtemp("/tmp/fh.");
   const host = await askingHost(other);
   const asks = (key: string, what: string, seen: boolean) => ({
     type: "asks",
@@ -1802,7 +1844,7 @@ const deskBack = (page: Page) =>
  * host alive, the host killed, and no host to be had at all until a person presses Try again.
  */
 const reconnect = async () => {
-  const own = await mkdtemp(join(tmpdir(), "fabrika-link-"));
+  const own = await mkdtemp("/tmp/fh.");
   const started = new Set<number>();
   const win = await launch(own);
   const { app } = win;
@@ -1887,7 +1929,7 @@ const reconnect = async () => {
     check("no dialog, no dock bounce, no focus taken", (await interruptions(app)).length === 0);
 
     // No host to be had: the home's host folder is a file, so no socket can be reached there.
-    const folder = join(own, "host");
+    const folder = (await testProject(own)).paths.dir;
     await rename(folder, join(own, "host-killed"));
     await writeFile(folder, "");
     await crash(next);
@@ -2010,7 +2052,7 @@ const focusOn = async (page: Page, id: string) => {
 
 /** L3, today's version: real keys overlap a look change, with no timer drain or typing retry. */
 const lookFocus = async () => {
-  const own = await mkdtemp(join(tmpdir(), "fabrika-look-"));
+  const own = await mkdtemp("/tmp/fh.");
   const win = await launch(own);
   const { app } = win;
 
@@ -2080,7 +2122,7 @@ const pickIn = (tracker: Locator) => tracker.getByRole("button", { name: /Tiles,
  *   SHOTS=docs pnpm --filter @kampus/fabrika-app-old e2e -- --tiles    only this, into docs/tiles
  */
 const tilesLook = async () => {
-  const own = await mkdtemp(join(tmpdir(), "fabrika-tiles-"));
+  const own = await mkdtemp("/tmp/fh.");
   const out = join(shots, "tiles");
   await mkdir(out, { recursive: true });
   const win = await launch(own);
@@ -2276,7 +2318,7 @@ const keysLook = async () => {
   await mkdir(out, { recursive: true });
 
   for (const layout of ["one", "side", "stacked", "2x2", "small"] as const) {
-    const own = await mkdtemp(join(tmpdir(), "fk-"));
+    const own = await mkdtemp("/tmp/fh.");
     const file = join(own, "keybindings.toml");
     await writeFile(file, "tezgah.fold = []\n");
     const win = await launch(own);
@@ -2725,7 +2767,7 @@ const keysLook = async () => {
  * sizes while the pointer moves, as tmux's drag does, and the desk keeps them once it is let go.
  */
 const borderDrag = async () => {
-  const own = await mkdtemp(join(tmpdir(), "fk-"));
+  const own = await mkdtemp("/tmp/fh.");
   const win = await launch(own);
   const { app } = win;
 
@@ -2885,9 +2927,14 @@ const grid = async (page: Page, visit: (layout: Layout, ids: readonly string[]) 
 const STATES = ["plain", "asks-dot", "close-asked", "info", "palette", "strips", "closing", "pipe"] as const;
 type State = (typeof STATES)[number];
 
-/** The existing, made-up ticket #7 has a plan waiting on the person. No agent is started. */
-const seedAsks = (own: string) =>
-  Effect.runPromise(
+/**
+ * The existing, made-up ticket #7 has a plan waiting on the person. No agent is started. Since
+ * ticket 276 the host reads the fixture project's own home, so the ledger is seeded there.
+ */
+const seedAsks = async (own: string) => {
+  const projectHome = (await testProject(own)).home;
+  await mkdir(projectHome, { recursive: true, mode: 0o700 });
+  return Effect.runPromise(
     Effect.gen(function* () {
       const ledger = yield* Ledger;
 
@@ -2901,8 +2948,9 @@ const seedAsks = (own: string) =>
           data: entry.fact,
         });
       }
-    }).pipe(Effect.provide(layerSqliteSync({ path: join(own, "ledger.sqlite") }))),
+    }).pipe(Effect.provide(layerSqliteSync({ path: join(projectHome, "ledger.sqlite") }))),
   );
+};
 
 const FOCUS = {
   "tile-focused": "apps/fabrika/docs/focus",
@@ -2917,7 +2965,7 @@ const LOOKS = ["dark", "light"] as const;
 
 /** T245 A and B, today's tracker: actual keyboard focus, with the built app's CSS cascade. */
 const trackerFocus = async () => {
-  const own = await mkdtemp(join(tmpdir(), "fh-ring-"));
+  const own = await mkdtemp("/tmp/fh.");
   await seedAsks(own);
   const win = await launch(own);
   const { app } = win;
@@ -3011,7 +3059,7 @@ const trackerFocus = async () => {
 
 /** All 60 planned images per build, under SHOTS with the plan's repo-relative folders. */
 const focusShots = async () => {
-  const own = await mkdtemp(join(tmpdir(), "fh-focus-"));
+  const own = await mkdtemp("/tmp/fh.");
   await seedAsks(own);
   const pending = new Set(
     Object.keys(FOCUS).flatMap((state) =>
@@ -3179,7 +3227,7 @@ const linesDiff = (was: string, now: string) => {
  *   pnpm --filter @kampus/fabrika-app-old e2e -- --aria    only this
  */
 const ariaStage = async (): Promise<0 | 2> => {
-  const own = await mkdtemp(join(tmpdir(), "fh-aria-"));
+  const own = await mkdtemp("/tmp/fh.");
   const out = join(shots, "aria-received");
   await mkdir(out, { recursive: true });
   await seedAsks(own);
@@ -3418,9 +3466,10 @@ const all = async () => {
       kept.length === 1 && kept[0]?.[1] === "counter" && kept[0]?.[2] === left,
       kept,
     );
-    const desk = await readFile(join(home, "desk.json"), "utf8").catch(() => "");
+    const projectHome = (await testProject(home)).home;
+    const desk = await readFile(join(projectHome, "desk.json"), "utf8").catch(() => "");
     check("the host kept the desk in the home", desk.includes(`"${left}"`), desk);
-    const history = await readFile(join(home, "history"), "utf8").catch(() => "");
+    const history = await readFile(join(projectHome, "history"), "utf8").catch(() => "");
     check("the host kept the history in the home", history.endsWith("counter\n"), history);
 
     const next = await launch(home);
@@ -3453,6 +3502,9 @@ const all = async () => {
       stop,
       shots,
     });
+    // P17's and P29's built-app properties (ticket 276): each launches the built app on its own
+    // home, so they run here, after the build, and never in vitest's test job.
+    await builtLaws();
     // The 60 focus images need a 1440 by 900 window, taller than a CI runner's screen, so they
     // run only with --focus, the way the ARIA trees run only with --aria.
   } finally {
@@ -3466,7 +3518,16 @@ const all = async () => {
 };
 
 // Each capture stage can also run alone. ARIA answers 2 only when it cannot reach a state.
-if (process.argv.includes("--ask-desk")) {
+if (process.argv.some((arg) => ["--projects", "--projects-flow", "--projects-captures"].includes(arg))) {
+  await runProjectChecks(
+    process.argv.includes("--projects-flow")
+      ? "flow"
+      : process.argv.includes("--projects-captures")
+        ? "captures"
+        : undefined,
+  );
+  process.exit(0);
+} else if (process.argv.includes("--ask-desk")) {
   await askDesk({ launch: askDeskLaunch, prompted, run, prefixed, focusOn, tilesAre, lookIs, hostPid, stop, shots });
 } else if (process.argv.includes("--keys")) {
   await keysLook();
@@ -3493,7 +3554,7 @@ check(
 const after = await pgrep(here);
 check("the host stopped by its pid: pgrep finds nothing of this app left", after.length === 0, after);
 
-const sock = await stat(join(home, "host", "sock")).then(
+const sock = await stat((await testProject(home)).paths.sock).then(
   () => true,
   () => false,
 );

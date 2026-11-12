@@ -30,9 +30,10 @@ import { type DoorRefused, doorOf } from "@kampus/fabrika-old/http";
 import { readOnlyRows } from "@kampus/fabrika-old/sqlite";
 import { ROOT } from "@tea-fabrika/tracker";
 import { Context, Duration, Effect, FileSystem, Layer, Option, Schedule, Schema } from "effect";
+import { Project } from "../project.ts";
 import { addressOf, type Connection, connectionOf, keepConnection, loginWith } from "./connection.ts";
 import { alive } from "./lock.ts";
-import { pathsOf, reach } from "./socket.ts";
+import { reach } from "./socket.ts";
 
 /** The streams that move: the tracker's, every one under these. */
 const MOVED: readonly string[] = [ROOT];
@@ -83,11 +84,14 @@ export const readLaptop = (file: string) =>
     return [...rows].sort((a, b) => Number(a.pos) - Number(b.pos)) as readonly SqlRow[];
   });
 
-/** Why the home's host is running, or none: a live socket, or a start lock a live pid holds. */
+/**
+ * Why the home's host is running, or none: a live socket, or a start lock a live pid holds. A
+ * project's home has them in its app home's runtime folder (`Project.hostPaths`), not in the home.
+ */
 const hostRunning = (home: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const paths = yield* pathsOf(home);
+    const paths = yield* Project.hostPaths(home);
 
     if ((yield* reach(paths.sock)) === "live") {
       return Option.some(`a host answers on ${paths.sock}`);

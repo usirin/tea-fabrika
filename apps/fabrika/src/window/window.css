@@ -4561,3 +4561,165 @@ main.program:has(> .view) {
     display: none;
   }
 }
+
+/*
+ * Projects (ticket 276): the project button that opens the top bar, the welcome page a window
+ * shows before a project, and the projects box in the palette's place. One raised box at a time,
+ * no new colors: the frame's own text steps, and the palette's own rows.
+ */
+.topbar .fb.project {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 32ch;
+  margin-right: 18px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.topbar .project-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The parent folders that tell two equal names apart: kept whole while the name is cut. */
+.topbar .project-twin {
+  flex: none;
+  color: var(--text-faint);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.topbar .chevron {
+  flex: none;
+  color: var(--text-faint);
+}
+
+.welcome {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  /* Centered in what the top bar leaves; a list taller than that starts at the top. */
+  align-items: safe center;
+  padding: var(--s-3);
+  font: 400 var(--fs-body) / 1.4 var(--font);
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.welcome-body {
+  width: min(640px, 100%);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.welcome h1 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--fs-title);
+  font-weight: 600;
+}
+
+.welcome-sub {
+  margin: 6px 0 24px;
+  color: var(--text-faint);
+}
+
+/* A refusal is said in words with the way on beside it: color never the only cue (WCAG 1.4.1). */
+.welcome-refusal {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  color: var(--stuck);
+}
+
+.welcome-refusal p {
+  flex: 1;
+  margin: 0;
+}
+
+.welcome-refusal button {
+  padding: 4px 10px;
+  border: 1px solid var(--border-faint);
+  border-radius: var(--r);
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.welcome-rows {
+  display: grid;
+  gap: 2px;
+}
+
+.welcome-row {
+  /* The path has the row's whole width on its own line, so it is cut last. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "name when"
+    "path path";
+  align-items: baseline;
+  column-gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--r);
+  color: var(--text-primary);
+  cursor: default;
+}
+
+.welcome-row.on,
+.welcome-row:hover {
+  background: var(--surface-hover);
+}
+
+.welcome-row:focus-visible {
+  outline: 1px solid var(--focus);
+  outline-offset: -1px;
+}
+
+.welcome-row .name {
+  grid-area: name;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.faint,
+.welcome-row .when,
+.pop.projects .when {
+  color: var(--text-faint);
+}
+
+.welcome-row .when {
+  grid-area: when;
+}
+
+.welcome-row .path {
+  grid-area: path;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pop.projects .when.open {
+  color: var(--text-primary);
+}
+
+.pop.projects .pop-count {
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  border-top: 1px solid var(--border-faint);
+}
+
+.pop.projects .pop-count .pop-foot {
+  flex: 1;
+  border-top: none;
+}

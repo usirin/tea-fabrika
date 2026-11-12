@@ -23,6 +23,7 @@ import type { Editor, EditorMsg } from "../keys/machine.ts";
 import type { Snapshot } from "../keys/program.ts";
 import { KeysWindow } from "../keys/window.tsx";
 import type { FromPage, HostNow, LinkNow, SummonedOn, ToApp } from "../messages.ts";
+import type { Project, ProjectRow } from "../projects.ts";
 import {
   agentsWord,
   asksMenuMachine,
@@ -36,6 +37,7 @@ import {
   fileWord,
   type Frame,
   type FrameMsg,
+  frameUpdate,
   hereWord,
   holdsWord,
   hostWord,
@@ -52,6 +54,7 @@ import {
   opensOf,
   type Part,
   prefixLine,
+  projectRowsFor,
   questionWord,
   restartedWord,
   type Shapes,
@@ -62,6 +65,7 @@ import {
 } from "./frame.ts";
 import { type Cap, type Hint, type Row, sentence, type Words } from "./pop.ts";
 import { type Empty, Foot, IconOf, Lines, Menu, Palette, Panel, useTip, WordsOf } from "./pop.tsx";
+import { PROJECTS_BOX, Projects } from "./projects.tsx";
 
 // The window's frame, drawn: the top bar, the bottom line, and what opens over the desk (the
 // asks list, the jobs list, the palette, an item's few lines). Its words are frame.ts's; this file only lays
@@ -101,6 +105,11 @@ export interface FrameProps {
   /** One of a run's own inputs, as its window would send it: `{type: "query", value: {ticket: 2}}`. */
   readonly toRun: (run: string, msg: unknown) => void;
   readonly step: (m: FrameMsg) => void;
+  /** The project this window shows, and its name as the title says it (ticket 276). */
+  readonly project?: Project | undefined;
+  readonly name?: string | undefined;
+  /** The projects box's rows: every other recent project, and Open Folder… last. */
+  readonly projectRows?: readonly ProjectRow[];
 }
 
 /** ` · `, between two words of the frame. */
@@ -185,6 +194,89 @@ function Item(props: {
   );
 }
 
+/**
+ * A name as the bar draws it: the folder's name, which may be cut, and the parent folders that tell
+ * two of the same name apart (project.ts, `titles`), which never are.
+ *
+ *   twinOf("repo · left")   {name: "repo", twin: "left"}
+ */
+const twinOf = (full: string): { readonly name: string; readonly twin: string | null } => {
+  const at = full.lastIndexOf(" · ");
+  return at < 0 ? { name: full, twin: null } : { name: full.slice(0, at), twin: full.slice(at + 3) };
+};
+
+/**
+ * The project this window shows, first in the top bar: a button by the ARIA APG's dialog button,
+ * whose full name says what it is and does, with a chevron since it opens the projects box. Long
+ * names are cut by the bar's width; the title keeps the whole one. It is never a drag region.
+ */
+function ProjectButton(props: FrameProps & { readonly name: string }): ReactNode {
+  const open = props.frame.over.kind === "palette" && props.frame.over.source._tag === "projects";
+  const shown = twinOf(props.name);
+  return (
+    <button
+      type="button"
+      className="fb project"
+      data-info={INFO.project}
+      data-item="project"
+      aria-label={`Project ${props.name}, switch project`}
+      aria-haspopup="dialog"
+      aria-expanded={open}
+      aria-controls={PROJECTS_BOX}
+      title={props.name}
+      onClick={() =>
+        props.step(
+          open
+            ? { type: "close" }
+            : { type: "projects", rows: props.projectRows ?? [], focus: "button:project", press: "button" },
+        )
+      }
+    >
+      <span className="project-name">{shown.name}</span>
+      {shown.twin !== null && <span className="project-twin">{` · ${shown.twin}`}</span>}
+      <span className="chevron" aria-hidden="true">
+        ▾
+      </span>
+    </button>
+  );
+}
+
+/** The projects box over the desk: picking a row closes it, then the app opens that project. */
+function ProjectsBox(props: FrameProps): ReactNode {
+  const { frame, step } = props;
+  const close = useCallback(() => step({ type: "close" }), [step]);
+
+  if (frame.over.kind !== "palette") {
+    return null;
+  }
+
+  const { rows, query, selected } = frame.over;
+  return (
+    <Projects
+      rows={projectRowsFor(rows, query)}
+      query={query}
+      selected={selected}
+      onQuery={(q) => step({ type: "query", query: q })}
+      onMove={(by) => step({ type: "move", by, of: rows.length })}
+      onOpen={(id) => {
+        // The app is told what the frame's own step opened, with the press that showed the box.
+        const enter = { type: "project_enter", id } as const;
+        const opening = frameUpdate(frame, enter).opening;
+        step(enter);
+
+        if (opening !== null && opening !== frame.opening) {
+          props.toApp(
+            opening.id === "folder"
+              ? { type: "folder", source: opening.source }
+              : { type: "open", key: opening.id, source: opening.source },
+          );
+        }
+      }}
+      onClose={close}
+    />
+  );
+}
+
 /** The host's own words are its own: while the app is not attached, they may be old, and are not shown. */
 const onHost = (link: LinkNow): boolean => link.kind === "up" || link.kind === "build";
 
@@ -220,6 +312,7 @@ export function TopBar(props: FrameProps): ReactNode {
   return (
     <header className="topbar" ref={bar}>
       <div className="lights-room" aria-hidden="true" />
+      {props.project !== undefined && props.name !== undefined && <ProjectButton {...props} name={props.name} />}
       {desk !== null && (
         <nav className="workspaces" aria-label="workspaces">
           {desk.workspaces.map((w, i) => (
@@ -433,7 +526,7 @@ export function Over(props: FrameProps): ReactNode {
     case "item":
       return <ItemLines {...props} what={over.what} />;
     case "palette":
-      return <CommandPalette {...props} />;
+      return over.source._tag === "projects" ? <ProjectsBox {...props} /> : <CommandPalette {...props} />;
   }
 }
 
@@ -1198,7 +1291,7 @@ export function BottomLine(props: FrameProps): ReactNode {
           opens={{
             popup: "dialog",
             id: POP.palette,
-            open: frame.over.kind === "palette" && frame.over.title === "keys",
+            open: frame.over.kind === "palette" && frame.over.source._tag === "keys",
           }}
           onClick={() => props.step({ type: "show", what: "keys" })}
         >
@@ -1313,9 +1406,9 @@ function CommandPalette(props: FrameProps): ReactNode {
     return null;
   }
 
-  const { title, query, at } = frame.over;
+  const { source, query, at } = frame.over;
 
-  if (title === "keys" && props.keysEditor != null && props.editKeys !== undefined) {
+  if (source._tag === "keys" && props.keysEditor != null && props.editKeys !== undefined) {
     return (
       <Dialog
         id={POP.palette}
@@ -1343,7 +1436,7 @@ function CommandPalette(props: FrameProps): ReactNode {
     );
   }
 
-  const keys = title === "keys";
+  const keys = source._tag === "keys";
   const shown = matching(commandsOf(props.keys, desk?.workspaces.length ?? 0), query);
   const run = (i: number) => {
     const c = shown[i];

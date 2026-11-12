@@ -102,9 +102,12 @@ export class SummonManager extends Context.Service<
   }
 >()("@kampus/fabrika-old/SummonManager") {}
 
-/** How to supply the repository a missing `SummonManager` needs. */
+/**
+ * How to supply the project a missing `SummonManager` needs: the app's own folder-opening action,
+ * which opens a window whose host works in that project (ticket 276).
+ */
 const NOWHERE =
-  "no repository is set for summoned agents: set FABRIKA_REPO to your git repo folder before starting fabrika, then restart its host";
+  "no project is open here for summoned agents: open one with File > Open Folder…, or press ⌘O and pick a project";
 
 /** The manager of a tsh started with none: it lists nobody, and refuses the rest in words. */
 /**

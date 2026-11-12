@@ -113,6 +113,7 @@ const SHOWN: Readonly<Record<Exclude<Show, TshOwn>, string>> = {
   sync: "Opens the sync lines under the top bar: which ledger this home reads, and how.",
   host: "Opens the host's lines under the top bar: its process, its build and how long it has run.",
   palette: "Finds a command by name and runs it.",
+  projects: "Opens the projects box: switch to another project, or open a folder in a window of its own.",
 };
 
 /** The words with no flags, as tsh lists them after split, focus and workspace. */
