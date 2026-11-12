@@ -623,6 +623,9 @@ Write-ups are read by busy people, some of them not native English speakers.
 - Move files with `git mv`, so history follows.
 - Stage your own paths by name. Another session may have work in the same
   checkout.
+- Push every commit when you make it, and give its branch a draft pull request at the first commit.
+  No code stays only on a branch
+  ([0134](./.decisions/0134-no-code-stays-only-on-a-local-branch.md)).
 
 ## Changing the product
 
