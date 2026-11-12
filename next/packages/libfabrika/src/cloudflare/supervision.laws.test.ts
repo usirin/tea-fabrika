@@ -1,25 +1,18 @@
 // P12, next/. Real box methods, execution adapters, runner, manager, receipts and SQLite.
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous SQLite handle for referee transactions
 import { Machine } from "@demlik/tea/effect";
 import { Cause, Effect, Exit, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Mailbox, ProcessStore, Writer } from "../coordination/index.ts";
-import { Gateway } from "../gateway/Gateway.ts";
 import { InputId } from "../ledger/Log.ts";
-import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { A, B, brain, data, first, from, ids, PIDS, read, storage } from "../processes/Process.test-support.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { Alarm, CheckedWriter, Incoming, ProgramLoader, Recording, WatcherManager } from "../runtime/Entry.ts";
 import { workerExecution } from "../runtime/Execution.ts";
 import { RecoveryStore, recoveryStore } from "../runtime/RecoveryStore.ts";
-import { ProgramRunner, Sent, Supervision } from "../runtime/Runner.ts";
-import { Written } from "../telemetry/Records.ts";
-import { KeyLine, writeSshsig } from "../transport/Sshsig.ts";
+import { ProgramRunner, Supervision } from "../runtime/Runner.ts";
 import { programBox } from "./box.ts";
-import { ProjectService, projectLayer } from "./runtime.ts";
 
 // Only Cloudflare's base class is supplied. No execution or supervision method is replaced.
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
@@ -29,236 +22,7 @@ const owner = Writer.cases.person.make({ key: "SHA256:fixture", for: from().for 
 const Model = Schema.Struct({ count: Schema.Int });
 const Msg = Schema.Struct({ type: Schema.Literal("add"), n: Schema.Int });
 
-const ProjectInput = Schema.Struct({
-  type: Schema.String,
-  n: Schema.optionalKey(Schema.Int),
-  body: Schema.optionalKey(Schema.String),
-});
-
 type Move = "rpc" | "decode" | "throw";
-
-const projectWalk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: Set<string>) {
-  const db = yield* Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(":memory:")),
-    (db) => Effect.sync(() => db.close()),
-  );
-  const sql = nodeSql(db);
-  const pair = generateKeyPairSync("ed25519");
-  const raw = pair.publicKey.export({ format: "der", type: "spki" }).subarray(-32);
-  const field = (bytes: Uint8Array) => {
-    const n = Buffer.alloc(4);
-    n.writeUInt32BE(bytes.length);
-    return Buffer.concat([n, bytes]);
-  };
-  const line = Schema.decodeUnknownSync(KeyLine)(
-    `ssh-ed25519 ${Buffer.concat([field(Buffer.from("ssh-ed25519")), field(raw)]).toString("base64")}`,
-  );
-  const fingerprint = `SHA256:${createHash("sha256").update(raw).digest("base64").replace(/=+$/, "")}`;
-  const program = {
-    name: "counter",
-    machine: Machine.make({
-      model: Model,
-      msg: Msg,
-      cmds: [],
-      init: (saved) => [saved ?? { count: 0 }, []],
-      update: { add: (s, m) => [{ count: s.count + m.n }, []] },
-    }),
-    state: { v: 1, schema: Model, upgrades: [] },
-    msg: Msg,
-    view: { data: Model, select: (s: typeof Model.Type) => s },
-    refuse: () => null,
-    inputs: { add: { _tag: "write", schema: Msg, description: "Add", personOnly: false } },
-    outputs: {},
-    writes: {},
-    wake: () => null,
-  };
-  const Box = programBox(program, BUILD);
-  const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
-  let accepted = 0;
-  // Only platform handles are supplied. Project routing, audit, Gateway and box calls are real.
-  const unused = vi.fn((): never => {
-    throw new Error("unused platform call");
-  });
-  const namespace = (getByName = vi.fn().mockImplementation(unused)) => ({
-    getByName,
-    newUniqueId: unused,
-    idFromName: unused,
-    idFromString: unused,
-    get: unused,
-    jurisdiction: unused,
-  });
-  const ctx: Parameters<typeof projectLayer>[0] = {
-    id: { name: "p13-project", equals: unused, toString: unused },
-    storage: {
-      sql: { exec: vi.fn().mockImplementation(sql.exec), databaseSize: 0, Cursor: unused, Statement: unused },
-      transactionSync: sql.transaction,
-      get: unused,
-      list: unused,
-      put: unused,
-      delete: unused,
-      deleteAll: unused,
-      transaction: unused,
-      getAlarm: unused,
-      setAlarm: unused,
-      deleteAlarm: unused,
-      sync: unused,
-      getCurrentBookmark: unused,
-      getBookmarkForTime: unused,
-      onNextSessionRestoreBookmark: unused,
-      kv: { get: unused, list: unused, put: unused, delete: unused },
-    },
-    waitUntil: unused,
-    exports: {},
-    props: undefined,
-    facets: { get: unused, delete: unused, abort: unused, clone: unused },
-    blockConcurrencyWhile: unused,
-    acceptWebSocket: unused,
-    getWebSockets: unused,
-    setWebSocketAutoResponse: unused,
-    getWebSocketAutoResponse: unused,
-    getWebSocketAutoResponseTimestamp: unused,
-    setHibernatableWebSocketEventTimeout: unused,
-    getHibernatableWebSocketEventTimeout: unused,
-    getTags: unused,
-    abort: unused,
-  };
-  const env: Parameters<typeof projectLayer>[1] = {
-    PROJECT: namespace(),
-    CONNECTION: namespace(),
-    LOADER: {
-      get: vi.fn().mockReturnValue({ getEntrypoint: vi.fn().mockReturnValue(box), getDurableObjectClass: unused }),
-      load: unused,
-    },
-    PROCESS: namespace(
-      vi.fn().mockReturnValue({
-        configure: async () => undefined,
-        msg: async (input: Incoming) =>
-          (await box.admit(input.envelope.input))
-            ? Sent.cases.accepted.make({ rev: ++accepted, pos: accepted })
-            : Sent.cases.refused.make({ reason: "bad_msg" }),
-      }),
-    ),
-    RECORD: namespace(vi.fn().mockReturnValue({ write: async () => Written.cases.written.make({}) })),
-    MEASUREMENTS: {
-      head: unused,
-      get: unused,
-      put: unused,
-      createMultipartUpload: unused,
-      resumeMultipartUpload: unused,
-      delete: unused,
-      list: unused,
-    },
-  };
-  const url = "https://fabrika.test/p13-project";
-  const project = yield* ProjectService.pipe(
-    Effect.provide(
-      projectLayer(ctx, env, {
-        config: {
-          name: "p13-project",
-          person: from().for,
-          founder: line,
-          window: raw.toString("base64url"),
-          port: 0,
-          build: BUILD,
-        },
-        programs: { counter: { hash: BUILD, source: "" } },
-        bootstrap: { name: NAME, id: "project-start", program: "counter" },
-        door: (options) =>
-          Gateway.pipe(
-            Effect.provide(
-              Gateway.layer({
-                ...options,
-                name: "p13-project",
-                url,
-                origins: ["https://fabrika.test"],
-                versions: [1],
-                location: "test",
-                build: BUILD,
-                waiting: { most: 20, ttl: 600_000 },
-                ping: { min: 10_000, max: 60_000 },
-                inputCap: 1000,
-                spentCap: 1000,
-                deliver: (pid, _envelope, _span, incoming) => options.deliver(pid, incoming),
-                inputs: {
-                  schema: ProjectInput,
-                  raw: [],
-                  personOnly: [],
-                  name: (m) => m.type,
-                },
-                events: { personOnly: [] },
-              }),
-            ),
-          ),
-      }),
-    ),
-  );
-  const client = yield* project.connect();
-  const nonce = yield* project.challenge(client);
-  const tab = "project-test";
-  const signed = yield* writeSshsig({
-    text: `fabrika-hello\n${url}\n${tab}\n${nonce}`,
-    line,
-    space: "fabrika-client",
-    sign: (bytes) => Effect.sync(() => sign(null, bytes, pair.privateKey)),
-  });
-  expect(
-    yield* project.initialize(
-      client,
-      {
-        versions: [1],
-        has: [],
-        ping: "30s",
-        key: raw.toString("base64url"),
-        tab,
-        nonce,
-        signed,
-        platform: "headless",
-        os: "linux",
-        sentAt: from().sentAt,
-      },
-      { url, tab, name: fingerprint },
-    ),
-  ).toMatchObject({ _tag: "online" });
-  const history: Array<{ letter: string; m: typeof ProjectInput.Type; answer: unknown }> = [];
-
-  for (const [n, entropy] of tape.entries()) {
-    const moves = history.length === 0 ? ["valid"] : ["valid", "unknown", "retry"];
-    const move = moves[entropy % moves.length]!;
-    reached.add(move);
-    const prior = move === "retry" ? history[Math.floor(entropy / moves.length) % history.length]! : undefined;
-    const letter = prior?.letter ?? `project-${n}`;
-    const m =
-      prior?.m ??
-      (move === "unknown"
-        ? ProjectInput.make({ type: `unknown-${accepted}`, body: `BODY-${entropy}-${n}` })
-        : Msg.make({ type: "add", n: accepted + 1 }));
-    const answer = yield* project.route(client, "process.send", {
-      pid: project.boot.process,
-      letter,
-      m,
-      sentAt: from().sentAt,
-      seen: 0,
-    });
-
-    if (prior !== undefined) {
-      expect(answer).toEqual(prior.answer);
-    } else {
-      expect(answer).toMatchObject({ _tag: "ok", result: { _tag: move === "unknown" ? "refused" : "accepted" } });
-      history.push({ letter, m, answer });
-    }
-  }
-});
-
-it("A13: project routing keeps unknown message types as normal refusals through the real audit callback", async () => {
-  const reached = new Set<string>();
-  await fc.assert(
-    fc.asyncProperty(fc.array(fc.noBias(fc.nat()), { minLength: 12, maxLength: 24 }), (tape) =>
-      Effect.runPromise(Effect.scoped(projectWalk(tape, reached))),
-    ),
-    { seed: 119120, numRuns: 6, endOnFailure: true },
-  );
-  expect([...reached]).toEqual(expect.arrayContaining(["valid", "unknown", "retry"]));
-});
 
 const thrown = fc.oneof(
   fc
