@@ -151,15 +151,10 @@ request opens, even when no study is running (owner, 2026-11-08).
 
 ### 7. Write the guideline page
 
-<<<<<<< Updated upstream
-`docs/guidelines/<area>.md` ([0136](../../../.decisions/0136-guidelines-live-in-their-own-pages.md)).
-Shape, from modes and hot reload:
-=======
 `docs/guidelines/<area>.md`, or for a visual area a folder: `docs/guidelines/<area>/README.md`
 with its shots in `shots/`
 ([0136](../../../.decisions/0136-guidelines-live-in-their-own-pages.md)). Copy the shape from
 `references/guideline-page.md`. No new note goes under `docs/direction/`.
->>>>>>> Stashed changes
 
 The page holds the rules only. The long reasoning, the leans and how sure, the Linear rows, the
 smaller calls, the ledger, the tryout and the cost stay in the experiment (step 6), and the page
