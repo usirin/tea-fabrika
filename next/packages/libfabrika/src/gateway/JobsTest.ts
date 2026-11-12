@@ -4,6 +4,8 @@
 // wrong-owner admission (A7), pre-turn or cached admission (A8), person Writer for hands (A9),
 // replaced receipts/metadata (A10), permissive parameter decoding/recording (A11), and one private
 // sentinel in each inspected output (A12). Product paths are outside this step's write list.
+// A-Kept plants after build: omit connection or has on start/finish, reuse the take's hello facts,
+// discard those fields on ledger reload, or replace the first assignment after reconnect.
 import { expect, it } from "@effect/vitest";
 import {
   Arbitrary,
@@ -506,6 +508,11 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
       expect(event.sentAt).toBe(cell.sentAt);
       expect(event.seen).toBe(seen);
       expect(event.build).toBe(c.build);
+
+      if (focus === "A10" && (event.event === "started" || event.event === "finished")) {
+        expect(event).toMatchObject({ connection: c.client, has: c.has });
+      }
+
       expect(s.job.state).toMatchObject({ request: s.request });
       expect(event.traceId).toMatch(/^[0-9a-f]{32}$/);
       expect(event.arrivedAt).toBeGreaterThanOrEqual(0);
@@ -591,7 +598,11 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
         if (p === "requested" || p === "finished") {
           yield* take(s, cell);
         } else {
-          if (current.live && (current.build === undefined || !current.has.includes("git"))) {
+          if (current.live && focus === "A10") {
+            current = yield* w.hello(current.key, "hands", ["git", ...cell.has], `${cell.build}-${sequence++}`);
+            expect(current.client).not.toBe(assignment(s).executor.connection);
+            done.add(`reconnect@${p}`);
+          } else if (current.live && (current.build === undefined || !current.has.includes("git"))) {
             current = yield* w.hello(current.key, "hands", ["git"], cell.build);
           }
 
@@ -611,6 +622,11 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
             const first = s.job;
             s.job = yield* w.j((j) => j.read(s.request.id));
             checkEvent(s, current, cell, params.seen);
+
+            if (focus === "A10") {
+              expect(assignment(s)).toEqual(assignment({ ...s, job: first }));
+            }
+
             expect(s.job.events).toHaveLength(first.events.length + 1);
             expect(receipt).toMatchObject({ rev: last(s.job.events).rev, arrivedAt: last(s.job.events).arrivedAt });
 
@@ -720,6 +736,13 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
         done.add(`retry@${p}`);
       } else if (move === "reopen") {
         yield* w.reopen;
+
+        if (focus === "A10") {
+          for (const kept of saved) {
+            expect(jobReply(yield* w.route(w.primary, "jobs.read", snapshot(kept)))).toEqual(kept.job);
+            done.add(`reopen@${phase(kept)}`);
+          }
+        }
       } else if (move === "revoke") {
         yield* w.revoke(current, `revoke-${sequence++}`);
       } else if (move === "race") {
@@ -948,7 +971,19 @@ const required: Record<Focus, ReadonlyArray<string>> = {
     "forbidden:jobs.request",
     "forbidden:project.sign",
   ],
-  A10: ["assigned", "started", "finished", "retry@started", "retry@finished", "reopen", "reconnect"],
+  A10: [
+    "assigned",
+    "started",
+    "finished",
+    "retry@started",
+    "retry@finished",
+    "reopen",
+    "reconnect",
+    "reconnect@assigned",
+    "reconnect@started",
+    "reopen@started",
+    "reopen@finished",
+  ],
   A11: [
     "assigned",
     "started",

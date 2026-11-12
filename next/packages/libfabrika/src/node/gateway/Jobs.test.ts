@@ -29,6 +29,8 @@ const open = Effect.gen(function* () {
   const handle = yield* Effect.acquireRelease(
     Effect.sync(() => {
       const db = new DatabaseSync(path);
+      // Keep a durable file across reopens without creating a rollback journal on every write.
+      db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL");
       return { db, sql: nodeSql(db) };
     }),
     (held) => Effect.sync(() => held.db.isOpen && held.db.close()),
@@ -42,6 +44,7 @@ const open = Effect.gen(function* () {
   const reopen = Effect.sync(() => {
     handle.db.close();
     handle.db = new DatabaseSync(path);
+    handle.db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL");
     handle.sql = nodeSql(handle.db);
   });
   const gateway: TestSuite.Store["gateway"] = (options) => {
