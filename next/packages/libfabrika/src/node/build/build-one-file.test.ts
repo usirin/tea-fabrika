@@ -152,7 +152,7 @@ const fixture = (value: string, count = 1) => {
   writeFileSync(join(home, "package.json"), '{"type":"module"}');
   mkdirSync(join(home, "node_modules/@p16"), { recursive: true });
 
-  for (const name of ["effect", "@demlik", "@kampus", "@alchemy.run"]) {
+  for (const name of ["effect", "@demlik", "@kampus", "@alchemy.run", "alchemy"]) {
     symlinkSync(join(ROOT, "next/apps/fabrika/node_modules", name), join(home, "node_modules", name), "dir");
   }
 
@@ -247,6 +247,9 @@ const embedded = (brain: string, sources: readonly string[]) => {
   }
 };
 
+// oxlint-disable-next-line fabrika/no-stage-word -- edge: Alchemy binds these two names in the Worker's env
+const workerEnv = { ALCHEMY_STACK_NAME: "fixture", ALCHEMY_STAGE: "test" };
+
 const inert = (file: string) =>
   execFileSync(
     process.execPath,
@@ -259,7 +262,7 @@ import {readFileSync} from 'node:fs';
 import {SourceTextModule,SyntheticModule,createContext} from 'node:vm';
 const context=createContext({console,TextEncoder,TextDecoder,URL,URLSearchParams,crypto,fetch,Request,Response,Headers,AbortController,AbortSignal,setTimeout,clearTimeout,setInterval,clearInterval,queueMicrotask,structuredClone,performance,Buffer,process:{env:{NODE_ENV:'test'}}});
 const module=new SourceTextModule(readFileSync(process.argv[1],'utf8'),{context});
-await module.link(async name=>{const values=name==='cloudflare:workers'?{DurableObject:class{},WorkerEntrypoint:class{},RpcTarget:class{},env:{}}:name.startsWith('node:')?await import(name):(()=>{throw Error('unfinished bundle '+name)})();return new SyntheticModule(Object.keys(values),function(){for(const [k,v] of Object.entries(values))this.setExport(k,v)},{context})});
+await module.link(async name=>{const values=name==='cloudflare:workers'?{DurableObject:class{},WorkerEntrypoint:class{},RpcTarget:class{},env:${JSON.stringify(workerEnv)}}:name.startsWith('node:')?await import(name):(()=>{throw Error('unfinished bundle '+name)})();return new SyntheticModule(Object.keys(values),function(){for(const [k,v] of Object.entries(values))this.setExport(k,v)},{context})});
 await module.evaluate(); if(context.__p16Inner!==undefined)throw Error('inner code executed');
 `,
       file,
@@ -1202,7 +1205,7 @@ const p40Home = Effect.fn("p40.home")(function* () {
   yield* fs.makeDirectory(path.join(home, "node_modules/@p40"), { recursive: true });
   yield* fs.makeDirectory(path.join(home, "programs"));
 
-  for (const name of ["effect", "@demlik", "@kampus", "@alchemy.run"]) {
+  for (const name of ["effect", "@demlik", "@kampus", "@alchemy.run", "alchemy"]) {
     yield* fs.symlink(path.join(ROOT, "next/apps/fabrika/node_modules", name), path.join(home, "node_modules", name));
   }
 
