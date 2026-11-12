@@ -1,13 +1,22 @@
 import { Cause, Effect, Exit, Path } from "effect";
 import effectPackage from "effect/package.json" with { type: "json" };
-import { rolldown, VERSION, type InputOption, type Plugin, type RolldownOutput } from "rolldown";
+import {
+  rolldown,
+  VERSION,
+  type InputOption,
+  type LogLevel,
+  type LogOrStringHandler,
+  type Plugin,
+  type RolldownLog,
+  type RolldownOutput,
+} from "rolldown";
 import { BuildError, hash } from "../../runtime/Built.ts";
 import type { ProgramSource } from "../../runtime/Execution.ts";
 
 export { BuildError, hash } from "../../runtime/Built.ts";
 
 /** Which bundle of a build this is. Recorded on its span, with no path or content. */
-export type Phase = "program" | "window" | "brain";
+export type Phase = "program" | "window" | "tab" | "brain";
 
 type Options = {
   readonly phase?: Phase;
@@ -16,6 +25,7 @@ type Options = {
   /** Let the bundle emit secondary chunks (windows); a program or a brain stays one module. */
   readonly split?: boolean;
   readonly define?: Readonly<Record<string, string>>;
+  readonly minify?: boolean;
 };
 
 const bytes = (text: string) => new TextEncoder().encode(text).byteLength;
@@ -48,12 +58,24 @@ export const bundle = Effect.fn("build.bundle")(function* (
   const config = {
     input,
     plugins,
+    // Rolldown notes each "use client" it drops; a bundle here has no server half.
+    onLog: (level: LogLevel, log: RolldownLog, handler: LogOrStringHandler) => {
+      if (log.code !== "MODULE_LEVEL_DIRECTIVE") {
+        handler(level, log);
+      }
+    },
     platform: "browser" as const,
-    external: options.phase === "brain" ? ["cloudflare:workers", /^node:/] : ["cloudflare:workers"],
+    // A tab names no platform module, so nothing is external there: its build refuses one.
+    external:
+      options.phase === "brain"
+        ? ["cloudflare:workers", /^node:/]
+        : options.phase === "tab"
+          ? []
+          : ["cloudflare:workers"],
     ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
     ...(options.define === undefined ? {} : { transform: { define: { ...options.define } } }),
   };
-  const output = { format: "esm" as const, codeSplitting: options.split === true };
+  const output = { format: "esm" as const, codeSplitting: options.split === true, minify: options.minify === true };
   const generate = Effect.acquireUseRelease(
     // oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown's build API returns a Promise
     Effect.tryPromise({ try: () => rolldown(config), catch: fail }),
