@@ -170,7 +170,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
   fc.assert(
     fc.property(tape, (draw) => {
       let model: Model = Open.machine.init(null, undefined)[0];
-      let phase: Phase = "closed";
+      const cursor: { phase: Phase } = { phase: "closed" };
       let selection = draw.selections[0]!;
       let request = draw.answers[0]!;
       let snapshot = draw.snapshots[0]!;
@@ -193,7 +193,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
         }
 
         model = next;
-        phase = expected;
+        cursor.phase = expected;
       };
       const select = (pick: number) => {
         if (model._tag !== "closed") {
@@ -216,13 +216,13 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
         send({ type: "select", selection }, "checking");
       };
       const advance = (pick: number, yes: boolean) => {
-        if (phase === "closed" || phase === "ready" || phase === "refused") {
+        if (cursor.phase === "closed" || cursor.phase === "ready" || cursor.phase === "refused") {
           select(pick);
-        } else if (phase === "checking") {
+        } else if (cursor.phase === "checking") {
           send({ type: "checked", selection, snapshot }, "history");
-        } else if (phase === "history") {
+        } else if (cursor.phase === "history") {
           send({ type: "history", selection, events: [] }, "awaiting_trust");
-        } else if (phase === "awaiting_trust") {
+        } else if (cursor.phase === "awaiting_trust") {
           request = draw.answers[pick % draw.answers.length]!;
           accepted = yes;
           send(
@@ -249,11 +249,11 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
           moves.push("late");
         }
 
-        if (phase === "saving") {
+        if (cursor.phase === "saving") {
           moves.push("failed", "wrong-request", "duplicate-answer");
         }
 
-        if (phase === "awaiting_trust") {
+        if (cursor.phase === "awaiting_trust") {
           moves.push("early-ack");
         }
 
@@ -268,7 +268,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
         } else if (move === "late") {
           const late = old.filter((msg) => "selection" in msg && msg.selection !== selection);
           const before = model;
-          send(late[cell.pick % late.length]!, phase);
+          send(late[cell.pick % late.length]!, cursor.phase);
           expect(model).toEqual(before);
         } else if (move === "failed") {
           send(
@@ -280,12 +280,12 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
           const before = model;
           send(
             { type: "saved", selection, request: other, receipt: draw.receipts[cell.pick % draw.receipts.length]! },
-            phase,
+            cursor.phase,
           );
           expect(model).toEqual(before);
           send(
             { type: "failed", selection, request: other, reason: draw.failures[cell.pick % draw.failures.length]! },
-            phase,
+            cursor.phase,
           );
           expect(model).toEqual(before);
         } else if (move === "duplicate-answer") {
@@ -297,12 +297,15 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
               request,
               decision: accepted ? TrustDecision.cases.accepted.make({}) : TrustDecision.cases.denied.make({}),
             },
-            phase,
+            cursor.phase,
           );
           expect(model).toEqual(before);
         } else {
           const before = model;
-          send({ type: "saved", selection, request, receipt: draw.receipts[cell.pick % draw.receipts.length]! }, phase);
+          send(
+            { type: "saved", selection, request, receipt: draw.receipts[cell.pick % draw.receipts.length]! },
+            cursor.phase,
+          );
           expect(model).toEqual(before);
         }
       }

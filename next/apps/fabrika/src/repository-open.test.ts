@@ -131,9 +131,11 @@ it.live("scenario: L11 actual dev selects the default commit, saves trust, and r
           process.platform === "darwin"
             ? ["-q", "/dev/null", process.execPath, ...argv]
             : ["-q", "-e", "-c", [process.execPath, ...argv].map(quote).join(" "), "/dev/null"];
+        // Node's stdin is a socket pair. A shell pipeline gives script a real pipe on both hosts.
+        // The scoped spawner owns the shell's process group, including cat, script and dev.
         const child = yield* ChildProcess.make(
-          interactive ? "script" : process.execPath,
-          interactive ? scriptArgs : argv,
+          interactive ? "sh" : process.execPath,
+          interactive ? ["-c", 'cat | exec script "$@"', "t878-terminal", ...scriptArgs] : argv,
           {
             cwd: repo,
             stdin: interactive ? Stream.fromQueue(input) : "ignore",

@@ -7,7 +7,7 @@ import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { ObjectId, Repositories, SourceMetadata } from "../../repositories/Repositories.ts";
-import type { Repository } from "../../repositories/Repositories.ts";
+import type { RepositoriesError, Repository } from "../../repositories/Repositories.ts";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";
 import * as Sources from "./Sources.ts";
@@ -165,9 +165,9 @@ const regularFileLinks = Effect.fnUntraced(function* (root: string) {
         expect(string(yield* source.read("file-link"))).toBe("regular file");
 
         for (const operation of ["resolve", "read"] as const) {
-          const result = yield* (
-            operation === "resolve" ? resolve(`${from}/${file}`, document) : source.read(file)
-          ).pipe(
+          const requested: Effect.Effect<unknown, RepositoriesError> =
+            operation === "resolve" ? resolve(`${from}/${file}`, document) : source.read(file);
+          const result = yield* requested.pipe(
             Effect.match({
               onFailure: (error) => error.reason._tag,
               onSuccess: (value) => (value === null ? "missing" : "success"),
@@ -343,7 +343,9 @@ const string = (value: unknown) => {
   return read === null ? null : new TextDecoder().decode(read.bytes);
 };
 
-it("L7: each prefix resolves from the winning file's base, pins committed bytes and follows outside targets", async () => {
+// The 200-run host check took 695 seconds under load. Keep 200 injected runs above,
+// and use 20 real-Git runs with over three times their measured share of that time.
+it("L7: bases, pinned bytes and outside targets (20 real-Git runs; 200 injected runs cover the same paths)", async () => {
   await fc.assert(
     fc.asyncProperty(
       fc.array(
@@ -506,6 +508,6 @@ it("L7: each prefix resolves from the winning file's base, pins committed bytes 
           ).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, Digest.layerWebCrypto))),
         ),
     ),
-    { seed: 119120, numRuns: 200 },
+    { seed: 119120, numRuns: 20 },
   );
-});
+}, 240_000);

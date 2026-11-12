@@ -248,6 +248,8 @@ const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string
   )).trim();
 });
 
+// The 200 real-Git fixtures exceed 60 seconds under load. Allow 15 minutes,
+// using the lead's 695-second L7 measurement as the floor, and retain all 200 runs.
 it("L8: refusal, consent and retries never evaluate, bundle or start repository code or Git-configured commands", async () => {
   await fc.assert(
     fc.asyncProperty(tape, ids, ids, people, async (cells, selection, request, actor) => {
@@ -329,7 +331,7 @@ it("L8: refusal, consent and retries never evaluate, bundle or start repository 
     }),
     { seed: 119120, numRuns: 200 },
   );
-});
+}, 900_000);
 
 const forms = (word: string) => [
   word,
@@ -416,15 +418,15 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
         const secret = `sentinel-${word}/+ &"`;
         const folder = `/private/fixture-${word}`;
         const url = `https://fixture:${encodeURIComponent(secret)}@example.invalid/repo.git`;
-        const outputs: Record<string, Array<unknown>> = {
-          report: [],
-          pending: [],
-          error: [],
-          errorJson: [],
-          spans: [],
-          ledger: [],
-          settings: [],
-          state: [],
+        const outputs = {
+          report: new Array<unknown>(),
+          pending: new Array<unknown>(),
+          error: new Array<unknown>(),
+          errorJson: new Array<unknown>(),
+          spans: new Array<unknown>(),
+          ledger: new Array<unknown>(),
+          settings: new Array<unknown>(),
+          state: new Array<unknown>(),
         };
         const spans: Array<Tracer.NativeSpan> = [];
         const tracer = Tracer.make({
@@ -582,7 +584,10 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                       source === 7
                         ? {
                             ...captured,
-                            append: () => Effect.fail(new LedgerError({ reason: `${url} ${folder} ${secret}` })),
+                            append: () =>
+                              Effect.fail(
+                                new LedgerError({ reason: "storage", message: `${url} ${folder} ${secret}` }),
+                              ),
                           }
                         : captured,
                     ),
