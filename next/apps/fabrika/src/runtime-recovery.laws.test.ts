@@ -739,17 +739,18 @@ describe("P12 Project configure recovery", () => {
         await w.interrupt();
       }
 
-      if (fault === "failed") {
-        // The failed delivery is seen: a log line naming the pid and the error's tag, never a silent drop.
+      if (fault !== "healthy") {
+        // The failed or cut delivery is seen: a log line naming the pid (and a failure's tag), never a silent drop.
         await vi.waitFor(
           () =>
             expect(
               logged.some((spy) =>
                 spy.mock.calls.some((call) => {
                   const text = inspect(call, { depth: 8 });
-                  return text.includes(descriptor.id) && text.includes("LedgerError");
+                  return text.includes(descriptor.id) && (fault === "interrupted" || text.includes("LedgerError"));
                 }),
               ),
+              `the ${fault} delivery of ${descriptor.id} is logged`,
             ).toBe(true),
           { timeout: 2_000 },
         );

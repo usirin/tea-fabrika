@@ -4,10 +4,11 @@
 // alarm is a recording double.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Exit, Layer, Schema } from "effect";
+import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Mailbox, ProcessStore, SessionManager, Writer } from "../coordination/index.ts";
-import { A, brain, data, first, from, ids, PIDS, storage } from "../processes/Process.test-support.ts";
+import { A, brain, data, first, from, ids, PIDS, read, storage } from "../processes/Process.test-support.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { Program } from "./Program.ts";
@@ -40,13 +41,22 @@ const world = (wakes: Readonly<Record<string, number | null>>) => {
     state = storage(),
     authority = storage();
   const next = ids(...PIDS);
-  const controls = { build: BUILD };
+  // `throws`: the program's init throws, as a program bug would; `loaded`: what each init was given.
+  const controls = { build: BUILD, throws: false, loaded: [] as Array<Model | null> };
   const alarms: Array<number | null> = [];
   const machine = Machine.make({
     model: Model,
     msg: Msg,
     cmds: [],
-    init: (loaded) => [loaded ?? { wake: wakes[controls.build] ?? null }, []],
+    init: (loaded) => {
+      controls.loaded.push(loaded ?? null);
+
+      if (controls.throws) {
+        throw new RangeError("init threw");
+      }
+
+      return [loaded ?? { wake: wakes[controls.build] ?? null }, []];
+    },
     update: {
       timer: (s) => [s, []],
     },
@@ -112,6 +122,8 @@ const world = (wakes: Readonly<Record<string, number | null>>) => {
   };
 };
 
+const lives = read(`processes/${NAME}`);
+
 /** The object's alarm after the calls: the last one set, or none ever set. */
 const lastAlarm = (alarms: ReadonlyArray<number | null>) => (alarms.length === 0 ? null : alarms.at(-1)!);
 
@@ -176,4 +188,47 @@ describe("ticket 762 A2: a process's first turn arms its alarm", () => {
       { seed: SEED, numRuns: 50 },
     );
   });
+
+  // A2: a program that throws in its init is supervision's, as any step that throws. The start
+  // still answers, and the crash is observed: the object arms supervision's wait, and the wait's
+  // alarm starts a successor. Fresh: no saved model; restored: an earlier life saved one.
+  it.effect.prop(
+    "L8 init crash: a program that throws in init, fresh or restored, leaves init answering and a successor started",
+    {
+      restored: Schema.Boolean,
+      wake: Schema.NullOr(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1e12 }))),
+    },
+    ({ restored, wake }) =>
+      Effect.gen(function* () {
+        // A restored life's earlier model wakes at 0, so its due runs one timer step and saves it.
+        const w = world({ [BUILD]: restored ? 0 : wake });
+        yield* w.boot;
+
+        if (restored) {
+          yield* ProgramRunner.use((r) => r.init()).pipe(Effect.provide(w.layer()));
+          yield* ProgramRunner.use((r) => r.due(0)).pipe(Effect.provide(w.layer()));
+          w.reopen();
+        }
+
+        w.controls.throws = true;
+        w.controls.loaded.length = 0;
+        yield* Effect.gen(function* () {
+          const r = yield* ProgramRunner;
+          const started = yield* Effect.exit(r.init());
+          expect(w.controls.loaded.length, "the program's init ran").toBeGreaterThan(0);
+          expect(
+            w.controls.loaded.every((m) => (m !== null) === restored),
+            restored ? "init was given the saved model" : "init was given no model",
+          ).toBe(true);
+          expect(Exit.isSuccess(started), "a start answers although its program's init threw").toBe(true);
+          const deadline = lastAlarm(w.alarms);
+          expect(deadline, "the crash is observed: supervision's wait is armed").toBeTypeOf("number");
+          w.controls.throws = false;
+          yield* TestClock.setTime(deadline!);
+          yield* r.due(deadline!);
+          expect((yield* lives).filter((row) => row._tag === "restarted")).toMatchObject([{ body: { after: A } }]);
+        }).pipe(Effect.provide(w.layer()));
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
 });
