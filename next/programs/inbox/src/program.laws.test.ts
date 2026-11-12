@@ -1,9 +1,7 @@
-// Ticket 884, slice 1, next/: the inbox program's rows, window input type and view.
-// I2 needs runner wiring in the app, as the checklist's RunnerTest suite does (0062).
+// Ticket 884, slice 1, next/: rows, input ports and view. I2 runs through RunnerTest (0062).
 import { applyCell } from "@demlik/tea";
 import { propertyInvariant } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import type { WindowMsg, WindowProps } from "@kampus/libfabrika";
 import { Arbitrary, Effect, Schema } from "effect";
 import * as fc from "fast-check";
 
@@ -83,16 +81,11 @@ describe("ticket 884 the inbox program, slice 1", () => {
     { arbitrary: { seed: SEED, runs: RUNS } },
   );
 
-  it.effect("pinned: I3 WindowMsg is never because the inbox program has no input port", () =>
+  it.effect("pinned: I3 the program has no input names, as amendment A-Runner requires for slice 1", () =>
     Effect.gen(function* () {
-      // Type law: CI checks these pins and the rejected press. No tile exists in slice 1.
+      // CI checks the type pin. The window's press type belongs to slice 2.
       const { inbox } = yield* Effect.promise(load);
-      expectTypeOf<WindowMsg<typeof inbox>>().toEqualTypeOf<never>();
-      const press = (window: WindowProps<typeof inbox>, msg: typeof Msg.Type) => {
-        // @ts-expect-error Only the brain may send added; a window has no legal press.
-        window.press(msg);
-      };
-      expectTypeOf(press).returns.toBeVoid();
+      expectTypeOf<keyof (typeof inbox)["inputs"]>().toEqualTypeOf<never>();
       expect(Object.keys(inbox.inputs)).toEqual([]);
     }),
   );
