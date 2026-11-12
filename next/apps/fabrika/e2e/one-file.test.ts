@@ -24,7 +24,7 @@ import { chromium } from "playwright";
 import { describe, expect, it } from "vitest";
 import type { Built } from "../src/build.ts";
 import { heldPort } from "../src/port.test-support.ts";
-import { settingsFixture } from "../src/record-wire.test-support.ts";
+import * as RecordWireTest from "../src/record-wire.test-support.ts";
 
 const APP = resolve(import.meta.dirname, ".."),
   ROOT = resolve(APP, "../../..");
@@ -137,7 +137,7 @@ describe("P16 real browser from a copied one-file build", () => {
             const instance = await Effect.runPromise(
               localInstance(
                 { ...built, brain: join(alone, "brain.mjs") },
-                settingsFixture({
+                RecordWireTest.settingsFixture({
                   home,
                   name: "p16-browser",
                   person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
@@ -362,7 +362,7 @@ const servedCounter = Effect.gen(function* () {
     "server",
     localInstance(
       built,
-      settingsFixture({
+      RecordWireTest.settingsFixture({
         home,
         name: "p14-browser",
         person: "person_01m6v5270hf3c8x2q7w9z4k5mn",

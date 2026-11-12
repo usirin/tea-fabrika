@@ -4,9 +4,10 @@ import { Context, Deferred, Effect, Exit, Fiber, Layer } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { RecordedStart } from "../settings/RecordedStart.ts";
+import type * as Start from "../settings/Start.ts";
 import * as Starts from "../settings/Starts.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
-import type { recordingLayer } from "./runtime.ts";
+import type { BrainOptions, recordingLayer } from "./runtime.ts";
 import * as SettingsRecorded from "./SettingsRecorded.ts";
 
 class Consumer extends Context.Service<Consumer, { readonly port: number }>()(
@@ -119,5 +120,7 @@ describe("recorded settings dependency, next/", () => {
     >().toEqualTypeOf<RecordedStart>();
     expectTypeOf<RecordedStart["Service"]["values"]["port"]>().toEqualTypeOf<number>();
     expectTypeOf<RecordedStart["Service"]["values"]["version"]>().toEqualTypeOf<string>();
+    expectTypeOf<BrainOptions>().toEqualTypeOf<Start.Input>();
+    expectTypeOf<Extract<keyof BrainOptions, "port" | "version">>().toEqualTypeOf<never>();
   });
 });

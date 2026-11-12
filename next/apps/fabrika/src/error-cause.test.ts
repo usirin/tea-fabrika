@@ -6,7 +6,7 @@ import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { build } from "./build.ts";
-import { settingsFixture } from "./record-wire.test-support.ts";
+import * as RecordWireTest from "./record-wire.test-support.ts";
 import { type Env, settings } from "./runtime.ts";
 
 // The brain reads its embedded tables from the build's generated module; these laws build nothing.
@@ -30,7 +30,7 @@ const failures: fc.Arbitrary<object> = fc.oneof(
   fc.record({ code: fc.string(), detail: fc.jsonValue() }, { noNullPrototype: true }),
 );
 
-const valid = settingsFixture({
+const valid = RecordWireTest.settingsFixture({
   name: "instance",
   person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
   founder: "ssh-ed25519 AAAA",

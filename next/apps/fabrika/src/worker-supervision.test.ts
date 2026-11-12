@@ -12,7 +12,7 @@ import { Effect, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { describe, expect } from "vitest";
 import { heldPort } from "./port.test-support.ts";
-import { settingsFixture } from "./record-wire.test-support.ts";
+import * as RecordWireTest from "./record-wire.test-support.ts";
 import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -115,7 +115,7 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
         const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
         const instance = yield* localInstance(
           built,
-          settingsFixture({
+          RecordWireTest.settingsFixture({
             home,
             name: PROJECT,
             person: PERSON,
@@ -334,7 +334,7 @@ const worldScoped = Effect.gen(function* () {
   );
   const instance: Instance = yield* localInstance(
     built,
-    settingsFixture({
+    RecordWireTest.settingsFixture({
       home,
       name: PROJECT,
       person: PERSON,

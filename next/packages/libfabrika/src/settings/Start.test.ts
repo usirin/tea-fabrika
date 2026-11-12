@@ -14,15 +14,15 @@ describe("instance start envelope, next/", () => {
     fc.tuple(StartsTest.recipe, fc.option(fc.integer({ min: 1, max: Number.MAX_SAFE_INTEGER }), { nil: undefined })),
     ([recipe, cap]) =>
       Effect.gen(function* () {
+        expect(Declarations.all.declarations.map((setting) => setting.path).sort()).toEqual([
+          "fabrika-version",
+          "instance.port",
+        ]);
         const base = yield* StartsTest.input(recipe);
         const wire = { ...base, ...(cap === undefined ? {} : { limits: { recordBytes: cap } }) };
         const decoded = yield* Schema.decodeUnknownEffect(Start.Input)(wire, { onExcessProperty: "error" });
         expect(decoded.settings).toEqual(base.settings);
         expect(decoded.limits?.recordBytes).toBe(cap);
-        expect(Declarations.all.declarations.map((setting) => setting.path).sort()).toEqual([
-          "fabrika-version",
-          "instance.port",
-        ]);
       }).pipe(Effect.provide(Digest.layerWebCrypto)),
   );
 

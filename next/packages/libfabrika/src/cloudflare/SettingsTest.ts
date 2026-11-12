@@ -127,8 +127,10 @@ export const suite = (open: Open) =>
 
               const warm = driver.counts();
 
-              // Each RecordPart method, first/later frames and process alarms/steps run through enter.
-              for (let n = 0; n < 8; n++) {
+              // Visit every method. The generated walk supplies repeated warm deliveries.
+              const methods = path === "Project" ? 3 : path === "Connection" || path === "Process" ? 2 : 4;
+
+              for (let n = 0; n < methods; n++) {
                 yield* entry.enter(n);
               }
 

@@ -9,7 +9,7 @@ import { Effect, Exit, Layer, Result } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
-import { settingsFixture } from "./record-wire.test-support.ts";
+import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, settings as decodeSettings } from "./runtime.ts";
 
 const held = vi.hoisted(() => ({ project: [] as Array<unknown>, door: [] as Array<unknown> }));
@@ -56,7 +56,7 @@ StartsTest.law(
 /** The `inputs.name` callback, as the runtime composes it. */
 const composedName = async (): Promise<(m: unknown) => string | undefined> => {
   const ctx: unknown = { id: { name: "project-a" } };
-  const input = settingsFixture(settings);
+  const input = RecordWireTest.settingsFixture(settings);
   const env = { INSTANCE: JSON.stringify(input) };
   const runtime: ReturnType<typeof projectRuntime> = Reflect.apply(projectRuntime, undefined, [ctx, env]);
   await runtime.runPromise(Effect.void);

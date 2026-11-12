@@ -20,7 +20,7 @@ import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime"
 import { Cause, Deferred, Effect, Exit, Layer, Option, Schema, Tracer } from "effect";
 import * as fc from "fast-check";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { settingsFixture } from "./record-wire.test-support.ts";
+import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, settings, type Env } from "./runtime.ts";
 import { Settings } from "./settings.ts";
 
@@ -163,7 +163,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
     INSTANCE: JSON.stringify(
-      settingsFixture({
+      RecordWireTest.settingsFixture({
         name: "project-test",
         person: PERSON,
         founder: key.line,

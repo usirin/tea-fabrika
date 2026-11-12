@@ -44,6 +44,14 @@ export interface Input {
   readonly repo: { readonly revision: string } | null;
   readonly founding: { readonly person: string; readonly founder: string; readonly window: string | null };
   readonly name: string;
+  readonly origin?: {
+    readonly by: string;
+    readonly for: string;
+    readonly sentAt: string;
+    readonly seen: number;
+    readonly parent: string | null;
+    readonly traceId: string;
+  };
   readonly limits?: { readonly recordBytes: number };
   readonly mail?: { readonly grants: Readonly<Record<string, ReadonlyArray<string>>> };
 }
@@ -237,11 +245,25 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
   describe("L5 L6 instance starts, next/", () => {
     law(
       "reachable deployments and lost replies retain immutable starts and original metadata",
-      fc.tuple(recipe, fc.array(fc.nat(), { minLength: 12, maxLength: 50 })),
-      ([first, choices]) =>
+      fc.tuple(
+        recipe,
+        fc.record({
+          by: fc.uuid(),
+          for: fc.uuid(),
+          sentAt: fc.integer({ min: 0, max: 2_000_000_000_000 }).map((ms) => new Date(ms).toISOString()),
+          seen: fc.nat(),
+          parent: fc.option(
+            fc.integer({ min: 1, max: 1_000_000 }).map((id) => `in-process_${"0".repeat(26)}-${id}`),
+            { nil: null },
+          ),
+          traceId: fc.uuid().map((id) => id.replaceAll("-", "")),
+        }),
+        fc.array(fc.nat(), { minLength: 12, maxLength: 50 }),
+      ),
+      ([first, origin, choices]) =>
         Effect.gen(function* () {
           const driver = yield* open;
-          const inputs: Input[] = [yield* input(first)];
+          const inputs: Input[] = [{ ...(yield* input(first)), origin: { ...origin, seen: 0 } }];
           const saved = new Map<string, Saved>();
 
           for (const [index, choice] of choices.entries()) {
@@ -252,13 +274,18 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
             const move = moves[choice % moves.length];
 
             if (move === "fresh") {
-              inputs.push(
-                yield* input({
+              inputs.push({
+                ...(yield* input({
                   ...first,
                   start: `${first.start}-${index}`,
                   port: choice % 2 === 0 ? first.port : (choice % 65535) + 1,
-                }),
-              );
+                })),
+                origin: {
+                  ...origin,
+                  seen: Math.min(origin.seen, saved.size),
+                  sentAt: new Date(Date.parse(origin.sentAt) + index + 1).toISOString(),
+                },
+              });
               continue;
             }
 
@@ -274,6 +301,31 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
               const different = yield* input({ ...first, start: current.start, build: `${current.build}-different` });
               expect(Exit.isFailure(yield* Effect.exit(driver.record(different)))).toBe(true);
               expect(yield* driver.read(current.start)).toEqual(saved.get(current.start));
+
+              // A retry cannot replace the original writer clock, parent, trace or reader position.
+              for (const key of ["by", "for", "sentAt", "seen", "parent", "traceId"] as const) {
+                const original = Option.getOrThrow(Option.fromUndefinedOr(current.origin));
+                const changed = {
+                  ...current,
+                  origin: {
+                    ...original,
+                    [key]:
+                      key === "seen"
+                        ? original.seen + 1
+                        : key === "parent"
+                          ? original.parent === null
+                            ? `in-process_${"0".repeat(26)}-1`
+                            : null
+                          : key === "traceId"
+                            ? `${original.traceId[0] === "0" ? "1" : "0"}${original.traceId.slice(1)}`
+                            : key === "sentAt"
+                              ? new Date(Date.parse(original.sentAt) + 1).toISOString()
+                              : `${original[key]}-different`,
+                  },
+                };
+                expect(Exit.isFailure(yield* Effect.exit(driver.record(changed)))).toBe(true);
+                expect(yield* driver.read(current.start)).toEqual(saved.get(current.start));
+              }
             } else {
               if (move === "lost") {
                 expect(Exit.isFailure(yield* Effect.exit(driver.loseReply(driver.record(current))))).toBe(true);
@@ -290,6 +342,7 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
                   build: current.build,
                   repo: current.repo,
                   settings: current.settings,
+                  entry: { ...current.origin, id: current.start, stream: `settings/instance/${current.start}` },
                 });
 
                 if (saved.has(current.start)) {

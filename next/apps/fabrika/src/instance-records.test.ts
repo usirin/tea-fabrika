@@ -22,7 +22,7 @@ import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { describe, expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
-import { recordCall, settingsFixture } from "./record-wire.test-support.ts";
+import * as RecordWireTest from "./record-wire.test-support.ts";
 
 // The local instance exposes Promise calls; RecordManager takes Effect calls.
 type RecordCalls = ReturnType<Parameters<typeof RecordManager.remote>[0]>;
@@ -30,10 +30,10 @@ type RecordCalls = ReturnType<Parameters<typeof RecordManager.remote>[0]>;
 const recordCalls = (stub: {
   [K in keyof RecordCalls]: (...args: Parameters<RecordCalls[K]>) => Promise<unknown>;
 }): RecordCalls => ({
-  write: (...args) => recordCall(() => stub.write(...args)),
-  read: (...args) => recordCall(() => stub.read(...args)),
-  content: (...args) => recordCall(() => stub.content(...args)),
-  deleteContent: (...args) => recordCall(() => stub.deleteContent(...args)),
+  write: (...args) => RecordWireTest.recordCall(() => stub.write(...args)),
+  read: (...args) => RecordWireTest.recordCall(() => stub.read(...args)),
+  content: (...args) => RecordWireTest.recordCall(() => stub.content(...args)),
+  deleteContent: (...args) => RecordWireTest.recordCall(() => stub.deleteContent(...args)),
 });
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -185,7 +185,7 @@ const world = async (
       Effect.gen(function* () {
         const instance = yield* localInstance(
           built,
-          settingsFixture({
+          RecordWireTest.settingsFixture({
             home,
             name: "p12-records",
             person: PERSON,

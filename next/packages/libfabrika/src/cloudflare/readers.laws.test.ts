@@ -791,6 +791,7 @@ SettingsTest.suite((recipe, secret) =>
     const starts = Context.get(startsContext, Starts.Starts);
     const gate = Effect.fnUntraced(function* (wire: unknown) {
       calls++;
+      captured.transport.push(wire);
 
       if (fault === "unreachable") {
         return yield* Effect.fail(lower);
