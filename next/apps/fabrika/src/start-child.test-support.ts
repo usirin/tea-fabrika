@@ -8,9 +8,13 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import type { Descriptor } from "@kampus/libfabrika";
+import { Doorbell } from "@kampus/libfabrika/ledger/Ledger";
+import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
+import { Owner, Recipient } from "@kampus/libfabrika/processes/Process";
+import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
@@ -163,7 +167,17 @@ const remote = <A>(work: Effect.Effect<A>) => Effect.runPromise(work);
 const Written = Schema.TaggedStruct("written", {});
 
 /** The platform operation that fails during a child start or its recovery. */
-export type ChildFailure = "owner" | "descriptor" | "exists" | "pending" | "configure" | "ack";
+export type ChildFailure =
+  | "owner"
+  | "descriptor"
+  | "exists"
+  | "pending"
+  | "configure"
+  | "ack"
+  | "exit_write"
+  | "down"
+  | "watch_cleanup"
+  | "retire";
 
 /** The real Project service on scoped SQLite, with only the platform handles supplied by the test. */
 export const childProject = Effect.fnUntraced(function* () {
@@ -203,6 +217,16 @@ export const childProject = Effect.fnUntraced(function* () {
           trip("pending", process);
         } else if (query === "UPDATE dev_descriptors SET pending=0 WHERE process=?") {
           trip("ack", process);
+        } else if (/INSERT INTO entries/.test(query)) {
+          if (params[12] === "exited") {
+            trip("exit_write");
+          } else if (params[12] === "send" && String(params[13]).includes('"DOWN"')) {
+            trip("down");
+          } else if (params[12] === "demonitored") {
+            trip("watch_cleanup");
+          }
+        } else if (/INSERT OR IGNORE INTO gateway_ended/.test(query)) {
+          trip("retire", process);
         }
 
         if (armed && /INSERT.*dev_descriptors/.test(query)) {
@@ -305,6 +329,22 @@ export const childProject = Effect.fnUntraced(function* () {
     from,
     configured,
     recorded,
+    monitor: (watcher: string, target: string, ref: string) =>
+      ProcessManager.use((manager) => manager.monitor(ref, target, from)).pipe(
+        Effect.provide(
+          ProcessManager.layer(
+            {
+              by: `brain:${PROJECT}`,
+              owner: Owner.cases.brain.make({}),
+              recipient: Recipient.cases.process.make({ process: watcher }),
+            },
+            Effect.die("monitor must not allocate a process"),
+          ).pipe(
+            Layer.provide(LedgerTransactionSql.layer(sql)),
+            Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
+          ),
+        ),
+      ),
     rows: () =>
       sql
         .exec("SELECT name FROM sqlite_master WHERE type='table'")

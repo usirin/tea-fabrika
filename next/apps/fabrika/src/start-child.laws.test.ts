@@ -243,7 +243,7 @@ const outputText = (value: unknown): Array<string> => {
 };
 
 const projectSecrets = Effect.fnUntraced(function* (
-  path: "descriptor" | "recovery" | "configuration",
+  path: "descriptor" | "recovery" | "configuration" | "exit",
   output: ChildOutput,
   secret: string,
   tape: Iterable<fc.AsyncCommand<object, SecretWalk>>,
@@ -267,18 +267,25 @@ const projectSecrets = Effect.fnUntraced(function* (
     runtime = yield* Scope.provide(scope)(fixture.acquire());
   });
   const project = yield* Effect.promise(() => runtime.runPromise(ProjectService.pipe(Effect.provide(logging))));
-  const child = {
+  let child = {
     id: `${project.boot.process}/1/0`,
     name: "child:secret",
     code: { program: "p42/child", hash: "child-test" },
     requester: Recipient.cases.process.make({ process: project.boot.process }),
     input: { type: "inc" },
   };
+  let pid: string | undefined;
   const call = Effect.fnUntraced(function* () {
     const outcome = yield* Effect.tryPromise({
       try: () =>
         runtime.runPromise(
-          ProjectService.use((p) => p.processChild(child, fixture.from)).pipe(Effect.provide(logging)),
+          ProjectService.use((p) => {
+            const request: Effect.Effect<unknown, unknown> =
+              path === "exit"
+                ? p.processExit(pid ?? "", { _tag: "normal" }, fixture.from)
+                : p.processChild(child, fixture.from);
+            return request;
+          }).pipe(Effect.provide(logging)),
         ),
       catch: (error) => error,
     }).pipe(Effect.result);
@@ -293,7 +300,6 @@ const projectSecrets = Effect.fnUntraced(function* (
 
     return outcome;
   });
-  let pid: string | undefined;
   const placed = Effect.fnUntraced(function* () {
     const starts = yield* Effect.promise(() => runtime.runPromise(project.read(`processes/${child.name}`, 0, "audit")));
     const saved = starts.filter((row) => row._tag === "started");
@@ -305,7 +311,9 @@ const projectSecrets = Effect.fnUntraced(function* (
       ? ["owner", "descriptor"]
       : path === "recovery"
         ? ["exists", "owner", "descriptor"]
-        : ["pending", "configure", "ack"],
+        : path === "configuration"
+          ? ["pending", "configure", "ack"]
+          : ["exit_write", "down", "watch_cleanup", "retire"],
   );
   const expected = remaining.size;
   const reached = new Set<ChildFailure>();
@@ -314,7 +322,7 @@ const projectSecrets = Effect.fnUntraced(function* (
     outputs.span.push(...outputText(fixture.recorded));
   };
 
-  if (path !== "descriptor") {
+  if (path !== "descriptor" && path !== "exit") {
     // A real failed call leaves exactly the missing descriptor or pending configure to recover.
     if (path === "recovery") {
       fixture.cut();
@@ -338,7 +346,7 @@ const projectSecrets = Effect.fnUntraced(function* (
       const answer = yield* call();
       expect(Result.isSuccess(answer), "L11: the failed start is retryable").toBe(true);
 
-      if (Result.isSuccess(answer)) {
+      if (Result.isSuccess(answer) && path !== "exit") {
         expect(answer.success).toMatchObject({
           _tag: "ok",
           value: { _tag: "started", process: pid, name: child.name },
@@ -362,9 +370,28 @@ const projectSecrets = Effect.fnUntraced(function* (
       yield* reopen();
     }
 
+    if (path === "exit") {
+      // A completed exit is irreversible. Each remaining failure needs a live child, with both
+      // an inbound watch to signal and an outbound watch to remove in the same exit turn.
+      child = { ...child, id: `${project.boot.process}/${reached.size + 1}/0`, name: `child:secret:${reached.size}` };
+      const started = yield* Effect.promise(() =>
+        runtime.runPromise(
+          ProjectService.use((p) => p.processChild(child, fixture.from)).pipe(Effect.provide(logging)),
+        ),
+      );
+      expect(started).toMatchObject({ _tag: "ok", value: { _tag: "started" } });
+      yield* placed();
+      const process = pid ?? "";
+      const watched = yield* Effect.promise(() =>
+        runtime.runPromise(ProjectService.use((p) => p.processMonitor(`in-${reached.size}`, process, fixture.from))),
+      );
+      expect(watched).toMatchObject({ _tag: "ok" });
+      yield* fixture.monitor(process, project.boot.process, `out-${reached.size}`);
+    }
+
     const marker = forms(secret)[pick.encoding] ?? secret;
     const error = Object.assign(new Error(`SQLITE_FULL at ${marker}`), { name: marker, code: marker, errcode: marker });
-    fixture.fail(point, error, point === "owner" ? undefined : pid);
+    fixture.fail(point, error, path === "exit" || point === "owner" ? undefined : pid);
     const outcome = yield* call();
     expect(fixture.hit(), `L11: ${path}/${point} was reached`).toBe(true);
     expect(Result.isFailure(outcome), "L11: storage failure is an RPC rejection").toBe(true);
@@ -374,6 +401,25 @@ const projectSecrets = Effect.fnUntraced(function* (
     }
 
     inspectRows();
+
+    if (path === "exit") {
+      const retried = yield* call();
+      expect(retried, "L11: the failed exit remains retryable").toMatchObject({
+        _tag: "Success",
+        success: { _tag: "ok" },
+      });
+      const rows = yield* Effect.promise(() => runtime.runPromise(project.read(`processes/${child.name}`, 0, "audit")));
+      expect(
+        rows.filter((row) => row._tag === "exited"),
+        "L11: retry writes one normal exit",
+      ).toMatchObject([{ body: { process: pid, reason: { _tag: "normal" } } }]);
+      const watches = yield* Effect.promise(() => runtime.runPromise(project.read("processes", 0, "audit")));
+      expect(
+        watches.filter((row) => row._tag === "demonitored" && JSON.stringify(row.body).includes(`out-${reached.size}`)),
+      ).toHaveLength(1);
+      inspectRows();
+    }
+
     remaining.delete(point);
     reached.add(point);
   });
@@ -395,10 +441,10 @@ const projectSecrets = Effect.fnUntraced(function* (
 });
 
 describe("P42 slice 1: a code start on the real Worker path", () => {
-  for (const path of ["descriptor", "recovery", "configuration"] as const) {
+  for (const path of ["descriptor", "recovery", "configuration", "exit"] as const) {
     for (const output of ["reply", "span", "row", "log"] as const) {
       effectIt.effect(
-        `L11: Project.processChild ${path} failures keep storage text and metadata out of ${output}`,
+        `L11: Project.${path === "exit" ? "processExit" : "processChild"} ${path} failures keep storage text and metadata out of ${output}`,
         () =>
           Effect.promise(() =>
             fc.assert(
@@ -555,8 +601,36 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
     await world(async (fixture, connect) => {
       const { start, live, facts } = helpers(fixture);
       const starter = await start("starter:1", "starter");
-      const other = await start("child:boot", "child");
+      const peer = await start("child:boot", "child");
+      const other = await until(
+        "the independent counter is live",
+        () => live("counter:1"),
+        (pid) => pid !== undefined,
+      );
+      expect(other).toBeDefined();
       const client = await connect("children");
+
+      for (let n = 0; n < 2; n++) {
+        expect(await client.call("process.send", letter(other ?? "", `other-inc-${n}`, { type: "inc" }))).toMatchObject(
+          {
+            result: { _tag: "accepted" },
+          },
+        );
+      }
+
+      const otherView = await until(
+        "the independent counter has a nonzero count",
+        () => client.call("view.open", { pid: other }),
+        (frame) => frame.result?.view?.count === 2,
+      );
+      expect(await client.call("process.send", letter(peer, "peer-inc", { type: "inc" }))).toMatchObject({
+        result: { _tag: "accepted" },
+      });
+      const peerView = await until(
+        "another life of the child's program has a nonzero count",
+        () => client.call("view.open", { pid: peer }),
+        (frame) => frame.result?.view?.count === 1,
+      );
 
       await client.call(
         "process.send",
@@ -579,6 +653,17 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
       expect(await client.call("process.send", letter(first, "inc-1", { type: "inc" }))).toMatchObject({
         result: { _tag: "accepted" },
       });
+      await until(
+        "the child stepped its next letter",
+        () => client.call("view.open", { pid: first }),
+        (frame) => frame.result?.view?.count === 2,
+      );
+      const starterView = await until(
+        "the starter saved its request and answer",
+        () => client.call("view.open", { pid: starter }),
+        (frame) => frame.result?.view?.asked === 1 && frame.result?.view?.told?.length === 1,
+      );
+      expect(starterView.result.view.told).toMatchObject([{ _tag: "started", process: first, name: "child:1" }]);
 
       // A throw restarts it: one restarted fact naming the old life, in the child's own name.
       await client.call("process.send", letter(first, "throw-1", { type: "throw" }));
@@ -600,14 +685,31 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
 
       // Its starter and the other program keep their lives and their counts.
       expect(await live("starter:1"), "L10: the starter keeps its life").toBe(starter);
-      expect(await live("child:boot"), "L10: another program keeps its life").toBe(other);
+      expect(await live("counter:1"), "L10: another program keeps its life").toBe(other);
+      expect(await live("child:boot"), "L10: another life of the child's program stays live").toBe(peer);
+      expect(
+        (await client.call("view.open", { pid: starter })).result?.view,
+        "L10: the starter keeps its saved state after the child throws",
+      ).toEqual(starterView.result.view);
+      expect(
+        (await client.call("view.open", { pid: other })).result?.view,
+        "L10: the independent program keeps its nonzero count after the child throws",
+      ).toEqual(otherView.result.view);
+      expect(
+        (await client.call("view.open", { pid: peer })).result?.view,
+        "L10: another life of the child's program keeps its nonzero count",
+      ).toEqual(peerView.result.view);
       expect(
         (await facts("processes/starter:1")).filter((fact) => fact._tag === "restarted"),
         "L10: the starter's restarts are unchanged",
       ).toEqual([]);
       expect(
-        (await facts("processes/child:boot")).filter((fact) => fact._tag === "restarted"),
+        (await facts("processes/counter:1")).filter((fact) => fact._tag === "restarted"),
         "L10: another program's restarts are unchanged",
+      ).toEqual([]);
+      expect(
+        (await facts("processes/child:boot")).filter((fact) => fact._tag === "restarted"),
+        "L10: another life of the child's program has no restart",
       ).toEqual([]);
     });
   });
