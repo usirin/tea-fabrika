@@ -28,8 +28,9 @@ Seeded 2026-11-09 from the notes above, checked against main at `5b1171ed`.
 | Labels carry no meaning to the core | Labels "do not directly imply semantics to the core system" ([labels]) | Not built in `next/`: the tracker is a later tier ([tier 1](../../plan/tier-1.md), "Later tiers") | differs, because not built yet |
 | Where work runs | Required and preferred node affinity ([affinity]) | Not built: hands and the order a turn is offered in are a later tier | differs, because not built yet |
 | Leases | A `Lease` with a holder, a duration and a renew time ([leases]) | Not built: C3's 30 s claim renewed every 10 s waits for hands, a later tier | differs, because not built yet |
+| A wait on an outside service | A failed image pull is tried again with a growing wait, up to 300 seconds; a restart's wait doubles to the same 5 minutes ([images], [restart]) | The merger waits after each outside fault (the code host or CI down, a lost check): doubling from `merger.poll`, 30 s, capped at `merger.backoff`, 300 s, kept as the one saved alarm (`next/programs/pipeline/src/Merger.ts:107-111`, `next/programs/pipeline/src/Settings.ts:40-42`) | same cap and shape; differs in the start, 30 s for Kubernetes' 10 s, because 30 s is the poll today's landing script uses, and both numbers are settings |
 
-Count: 13 rows, 1 same, 12 differ. Of the 12, 6 are not built yet (limits, a quota per namespace, a
+Count: 14 rows, 2 same, 12 differ. Of the 12, 6 are not built yet (limits, a quota per namespace, a
 CPU limit per container, labels, node affinity, leases).
 
 Coming: [0016](../../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)
@@ -46,3 +47,4 @@ quota and CPU limit rows ([0020](../../../.decisions/0020-programs-get-hard-wall
 [affinity]: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity
 [leases]: https://kubernetes.io/docs/concepts/architecture/leases/
 [quotas]: https://kubernetes.io/docs/concepts/policy/resource-quotas/
+[images]: https://kubernetes.io/docs/concepts/containers/images/#imagepullbackoff

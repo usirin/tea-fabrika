@@ -51,6 +51,10 @@
     "./brain-life": "./src/runtime/BrainLife.ts",
     "./brain-event": "./src/runtime/BrainEvent.ts",
     "./testing": "./src/Testing.ts",
+    "./codehost/*": "./src/codehost/*.ts",
+    "./codehost/internal/*": null,
+    "./ci/*": "./src/ci/*.ts",
+    "./ci/internal/*": null,
     "./node/Chaos.test-support": "./src/node/Chaos.test-support.ts"
   },
   "scripts": {
