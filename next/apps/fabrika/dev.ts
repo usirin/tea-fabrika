@@ -8,7 +8,7 @@ import { Digest, SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import { build } from "./src/build.ts";
 import { localInstance } from "./src/local-instance.ts";
-import { Settings } from "./src/settings.ts";
+import { Founding } from "./src/settings.ts";
 
 class InstanceError extends Schema.TaggedError<InstanceError>()("InstanceError", {
   reason: Schema.String,
@@ -29,7 +29,7 @@ const settings = Object.fromEntries(
 
 // The saved state of a home: its founding facts. A port saved there by an older start is read
 // only to say that it is no longer used.
-const Saved = Settings.mapFields(({ port, ...fields }) => ({ ...fields, port: Schema.optionalKey(port) }));
+const Saved = Schema.Struct({ ...Founding.fields, port: Schema.optionalKey(Schema.Unknown) });
 
 /** The entries that hold a value, as one record. */
 const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) =>
@@ -129,7 +129,15 @@ const command = Command.make("dev", flags, (options) => {
           .writeFileString(file, JSON.stringify(state), { mode: 0o600 })
           .pipe(Effect.mapError((cause) => new InstanceError({ reason: "settings", cause })));
         const built = yield* build({ out: path.join(home, "build") });
-        yield* localInstance(built, { ...state, port: loaded.values.port, home });
+        yield* localInstance(built, {
+          name: state.name,
+          founding: { person: state.person, founder: state.founder, window: state.window },
+          settings: loaded.snapshot,
+          repo: null,
+          home,
+          ...(state.limits === undefined ? {} : { limits: state.limits }),
+          ...(state.mail === undefined ? {} : { mail: state.mail }),
+        });
         process.stdout.write(
           `${JSON.stringify({ ready: `http://127.0.0.1:${loaded.values.port}`, build: built.build })}\n`,
         );

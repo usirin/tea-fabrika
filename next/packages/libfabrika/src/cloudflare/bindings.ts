@@ -10,6 +10,7 @@ import { type Delivery, MailRefusal } from "../processes/ProgramMail.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import type { Incoming } from "../runtime/Entry.ts";
 import type { Descriptor, ProgramRunner } from "../runtime/Runner.ts";
+import type * as SettingsStart from "../settings/Start.ts";
 import type { RecordCalls } from "../telemetry/Records.ts";
 import type { checkHello } from "../transport/Hello.ts";
 import type { Answer } from "../transport/Wire.ts";
@@ -124,6 +125,8 @@ type ProcessCall<F> = F extends (...args: infer A) => Effect.Effect<infer B, unk
 export type ProjectBinding = Rpc.DurableObjectBranded &
   LedgerCalls &
   Remote<Pick<DoorService, "target" | "challenge" | "initialize" | "route" | "knock" | "grant" | "disconnect">> & {
+    settingsStart: RemoteCall<(input: SettingsStart.Input) => Effect.Effect<typeof SettingsStart.Reply.Type>>;
+    settingsRead: RemoteCall<(start: string) => Effect.Effect<typeof SettingsStart.Reply.Type>>;
     clientConnect: RemoteCall<DoorService["connect"]>;
     register: RemoteCall<(client: string, gateway: string, session: string) => Effect.Effect<void>>;
     join: RemoteCall<Gateways["join"]>;

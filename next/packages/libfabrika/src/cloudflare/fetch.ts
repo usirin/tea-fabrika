@@ -1,7 +1,24 @@
-import { Effect } from "effect";
+import { Context, Effect } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
+import { RecordedStart } from "../settings/RecordedStart.ts";
 import { GatewayClient, ProjectClient } from "./platform.ts";
-import { projectStub, rpc, type BrainOptions, type Env } from "./runtime.ts";
+import { projectStub, recordedLayer, rpc, SettingsRuntime, type BrainOptions, type Env } from "./runtime.ts";
+
+// Worker bindings are immutable for an isolate. Requests never enter the shared context.
+const isolates = new WeakMap<Env, ReturnType<typeof httpRuntime>>();
+const httpRuntime = (env: Env) => SettingsRuntime.runtime(recordedLayer(env));
+
+export const httpContext = (env: Env) => {
+  const known = isolates.get(env);
+
+  if (known !== undefined) {
+    return known.context;
+  }
+
+  const owner = httpRuntime(env);
+  isolates.set(env, owner);
+  return owner.context;
+};
 
 /** The tab's page in the window table, answered at `/` (P14). */
 const PAGE = "/index.html";
@@ -39,9 +56,11 @@ export const serveAsset = Effect.fn("brain.asset")(function* (
 export const fetch = Effect.fn("workers.fetch")(function* (
   request: Request,
   env: Env,
-  config: BrainOptions,
+  _config?: BrainOptions,
   assets?: Readonly<Record<string, Served>>,
 ) {
+  const start = Context.get(yield* httpContext(env), RecordedStart);
+  const config = { ...start.input, port: start.values.port };
   const url = new URL(request.url),
     origin = `http://127.0.0.1:${config.port}`;
 

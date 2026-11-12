@@ -1,4 +1,5 @@
 import { Cause, Effect, Path, Predicate, Schema } from "effect";
+import type { Options } from "./settings.ts";
 
 class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {
   reason: Schema.Literal("storage"),
@@ -28,7 +29,7 @@ const portTaken = (cause: Cause.Cause<unknown>) =>
 
 export const localInstance = Effect.fn("brain.localInstance")(function* (
   built: Omit<import("./build.ts").Built, "assets">,
-  options: Omit<import("./settings.ts").Settings, "build"> & { readonly home: string },
+  options: Options,
 ) {
   const path = yield* Path.Path;
   process.env.DO_NOT_TRACK = "1";
@@ -52,7 +53,7 @@ export const localInstance = Effect.fn("brain.localInstance")(function* (
       portTaken(cause)
         ? Effect.fail(
             new PortError({
-              message: `Port ${options.port} is taken, so the instance did not start. Stop what uses it, or set instance.port to another port.`,
+              message: `Port ${options.settings.values["instance.port"]} is taken, so the instance did not start. Stop what uses it, or set instance.port to another port.`,
             }),
           )
         : Effect.failCause(cause),

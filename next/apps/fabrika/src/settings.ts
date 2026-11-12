@@ -1,13 +1,15 @@
+import { SettingsStart } from "@kampus/libfabrika";
 import { Schema } from "effect";
 
-export const Settings = Schema.Struct({
-  name: Schema.NonEmptyString,
-  person: Schema.NonEmptyString,
-  founder: Schema.NonEmptyString,
-  window: Schema.NullOr(Schema.String),
-  port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })),
-  build: Schema.NonEmptyString,
-  mail: Schema.optionalKey(Schema.Struct({ grants: Schema.Record(Schema.String, Schema.Array(Schema.String)) })),
-  limits: Schema.optionalKey(Schema.Struct({ recordBytes: Schema.Int.check(Schema.isGreaterThan(0)) })),
-});
+export const Settings = SettingsStart.Input;
 export type Settings = typeof Settings.Type;
+
+export const Founding = Schema.Struct({
+  name: Settings.fields.name,
+  ...Settings.fields.founding.fields,
+  build: Settings.fields.build,
+  limits: Settings.fields.limits,
+  mail: Settings.fields.mail,
+});
+
+export type Options = Omit<Settings, "start" | "build"> & { readonly start?: string; readonly home: string };
