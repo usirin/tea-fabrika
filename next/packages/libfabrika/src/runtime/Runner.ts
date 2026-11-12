@@ -658,6 +658,15 @@ export class ProgramRunner extends Context.Service<
           receipt?: Receipt,
         ) {
           if (supervision !== null) {
+            // The permit excludes an active callback. Pending work here belongs to a failed live call;
+            // a reopened runner has already captured its interruption in ensure.
+            const pending = supervision.journal;
+
+            if (pending._tag === "checking" || pending._tag === "stepping") {
+              yield* complete({ type: "abandoned", seq: pending.attempt.seq });
+              yield* continueRecovery();
+            }
+
             const status = yield* (yield* coordinator).status(process.name);
             const phase = reason === "step" ? "fresh" : "saved";
             yield* complete({ type: "begin", process: process.id, letter, build: process.build, phase, at: status.at });
