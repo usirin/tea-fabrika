@@ -350,7 +350,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
       prev.step._tag === "asking" &&
       msg.cmd.attempt === prev.attempt
     ) {
-      green = ChangeKind.verdictOf(prev.checks, msg.value)._tag === "green";
+      green = ChangeKind.verdict(prev.checks, msg.value)._tag === "green";
     }
 
     if (law === "L1") {
@@ -476,7 +476,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
       msg.value.state === "open" &&
       msg.value.head === prev.job.head
     ) {
-      const kind = ChangeKind.kindOf(settingsFor(w).kinds, msg.value.paths);
+      const kind = ChangeKind.kind(settingsFor(w).kinds, msg.value.paths);
 
       if (settingsFor(w).checks[kind].length === 0) {
         reached = true;
@@ -496,7 +496,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
         prev.step._tag === "asking";
       const verdict =
         taken && msg.type === "checks_ok" && prev._tag === "checking"
-          ? ChangeKind.verdictOf(prev.checks, msg.value)._tag
+          ? ChangeKind.verdict(prev.checks, msg.value)._tag
           : null;
       const fault =
         (taken && msg.type.endsWith("_err")) ||

@@ -85,17 +85,17 @@ describe("L5: the verdict", () => {
       fc.property(cases, ({ checks, runs, shuffled, extra }) => {
         expect(Schema.is(Checks)(runs)).toBe(true);
         const expected = oracle(checks, runs);
-        const answer = Change.verdictOf(checks, runs);
+        const answer = Change.verdict(checks, runs);
         expect(Schema.is(Change.Verdict)(answer)).toBe(true);
         expect(answer._tag).toBe(expected.tag);
         const values = answer._tag === "pending" ? answer.checks : answer.runs;
         expect(values.length).toBeGreaterThan(0);
         expect(normalize(values)).toEqual(normalize(expected.values));
-        const repeated = Change.verdictOf([...checks, ...checks], shuffled);
+        const repeated = Change.verdict([...checks, ...checks], shuffled);
         expect(repeated._tag).toBe(answer._tag);
         expect(normalize(repeated._tag === "pending" ? repeated.checks : repeated.runs)).toEqual(normalize(values));
         const unused = { ...extra, name: `${checks.map((c) => c.name).join("")}unused` };
-        const added = Change.verdictOf(checks, [...runs, unused]);
+        const added = Change.verdict(checks, [...runs, unused]);
         expect(added._tag).toBe(answer._tag);
         expect(normalize(added._tag === "pending" ? added.checks : added.runs)).toEqual(normalize(values));
 
@@ -103,7 +103,7 @@ describe("L5: the verdict", () => {
           { name: "a\u0000b", source: "c" },
           { name: "a", source: "b\u0000c" },
         ]) {
-          const one = Change.verdictOf([pair], runs);
+          const one = Change.verdict([pair], runs);
           const wanted = oracle([pair], runs);
           expect(one._tag).toBe(wanted.tag);
           expect(normalize(one._tag === "pending" ? one.checks : one.runs)).toEqual(normalize(wanted.values));
@@ -151,11 +151,11 @@ describe("L6: kind is the heaviest", () => {
                       : "code";
                   return weight[kind] > weight[heavy] ? kind : heavy;
                 }, "rows");
-          expect(Change.kindOf(kinds, paths)).toBe(expected);
-          expect(Change.kindOf(kinds, null)).toBe("code");
-          expect(Change.kindOf(kinds, [])).toBe("code");
+          expect(Change.kind(kinds, paths)).toBe(expected);
+          expect(Change.kind(kinds, null)).toBe("code");
+          expect(Change.kind(kinds, [])).toBe("code");
           expect(
-            Change.kindOf(
+            Change.kind(
               {
                 rows: [...kinds.rows].reverse().concat(kinds.rows),
                 docs: [...kinds.docs].reverse().concat(kinds.docs),
@@ -165,11 +165,11 @@ describe("L6: kind is the heaviest", () => {
           ).toBe(expected);
 
           if (paths.length > 0) {
-            expect(weight[Change.kindOf(kinds, [...paths, added])]).toBeGreaterThanOrEqual(weight[expected]);
+            expect(weight[Change.kind(kinds, [...paths, added])]).toBeGreaterThanOrEqual(weight[expected]);
           }
 
           const both = Schema.decodeUnknownSync(Change.Glob)("**");
-          expect(Change.kindOf({ rows: [both], docs: [both] }, [Schema.decodeUnknownSync(Path)("docs/a b.md")])).toBe(
+          expect(Change.kind({ rows: [both], docs: [both] }, [Schema.decodeUnknownSync(Path)("docs/a b.md")])).toBe(
             "docs",
           );
         },
@@ -182,7 +182,7 @@ describe("L6: kind is the heaviest", () => {
 // L7 is checked by the compiler. No invalid call runs in Vitest.
 const emptyIsInvalid = (runs: typeof Checks.Type) => {
   // @ts-expect-error No verdict is defined for an empty check plan.
-  Change.verdictOf([], runs);
+  Change.verdict([], runs);
 };
 
 type Model = ReturnType<typeof merger>["machine"]["model"]["Type"];
