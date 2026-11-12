@@ -21,12 +21,14 @@ export const layer = (stub: LedgerCalls, caller: { readonly reader: string }): L
       "rpc.method": name,
       ...short({ [STREAM]: stream, [tag("reader")]: caller.reader }),
     });
-    const fail = () => new LedgerError({ reason: "unreachable" });
+    const fail = (cause: unknown) => new LedgerError({ reason: "unreachable", cause });
     // oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object stub answers with a Promise
     const io = Effect.tryPromise({ try: () => Reflect.apply(stub[name], stub, args), catch: fail });
     return yield* io.pipe(
       Effect.flatMap((raw) =>
-        Schema.decodeUnknownEffect(answer)(raw).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" }))),
+        Schema.decodeUnknownEffect(answer)(raw).pipe(
+          Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+        ),
       ),
       Effect.tapError((error) => Effect.annotateCurrentSpan(tag("reason"), error.reason)),
     );

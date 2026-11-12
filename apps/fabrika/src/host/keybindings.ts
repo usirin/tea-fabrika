@@ -18,7 +18,8 @@ import {
   KeybindingService as ManagerService,
   type Snapshot,
 } from "../keys/program.ts";
-import { saidOf, settingsFile } from "./settings.ts";
+import { holdLock } from "./lock.ts";
+import { saidOf, settingsSaves } from "./settings.ts";
 
 export { Edit };
 export type { Snapshot };
@@ -147,7 +148,10 @@ export const KeybindingManager = Object.assign(ManagerService, {
           yield* SubscriptionRef.set(state, snapshot);
           return snapshot;
         });
-      yield* settingsFile(options.folder, "keybindings.toml", (text) => Result.succeed(text)).pipe(
+      // Every save is read, not only a new text: this manager's own save moves what it holds, so
+      // another host's save that puts the old text back must still be heard. observe skips a text
+      // it already holds.
+      yield* settingsSaves(options.folder, "keybindings.toml", (text) => Result.succeed(text)).pipe(
         Stream.runForEach((answer) =>
           one(
             Effect.gen(function* () {
@@ -164,9 +168,21 @@ export const KeybindingManager = Object.assign(ManagerService, {
         Effect.forkScoped,
       );
       yield* Deferred.await(ready);
+      // Every project's host edits the one shared file: the read, the check and the rename are
+      // held under a lock beside it, across processes (host/lock.ts), so an edit made by another
+      // host in between is read, kept, and never written over.
+      // The lock and its temporary files sit in a folder of their own, so the settings folder's
+      // watcher sees no file come and go for a save but the save itself.
+      const locks = path.join(options.folder, ".keybindings-lock");
+      const shared = fs.makeDirectory(locks, { recursive: true, mode: 0o700 }).pipe(
+        Effect.andThen(holdLock(path.join(locks, "lock"), locks)),
+        Effect.provideService(FileSystem.FileSystem, fs),
+        Effect.mapError(() => new Refused({ why: "another window is saving keybindings.toml: try again" })),
+      );
       const edit = (request: typeof Edit.Type, from: Source) =>
         one(
           Effect.gen(function* () {
+            yield* shared;
             const latest = yield* read;
             const checked = latest === null ? Result.succeed(defaults) : decodeKeys(latest, options.mac);
 
@@ -271,7 +287,7 @@ export const KeybindingManager = Object.assign(ManagerService, {
             const applied = yield* observe(saved, from, displaced);
             undo = request._tag === "undo" ? null : { version: applied.version, rows: restore };
             return applied;
-          }),
+          }).pipe(Effect.scoped),
         );
       return ManagerService.of({
         current: SubscriptionRef.get(state),

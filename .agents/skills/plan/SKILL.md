@@ -47,7 +47,8 @@ the blank approval line.
 - Split a big plan into pull requests that each land whole, ordered by what the owner sees first.
   Give the files table a "Product lines expected" column (a number, or a word such as `tests` or
   `docs`), and list the slices as numbered items under `## Size`, each saying "<n> lines".
-  `plancheck.sh --draft` names each slice over `[review] lines` (600, 0087); for now it advises.
+  `plancheck.sh --draft` prints the plan's size and names each slice with no estimate. No number
+  caps a slice (0099): cut by what lands whole, never to fit a count.
 
 ## The open questions test
 

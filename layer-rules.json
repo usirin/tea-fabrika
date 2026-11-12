@@ -82,6 +82,11 @@
       "paths": ["next/packages/libfabrika/src/jobs"]
     },
     {
+      "name": "next-packs",
+      "layer": 3,
+      "paths": ["next/packages/libfabrika/src/packs"]
+    },
+    {
       "name": "next-ledger",
       "layer": 2,
       "paths": ["next/packages/libfabrika/src/ledger"]
@@ -377,12 +382,6 @@
     },
     {
       "from": "next/packages/libfabrika/src/telemetry/P12Readers.laws.test.ts",
-      "to": "next/packages/libfabrika/src/ledger/NodeSqlite.ts",
-      "sites": 1,
-      "reason": "until ticket 641, 2026-11-10: This test opens a real SQLite database through the Node driver in ledger/NodeSqlite.ts, which sits on a higher layer. Ticket 641 turns the database laws into a suite that takes a Sql maker, so this test stops importing the driver."
-    },
-    {
-      "from": "next/packages/libfabrika/src/telemetry/RecordPart.test.ts",
       "to": "next/packages/libfabrika/src/ledger/NodeSqlite.ts",
       "sites": 1,
       "reason": "until ticket 641, 2026-11-10: This test opens a real SQLite database through the Node driver in ledger/NodeSqlite.ts, which sits on a higher layer. Ticket 641 turns the database laws into a suite that takes a Sql maker, so this test stops importing the driver."

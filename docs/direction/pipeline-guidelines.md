@@ -9,9 +9,10 @@ test the least sure: the bounds in P8 (65%) and two nudges in P11 (60%). P9 was 
 Built from [experiment 186](../../experiments/186-pipeline-guidelines.md), which read how
 factories, supervisors, durable workflows, CI systems and build caches handle a stop, and
 checked the self-fix plan of [PR 289](https://github.com/usirin/tea-fabrika/pull/289) against
-the result. It is reading, not a measurement. It sits under the note "Jidoka and andon", on its
-own branch in PR 289, which applies these rules to today's lane, row by row. Both PR 289 files
-named here, that note and the plan "pipeline-self-fix", are on that branch, not on main.
+the result. It is reading, not a measurement. It sits under the note
+[Jidoka and andon](./jidoka-and-andon.md), from PR 289, which applies these rules to today's lane,
+row by row. Both PR 289 files named here, that note and the plan
+[pipeline-self-fix](../plan/pipeline-self-fix.md), are on main now.
 
 ```ts
 // A sketch. A step still answers in the five verbs. What is new is what each one must carry.

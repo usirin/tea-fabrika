@@ -313,8 +313,10 @@ describe("P12 real browser protocol", () => {
     }
 
     const processes = await rpc(a, "ledger.read", { stream: "processes/counter:1", after: 0 });
-    const pid = processes.result.entries.find((r: any) => r._tag === "started" && r.body.name === "counter:1").body
-      .process;
+    const started = processes.result.entries.find((r: any) => r._tag === "started" && r.body.name === "counter:1");
+    // P40: the registered name stays `counter:1`; the code it runs is the core pack's `fabrika/counter`.
+    expect(started.body.program).toBe("fabrika/counter");
+    const pid = started.body.process;
     expect((await rpc(a, "view.open", { pid })).result).toEqual({ rev: 0, view: { count: 0 } });
     const waiting = rpc(b, "ledger.wait", { stream: "counter:1/inbox", after: 0 });
     const accepted = await rpc(a, "process.send", {

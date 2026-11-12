@@ -1,7 +1,7 @@
 ---
 id: 0033
 title: Lead tooling under .agents/ follows next/'s code rules, with a ledger of old breaks that only shrinks
-status: amended-in-part by [0070](0070-flow-runner-stays-a-machine.md)
+status: amended-in-part by [0070](0070-flow-runner-stays-a-machine.md), [0113](0113-no-shell-or-python-scripts.md)
 date: 2026-11-09
 tags: [lead, tooling, lint, agents, ledger, effect, no-promises]
 ---
@@ -68,6 +68,8 @@ ledger that only shrinks, and new code passes from day one.**
   `// oxlint-disable-next-line <rule> -- edge: <why>`, one line each.
 - **Shell and Python move to TypeScript and Effect when next touched,** one script at a time, never
   in one big rewrite.
+  Now replaced: every script is ported now and no new one enters
+  ([0113](0113-no-shell-or-python-scripts.md)); the rest of this decision holds.
 - **The first big burn-down** is `chain.ts` moving onto `Program.make` under
   [0031](0031-lane-tooling-dogfoods-fabrikas-primitives.md). For now it waits: the runner stays a
   tea machine ([0070](0070-flow-runner-stays-a-machine.md)).

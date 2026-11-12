@@ -1,47 +1,3 @@
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./mutbox.ts?raw";
-import "./mutbox-entry.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./mutbox.Dockerfile?raw";
-import "../../mutation/scripts/run.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/limit.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/sample.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/scope.ts?raw";
-import "./catchup.sh?raw";
-import "./leakgrep.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./botpush.mjs?raw";
-import "./env.sh?raw";
-import "./box.sh?raw";
-import "./keepruns.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./drive.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./pgrep.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./agents.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./codexexec.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./boxnode.ts?raw";
-import "./fieldrow.py?raw";
-import "./runplan.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./gc.ts?raw";
-import "./redact.sh?raw";
-import "./clauderow.py?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./lane.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./freshmain.ts?raw";
-import "../../plan/scripts/plancheck.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./sizecap.ts?raw";
-import "../../step-commit/scripts/exam.py?raw";
-import "../../step-commit/scripts/stepcommit.sh?raw";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -52,6 +8,7 @@ import {
   assertHead,
   type Check,
   green,
+  link,
   matrixChecks,
   merged,
   merges,
@@ -63,6 +20,7 @@ import {
   type Setup,
   success,
   tip,
+  type View,
 } from "./catchup.test-support.ts";
 
 describe("catchup, today's tooling", () => {
@@ -138,6 +96,55 @@ describe("catchup, today's tooling", () => {
       );
     },
   );
+  // 0134's amendment (2026-11-11): a draft's run names its jobs `lint` and `ci-required (draft)`.
+  // Plants: read them as any other check (a red or pending one blocks), or read `lint` for `check`.
+  it("property: a draft's own checks are never read, whatever they say, beside the ready run's", () => {
+    fc.assert(
+      fc.property(
+        fc.shuffledSubarray(matrixChecks, { minLength: matrixChecks.length, maxLength: matrixChecks.length }),
+        fc.array(
+          fc.record({
+            name: fc.constantFrom("lint", "ci-required (draft)"),
+            status: fc.constantFrom("completed", "in_progress", "queued"),
+            conclusion: fc.constantFrom("success", "failure", "cancelled", "skipped"),
+          }),
+          { minLength: 1, maxLength: 3 },
+        ),
+        (ready, draft) => {
+          const got = run({ ...green, checks: [...draft, ...ready], clock: [0, 1, 3601] });
+          expect(got.code, got.text).toBe(0);
+          expect(merges(got.calls)).toHaveLength(1);
+        },
+      ),
+      { seed: 119120, numRuns: 4 },
+    );
+  });
+  it("scenario: a draft run's green checks alone, before the ready run's check, never land", () => {
+    const draft: Check[] = [
+      success("lint"),
+      success("commits"),
+      success("ci-required (draft)"),
+      { name: "e2e", status: "completed", conclusion: "skipped" },
+      { name: "next", status: "completed", conclusion: "skipped" },
+    ];
+    const got = run({ ...green, checks: draft, clock: [0, 1, 3601] });
+    expect(got.code, got.text).toBe(1);
+    expect(got.text).toContain("missing: check");
+    expect(merges(got.calls)).toHaveLength(0);
+  });
+  it("scenario: a docs-only change's skipped check job, reported by its raw name, counts as check only beside ci-required", () => {
+    // scenario: GitHub leaves a skipped job's name expression unevaluated, which parked two docs pull requests.
+    const raw = "github.event.pull_request.draft && 'lint' || 'check'";
+    const skipped = (name: string): Check => ({ name, status: "completed", conclusion: "skipped" });
+    const docs: Check[] = [success("commits"), skipped(raw), skipped("e2e"), skipped("next")];
+    const ready = run({ ...green, checks: [...docs, success("ci-required")], clock: [0, 1, 3601] });
+    expect(ready.code, ready.text).toBe(0);
+    expect(merges(ready.calls)).toHaveLength(1);
+    const draft = run({ ...green, checks: [...docs, success("ci-required (draft)")], clock: [0, 1, 3601] });
+    expect(draft.code, draft.text).toBe(1);
+    expect(draft.text).toContain("missing: check");
+    expect(merges(draft.calls)).toHaveLength(0);
+  });
   it("T376 bare success and unfinished bare skips cannot stand in for the matrix", () => {
     fc.assert(
       fc.property(
@@ -434,59 +441,41 @@ describe("catchup, today's tooling", () => {
     }
   });
 
-  // Plants: drop the BEHIND branch; merge behind without the sha pin or with another one; add
-  // --admin, --auto or bypass_rules; retry the write; reach it on red checks or a red lint; treat a
-  // 409 or a 405 as landed.
-  it("T552 property: a green, linted pull request that gh refuses as BEHIND lands by one pinned REST squash; red checks, a red lint, a moved head or GitHub's own refusal stop it (0049)", () => {
+  // Plants: skip the look at main; merge on red checks or a red lint; merge by any other route than
+  // one pinned `gh pr merge` (the REST endpoint, --admin, --auto or bypass_rules); retry the merge.
+  it("T552 property: a green pull request lands by one pinned gh pr merge only after freshmain.ts's look at main passes; red checks or a red lint stop it, and no other route merges it (0049)", () => {
     fc.assert(
       fc.property(
         fc.record({
           answer: fc.constantFrom<Setup["answer"]>("green", "red"),
           stale: fc.boolean(),
-          behind: fc.boolean(),
-          rest: fc.constantFrom<NonNullable<Setup["rest"]>>("merged", "moved", "refused"),
         }),
-        ({ answer, stale, behind, rest }) => {
-          const got = run({ ...green, answer, stale, behind, rest });
-          const reached = answer === "green" && !stale;
-          const behindTried = reached && behind;
-          const lands = reached && (!behind || rest === "merged");
+        ({ answer, stale }) => {
+          const got = run({ ...green, answer, stale });
+          const lands = answer === "green" && !stale;
           expect(got.code, got.text).toBe(lands ? 0 : 1);
-          expect(merges(got.calls)).toHaveLength(reached ? 1 : 0);
+          const looks = got.calls.filter((c) => c.cmd === "node" && c.args[0]!.endsWith("/freshmain.ts"));
+          expect(looks).toHaveLength(answer === "green" ? 1 : 0);
+          expect(merges(got.calls)).toHaveLength(lands ? 1 : 0);
+          // 0101: a landed merge kicks one box cleanup sweep, after it lands; a refused one kicks none.
+          const kicks = got.calls.filter((c) => c.cmd === "node" && c.args[0]!.endsWith("/gcloop.ts"));
+          expect(kicks.map((c) => c.args.slice(1))).toEqual(lands ? [["kick", "--trigger", "merge"]] : []);
 
-          const writes = got.calls.filter((c) => c.key === "rest");
-          expect(writes.map((c) => c.args)).toEqual(
-            behindTried
-              ? [
-                  [
-                    "api",
-                    "-X",
-                    "PUT",
-                    "repos/fixture/repo/pulls/900/merge",
-                    "-f",
-                    "merge_method=squash",
-                    "-f",
-                    `sha=${tip}`,
-                  ],
-                ]
-              : [],
-          );
+          if (lands) {
+            expect(got.calls.findIndex((c) => c.key === "landed")).toBeLessThan(got.calls.indexOf(kicks[0]!));
+          }
+
+          for (const call of merges(got.calls)) {
+            expect(call.args).toContain("--squash");
+          }
+
+          expect(got.calls.some((c) => c.args.includes("PUT"))).toBe(false);
           expect(got.calls.flatMap((c) => c.args).filter((a) => /--admin|--auto|bypass/.test(a))).toEqual([]);
           expect(got.calls.some((c) => c.key === "landed")).toBe(lands);
-
-          if (behindTried && rest !== "merged") {
-            expect(got.text).toContain("pr 900: merge behind main refused at");
-            expect(got.text).toContain(rest === "moved" ? "HTTP 409" : "HTTP 405");
-          }
-
-          if (behindTried && rest === "merged") {
-            expect(got.text).toContain("pr 900: landed behind main on purpose (0049)");
-          }
-
           assertHead(got.calls);
         },
       ),
-      { seed: 552, numRuns: 12 },
+      { seed: 552, numRuns: 4 },
     );
   });
 
@@ -580,39 +569,30 @@ describe("catchup lands a green head without catching up (0097), today's tooling
   const none = { merged: 0, signed: 0, pushed: 0 };
 
   // Plants: merge main in anyway; push or sign a green head; skip the lint on the true merge; wait
-  // on the checks again; unpin the squash, the REST merge or the stack's head read.
+  // on the checks again; unpin the squash or the stack's head read; merge through the REST endpoint.
   it("0097 property: a green head behind main never merges main in, signs or pushes; it is linted on the true merge and squashed pinned to that head, and a moved head is refused", () => {
     for (const stack of ["none", "same", "moved"] as const) {
       fc.assert(
-        fc.property(
-          fc.record({
-            bot: fc.boolean(),
-            behind: fc.boolean(),
-            rest: fc.constantFrom<NonNullable<Setup["rest"]>>("merged", "moved", "refused"),
-          }),
-          ({ bot, behind, rest }) => {
-            const branch = bot ? "fabrikalfa/tests-520" : "person/tests-520";
-            const got = run({ ...green, merge: true, branch, stack, behind, rest });
-            const lands = stack === "same" || (stack === "none" && (!behind || rest === "merged"));
-            expect(got.code, got.text).toBe(lands ? 0 : 1);
-            expect(catchUp(got.calls)).toEqual(none);
-            expect(got.text).toContain(`pr 900: every check is green at ${tip}; it lands without catching up`);
-            // One read of the checks and of the commits run, on the head, and no second wait.
-            expect(reads.map((key) => got.calls.filter((c) => c.key === key).length)).toEqual([1, 1, 1, 1, 1]);
-            expect(got.calls.filter(isLook).map((c) => c.args.slice(1))).toEqual([["900", tip]]);
-            const order = got.calls.map((c) => (isLook(c) ? "look" : c.key));
-            expect(order.lastIndexOf("logs")).toBeLessThan(order.indexOf("look"));
-            expect(order.indexOf("look")).toBeLessThan(order.indexOf("merge"));
-            expect(merges(got.calls)).toHaveLength(1);
-            expect(got.calls.filter((c) => c.key === "oid")).toHaveLength(stack === "none" ? 0 : 1);
-            expect(got.calls.filter((c) => c.key === "stack")).toHaveLength(stack === "same" ? 1 : 0);
-            expect(got.calls.filter((c) => c.key === "rest").map((c) => c.args.at(-1))).toEqual(
-              stack === "none" && behind ? [`sha=${tip}`] : [],
-            );
-            expect(got.calls.flatMap((c) => c.args).filter((a) => /--admin|--auto|bypass/.test(a))).toEqual([]);
-            assertHead(got.calls);
-          },
-        ),
+        fc.property(fc.boolean(), (bot) => {
+          const branch = bot ? "fabrikalfa/tests-520" : "person/tests-520";
+          const got = run({ ...green, merge: true, branch, stack });
+          const lands = stack !== "moved";
+          expect(got.code, got.text).toBe(lands ? 0 : 1);
+          expect(catchUp(got.calls)).toEqual(none);
+          expect(got.text).toContain(`pr 900: every check is green at ${tip}; it lands without catching up`);
+          // One read of the checks and of the commits run, on the head, and no second wait.
+          expect(reads.map((key) => got.calls.filter((c) => c.key === key).length)).toEqual([1, 1, 1, 1, 1]);
+          expect(got.calls.filter(isLook).map((c) => c.args.slice(1))).toEqual([["900", tip]]);
+          const order = got.calls.map((c) => (isLook(c) ? "look" : c.key));
+          expect(order.lastIndexOf("logs")).toBeLessThan(order.indexOf("look"));
+          expect(order.indexOf("look")).toBeLessThan(order.indexOf("merge"));
+          expect(merges(got.calls)).toHaveLength(1);
+          expect(got.calls.filter((c) => c.key === "oid")).toHaveLength(stack === "none" ? 0 : 1);
+          expect(got.calls.filter((c) => c.key === "stack")).toHaveLength(stack === "same" ? 1 : 0);
+          expect(got.calls.some((c) => c.args.includes("PUT"))).toBe(false);
+          expect(got.calls.flatMap((c) => c.args).filter((a) => /--admin|--auto|bypass/.test(a))).toEqual([]);
+          assertHead(got.calls);
+        }),
         { seed: 97, numRuns: 4 },
       );
     }
@@ -651,7 +631,7 @@ describe("catchup lands a green head without catching up (0097), today's tooling
     expect(catchUp(got.calls)).toEqual(none);
     expect(got.calls.filter(isLook)).toHaveLength(1);
     expect(merges(got.calls)).toHaveLength(0);
-    expect(got.calls.some((c) => c.key === "rest" || c.key === "stack")).toBe(false);
+    expect(got.calls.some((c) => c.key === "stack" || c.args.includes("PUT"))).toBe(false);
     expect(got.text).toContain("pr 900: not merged");
   });
 
@@ -793,5 +773,160 @@ describe("catchup closes the tickets a merged PR names, today's tooling", () => 
     expect(off.code, off.text).toBe(0);
     expect(off.posts).toEqual([]);
     expect(off.text).toContain(`pr 900: merge commit ${merged} is not on main; closed no tickets`);
+  });
+});
+
+// A catch-up on a pull request that is not open and ready ends at once, with one line, and every
+// wait has a bound (a waiter left on a merged pull request ran for an hour, 2026-11-11). Edge
+// cases, each with its law below: merged before the start; merged, closed or made a draft by
+// someone else during the wait; closed unmerged; a draft; one failed state read (network) against
+// a pull request GitHub does not know; and a wait reaching its bound. The checks' own bound is the
+// law "no merge once the clock is past the hour" above.
+describe("catchup ends on a pull request that is not open, today's tooling", () => {
+  const ending = {
+    MERGED: { code: 0, line: `pr 900: already merged at ${merged}` },
+    CLOSED: { code: 1, line: "pr 900: closed, not merged" },
+    DRAFT: { code: 1, line: "pr 900: draft, not merged" },
+  } as const;
+  const touches = (calls: ReturnType<typeof run>["calls"]) =>
+    calls.filter(
+      (c) =>
+        (c.cmd === "git" && ["fetch", "checkout", "push", "merge"].some((a) => c.args.includes(a))) ||
+        (c.cmd === "node" && c.args[0]!.endsWith("/botpush.mjs")) ||
+        c.cmd === "pnpm" ||
+        c.cmd === "nice" ||
+        ["checks", "merge", "stack", "rest"].includes(c.key ?? ""),
+    );
+
+  // Plants: read the state after the fetch; treat MERGED as an error or CLOSED as done; let a
+  // draft wait on the checks.
+  it("property: a pull request merged, closed or a draft at the start ends before any fetch, push, check read or merge", () => {
+    fc.assert(
+      fc.property(
+        fc.record({
+          view: fc.constantFrom<keyof typeof ending>("MERGED", "CLOSED", "DRAFT"),
+          merge: fc.boolean(),
+          bot: fc.boolean(),
+        }),
+        ({ view, merge, bot }) => {
+          const got = run({ ...green, merge, branch: bot ? "fabrikalfa/tests-1" : "person/x", views: [view] });
+          expect(got.code, got.text).toBe(ending[view].code);
+          expect(got.text).toContain(ending[view].line);
+          expect(got.text.split("\n").filter((l) => l.startsWith("pr 900:"))).toHaveLength(1);
+          expect(touches(got.calls)).toEqual([]);
+          expect(got.calls.filter((c) => c.key === "head")).toHaveLength(1);
+        },
+      ),
+      { seed: 1101, numRuns: 8 },
+    );
+  });
+
+  // Plants: look only once before the wait; keep reading checks after the PR is merged or closed;
+  // squash a PR that someone else merged.
+  it("property: merged, closed or made a draft during the wait ends at that look, with no check read or merge after it", () => {
+    fc.assert(
+      fc.property(
+        fc.record({
+          view: fc.constantFrom<keyof typeof ending>("MERGED", "CLOSED", "DRAFT"),
+          opens: fc.integer({ min: 0, max: 3 }),
+        }),
+        ({ view, opens }) => {
+          // The start read and `opens` looks see it open, with the checks still running.
+          const views: View[] = [...Array.from({ length: opens + 1 }, () => "OPEN" as const), view];
+          const got = run({ ...green, pending: 5, views });
+          expect(got.code, got.text).toBe(ending[view].code);
+          expect(got.text).toContain(ending[view].line);
+          expect(got.calls.filter((c) => c.key === "standing")).toHaveLength(opens + 1);
+          expect(got.calls.filter((c) => c.key === "checks")).toHaveLength(opens);
+          const last = got.calls.map((c) => c.key).lastIndexOf("standing");
+          expect(got.calls.slice(last + 1).filter((c) => c.cmd === "gh")).toEqual([]);
+          expect(merges(got.calls)).toHaveLength(0);
+          assertHead(got.calls);
+        },
+      ),
+      { seed: 1102, numRuns: 8 },
+    );
+  });
+
+  // Plant: print "merge refused" when the squash fails because someone else just merged it.
+  it("scenario: a squash refused because the PR was merged or closed in the meantime says so (the race after the last look)", () => {
+    for (const view of ["MERGED", "CLOSED"] as const) {
+      // The start read and the one look in the wait see it open; the look after the refusal does not.
+      const got = run({ ...green, mergeFails: true, views: ["OPEN", "OPEN", view] });
+      expect(got.code, got.text).toBe(ending[view].code);
+      expect(got.text).toContain(ending[view].line);
+      expect(got.text).not.toContain("merge refused");
+    }
+
+    const open = run({ ...green, mergeFails: true });
+    expect(open.code, open.text).toBe(1);
+    expect(open.text).toContain("pr 900: merge refused");
+  });
+
+  // Plants: retry a pull request GitHub does not know; stop on one failed look.
+  it("scenario: a failed state read is retried as the network, and a pull request GitHub does not know stops at once (gh says 'Could not resolve to a PullRequest')", () => {
+    const unknown = run({ ...green, views: ["UNKNOWN"] });
+    expect(unknown.code, unknown.text).toBe(1);
+    expect(unknown.text).toContain("pr 900: no such pull request in fixture/repo");
+    expect(unknown.calls.filter((c) => c.key === "head")).toHaveLength(1);
+    expect(unknown.calls.filter((c) => c.cmd === "sleep")).toEqual([]);
+    expect(touches(unknown.calls)).toEqual([]);
+
+    for (const lookFailures of [1, 2]) {
+      const got = run({ ...green, lookFailures });
+      expect(got.code, got.text).toBe(0);
+      expect(got.calls.filter((c) => c.key === "standing")).toHaveLength(lookFailures + 1);
+      expect(merges(got.calls)).toHaveLength(1);
+    }
+
+    const down = run({ ...green, lookFailures: 3 });
+    expect(down.code, down.text).toBe(1);
+    expect(down.text).toContain("failed after 3 attempts");
+    expect(merges(down.calls)).toHaveLength(0);
+  });
+
+  // Plants: wait on the lock forever; remove a lock another run holds; give up before the hour.
+  it("property: a lock another run holds is waited on for an hour at most, then the run ends with a line naming it and leaves the lock", () => {
+    fc.assert(
+      fc.property(fc.array(fc.integer({ min: 1, max: 1700 }), { minLength: 1, maxLength: 4 }), (steps) => {
+        const clock = [0];
+
+        for (const step of steps) {
+          clock.push(clock.at(-1)! + step);
+        }
+
+        // The last answer is past the hour, so every case reaches the bound.
+        clock.push(clock.at(-1)! + 3600);
+        const got = run({ ...green, lockHeld: clock });
+        const late = clock.findIndex((t) => t >= 3600);
+        expect(got.code, got.text).toBe(1);
+        expect(got.text).toMatch(/^pr 900: waited an hour for the catch-up lock .*catchup\.lock; nothing done$/m);
+        // The first date sets the deadline; each later one before it is one more wait.
+        expect(got.calls.filter((c) => c.cmd === "sleep")).toHaveLength(late - 1);
+        expect(got.calls.filter((c) => c.cmd === "gh")).toEqual([]);
+      }),
+      { seed: 1105, numRuns: 6 },
+    );
+  });
+
+  // Plant: print a red job's name without its link.
+  it("property: a red job prints with its link beside its name", () => {
+    fc.assert(
+      fc.property(fc.constantFrom("check", "e2e", "commits", ...nextNames), (name) => {
+        const checks = matrixChecks.map((c) =>
+          c.name === name ? { ...c, conclusion: "failure", url: link(name) } : { ...c, url: link(c.name) },
+        );
+        const got = run({ ...green, checks });
+        expect(got.code, got.text).toBe(1);
+        expect(got.text).toContain(`pr 900: red at ${tip}: ${name}: failure, ${link(name)}`);
+        expect(merges(got.calls)).toHaveLength(0);
+      }),
+      { seed: 1106, numRuns: 4 },
+    );
+    // A check run with no link still prints its name and conclusion as before.
+    const bare = run({ ...green, answer: "red" });
+    expect(bare.text).toMatch(new RegExp(`^pr 900: red at ${tip}: check: failure$`, "m"));
+    const linked = run({ ...green, answer: "red", links: true });
+    expect(linked.text).toContain(`pr 900: red at ${tip}: check: failure, ${link("check")}`);
   });
 });

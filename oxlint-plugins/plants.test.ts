@@ -9,10 +9,11 @@
 // The planted lines of our own rules also run in process through oxlint's RuleTester, and every
 // plant's file goes through one oxlint run, so the config is still what refuses each one.
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
+import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
 import { BUILTIN_PLANTS, type Plant } from "./builtin-plants.ts";
 import fabrika from "./index.ts";
 
@@ -366,6 +367,8 @@ describe("each rule refuses what it is there to refuse", () => {
       // P17a's path-scoped rules have plants in their own oxlint-plugins/*.test.ts files.
       "door-is-library",
       "outside-input-constructor",
+      // T737's rule reads only libfabrika's src, so service-id.test.ts plants it there.
+      "service-id",
       // T518's retired module is planted in one-id-module.test.ts.
       "one-id-module",
       // Generated files and their fix in padding-line-between-statements.test.ts.
@@ -387,8 +390,12 @@ describe("each rule refuses what it is there to refuse", () => {
       "modules",
       // P16's rule reads the program package, so generated packages plant it in its own test file.
       "program-package-layout",
-      // Generated no-why-key.test.ts plants run at next/ paths with the real lint config.
-      "no-why-key",
+      // Generated no-question-word-key.test.ts plants run at next/ and .agents/ paths with the real
+      // lint config, beside oxlint's own id-denylist. Generated no-wall-clock.test.ts plants run at
+      // next/ paths with the real lint config.
+      "no-question-word-key",
+      "no-wall-clock",
+      "one-machine-per-file", // scoped plant and blocking check below
       // Generated no-stage-word.test.ts plants run at next/ paths with the real lint config.
       "no-stage-word",
     ];
@@ -615,4 +622,35 @@ describe("rules that apply by path", () => {
     made.push(at);
     expect(fires(file, "react-hooks(rules-of-hooks)")).toEqual([]);
   });
+});
+
+// pinned: 0046 is blocking from its first commit and the real config must enable it.
+it("pinned: L6 a second machine is planted and lint.ts exits 1", async () => {
+  const text =
+    'import {Machine} from "@demlik/tea/effect";\nexport const first = Machine.make({});\nexport const second = Machine.make({});\n';
+  const result = await lintCopies({ "next/machine.ts": text });
+  expect(result("fabrika(one-machine-per-file)", "next/machine.ts")).toEqual([3]);
+  // Copy the wrapper as well: its ROOT is its own folder's parent. Keep cwd in the real
+  // checkout so its read-only git check still sees a repository. No real product file is planted.
+  const at = mkdtempSync(join(plant, "blocking-machine-"));
+  mkdirSync(join(at, "oxlint-plugins"));
+
+  for (const entry of readdirSync(join(ROOT, "oxlint-plugins"), { withFileTypes: true })) {
+    if (entry.isFile()) {
+      copyFileSync(join(ROOT, "oxlint-plugins", entry.name), join(at, "oxlint-plugins", entry.name));
+    }
+  }
+
+  copyFileSync(join(ROOT, ".oxlintrc.json"), join(at, ".oxlintrc.json"));
+  symlinkSync(join(ROOT, "node_modules"), join(at, "node_modules"));
+  mkdirSync(join(at, ".agents/skills"), { recursive: true });
+  mkdirSync(join(at, "next"));
+  const file = join(at, "next/machine.ts");
+  writeFileSync(file, text);
+  const out = spawnSync(process.execPath, [join(at, "oxlint-plugins/lint.ts"), file], {
+    cwd: ROOT,
+    encoding: "utf8",
+  });
+  expect(out.stdout).toContain("fabrika(one-machine-per-file)");
+  expect(out.status).toBe(1);
 });

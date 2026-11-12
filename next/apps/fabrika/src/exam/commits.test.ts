@@ -105,7 +105,7 @@ const stuck = (reason: string, sha: string, more: object = {}) => ({
   ...more,
 });
 
-const ask = (paths: string[]): Answer => ({ _tag: "ask", who: "owner", for: "exam_read", paths });
+const ask = (paths: string[]): Answer => ({ _tag: "ask", to: "owner", for: "exam_read", paths });
 
 const examPaths = fc
   .uniqueArray(filename, { minLength: 1, maxLength: 8 })
@@ -817,6 +817,8 @@ describe("trusted config files", () => {
         },
         { "glob": "next/**/*.test.ts", "why": "next/'s tests" },
         { "glob": "next/**/*.test.tsx", "why": "next/'s tests" },
+        { "glob": "next/**/*Test.ts", "why": "next/'s shared suites, read as RecordPartTest.suite(open) (0062)" },
+        { "glob": "next/**/*.test-support.ts", "why": "next/'s test support: the stores and fixtures laws run on" },
         {
           "glob": "next/**/tsconfig.json",
           "why": "next/'s type checks, including Node's erasable syntax"
@@ -828,6 +830,19 @@ describe("trusted config files", () => {
           "why": "the port an instance test hands to dev.ts"
         },
         { "glob": "fixtures/next/**", "why": "saved letters and vectors the tests read" },
+        { "glob": "**/*.ask-desk.test.ts", "why": "today's ask-desk PR 1 laws" },
+        {
+          "glob": "programs/tracker/src/ask-window.laws.test.ts",
+          "why": "the shared ask editor, attention and status laws"
+        },
+        {
+          "glob": "packages/pipeline/src/ask-desk.test-support.ts",
+          "why": "the ask-desk properties' test runner and input constraints"
+        },
+        { "glob": "fixtures/ask-desk/**", "why": "ask-desk saved cases, vectors and mutation plants" },
+        { "glob": "apps/fabrika/e2e.ts", "why": "today's real-app checks and their routing" },
+        { "glob": "apps/fabrika/e2e/**", "why": "today's real-app checks and captures" },
+        { "glob": "programs/tracker/package.json", "why": "the shared ask-view subpath" },
         { "glob": "next/apps/fabrika/e2e.ts", "why": "the end-to-end runner" },
         { "glob": "next/apps/fabrika/e2e/**", "why": "the end-to-end tests" },
         {
@@ -835,6 +850,10 @@ describe("trusted config files", () => {
           "why": "today's app tests, including configurable keys"
         },
         { "glob": "apps/fabrika/e2e.ts", "why": "today's app end-to-end runner and screenshot checks" },
+        { "glob": "apps/fabrika/projects-e2e.ts", "why": "T276 real project flows and capture steps" },
+        { "glob": "apps/fabrika/summon-e2e.ts", "why": "the real fake-agent summon capture steps" },
+        { "glob": "apps/fabrika/src/project.test-support.ts", "why": "T276 generated project fixtures and plant checks" },
+        { "glob": "apps/fabrika/src/host/settings.shared.fixture.ts", "why": "T276 cross-process shared-settings worker" },
         { "glob": "fixtures/keybindings/**", "why": "hand-written keybinding files used by the exam" },
         { "glob": ".oxlintrc.json", "why": "the lint rules" },
         { "glob": ".oxfmtrc.json", "why": "the format settings" },
@@ -868,6 +887,7 @@ describe("trusted config files", () => {
         },
         { "glob": "unreachable-ledger.json", "why": "the owner's ledger of dead exports" },
         { "glob": "package.json", "why": "the root scripts: lint, test, typecheck and this check" },
+        { "glob": "pnpm-lock.yaml", "why": "the exact dependencies the tests and checks run" },
         { "glob": "tsconfig.base.json", "why": "the type checker's strictness" },
         { "glob": "patches/**", "why": "the Effect checks patched into tsgo" },
         {

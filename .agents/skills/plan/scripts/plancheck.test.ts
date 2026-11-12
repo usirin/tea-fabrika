@@ -1,62 +1,3 @@
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/mutbox.ts?raw";
-import "../../lead/scripts/mutbox-entry.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/mutbox.Dockerfile?raw";
-import "../../mutation/scripts/run.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/limit.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/sample.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/scope.ts?raw";
-import "./plancheck.sh?raw";
-import "../../lead/scripts/leakgrep.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/sizecap.ts?raw";
-import "../../step-commit/scripts/exam.py?raw";
-import "../../step-commit/scripts/stepcommit.sh?raw";
-import "../../lead/scripts/box.sh?raw";
-import "../../lead/scripts/keepruns.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/drive.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/pgrep.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/agents.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/codexexec.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/boxnode.ts?raw";
-import "../../lead/scripts/fieldrow.py?raw";
-import "../../lead/scripts/runplan.sh?raw";
-import "../../lead/scripts/env.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/gc.ts?raw";
-import "../../lead/scripts/redact.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/botpush.mjs?raw";
-import "../../lead/scripts/clauderow.py?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/lane.ts?raw";
-import "../../lead/scripts/catchup.sh?raw";
-import "../../lead/scripts/loosening.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/freshmain.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/flow/Beat.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/flow/Outcome.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/flow/Runners.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/flow/Step.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/flow/typecheck.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/flow/host.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../../../exam-paths.json?raw";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -143,12 +84,16 @@ const constructor = fc.constantFrom(
 
 const allowed = fc.oneof(
   fc.constantFrom("lint", "type"),
-  fc.tuple(constructor, fc.boolean(), word).map(([name, described, why]) => `fc.${name}${described ? `: ${why}` : ""}`),
+  fc
+    .tuple(constructor, fc.boolean(), word)
+    .map(([name, described, description]) => `fc.${name}${described ? `: ${description}` : ""}`),
   fc
     .tuple(fc.constantFrom("arbMsg", "arbRecordMsg", "arbMsgSequence", "arbGuidedSequence"), fc.boolean(), word)
-    .map(([name, described, why]) => `@demlik/tea/pbt.${name}${described ? `: ${why}` : ""}`),
+    .map(([name, described, description]) => `@demlik/tea/pbt.${name}${described ? `: ${description}` : ""}`),
   fc.tuple(word, word).map(([a, b]) => `Effect Arbitrary: ${a}.${b}`),
-  fc.tuple(fc.constantFrom("vector", "format", "pinned", "scenario"), word).map(([label, why]) => `${label}: ${why}`),
+  fc
+    .tuple(fc.constantFrom("vector", "format", "pinned", "scenario"), word)
+    .map(([label, description]) => `${label}: ${description}`),
 );
 
 const refused = fc.oneof(
@@ -552,16 +497,16 @@ describe("plancheck, today's tooling", () => {
           trail: trailRun,
           after: marks,
           form: fc.constantFrom(...(Object.keys(forms) as Form[])),
-          where: fc.constantFrom(...(Object.keys(place) as Place[])),
+          location: fc.constantFrom(...(Object.keys(place) as Place[])),
           lang: fc.oneof(fc.constantFrom("", "md", "sh", "json", "ts", "text"), word),
         }),
-        ({ path, ticks, dot, before, lead, dots, trail, after, form, where, lang }) => {
+        ({ path, ticks, dot, before, lead, dots, trail, after, form, location, lang }) => {
           const tick = ticks ? "`" : "";
           // A `./` prefix, or a stripped run: leading `_`/`-`, then leading dots on a path that is
           // not a dotfile (A12 matches a word with its leading dots removed).
           const head = dot ? "./" : `${lead}${path.startsWith(".") ? "" : ".".repeat(dots)}`;
           const token = `${before}${tick}${head}${path}${trail}${tick}${after}`;
-          const body = place[where](forms[form](token, path), lang);
+          const body = place[location](forms[form](token, path), lang);
           const got = check(body);
           expect(got.text, `${body}\n${got.text}`).toContain(`exam path named: ${path}\t`);
         },
@@ -572,13 +517,13 @@ describe("plancheck, today's tooling", () => {
         examples: [
           // pinned: ticket 520 review round 6, a link title. The build-owned cell
           // [package.json](package.json "manifest") was missed by both checks at bb7d5a09.
-          [{ ...bare, path: "package.json", form: "linkSelfTitle", where: "fileCell" }],
+          [{ ...bare, path: "package.json", form: "linkSelfTitle", location: "fileCell" }],
           // pinned: ticket 520 review round 6, a fenced block holding package.json was never
           // listed at bb7d5a09.
-          [{ ...bare, path: "package.json", form: "plain", where: "fence", lang: "sh" }],
+          [{ ...bare, path: "package.json", form: "plain", location: "fence", lang: "sh" }],
           // pinned: ticket 520 amendment A11, underscore emphasis around a path with an inner
           // underscore. _allowed_signers_ was not listed at bb7d5a09.
-          [{ ...bare, path: "allowed_signers", form: "underscore", where: "prose" }],
+          [{ ...bare, path: "allowed_signers", form: "underscore", location: "prose" }],
           // pinned: ticket 520 review round 5, [`package.json`](package.json) in a build-owned
           // cell printed "no exam paths named" at 2e25c4e7.
           [
@@ -589,7 +534,7 @@ describe("plancheck, today's tooling", () => {
               before: "[",
               after: "](package.json)",
               form: "plain",
-              where: "fileCell",
+              location: "fileCell",
             },
           ],
           // pinned: ticket 520 review round 7, three cells that printed "no exam paths named" at
@@ -601,7 +546,7 @@ describe("plancheck, today's tooling", () => {
               before: "~~",
               after: "~~",
               form: "plain",
-              where: "fileCell",
+              location: "fileCell",
             },
           ],
           [
@@ -611,7 +556,7 @@ describe("plancheck, today's tooling", () => {
               before: "“",
               after: "”",
               form: "plain",
-              where: "fileCell",
+              location: "fileCell",
             },
           ],
           [
@@ -623,7 +568,7 @@ describe("plancheck, today's tooling", () => {
               trail: "--",
               after: ">",
               form: "plain",
-              where: "fileCell",
+              location: "fileCell",
             },
           ],
         ],
@@ -967,11 +912,11 @@ const modeCheck = (text: string, mode: "--draft" | "--approved") => {
 };
 
 describe("T686 size advice in the draft check, today's tooling", () => {
-  // Plant: let a slice over the cap fail the draft, or drop the advice. 0087 says it advises until
-  // the replay, so the exit code is the same either way, and only a slice over 600 is named.
-  it("property: the draft names each slice over 600 product lines and never changes the exit code", () => {
+  // Plant: let a slice's size fail the draft, name a slice by its size, or drop the size line. 0099
+  // says no number caps a pull request, so the exit code is the same whatever the slices expect.
+  it("property: the draft prints the plan's size, names no slice by its line count and never changes the exit code", () => {
     fc.assert(
-      fc.property(fc.array(fc.integer({ min: 1, max: 1200 }), { minLength: 1, maxLength: 4 }), (slices) => {
+      fc.property(fc.array(fc.integer({ min: 1, max: 5000 }), { minLength: 1, maxLength: 4 }), (slices) => {
         const listed = slices.map((lines, at) => `${at + 1}. **Slice ${at + 1}: ${lines} lines.**`).join("\n");
         const body = complete().replace(
           "Size: 1 agent hour, 80 lines. Confidence: 85%.",
@@ -979,8 +924,8 @@ describe("T686 size advice in the draft check, today's tooling", () => {
         );
         const ran = modeCheck(`\nPlancheck-Version: 3\n${body}`, "--draft");
         expect(ran.code, ran.text).toBe(0);
-        const named = [...ran.text.matchAll(/size: slice (\d+) .* over the cap of 600/g)].map((m) => Number(m[1]));
-        expect(named).toEqual(slices.flatMap((lines, at) => (lines > 600 ? [at + 1] : [])));
+        expect(ran.text).toContain(`${slices.length} slices, the largest ${Math.max(...slices)}\n`);
+        expect(ran.text).not.toMatch(/size: slice \d+|\bcap\b/);
       }),
       { seed: 686, numRuns: 4 },
     );
@@ -1405,9 +1350,11 @@ describe("laws and validation advice, today's tooling", () => {
     const runs = fc.constantFrom("", "200 runs", "1 run", "default runs", "Default runs");
     const at = fc.constantFrom("generator", "plant");
     fc.assert(
-      fc.property(kindHead, fcCell, runs, at, (head, gen, count, where) => {
+      fc.property(kindHead, fcCell, runs, at, (head, gen, count, location) => {
         const cells =
-          where === "generator" ? row("test", count ? `${gen}, ${count}` : gen) : row("test", gen, `break it ${count}`);
+          location === "generator"
+            ? row("test", count ? `${gen}, ${count}` : gen)
+            : row("test", gen, `break it ${count}`);
         const got = check(kinded(head, [cells]));
         expect(got.code, got.text).toBe(0);
         expect(advice(got.text).length, got.text).toBe(count === "" ? 1 : 0);

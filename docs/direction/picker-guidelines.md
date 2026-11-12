@@ -13,6 +13,12 @@ and a tsh word, and a program hands the desk `index(model)`, a pure function, so
 index and ranks once, and picking a row is `open program location`
 ([program guidelines](./program-guidelines.md), G3, G5, G7 and its R5, decided 2026-11-06).
 
+Its decided rules are in: [0512](../../.decisions/0512-a-picker-is-five-parts.md),
+[0513](../../.decisions/0513-the-picker-is-one-ranked-box.md),
+[0514](../../.decisions/0514-a-prefix-narrows-the-picker.md),
+[0515](../../.decisions/0515-enter-acts-esc-goes-back-one.md),
+[0516](../../.decisions/0516-each-pick-is-a-picked-fact.md).
+
 Rooms, direct messages, mentions, summon and forks belong to the summon note
 ([PR 425](https://github.com/usirin/tea-fabrika/pull/425), proposed). The picker only lists them as
 a source.

@@ -35,13 +35,13 @@ const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const OTHER = "person_01m6v5270hg0000000000000zz";
 const TO = "ledger:home";
 const SENT = "2026-11-11T09:00:00.000Z";
-const SAW = { code: "4417", label: "Mac", where: "Istanbul", how: "compare", check: "touch", has: [] } as const;
-const TOOK = { label: "Mac", where: "Istanbul", how: "panel", check: "touch" } as const;
+const SAW = { code: "4417", label: "Mac", location: "Istanbul", method: "compare", check: "touch", has: [] } as const;
+const TOOK = { label: "Mac", location: "Istanbul", method: "panel", check: "touch" } as const;
 
 const ADD_SAW = {
-  how: "device",
+  method: "device",
   check: "touch",
-  where: "Istanbul",
+  location: "Istanbul",
   has: [],
   typed: false,
   kept: null,
@@ -223,7 +223,7 @@ const choose = (
 
   const signer = pickSigner(model, c, n);
   const id = pickId(model, c, refused, n, c.kind);
-  const who = pickFor(model, c);
+  const person = pickFor(model, c);
 
   switch (c.kind) {
     case "denied":
@@ -231,13 +231,13 @@ const choose = (
     case "granted":
       return {
         _tag: "granted",
-        grant: { id, key: pickTarget(model, c, n, "leaf"), for: who, to: TO, as: c.as, saw: SAW, sentAt: SENT },
+        grant: { id, key: pickTarget(model, c, n, "leaf"), for: person, to: TO, as: c.as, saw: SAW, sentAt: SENT },
         signed: signed(signer),
       };
     case "revoked":
       return {
         _tag: "revoked",
-        revoke: { id, key: pickTarget(model, c, n, "gone"), for: who, to: TO, saw: TOOK, sentAt: SENT },
+        revoke: { id, key: pickTarget(model, c, n, "gone"), for: person, to: TO, saw: TOOK, sentAt: SENT },
         signed: signed(signer),
       };
     case "person":
@@ -245,7 +245,7 @@ const choose = (
         _tag: "added",
         add: {
           id,
-          for: who,
+          for: person,
           to: TO,
           adds: { _tag: "person", key: pickTarget(model, c, n, "device"), window: pickTarget(model, c, n + 1, "tab") },
           drops: pickDrops(model, c, signer),
@@ -259,11 +259,11 @@ const choose = (
         _tag: "added",
         add: {
           id,
-          for: who,
+          for: person,
           to: TO,
           adds: { _tag: "recovery", key: pickTarget(model, c, n, "sheet"), v: 1 },
           drops: pickDrops(model, c, signer),
-          saw: { ...ADD_SAW, how: "sheet", typed: true, kept: "print" },
+          saw: { ...ADD_SAW, method: "sheet", typed: true, kept: "print" },
           sentAt: SENT,
         },
         signed: signed(signer),

@@ -38,21 +38,21 @@ const SENT = "2026-11-07T21:10:01.204Z";
 const SAW = {
   code: "4417",
   label: "Firefox on a Mac",
-  where: "Istanbul",
-  how: "compare",
+  location: "Istanbul",
+  method: "compare",
   check: "touch",
   has: ["window"],
 } as const;
 
-const TOOK = { label: "Mac A", where: "Istanbul", how: "panel", check: "touch" } as const;
+const TOOK = { label: "Mac A", location: "Istanbul", method: "panel", check: "touch" } as const;
 
-const addSaw = (how: "sheet" | "recovery" | "device", old: "lost" | "kept" | null = null) => ({
-  how,
+const addSaw = (method: "sheet" | "recovery" | "device", old: "lost" | "kept" | null = null) => ({
+  method,
   check: "touch" as const,
-  where: "Istanbul",
+  location: "Istanbul",
   has: [],
-  typed: how === "sheet",
-  kept: how === "sheet" ? ("print" as const) : null,
+  typed: method === "sheet",
+  kept: method === "sheet" ? ("print" as const) : null,
   old,
 });
 
@@ -313,17 +313,17 @@ describe("p28, recorded choices and founding limits", () => {
         fc.record({
           code: fc.string(),
           label: fc.string(),
-          where: fc.string(),
+          location: fc.string(),
           has: fc.array(fc.string()),
         }),
         (fields) => {
-          expect(Schema.is(Saw)({ ...fields, how: "link", check: "touch" })).toBe(true);
-          expect(Schema.is(Saw)({ ...fields, how: "compare", check: "none" })).toBe(true);
+          expect(Schema.is(Saw)({ ...fields, method: "link", check: "touch" })).toBe(true);
+          expect(Schema.is(Saw)({ ...fields, method: "compare", check: "none" })).toBe(true);
           expect(
             Schema.is(Took)({
               label: fields.label,
-              where: fields.where,
-              how: "panel",
+              location: fields.location,
+              method: "panel",
               check: "none",
             }),
           ).toBe(true);

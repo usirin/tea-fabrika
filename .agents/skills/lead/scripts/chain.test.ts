@@ -1,62 +1,3 @@
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./mutbox.ts?raw";
-import "./mutbox-entry.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./mutbox.Dockerfile?raw";
-import "../../mutation/scripts/run.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/limit.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/sample.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/scope.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./chain.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./drive.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./pgrep.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./agents.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./codexexec.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./boxnode.ts?raw";
-import "./catchup.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./freshmain.ts?raw";
-import "./box.sh?raw";
-import "./keepruns.sh?raw";
-import "./leakgrep.sh?raw";
-import "./loosening.sh?raw";
-import "./fieldrow.py?raw";
-import "./runplan.sh?raw";
-import "./env.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./gc.ts?raw";
-import "./redact.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./botpush.mjs?raw";
-import "./clauderow.py?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./lane.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./flow/Outcome.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./flow/Beat.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./flow/Runners.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./flow/Step.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./flow/host.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./flow/typecheck.ts?raw";
-import "../../plan/scripts/plancheck.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./sizecap.ts?raw";
-import "../../step-commit/scripts/exam.py?raw";
-import "../../step-commit/scripts/stepcommit.sh?raw";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -148,10 +89,10 @@ const hostSkipped = (machine: ReturnType<typeof makeMachine>, [m, cmds]: Stepped
       } as never)
     : [m, cmds];
 
-/** The host typecheck answered green; any other state stays. */
+/** CI's typecheck job answered green; any other state stays. */
 const typechecked = (machine: ReturnType<typeof makeMachine>, [m, cmds]: Stepped): Stepped =>
   m.phase === "typechecking"
-    ? machine.update.typecheck_run_ok(m, { type: "typecheck_run_ok", value: { _tag: "green" } } as never)
+    ? machine.update.typecheck_read_ok(m, { type: "typecheck_read_ok", value: { _tag: "green" } } as never)
     : [m, cmds];
 
 describe("T341 the chain's moves follow the five verbs, today's tooling", () => {
@@ -165,8 +106,8 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
       review: "open",
     };
     fc.assert(
-      fc.property(step, fc.constantFrom("done", "skip:step_said"), word, (s, o, why) => {
-        const m = moveOf(s, line(o, "h", why), 0, 3);
+      fc.property(step, fc.constantFrom("done", "skip:step_said"), word, (s, o, reason) => {
+        const m = moveOf(s, line(o, "h", reason), 0, 3);
         expect(m._tag === "step" ? m.step : m._tag).toBe(walk[s]);
 
         if (m._tag === "step") {
@@ -180,21 +121,21 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
 
   it("property: a send goes to the lane step it names with the sender's word; a send to plan or mutation parks", () => {
     fc.assert(
-      fc.property(step, laneStep, word, (from, to, why) => {
+      fc.property(step, laneStep, word, (from, to, reason) => {
         fc.pre(from !== to);
-        const m = moveOf(from, line(`send:${to}:step_said`, "h", why), 0, 3);
+        const m = moveOf(from, line(`send:${to}:step_said`, "h", reason), 0, 3);
         expect(m).toMatchObject({ _tag: "step", step: to });
 
         if (m._tag === "step") {
-          expect(m.note).toContain(why);
+          expect(m.note).toContain(reason);
         }
 
-        expect(moveOf(from, line("send:plan:plancheck", "h", why), 0, 3)._tag).toBe("park");
-        const toMutation = moveOf(from, line("send:mutation:step_said", "h", why), 0, 3);
+        expect(moveOf(from, line("send:plan:plancheck", "h", reason), 0, 3)._tag).toBe("park");
+        const toMutation = moveOf(from, line("send:mutation:step_said", "h", reason), 0, 3);
         expect(toMutation._tag).toBe("park");
 
         if (toMutation._tag === "park") {
-          expect(toMutation.reason).toContain(why);
+          expect(toMutation.reason).toContain(reason);
         }
       }),
       options,
@@ -205,8 +146,8 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
   // `to === step` check in moveOf, and every case here runs the same step again.
   it("property: a send to the step that sent it is never another round of that step: it goes to judgment", () => {
     fc.assert(
-      fc.property(laneStep, fc.nat({ max: 4 }), word, (s, stucks, why) => {
-        const m = moveOf(s, line(`send:${s}:step_said`, "h", why), stucks, 3);
+      fc.property(laneStep, fc.nat({ max: 4 }), word, (s, stucks, reason) => {
+        const m = moveOf(s, line(`send:${s}:step_said`, "h", reason), stucks, 3);
         expect(m).toEqual({ _tag: "judge" });
       }),
       options,
@@ -215,10 +156,10 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
 
   it("a question goes to judgment, a lockfile ask parks with drive's own words", () => {
     fc.assert(
-      fc.property(step, word, (s, why) => {
-        expect(moveOf(s, line("ask:lead:question", "h", why), 0, 3)._tag).toBe("judge");
-        const m = moveOf(s, line("ask:lead:lockfile", "h", why), 0, 3);
-        expect(m).toEqual({ _tag: "park", reason: why });
+      fc.property(step, word, (s, reason) => {
+        expect(moveOf(s, line("ask:lead:question", "h", reason), 0, 3)._tag).toBe("judge");
+        const m = moveOf(s, line("ask:lead:lockfile", "h", reason), 0, 3);
+        expect(m).toEqual({ _tag: "park", reason });
       }),
       options,
     );
@@ -241,15 +182,15 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
 
   it("the slot schedule is spaced by the wait, and running out is a typed RetriesExhausted", () => {
     fc.assert(
-      fc.property(fc.integer({ min: 1, max: 60 }), word, (minutes, why) => {
+      fc.property(fc.integer({ min: 1, max: 60 }), word, (minutes, reason) => {
         expect(slotSchedule(minutes)).toBeDefined();
         const e = new RetriesExhausted({
           schedule: `slotSchedule(${minutes} minutes)`,
           times: 7,
-          reason: why,
+          reason,
         });
         expect(e._tag).toBe("RetriesExhausted");
-        expect(e.reason).toBe(why);
+        expect(e.reason).toBe(reason);
       }),
       options,
     );
@@ -257,8 +198,8 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
 
   it("a stuck goes to judgment until MaxStucks in a row on one step, then parks", () => {
     fc.assert(
-      fc.property(step, fc.nat({ max: 6 }), fc.integer({ min: 1, max: 5 }), word, (s, stucks, max, why) => {
-        const m = moveOf(s, line(`stuck:${why.replaceAll(" ", "_")}`, "h", why), stucks, max);
+      fc.property(step, fc.nat({ max: 6 }), fc.integer({ min: 1, max: 5 }), word, (s, stucks, max, reason) => {
+        const m = moveOf(s, line(`stuck:${reason.replaceAll(" ", "_")}`, "h", reason), stucks, max);
         expect(m._tag).toBe(stucks >= max ? "park" : "judge");
       }),
       options,
@@ -336,6 +277,7 @@ describe("T341 the lane brief is cut into one brief per step, today's tooling", 
           commits: [{ step: "tests", sha: head }],
           note,
           host: s === "review" ? `done at ${head}: 2 host commands passed` : null,
+          plants: s === "review" ? "## Plant records\n\n- L1, at 0123abcd:" : null,
         });
         expect(text).toContain("Shared: ticket 7");
         expect(text).toContain(cut.sections[s] ?? "nothing");
@@ -356,6 +298,8 @@ describe("T341 the lane brief is cut into one brief per step, today's tooling", 
           expect(text).toContain(`: done at ${head}: 2 host commands passed`);
           expect(text).toContain(`Reviewed head: fabrikalfa/x-wip at ${head}`);
           expect(text).toContain(`Parent base: origin/main at ${root}`);
+          // Ticket 850: a review reads the lane's plant records, which its box cannot open.
+          expect(text).toContain("## Plant records\n\n- L1, at 0123abcd:");
         }
 
         if (s === "mutation") {
@@ -384,6 +328,7 @@ describe("T341 the lane brief is cut into one brief per step, today's tooling", 
           commits,
           note: "",
           host: null,
+          plants: null,
         });
         expect(text.includes("No step has committed yet.")).toBe(commits.length === 0);
         expect(text).not.toContain("could not be read");
@@ -406,6 +351,7 @@ describe("T341 the lane brief is cut into one brief per step, today's tooling", 
       commits: null,
       note: "",
       host: null,
+      plants: null,
     });
     expect(unread).toContain("The lane's step commits could not be read");
     expect(unread).not.toContain("No step has committed yet.");
@@ -471,10 +417,7 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
   };
   // Every review hosts first; these laws are about the other steps, so the host step skips.
   const ran = (m: ReturnType<typeof start>[0], l: Line) =>
-    typechecked(
-      machine,
-      hostSkipped(machine, machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never)),
-    );
+    hostSkipped(machine, machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never));
 
   it("scenario: a clean lane runs tests, build and review, opens the PR, runs loosening.sh and lands it, with exit 0", () => {
     let [m, cmds] = start();
@@ -494,6 +437,8 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
       type: "pr_open_ok",
       value: { pr: 42, detail: "opened" },
     } as never);
+    expect(cmds[0]).toMatchObject({ type: "typecheck_read", pr: 42, head: heads[2] });
+    [m, cmds] = typechecked(machine, [m, cmds]);
     expect(cmds[0]).toMatchObject({ type: "loosen", pr: 42, head: heads[2] });
     [m, cmds] = machine.update.loosen_ok(m, {
       type: "loosen_ok",
@@ -595,10 +540,10 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
 
   it("a send back reruns the named step with the sender's word in its note", () => {
     fc.assert(
-      fc.property(laneStep, word, (to, why) => {
+      fc.property(laneStep, word, (to, reason) => {
         let [m, cmds] = start();
         [m, cmds] = ran(m, line("done", "a".repeat(40)));
-        [m, cmds] = ran(m, line(`send:${to}:step_said`, "b".repeat(40), why));
+        [m, cmds] = ran(m, line(`send:${to}:step_said`, "b".repeat(40), reason));
 
         // The build is the sender here: a send to itself goes to judgment, never another round.
         if (to === "build") {
@@ -612,7 +557,7 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
         expect(cmds[0]).toMatchObject({ type: "step_run", step: to, round: to === "review" ? 4 : 3 });
 
         if (cmds[0]?.type === "step_run") {
-          expect(cmds[0].note).toContain(why);
+          expect(cmds[0].note).toContain(reason);
         }
       }),
       options,
@@ -621,25 +566,25 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
 
   it("a stuck asks for judgment; the judgment's send reruns that step, its park ends as ask (exit 20)", () => {
     fc.assert(
-      fc.property(laneStep, word, (to, why) => {
+      fc.property(laneStep, word, (to, reason) => {
         let [m, cmds] = start();
-        [m, cmds] = ran(m, line("stuck:timeout", "", why));
+        [m, cmds] = ran(m, line("stuck:timeout", "", reason));
         expect(m.phase).toBe("judging");
         expect(cmds[0]).toMatchObject({ type: "judge", step: "tests" });
         const [sent, after] = hostSkipped(
           machine,
           machine.update.judge_ok(m, {
             type: "judge_ok",
-            value: { text: `answer: send ${to} ${why}` },
+            value: { text: `answer: send ${to} ${reason}` },
           } as never),
         );
         expect(sent).toMatchObject({ phase: "stepping", step: to });
         expect(after[0]).toMatchObject({ type: "step_run", step: to });
         const [parked] = machine.update.judge_ok(m, {
           type: "judge_ok",
-          value: { text: `answer: park ${why}` },
+          value: { text: `answer: park ${reason}` },
         } as never);
-        expect(parked).toMatchObject({ phase: "over", end: { kind: "ask", reason: why } });
+        expect(parked).toMatchObject({ phase: "over", end: { kind: "ask", reason } });
 
         if (parked.phase === "over") {
           expect(exitOf(parked.end)).toBe(20);
@@ -651,7 +596,7 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
 
   it("a RetriesExhausted on the step's err channel ends the lane as stuck (exit 30), naming the schedule", () => {
     fc.assert(
-      fc.property(word, fc.integer({ min: 1, max: 9 }), (why, times) => {
+      fc.property(word, fc.integer({ min: 1, max: 9 }), (reason, times) => {
         const [m] = start();
         const [over] = machine.update.step_run_err(m, {
           type: "step_run_err",
@@ -659,14 +604,14 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
             _tag: "RetriesExhausted",
             schedule: "slotSchedule(5 minutes)",
             times,
-            reason: why,
+            reason,
           },
         } as never);
         expect(over).toMatchObject({ phase: "over", end: { kind: "stuck" } });
 
         if (over.phase === "over") {
           expect(over.end.reason).toContain("slotSchedule(5 minutes)");
-          expect(over.end.reason).toContain(why);
+          expect(over.end.reason).toContain(reason);
           expect(exitOf(over.end)).toBe(30);
           // Nothing moved: the lane's head is where it was.
           expect(over.lane.head).toBe("");
@@ -811,11 +756,11 @@ describe("the host step runs before every review of a new head, today's tooling"
   });
 });
 
-describe("one host typecheck runs before the pull request opens, today's tooling", () => {
+describe("CI's typecheck job answers once the pull request opens, with no laptop typecheck (0133), today's tooling", () => {
   const machine = makeMachine(limits(16));
   type Machine = typeof machine;
-  // A lane whose review said merge-ready at `head`, after `sends` sends back: the typecheck is next.
-  const reviewed = (head: string, sends = 0, on: Machine = machine) => {
+  // A lane whose review said merge-ready at `head`, after `sends` sends back: the PR opens next.
+  const merged = (head: string, sends = 0, on: Machine = machine) => {
     const ran = (m: Stepped[0], l: Line) => on.update.step_run_ok(m, { type: "step_run_ok", value: l } as never);
     const [idle] = on.init(null, undefined);
     let [m] = on.update.start(idle, { type: "start", step: sends > 0 ? "tests" : "build" });
@@ -832,37 +777,47 @@ describe("one host typecheck runs before the pull request opens, today's tooling
     [m] = hostSkipped(on, ran(m, line("done", head)));
     return ran(m, line("done", head));
   };
+  // The same lane with PR `pr` open at `head`: CI's typecheck job is next.
+  const reviewed = (head: string, sends = 0, on: Machine = machine, pr = 7) => {
+    const [m] = merged(head, sends, on);
+    return on.update.pr_open_ok(m, { type: "pr_open_ok", value: { pr, detail: "opened" } } as never);
+  };
   const answered = (m: Stepped[0], value: unknown, on: Machine = machine) =>
-    on.update.typecheck_run_ok(m, { type: "typecheck_run_ok", value } as never);
+    on.update.typecheck_read_ok(m, { type: "typecheck_read_ok", value } as never);
   const lines = fc.array(word, { minLength: 1, maxLength: 30 });
+  const pr = fc.integer({ min: 1, max: 99_999 });
 
-  it("property: a merge-ready review runs the typecheck at its head, and nothing opens before it", () => {
+  it("property: a merge-ready review opens the PR at once, and CI's typecheck job at its head is read next", () => {
     fc.assert(
-      fc.property(sha, (head) => {
-        const [m, cmds] = reviewed(head);
-        expect(m.phase).toBe("typechecking");
-        expect(cmds).toEqual([expect.objectContaining({ type: "typecheck_run", head })]);
+      fc.property(sha, pr, (head, n) => {
+        const [opening, opens] = merged(head);
+        expect(opening.phase).toBe("opening");
+        expect(opens).toEqual([expect.objectContaining({ type: "pr_open", head })]);
+        const [m, cmds] = reviewed(head, 0, machine, n);
+        expect(m).toMatchObject({ phase: "typechecking", pr: n });
+        expect(cmds).toEqual([expect.objectContaining({ type: "typecheck_read", pr: n, head })]);
       }),
       options,
     );
   });
 
-  it("property: green opens the PR; one that did not run opens it too, and the lane keeps why", () => {
+  it("property: green goes on to loosening.sh; no answer goes on too, and the lane keeps why", () => {
     fc.assert(
-      fc.property(sha, word, (head, why) => {
-        const [m] = reviewed(head);
-        const [green, opens] = answered(m, { _tag: "green" });
-        expect(green).toMatchObject({ phase: "opening", lane: { unchecked: null } });
-        expect(opens).toEqual([expect.objectContaining({ type: "pr_open", head })]);
-        const [skipped, also] = answered(m, { _tag: "skipped", reason: why });
-        expect(skipped).toMatchObject({ phase: "opening", lane: { unchecked: why } });
-        expect(also).toEqual([expect.objectContaining({ type: "pr_open", head })]);
-        const [threw, again] = machine.update.typecheck_run_err(m, {
-          type: "typecheck_run_err",
+      fc.property(sha, pr, word, (head, n, reason) => {
+        const [m] = reviewed(head, 0, machine, n);
+        const loosens = [expect.objectContaining({ type: "loosen", pr: n, head })];
+        const [green, next] = answered(m, { _tag: "green" });
+        expect(green).toMatchObject({ phase: "loosening", pr: n, lane: { unchecked: null } });
+        expect(next).toEqual(loosens);
+        const [skipped, also] = answered(m, { _tag: "skipped", reason });
+        expect(skipped).toMatchObject({ phase: "loosening", pr: n, lane: { unchecked: reason } });
+        expect(also).toEqual(loosens);
+        const [threw, again] = machine.update.typecheck_read_err(m, {
+          type: "typecheck_read_err",
           error: { _tag: "unknown" },
         } as never);
-        expect(threw).toMatchObject({ phase: "opening", lane: { unchecked: "the typecheck threw" } });
-        expect(again).toEqual([expect.objectContaining({ type: "pr_open", head })]);
+        expect(threw).toMatchObject({ phase: "loosening", lane: { unchecked: "reading CI's typecheck job threw" } });
+        expect(again).toEqual(loosens);
       }),
       options,
     );
@@ -899,6 +854,27 @@ describe("one host typecheck runs before the pull request opens, today's tooling
     expect(stopped).toMatchObject({ phase: "over", end: { kind: "ask", stop: { _tag: "intensity" } } });
   });
 
+  it("scenario: after a red one, the next merge-ready review pushes again and reads CI at the new head", () => {
+    const first = "a".repeat(40);
+    const second = "b".repeat(40);
+    const [m] = reviewed(first);
+    let [back] = answered(m, { _tag: "red", to: "build", lines: ["a.ts(1,1): error TS1: x"] });
+    expect(back).toMatchObject({ phase: "stepping", step: "build" });
+    [back] = machine.update.step_run_ok(back, { type: "step_run_ok", value: line("done", second) } as never);
+    [back] = hostSkipped(machine, [back, []]);
+    const [opening, opens] = machine.update.step_run_ok(back, {
+      type: "step_run_ok",
+      value: line("done", second),
+    } as never);
+    expect(opening.phase).toBe("opening");
+    expect(opens).toEqual([expect.objectContaining({ type: "pr_open", head: second })]);
+    const [, reads] = machine.update.pr_open_ok(opening, {
+      type: "pr_open_ok",
+      value: { pr: 7, detail: "existing" },
+    } as never);
+    expect(reads).toEqual([expect.objectContaining({ type: "typecheck_read", pr: 7, head: second })]);
+  });
+
   it("scenario: a typecheck answer outside the typecheck phase changes nothing", () => {
     const [idle] = machine.init(null, undefined);
     const [same, cmds] = answered(idle, { _tag: "green" });
@@ -915,16 +891,16 @@ describe("T590 loosening.sh runs after review and before catch-up, today's tooli
     let [m] = machine.update.start(idle, { type: "start", step: "tests" });
 
     for (const _ of LANE_STEPS) {
-      [m] = typechecked(
+      [m] = hostSkipped(
         machine,
-        hostSkipped(
-          machine,
-          machine.update.step_run_ok(m, { type: "step_run_ok", value: line("done", head) } as never),
-        ),
+        machine.update.step_run_ok(m, { type: "step_run_ok", value: line("done", head) } as never),
       );
     }
 
-    return machine.update.pr_open_ok(m, { type: "pr_open_ok", value: { pr, detail: "opened" } } as never);
+    return typechecked(
+      machine,
+      machine.update.pr_open_ok(m, { type: "pr_open_ok", value: { pr, detail: "opened" } } as never),
+    );
   };
   const pr = fc.integer({ min: 1, max: 99_999 });
   const hits = fc
@@ -1058,11 +1034,11 @@ describe("T341 the pull request's steps table, today's tooling", () => {
 describe("T341 the chain record is a Schema value, today's tooling", () => {
   it("a step's record round-trips through encode and decode, before and after the step", () => {
     fc.assert(
-      fc.property(step, fc.nat({ max: 20 }), outcome, sha, word, (s, round, o, head, why) => {
+      fc.property(step, fc.nat({ max: 20 }), outcome, sha, word, (s, round, o, head, reason) => {
         const started = {
           round,
           step: s,
-          note: why,
+          note: reason,
           startedAt: "t",
           endedAt: null,
           line: null,
@@ -1076,8 +1052,8 @@ describe("T341 the chain record is a Schema value, today's tooling", () => {
             {
               ...started,
               endedAt: "u",
-              line: line(o, head, why),
-              judged: { box: "b", answer: why },
+              line: line(o, head, reason),
+              judged: { box: "b", answer: reason },
             },
           ],
         };

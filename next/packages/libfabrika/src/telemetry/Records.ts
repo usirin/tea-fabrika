@@ -415,7 +415,7 @@ export class RecordManager extends Context.Service<
       by: { readonly by: string; readonly reason: string },
     ) => Effect.Effect<void, SinkError>;
   }
->()("@kampus/libfabrika/RecordManager") {
+>()("@kampus/libfabrika/telemetry/Records.RecordManager") {
   /** Each part on the `Sql` that `open` gives for its name, rolled at `cap` bytes. */
   static readonly sql = (open: (name: string) => Sql, cap: number): Layer.Layer<RecordManager> =>
     Layer.sync(RecordManager)(() => manager(parts((name) => sqlStore(open(name)), cap)));
@@ -441,7 +441,7 @@ export class RecordManager extends Context.Service<
       return yield* io.pipe(
         Effect.flatMap((raw) =>
           Schema.decodeUnknownEffect(answer)(raw).pipe(
-            Effect.mapError(() => new SinkError({ reason: "bad_row", held: 0 })),
+            Effect.mapError((cause) => new SinkError({ reason: "bad_row", held: 0, cause })),
           ),
         ),
       );

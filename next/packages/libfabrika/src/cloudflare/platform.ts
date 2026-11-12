@@ -9,12 +9,31 @@ type Client<S> = {
     : never;
 };
 
-const unreachable = () => new LedgerError({ reason: "unreachable" });
+/** A rejected platform call. It keeps the thrown value as its cause (ticket 695), and its message keeps
+ *  that value's class and text as `<class>: <text>`. Both stay in memory: a sink stores a typed
+ *  failure's tag and reason only, and never puts its text in a tag. */
+const unreachable = (cause: unknown) =>
+  new LedgerError({
+    reason: "unreachable",
+    message: cause instanceof Error ? `${cause.name}: ${cause.message}` : `${typeof cause}: ${String(cause)}`,
+    cause,
+  });
+
+/** The thrown value behind an `unreachable` LedgerError, rebuilt from its message with its class as
+ *  `name`, so a failed span names the class that was thrown; any other error stays as it is. */
+export const rejected = (error: unknown): unknown => {
+  if (!(error instanceof LedgerError) || error.reason !== "unreachable" || error.message === undefined) {
+    return error;
+  }
+
+  const at = error.message.indexOf(": ");
+  return at < 0 ? error : Object.assign(new Error(error.message.slice(at + 2)), { name: error.message.slice(0, at) });
+};
 
 export class ProjectClient extends Context.Service<
   ProjectClient,
   Client<Omit<ProjectBinding, keyof Rpc.DurableObjectBranded>>
->()("fabrika/ProjectClient") {
+>()("@kampus/libfabrika/cloudflare/platform.ProjectClient") {
   static make(stub: ProjectBinding): ProjectClient["Service"] {
     return {
       clientConnect: () =>
@@ -68,6 +87,9 @@ export class ProjectClient extends Context.Service<
       commit: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Project commit RPC enters Effect
         Effect.tryPromise({ try: () => stub.commit(...args), catch: unreachable }),
+      mail: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Project mail RPC enters Effect
+        Effect.tryPromise({ try: () => stub.mail(...args), catch: unreachable }),
       inbox: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Project inbox RPC enters Effect
         Effect.tryPromise({ try: () => stub.inbox(...args), catch: unreachable }),
@@ -129,9 +151,12 @@ export class ProjectClient extends Context.Service<
 export class ProcessClient extends Context.Service<
   ProcessClient,
   Client<Omit<ProcessBinding, keyof Rpc.DurableObjectBranded>>
->()("fabrika/ProcessClient") {
+>()("@kampus/libfabrika/cloudflare/platform.ProcessClient") {
   static make(stub: ProcessBinding): ProcessClient["Service"] {
     return {
+      mailed: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Process mailed RPC enters Effect
+        Effect.tryPromise({ try: () => stub.mailed(...args), catch: unreachable }),
       configure: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Process configure RPC enters Effect
         Effect.tryPromise({ try: () => stub.configure(...args), catch: unreachable }),
@@ -169,7 +194,7 @@ export class ProcessClient extends Context.Service<
 export class GatewayClient extends Context.Service<
   GatewayClient,
   Client<Omit<ConnectionBinding, keyof Rpc.DurableObjectBranded>>
->()("fabrika/GatewayClient") {
+>()("@kampus/libfabrika/cloudflare/platform.GatewayClient") {
   static make(stub: ConnectionBinding): GatewayClient["Service"] {
     return {
       fetch: (...args) =>
@@ -188,7 +213,9 @@ export class GatewayClient extends Context.Service<
   }
 }
 
-export class RecordClient extends Context.Service<RecordClient, RecordShape>()("fabrika/RecordClient") {
+export class RecordClient extends Context.Service<RecordClient, RecordShape>()(
+  "@kampus/libfabrika/cloudflare/platform.RecordClient",
+) {
   static make(stub: RecordShape): RecordClient["Service"] {
     return stub;
   }
@@ -204,7 +231,7 @@ export class StorageClient extends Context.Service<
     readonly setAlarm: (at: number) => Effect.Effect<void, LedgerError>;
     readonly deleteAlarm: () => Effect.Effect<void, LedgerError>;
   }
->()("fabrika/StorageClient") {
+>()("@kampus/libfabrika/cloudflare/platform.StorageClient") {
   static make(storage: DurableObjectStorage): StorageClient["Service"] {
     return {
       get: <A>(key: string) =>
@@ -235,7 +262,7 @@ export class BucketClient extends Context.Service<
     readonly put: (key: string, body: Uint8Array, sha256: string) => Effect.Effect<unknown, LedgerError>;
     readonly head: (key: string) => Effect.Effect<R2Object | null, LedgerError>;
   }
->()("fabrika/BucketClient") {
+>()("@kampus/libfabrika/cloudflare/platform.BucketClient") {
   static make(bucket: R2Bucket): BucketClient["Service"] {
     return {
       put: (key, body, sha256) =>

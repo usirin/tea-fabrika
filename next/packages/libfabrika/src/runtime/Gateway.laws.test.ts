@@ -60,7 +60,7 @@ type Connection = {
 const online = () =>
   Attached.cases.online.make({
     client: "gateway/session-1",
-    who: { key: "SHA256:test", person: "person-test", as: "window" },
+    identity: { key: "SHA256:test", person: "person-test", as: "window" },
     version: 1,
     waits: [],
     watching: false,

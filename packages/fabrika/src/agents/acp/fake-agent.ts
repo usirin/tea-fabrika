@@ -20,6 +20,10 @@ import * as acp from "@agentclientprotocol/sdk/unstable";
 //   title         the session gets a title
 //   think         two thought chunks
 //   write         an edit tool call that asks permission first, its input in the ask; allowed, it writes `written.txt`
+//   cancelonly    `write`'s ask, offering only `yes` and `cancel`, as Codex's file change
+//   declinelast   `write`'s ask, offering `yes`, `cancel`, then `decline`, as a Codex command may
+//
+// As Codex's do, `cancel` ends the turn `cancelled`; `decline` writes nothing and the turn goes on.
 //   slowly        a second's pause before each step: a turn to cancel, or to kill
 //   untallied     the turn reports no tokens (no `usage`), as a harness may: none, not 0
 //
@@ -112,6 +116,24 @@ const loaded = (id: string): { readonly session: Session; readonly updates: Upda
   session.turns = updates.filter((u) => u.sessionUpdate === "user_message_chunk").length;
   return { session, updates };
 };
+
+const YES: acp.PermissionOption = { optionId: "yes", name: "Allow once", kind: "allow_once" };
+const CANCEL: acp.PermissionOption = { optionId: "cancel", name: "No, and stop", kind: "reject_once" };
+
+/** The prompt words that ask to write, each with the options its ask offers. */
+const ASKS: readonly (readonly [string, readonly acp.PermissionOption[]])[] = [
+  ["cancelonly", [YES, CANCEL]],
+  ["declinelast", [YES, CANCEL, { optionId: "decline", name: "No, and go on", kind: "reject_once" }]],
+  [
+    "write",
+    [
+      YES,
+      { optionId: "always", name: "Always allow", kind: "allow_always" },
+      { optionId: "no", name: "Reject", kind: "reject_once" },
+      { optionId: "never", name: "Always reject", kind: "reject_always" },
+    ],
+  ],
+];
 
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -271,7 +293,9 @@ const app = acp
         });
       }
 
-      if (/\bwrite\b/.test(text)) {
+      const asking = ASKS.find(([word]) => new RegExp(`\\b${word}\\b`).test(text));
+
+      if (asking !== undefined) {
         if (!(await step())) {
           return "cancelled";
         }
@@ -291,12 +315,7 @@ const app = acp
           {
             sessionId,
             toolCall: call,
-            options: [
-              { optionId: "yes", name: "Allow once", kind: "allow_once" },
-              { optionId: "always", name: "Always allow", kind: "allow_always" },
-              { optionId: "no", name: "Reject", kind: "reject_once" },
-              { optionId: "never", name: "Always reject", kind: "reject_always" },
-            ],
+            options: [...asking[1]],
           },
         );
         const allowed =
@@ -314,7 +333,7 @@ const app = acp
           status: allowed ? "completed" : "failed",
         });
 
-        if (answer.outcome.outcome === "cancelled") {
+        if (answer.outcome.outcome === "cancelled" || answer.outcome.optionId === "cancel") {
           return "cancelled";
         }
       }

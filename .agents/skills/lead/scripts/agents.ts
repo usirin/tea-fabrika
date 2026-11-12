@@ -24,7 +24,7 @@ import { Agent } from "@kampus/fabrika-old";
 import { ADAPTERS, acpAdapter, psReaper } from "@kampus/fabrika-old/agents/acp";
 import { Clock, Context, Effect, FileSystem, Result, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
-import { boxEnv } from "./boxnode.ts";
+import { boxEnv, repoNode } from "./boxnode.ts";
 import { CAPACITY, codexExecAdapter } from "./codexexec.ts";
 
 export const PROVIDERS = ["codex", "codex-read", "codex-exec", "codex-exec-read", "claude"] as const;
@@ -207,18 +207,20 @@ export const adaptersReady = (modules: string = ADAPTERS, install: Install = pnp
 
 /**
  * The provider table on the ACP rows, the session map and the reaper. One per process. Every row
- * starts from the env `boxEnv` gives, so a box finds the Node the checkout at `main` pins first.
+ * starts from the env `boxEnv` gives, so a box finds the Node the checkout at `main` pins first,
+ * and a `codex-exec` turn starts only once the box's shell finds that pin (codexexec.ts).
  */
 export const makeStepAgents = (sessionsDir: string, main: string) =>
   Effect.gen(function* () {
     yield* adaptersReady();
     const sessions = yield* Agent.fileSessions(sessionsDir);
     const env = yield* boxEnv(main, process.env);
+    const pin = yield* repoNode(main);
     const adapters = {
       codex: yield* acpAdapter({ name: "codex", access: "write" }, env),
       "codex-read": yield* acpAdapter({ name: "codex", access: "read" }, env),
-      "codex-exec": yield* codexExecAdapter({ access: "write", env }),
-      "codex-exec-read": yield* codexExecAdapter({ access: "read", env }),
+      "codex-exec": yield* codexExecAdapter({ access: "write", env, pin }),
+      "codex-exec-read": yield* codexExecAdapter({ access: "read", env, pin }),
       claude: yield* acpAdapter("claude", env),
     };
     return Agent.makeAgents({ adapters, sessions, reaper: psReaper });
@@ -437,10 +439,10 @@ const execTurn = <A>(agents: Agents, ask: TurnAsk<A>) =>
       return { ...s, spent, said: report };
     }
 
-    const why = s._tag === "failed" ? `${s.reason}: ${s.message}` : `it stopped ${s.stop} with none`;
+    const detail = s._tag === "failed" ? `${s.reason}: ${s.message}` : `it stopped ${s.stop} with none`;
     return Failed.make({
       reason: "no_answer",
-      message: `the report held no answer the schema reads, and the one turn that asked for it gave none (${why})`,
+      message: `the report held no answer the schema reads, and the one turn that asked for it gave none (${detail})`,
       spent,
     });
   });

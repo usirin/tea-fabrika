@@ -266,8 +266,8 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
               saw: {
                 code: data.target.code,
                 label: data.label ?? data.target.label,
-                where: "local",
-                how: "command",
+                location: "local",
+                method: "command",
                 check: "none",
                 has: [],
               },

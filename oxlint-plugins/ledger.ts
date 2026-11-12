@@ -1,7 +1,11 @@
-// The lead tooling under `.agents/` is held to `next/`'s rules (0033). What it broke on the day it
-// joined is named in `agents-ledger.json`, and a finding the ledger names does not block. The ledger
-// only shrinks: `lint.ts` writes back only the entries a finding still matches, and CI fails until
-// that pruned file is committed. Nothing here adds an entry; that is the owner's call.
+// A rule that joins with findings already in the tree blocks every new one, and the findings it met
+// on its first day are named in a ledger, which only shrinks. `lint.ts` waives a finding a ledger
+// names, writes back only the entries a finding still matched, and CI fails until that pruned file is
+// committed. Nothing here adds an entry; that is the owner's call.
+//
+// Two ledgers, each for one folder. `agents-ledger.json` holds what `.agents/` broke the day it was
+// held to next/'s rules (0033). `next-ledger.json` holds what `next/` broke the day a rule joined it:
+// question-word names (0081), a module two layers down (0043) and a clock or an after-hook (0061).
 //
 // An entry is keyed by file, rule and the finding's line of code with its spaces collapsed, never a
 // line number, so code moving up or down keeps its entry and a changed line loses it.
@@ -13,26 +17,35 @@ export interface Finding {
   readonly code: string;
 }
 
-/** Where a ledger entry may point: only the lead tooling, never `next/` or anywhere else. */
-export const LEDGER_ROOT = ".agents/";
+/** A ledger file, from the top of the repo, and the one folder its entries may point into. */
+interface Ledger {
+  readonly file: string;
+  readonly root: string;
+}
 
-/** A line of code as the ledger keys it: trimmed, each run of spaces one space. */
+export const LEDGERS: readonly Ledger[] = [
+  { file: "agents-ledger.json", root: ".agents/" },
+  { file: "next-ledger.json", root: "next/" },
+];
+
+/** A line of code as a ledger keys it: trimmed, each run of spaces one space. */
 export const fingerprint = (line: string): string => line.trim().replace(/\s+/g, " ");
 
-/** The ledger entries outside `.agents/`: each one is refused, not read. */
-export const outside = (entries: readonly Finding[]): readonly Finding[] =>
-  entries.filter((entry) => !entry.file.startsWith(LEDGER_ROOT));
+/** The entries outside the ledger's folder: each one is refused, not read. */
+export const outside = (entries: readonly Finding[], root: string): readonly Finding[] =>
+  entries.filter((entry) => !entry.file.startsWith(root));
 
 const key = ({ file, rule, code }: Finding) => JSON.stringify([file, rule, code]);
 
 /**
  * Splits the findings into those the ledger names and those that block, and keeps the entries a
  * finding still matched, in the ledger's order. Each entry covers one finding, so two equal lines
- * need two entries.
+ * need two entries. Only an entry inside `root` is read.
  */
 export const settle = (
   entries: readonly Finding[],
   findings: readonly Finding[],
+  root: string,
 ): {
   readonly waived: readonly Finding[];
   readonly blocks: readonly Finding[];
@@ -41,7 +54,7 @@ export const settle = (
   const open = new Map<string, number[]>();
 
   for (const [i, entry] of entries.entries()) {
-    if (entry.file.startsWith(LEDGER_ROOT)) {
+    if (entry.file.startsWith(root)) {
       open.set(key(entry), [...(open.get(key(entry)) ?? []), i]);
     }
   }

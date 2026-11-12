@@ -4,6 +4,10 @@ Decided 2026-10-24. It was called the verify writer in
 promises in the pipeline; where the two
 disagree, this note holds.
 
+Its decided rules are in: [0385](../../.decisions/0385-tla-only-for-a-design-with-no-code.md),
+[0386](../../.decisions/0386-the-test-writer-is-its-own-agent.md),
+[0387](../../.decisions/0387-a-surprise-on-the-base-asks.md).
+
 ```ts
 // A sketch. After the owner's approval, before build: one test per Property, run on the plan's base.
 const written = draft("tests_write", {input: PlanAndCode, ok: TestFiles}); // in its box, not the builder
@@ -91,7 +95,7 @@ const onBase = checkRun("tests_on_base", {input: TestFiles, verdict: Results});
     change a running exam. A diff that changes the list asks the owner.
 - **Where it writes.** Code makes a local commit of the new tests on the
   plan's base, and the ledger holds only its hash
-  ([nothing is pushed before review](./push-after-review.md)). One `checked`
+  ([nothing is pushed before review](../../.decisions/0391-the-ledger-holds-the-commit-hash.md)). One `checked`
   fact per Property records red or green
   (`packages/pipeline/src/criteria/book.ts`, where each Property has its own `p<n>` id). Nothing is pushed.
 - **Names.** Test writer (was verify writer), `tests_write` (was

@@ -10,12 +10,12 @@ const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
 class Offline extends Schema.TaggedError<Offline>()("Offline", {}) {}
 
-type Route = (method: string, params: unknown, who: typeof Who.Type) => Effect.Effect<typeof Answer.Type, Offline>;
+type Route = (method: string, params: unknown, identity: typeof Who.Type) => Effect.Effect<typeof Answer.Type, Offline>;
 
 const online = () =>
   Attached.cases.online.make({
     client: "c1",
-    who: { key: "SHA256:checked", person: PERSON, as: "window" },
+    identity: { key: "SHA256:checked", person: PERSON, as: "window" },
     version: 2,
     waits: [],
     watching: false,
@@ -239,7 +239,7 @@ describe("P10 JSON-RPC", () => {
       const attached = online();
       const result = yield* answerFrame(frame({ future: { by: "forged" } }), attached, admit, route);
       expect(JSON.parse(result.send!)).toMatchObject({ id: "r1", result: null });
-      expect(route.mock.calls[0]?.[2]).toEqual(attached.who);
+      expect(route.mock.calls[0]?.[2]).toEqual(attached.identity);
     }),
   );
 });

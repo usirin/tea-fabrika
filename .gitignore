@@ -14,3 +14,6 @@ runs
 .claude/worktrees
 # Plant copies door.laws.test.ts leaves when a run is killed before it cleans up.
 packages/fabrika/src/host/.door-laws-plant-*
+
+# The lead tooling's local settings (the Codex model and effort): a person's own, never committed.
+.agents/skills/lead/local.env
