@@ -182,12 +182,8 @@ const fitsText = (value: string): boolean => value.length <= 256;
 const bytes = (value: unknown): number => encoder.encode(JSON.stringify(value) ?? "").length;
 const decodeKept = Schema.decodeUnknownOption(Schema.Struct({ program: Schema.String }));
 
-/**
- * A start_child or exit whose operands, as JSON, are over the ledger's row limit can never be saved
- * or echoed whole. It keeps only a program and a name that fit their Text bound, and the refusal
- * L6's order gives it: `bad_cmd` off its schema, `no_program` for a program no Code can hold, then
- * `bad_name` or `bad_input`, judged after the loader.
- */
+/** Keeps oversized invalid operands out of the checkpoint and answer. A valid first letter stays
+ *  whole in the split checkpoint and reaches the ledger's row check. Refusals follow L6's order. */
 const oversized = (cmd: unknown): Option.Option<Pick<Dispatched, "cmd" | "oversize">> => {
   const type = Option.getOrUndefined(Option.map(decodeTyped(cmd), (c) => c.type));
 
@@ -202,6 +198,12 @@ const oversized = (cmd: unknown): Option.Option<Pick<Dispatched, "cmd" | "oversi
   }
 
   const { program, name } = input.value;
+
+  // Checkpoint rows can split. The ledger judges the first letter, not the whole Cmd.
+  if (fitsText(program) && fitsText(name) && bytes(input.value.input) <= INPUT_BYTES) {
+    return Option.none();
+  }
+
   const kept = { type, ...(fitsText(program) ? { program } : {}), ...(fitsText(name) ? { name } : {}) };
   return Option.some({
     cmd: kept,
@@ -307,9 +309,11 @@ export class ProgramRunner extends Context.Service<
         const sessions = yield* Effect.serviceOption(SessionManager);
         const delivery = yield* Effect.serviceOption(MailDelivery);
         const children = yield* Effect.serviceOption(Children);
-        /** A life the process table holds ended while its supervision is still live: it exited with
-         *  `exit`. Read again on every call; it steps nothing more and runs no Cmd after its exit. */
-        let ended: string | null = null;
+        // Read the lifecycle from its machine; the runner keeps no second copy.
+        const ended = Effect.map(
+          Effect.suspend(() => manager.status(process.name)),
+          ({ state }) => state._tag === "ended" && state.process === process.id && state.reason._tag === "normal",
+        );
         /** Sends running now, sends a drain of ordinary mail made, and when a failed send is retried. */
         const sending = new Set<string>();
         let drained: ReadonlyArray<Dispatched> = [];
@@ -379,6 +383,17 @@ export class ProgramRunner extends Context.Service<
         /** One object alarm: program work is eligible only while live. */
         const setAlarm = Effect.fnUntraced(function* (retryAt?: number) {
           const running = supervision === null || supervision.recovery._tag === "live";
+
+          // The process table's machine owns normal exit, including after a lost checkpoint.
+          if (running && (yield* ended)) {
+            if (alarmAt !== null) {
+              yield* alarm.set(null);
+              alarmAt = null;
+            }
+
+            return;
+          }
+
           const waited = waitUntil(supervision);
           const until =
             retryAt ?? (waited === null || mailRetry === null ? (waited ?? mailRetry) : Math.min(waited, mailRetry));
@@ -795,15 +810,6 @@ export class ProgramRunner extends Context.Service<
           if (latest.recovery._tag !== "live") {
             yield* setAlarm();
           }
-
-          // Only a throw reaches P34's restart; a life that ended itself stays ended.
-          if (
-            latest.recovery._tag === "live" &&
-            status.state._tag === "ended" &&
-            status.state.process === latest.recovery.process
-          ) {
-            ended = status.state.process;
-          }
         });
 
         const step = Effect.fnUntraced(function* (
@@ -1003,7 +1009,7 @@ export class ProgramRunner extends Context.Service<
           state: Live,
           options: { readonly mine?: string; readonly dirty?: boolean } = {},
         ) {
-          if (ended === process.id) {
+          if (yield* ended) {
             return { state, fresh: [] as ReadonlyArray<Dispatched>, mine: Option.none<History>() };
           }
 
@@ -1485,7 +1491,7 @@ export class ProgramRunner extends Context.Service<
         ): Effect.fn.Return<ReadonlyArray<Dispatched>, RunnerFailure> {
           if (
             !job.id.startsWith(`${process.id}/`) ||
-            ended === process.id ||
+            (yield* ended) ||
             (supervision !== null && supervision.recovery._tag !== "live")
           ) {
             return [];
@@ -1514,11 +1520,10 @@ export class ProgramRunner extends Context.Service<
             // The life ended: what it still owed, the Cmds listed after its exit included, never runs.
             return yield* permit.withPermit(
               Effect.gen(function* () {
-                ended = origin.id;
-
                 if (origin.id === process.id && live !== null) {
                   live = { ...live, cmds: [] };
                   yield* store.save(checkpoint(live, null));
+                  yield* setAlarm();
                 }
 
                 return [];
@@ -1625,7 +1630,11 @@ export class ProgramRunner extends Context.Service<
                 return { answer, jobs: [...takeRetry(), ...jobs] };
               }),
             );
-            yield* commandPermit.withPermit(runAll(jobs));
+
+            if (jobs.length > 0) {
+              yield* commandPermit.withPermit(runAll(jobs));
+            }
+
             return answer;
           });
           return Effect.fnUntraced(function* <A>(
@@ -1696,7 +1705,7 @@ export class ProgramRunner extends Context.Service<
                 }
 
                 // A life that ended itself steps no later letter.
-                if (ended === process.id) {
+                if (yield* ended) {
                   return { answer: Sent.cases.refused.make({ reason: "ended" }), jobs: [] };
                 }
 
@@ -1738,7 +1747,8 @@ export class ProgramRunner extends Context.Service<
           due: (time: number) =>
             due(
               Effect.gen(function* () {
-                if (ended === process.id || (supervision !== null && supervision.recovery._tag !== "live")) {
+                if ((yield* ended) || (supervision !== null && supervision.recovery._tag !== "live")) {
+                  yield* setAlarm();
                   return { answer: undefined, jobs: [] };
                 }
 
@@ -1850,7 +1860,7 @@ export class ProgramRunner extends Context.Service<
               return { answer: Sent.cases.accepted.make({ rev: prior.rev, pos: prior.pos }), jobs: [] };
             }
 
-            if (ended === process.id || state.cmds.some((job) => exits(state, job))) {
+            if ((yield* ended) || state.cmds.some((job) => exits(state, job))) {
               return { answer: Sent.cases.refused.make({ reason: "ended" }), jobs: [] };
             }
 
