@@ -62,8 +62,8 @@ lead tooling.**
 - The run's file pick must change to match: today it takes any changed lead script that has a test
   beside it. That change to `sample.ts` and `mutation.yaml` is a follow-up ticket; this file
   changes no code or config.
-- The flow runner is not on main yet (open [PR 814](https://github.com/usirin/tea-fabrika/pull/814),
-  under `.agents/skills/lead/scripts/flow/`). It joins the scope when it lands. On main, vitest's
+- The flow runner was not on main when this was written (it landed in
+  [PR 814](https://github.com/usirin/tea-fabrika/pull/814), under `.agents/skills/lead/scripts/flow/`). It joins the scope when it lands. On main, vitest's
   include for lead tests is `.agents/skills/*/scripts/*.test.ts`, one folder deep, so its tests must
   be in the include before the run can use them.
 - Not decided here: whether lane code leaves the fast track (it does not), lint or types for shell

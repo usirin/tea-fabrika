@@ -153,7 +153,8 @@ agent's, and the loop stays fabrika's (owner, 2026-11-10).**
   - **How the MCP door takes it.** One lean, not decided: a "code mode" door, where the agent writes
     a small program against the one typed API and fabrika runs it in an isolate
     ([experiment 173](../experiments/173-worker-loader.md) runs program code in one), instead of one
-    tool per program input. A reading of the makers' pages is running.
+    tool per program input. A reading of the makers' pages is
+    [experiment 265](../experiments/265-code-mode-for-the-mcp-door.md).
   - **What fabrika checks before it runs a handed-over flow, and who must look:** a case of
     [0071](0071-risk-tier-decides-who-looks.md)'s risk tier.
     *2026-11-10: partly answered by [0082](0082-approvals-is-a-floor-for-every-run.md): a flow with
