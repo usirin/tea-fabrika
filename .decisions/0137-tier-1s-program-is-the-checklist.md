@@ -60,8 +60,11 @@ real app of Tier 2.**
 - Lost from Tier 1, and owed to Tier 2: Markdown drawing with its safety laws, the "two writers,
   keep mine as a new note" story, and the fixture of real note text.
 - The risk: a checklist with agent notes may be too thin to open every day, so fewer real bugs
-  are found by use. Not decided here: how the agent learns of a new item (it asks, it waits, or
-  fabrika starts it). That is the plan's first open question.
+  are found by use.
+- How the agent learns of a new item (owner, 2026-11-11): first it asks. An agent the person
+  already runs reads the items through the MCP door when told to or between its own steps, and
+  nothing calls it. Next, fabrika starts an agent run for a new item, which is Tier 1's "an agent
+  fabrika starts" slice and gets its own plan. A tool that waits on the list is skipped.
 - This walks back part of the Tier 1 approval of 2026-11-01: the job line, the notes stories and
   the check that notes go real on Cloudflare. No numbered decision is replaced.
   [0125](0125-the-example-program-is-a-checklist.md) holds as written.
