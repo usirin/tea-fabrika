@@ -223,7 +223,7 @@ export const layer = (options: { readonly person: string }) =>
               const tab = record.indexOf("\t"),
                 fields = record.slice(0, tab).split(" ");
 
-              if (record.slice(tab + 1, -1) !== file) {
+              if (record.slice(tab + 1) !== file) {
                 return yield* failure("tree", "unexpected path");
               }
 
