@@ -485,8 +485,11 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
       isLive: processes.isLive,
       audit: Effect.fn("project.audit")(function* (pid: string, message: unknown) {
         // Like processLogic, load this target's available build; its start record may name an older build.
-        const program = yield* resolved(pid).pipe(
-          Effect.flatMap((life) => loader.load(life.state.code.program, life.state.process)),
+        const program = yield* Effect.gen(function* () {
+          const life = yield* resolved(pid);
+          const tail = yield* bindTail(ctx, { project: name, name: life.name, process: life.state.process });
+          return yield* loader.load(life.state.code.program, life.state.process, tail);
+        }).pipe(
           Effect.mapError(
             (cause) => new Audit.AuditError({ reason: new Audit.Transport({ cause: Redacted.make(cause) }) }),
           ),
