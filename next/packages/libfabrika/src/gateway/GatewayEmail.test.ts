@@ -1,6 +1,6 @@
 // P36, next/: Gateway request edge and real SSHSIG. Signatures are made in memory.
 import { expect, it } from "@effect/vitest";
-import { Effect, Redacted } from "effect";
+import { Effect, Redacted, Schema } from "effect";
 import {
   EFFECT,
   SignatureFlow,
@@ -103,6 +103,13 @@ effectLaw("P36.07 changed signed fields and wrong-ledger text are refused", (h) 
       { ...unsigned, verified: { ...unsigned.verified, to: "other-ledger" } },
       { ...unsigned, verified: { ...unsigned.verified, email: "email_changed" } },
       { ...unsigned, verified: { ...unsigned.verified, key: "other-key" } },
+      {
+        ...unsigned,
+        verified: {
+          ...unsigned.verified,
+          sentAt: new Date(Date.parse(unsigned.verified.sentAt) + 1).toISOString(),
+        },
+      },
     ];
 
     for (const changed of variations) {
@@ -170,8 +177,8 @@ effectLaw("P36.07 changed signed fields and wrong-ledger text are refused", (h) 
 
 it.effect.prop(
   "P36.07 every generated signature-section change fails real SSHSIG",
-  { flow: SignatureFlow },
-  ({ flow }) =>
+  { flow: SignatureFlow, section: Schema.Literals(["begin", "body", "end"]) },
+  ({ flow, section }) =>
     Effect.gen(function* () {
       const { verifySshsig } = yield* Effect.promise(() => import("../transport/Sshsig.ts"));
       const key = yield* testKey(flow.seed);
@@ -179,7 +186,8 @@ it.effect.prop(
       const armored = yield* key.sign(text);
       const lines = armored.split("\n");
       // Exactly one changed section: a body byte, BEGIN marker or END marker.
-      const at = flow.mutation === "armor" ? 0 : 1;
+      const at =
+        section === "begin" ? 0 : section === "body" ? 1 : lines.findIndex((line) => line.startsWith("-----END"));
       const line = lines[at]!;
       lines[at] = `${line[0] === "A" ? "B" : "A"}${line.slice(1)}`;
       const changed = lines.join("\n").slice(0, 2048);
