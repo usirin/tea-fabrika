@@ -106,10 +106,13 @@ it.effect("scenario: reserved is counted, other refusals and ok keep rpc spans, 
       expect(db.prepare("SELECT * FROM unsent").all()).toEqual([]);
       expect(
         db
-          .prepare("SELECT piece,hour,refused,count FROM sums")
+          .prepare("SELECT piece,hour,refused,count FROM sums ORDER BY piece")
           .all()
           .map((row) => ({ ...row })),
-      ).toEqual([{ piece: "runtime.rpc", hour: H, refused: "reserved", count: 1 }]);
+      ).toEqual([
+        { piece: "connection.frame", hour: H, refused: "reserved", count: 1 },
+        { piece: "runtime.rpc", hour: H, refused: "reserved", count: 1 },
+      ]);
 
       answer = Answer.cases.refused.make({ reason: "bad_input" });
       yield* service.message(socket, JSON.stringify({ jsonrpc: "2.0", id: 2, method: "process.send", params: {} }));
@@ -132,9 +135,16 @@ it.effect("scenario: reserved is counted, other refusals and ok keep rpc spans, 
         "connection.frame",
       ]);
       expect(db.prepare("SELECT count(*) AS n FROM measurements WHERE piece='runtime.rpc'").get()?.n).toBe(2);
+      expect(db.prepare("SELECT count(*) AS n FROM measurements WHERE piece='connection.frame'").get()?.n).toBe(2);
       expect(
         db
           .prepare("SELECT count FROM sums WHERE piece='runtime.rpc'")
+          .all()
+          .map((row) => ({ ...row })),
+      ).toEqual([{ count: 1 }]);
+      expect(
+        db
+          .prepare("SELECT count FROM sums WHERE piece='connection.frame'")
           .all()
           .map((row) => ({ ...row })),
       ).toEqual([{ count: 1 }]);
