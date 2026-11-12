@@ -369,6 +369,7 @@ for (const failed of [false, true]) {
             join(root, "compiler-ledger.json"),
           ]);
           expect(w.calls[0]).toEqual(["read", source]);
+          expect(w.calls[1]).toEqual(["read", join(root, "compiler-ledger.json")]);
           const ledgerRead = w.calls.findIndex(
             ([call, file]) => call === "read" && file === join(root, "compiler-ledger.json"),
           );
