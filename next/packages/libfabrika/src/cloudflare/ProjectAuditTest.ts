@@ -1,9 +1,13 @@
 // P13 slice 2, next/. Project audit laws take scoped storage and RPC handles from their driver (0062).
 import { createHash, generateKeyPairSync, sign } from "node:crypto"; // edge: Effect has no SSH Ed25519 key export or signing API
 import { Machine } from "@demlik/tea/effect";
-import { Effect, Schema, type Scope } from "effect";
+import { Effect, Layer, Schema, type Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import { expect, vi } from "vitest";
+import { InputId } from "../Id.ts";
+import { Doorbell, Ledger } from "../ledger/Ledger.ts";
+import * as LedgerSql from "../ledger/LedgerSql.ts";
+import type { Entry } from "../ledger/Log.ts";
 import { from } from "../processes/Process.test-support.ts";
 import { Input } from "../runtime/Program.ts";
 import { nth } from "../runtime/RepliesTest.ts";
@@ -18,6 +22,10 @@ const NAME = "counter:1";
 const BUILD = "build-a";
 const Model = Schema.Struct({ count: Schema.Int });
 const Msg = Schema.Struct({ type: Schema.Literal("add"), n: Schema.Int });
+const StampedMsg = Schema.Struct({ ...Msg.fields, parent: InputId, body: Schema.String });
+const Metadata = Schema.Struct({ ...Msg.fields, parent: InputId });
+const Recorded = Schema.Struct({ input: Schema.optionalKey(Schema.Json) });
+type Selector = "plain" | "default" | "custom";
 
 const ProjectInput = Schema.Struct({
   type: Schema.String,
@@ -45,8 +53,20 @@ export type Register = (
   required: ReadonlyArray<string>,
 ) => void;
 
-const projectWalk = Effect.fnUntraced(function* (harness: Harness, tape: ReadonlyArray<number>, reached: Set<string>) {
+const projectWalk = Effect.fnUntraced(function* (
+  harness: Harness,
+  tape: ReadonlyArray<number>,
+  reached: Set<string>,
+  selector: Selector = "plain",
+) {
   const sql = yield* harness.open;
+  const ledger = yield* Ledger.pipe(
+    Effect.provide(
+      LedgerSql.layer(sql, { reader: "project-audit-test" }).pipe(
+        Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
+      ),
+    ),
+  );
   const pair = generateKeyPairSync("ed25519");
   const raw = pair.publicKey.export({ format: "der", type: "spki" }).subarray(-32);
   const field = (bytes: Uint8Array) => {
@@ -58,11 +78,12 @@ const projectWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
     `ssh-ed25519 ${Buffer.concat([field(Buffer.from("ssh-ed25519")), field(raw)]).toString("base64")}`,
   );
   const fingerprint = `SHA256:${createHash("sha256").update(raw).digest("base64").replace(/=+$/, "")}`;
+  const message = selector === "plain" ? Msg : StampedMsg;
   const program = {
     name: "counter",
     machine: Machine.make({
       model: Model,
-      msg: Msg,
+      msg: message,
       cmds: [],
       init: (saved: typeof Model.Type | null) => [saved ?? { count: 0 }, []],
       update: {
@@ -70,13 +91,21 @@ const projectWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
       },
     }),
     state: { v: 1, schema: Model, upgrades: [] },
-    msg: Msg,
+    msg: message,
     view: { data: Model, select: (s: typeof Model.Type) => s },
     refuse: () => null,
-    inputs: { add: Input.cases.write.make({ schema: Msg, description: "Add", personOnly: false }) },
+    inputs: { add: Input.cases.write.make({ schema: message, description: "Add", personOnly: false }) },
     outputs: {},
     writes: {},
     wake: () => null,
+    ...(selector === "custom"
+      ? {
+          audit: {
+            data: Metadata,
+            select: (m: typeof StampedMsg.Type) => Metadata.make({ type: m.type, n: m.n, parent: m.parent }),
+          },
+        }
+      : {}),
   };
   const Box = programBox(program, BUILD);
   const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
@@ -167,9 +196,11 @@ const projectWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
     ),
   ).toHaveProperty("_tag", "online");
   const history: Array<{ letter: string; m: typeof ProjectInput.Type; answer: unknown }> = [];
+  const records = new Map<string, ReadonlyArray<Entry>>();
 
   for (const [n, entropy] of tape.entries()) {
-    const moves = history.length === 0 ? ["valid"] : ["valid", "unknown", "retry"];
+    const moves =
+      history.length === 0 ? ["valid"] : selector === "plain" ? ["valid", "unknown", "retry"] : ["valid", "retry"];
     const move = nth(moves, entropy);
     reached.add(move);
     const prior = move === "retry" ? nth(history, Math.floor(entropy / moves.length)) : undefined;
@@ -178,7 +209,9 @@ const projectWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
       prior?.m ??
       (move === "unknown"
         ? ProjectInput.make({ type: `unknown-${accepted}`, body: `BODY-${entropy}-${n}` })
-        : Msg.make({ type: "add", n: accepted + 1 }));
+        : selector === "plain"
+          ? Msg.make({ type: "add", n: accepted + 1 })
+          : ProjectInput.make({ type: "add", n: accepted + 1, body: `BODY-${entropy}-${n}/雪\n` }));
     const answer = yield* project.route(client, "process.send", {
       pid: project.boot.process,
       letter,
@@ -194,6 +227,30 @@ const projectWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
       expect(answer).toHaveProperty("result._tag", move === "unknown" ? "refused" : "accepted");
       history.push({ letter, m, answer });
     }
+
+    if (selector !== "plain") {
+      const binding = Schema.decodeUnknownSync(Schema.Struct({ id: InputId }))(
+        sql.exec("SELECT id FROM gateway_bindings WHERE letter=?", `${project.boot.process}/${letter}`)[0],
+      );
+      const rows = (yield* Stream.runCollect(ledger.read("gateway/inputs", 0))).filter(
+        (entry: Entry) => entry.id === binding.id,
+      );
+      expect(rows).toHaveLength(1);
+
+      if (prior !== undefined) {
+        expect(rows).toEqual(records.get(letter));
+      } else {
+        const recorded = Schema.decodeUnknownSync(Recorded)(rows.at(0)?.body);
+
+        if (move === "valid") {
+          expect(recorded.input).toEqual(
+            selector === "default" ? { type: "add" } : { type: "add", n: m.n, parent: binding.id },
+          );
+        }
+
+        records.set(letter, rows);
+      }
+    }
   }
 });
 
@@ -208,4 +265,16 @@ export const suite = (harness: Harness, register: Register) => {
     reached,
     ["valid", "unknown", "retry"],
   );
+
+  for (const selector of ["default", "custom"] as const) {
+    const selected = new Set<string>();
+    register(
+      `A13: ${selector} audit selection decodes the gateway parent and keeps recorded retries body-free`,
+      fc.array(fc.noBias(fc.nat()), { minLength: 12, maxLength: 24 }),
+      (tape: ReadonlyArray<number>) => projectWalk(harness, tape, selected, selector),
+      { seed: 119120, numRuns: 6, endOnFailure: true },
+      selected,
+      ["valid", "retry"],
+    );
+  }
 };

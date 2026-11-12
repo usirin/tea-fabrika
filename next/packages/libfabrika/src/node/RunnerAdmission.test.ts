@@ -2,7 +2,7 @@
 import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous SQLite handle for referee transactions
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path, type Scope } from "effect";
+import { Effect, FileSystem, Layer, Path, Predicate, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -103,7 +103,10 @@ const environment: ProjectAuditTest.Harness["environment"] = (
       vi.fn().mockReturnValue({
         configure: async () => undefined,
         msg: async (input: Incoming) => {
-          if (!(await box.admit(input.envelope.input))) {
+          const message = input.envelope.input;
+          const stamped = Predicate.isObject(message) ? { ...message, parent: input.envelope.id } : message;
+
+          if (!(await box.admit(stamped))) {
             return Sent.cases.refused.make({ reason: "bad_msg" });
           }
 
