@@ -41,7 +41,7 @@ beforeEach(async () => {
   Id = await vi.importActual<typeof Id>("../Id.ts");
 });
 
-const checks = { seed: 119120, numRuns: 20 };
+const checks = { seed: 119120, numRuns: 25 };
 const folder = mkdtempSync(join(tmpdir(), "p17-revoke-"));
 const opened: DatabaseSync[] = [];
 
