@@ -15,14 +15,17 @@
 //   9. a read row runs Codex's read-only sandbox, a write row workspace-write;
 //  10. the tokens of `turn.completed` reach `spent`; over a resumed thread they are its running
 //      total, so the larger count wins and is never added twice, while tool calls add up;
-//  11. no try starts that the turn's minutes could not wait for.
+//  11. no try starts that the turn's minutes could not wait for;
+//  12. every command line turns the login shell off, and the Node probe runs on the same route;
+//  13. a box whose shell finds any Node but the pin fails the turn's start, with no Codex turn run,
+//      and one that finds the pin starts it.
 import { NodeServices } from "@effect/platform-node";
 import { Agent } from "@kampus/fabrika-old";
 import { Effect, FileSystem, type Scope } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Answer, CapacityRetry, runTurn, type TurnAsk, type Turned } from "./agents.ts";
-import { CAPACITY, codexExecAdapter, type ExecAsk, execArgs } from "./codexexec.ts";
+import { CAPACITY, codexExecAdapter, type ExecAsk, execArgs, probeArgs, routeArgs } from "./codexexec.ts";
 
 const options = { seed: 119120, numRuns: 12 };
 
@@ -30,9 +33,18 @@ const ran = <A, E>(law: Effect.Effect<A, E, NodeServices.NodeServices | Scope.Sc
   // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Vitest awaits the Promise a test hands back
   Effect.runPromise(law.pipe(Effect.scoped, Effect.provide(NodeServices.layer)));
 
-/** The fake: counts its calls, keeps each one's arguments (NUL apart) and plays `out-<n>`, `last-<n>`, `code-<n>`. */
+/**
+ * The fake: counts its calls, keeps each one's arguments (NUL apart) and plays `out-<n>`, `last-<n>`, `code-<n>`.
+ * A `codex sandbox` call is the Node probe: it is not counted, keeps its arguments and folder, and
+ * prints `node-said`.
+ */
 const FAKE = `#!/bin/sh
 dir="$FAKE_DIR"
+if [ "$1" = sandbox ]; then
+  printf '%s\\0' "$PWD" "$@" > "$dir/probe"
+  cat "$dir/node-said" 2>/dev/null
+  exit 0
+fi
 n=$(( $(cat "$dir/count" 2>/dev/null || echo 0) + 1 ))
 echo "$n" > "$dir/count"
 printf '%s\\0' "$@" > "$dir/argv-$n"
@@ -77,10 +89,12 @@ const failing = (message: string): Play => ({
 });
 
 /** A world: the fake on PATH, its plays, the agents on the codex-exec rows, and what each call was handed. */
-const world = (plays: ReadonlyArray<Play>) =>
+const world = (plays: ReadonlyArray<Play>, node: { pin: string; said: string } | null = null) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const dir = yield* fs.makeTempDirectoryScoped({ prefix: "codexexec-" });
+    yield* node === null ? Effect.void : fs.writeFileString(`${dir}/node-said`, node.said);
+    const pin = node?.pin ?? null;
     yield* fs.writeFileString(`${dir}/codex`, FAKE);
     yield* fs.chmod(`${dir}/codex`, 0o755);
     yield* fs.makeDirectory(`${dir}/work`);
@@ -92,11 +106,11 @@ const world = (plays: ReadonlyArray<Play>) =>
       yield* fs.writeFileString(`${dir}/code-${n}`, String(play.code ?? 0));
     }
 
-    const env = { ...process.env, PATH: `${dir}:${process.env.PATH ?? ""}`, FAKE_DIR: dir };
+    const env = { ...process.env, PATH: `${dir}:${process.env.PATH ?? ""}`, FAKE_DIR: dir, SHELL: "/bin/zsh" };
     const agents = Agent.makeAgents({
       adapters: {
-        "codex-exec": yield* codexExecAdapter({ access: "write", env }),
-        "codex-exec-read": yield* codexExecAdapter({ access: "read", env }),
+        "codex-exec": yield* codexExecAdapter({ access: "write", env, pin }),
+        "codex-exec-read": yield* codexExecAdapter({ access: "read", env, pin }),
       },
       sessions: yield* Agent.fileSessions(`${dir}/sessions`),
       reaper: Agent.noReaper,
@@ -128,7 +142,9 @@ const world = (plays: ReadonlyArray<Play>) =>
     const turn = (over: Partial<TurnAsk<Answer>> = {}, retry = { tries: 6, waitSeconds: 0 }) =>
       runTurn(agents, ask(over)).pipe(Effect.provideService(CapacityRetry, retry));
     const read = (path: string) => fs.readFileString(path).pipe(Effect.orElseSucceed(() => ""));
-    return { dir, calls, turn, read };
+    /** The probe's folder, then its arguments; empty when no probe ran. */
+    const probed = read(`${dir}/probe`).pipe(Effect.map((text) => text.split("\0").slice(0, -1)));
+    return { dir, calls, turn, read, probed };
   });
 
 const answerIn = (t: Turned<Answer>) => (t._tag === "ended" ? t.answer : null);
@@ -299,6 +315,78 @@ describe("codex-exec: the session", () => {
         expect(read).toContain('sandbox_mode="read-only"');
       }),
     ));
+});
+
+describe("codex-exec: the box's Node", () => {
+  const pin = "26.13.0";
+  const version = fc.tuple(fc.nat(30), fc.nat(30), fc.nat(30)).map((v) => `v${v.join(".")}`);
+  /** A probe answer that is not the pin on both lines: another Node, a missing line, or nothing. */
+  const notPin = fc
+    .oneof(
+      fc.tuple(version, version).map(([a, b]) => `${a}\n${b}\n`),
+      version.map((a) => `${a}\n`),
+      fc.constant(""),
+    )
+    .filter((said) => said !== `v${pin}\nv${pin}\n`);
+
+  it("property: a box whose shell finds any Node but the pin fails the start, and no Codex turn runs", () =>
+    fc.assert(
+      fc.asyncProperty(notPin, (said) =>
+        ran(
+          Effect.gen(function* () {
+            const w = yield* world([answered(JSON.stringify(ANSWER))], { pin, said });
+            const t = yield* w.turn();
+            expect(yield* w.calls).toHaveLength(0);
+            expect(t).toMatchObject({ _tag: "failed", reason: "start" });
+            expect(t._tag === "failed" ? t.message : "").toContain(`no Node ${pin}`);
+          }),
+        ),
+      ),
+      options,
+    ));
+
+  it("scenario: a box whose shell finds the pin starts the turn, after a probe in the turn's folder on its route", () =>
+    // The probe is the turn's own route: Codex's sandbox, no login shell, the user's shell.
+    ran(
+      Effect.gen(function* () {
+        const w = yield* world([answered(JSON.stringify(ANSWER))], { pin, said: `v${pin}\nv${pin}\n` });
+        const t = yield* w.turn();
+        expect(yield* w.calls).toHaveLength(1);
+        expect(answerIn(t)).toEqual(ANSWER);
+        const fs = yield* FileSystem.FileSystem;
+        const [cwd = "", ...args] = yield* w.probed;
+        expect(yield* fs.realPath(cwd)).toBe(yield* fs.realPath(`${w.dir}/work`));
+        expect(args).toEqual(probeArgs("write", "/bin/zsh"));
+      }),
+    ));
+
+  it("property: every command line turns the login shell off, and the probe runs on the same route", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom("write" as const, "read" as const),
+        fc.option(fc.uuid(), { nil: null }),
+        (access, resume) => {
+          const route = routeArgs(access);
+          expect(route).toContain("allow_login_shell=false");
+          const args = execArgs({
+            access,
+            folder: "/w",
+            prompt: "p",
+            resume,
+            model: null,
+            effort: null,
+            system: null,
+            last: "/l",
+          });
+          // Only the options count, before `resume` and the prompt, where `codex exec` reads them.
+          const flags = args.slice(0, resume === null ? -1 : args.indexOf("resume"));
+          expect(flags.join("\0")).toContain(route.join("\0"));
+          expect(probeArgs(access, "/bin/zsh").slice(1, 1 + route.length)).toEqual(route);
+        },
+      ),
+      { seed: 119120, numRuns: 50 },
+    );
+  });
 });
 
 describe("codex-exec: the command line", () => {
