@@ -197,11 +197,15 @@ const checkedValue = Effect.fnUntraced(function* <A>(
   return reply.value;
 });
 
-export const configureProcess = Effect.fn("process.configure")(function* (
+/** Saves the descriptor, then runs the new process's first turn before the start answers. */
+export const configureProcess = Effect.fn("process.configure")(function* <E>(
   ctx: DurableObjectState,
   descriptor: Descriptor,
+  runtime: ManagedRuntime.ManagedRuntime<ProcessService, E>,
 ) {
   yield* rpc(StorageClient.make(ctx.storage).put("descriptor", descriptor));
+  const services = yield* runtime.contextEffect;
+  yield* ProcessService.use((p) => p.init()).pipe(Effect.provideContext(services));
 });
 
 export const savedAlarm = Effect.fn("process.savedAlarm")(function* (ctx: DurableObjectState) {
@@ -369,18 +373,29 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     sql.exec("ALTER TABLE dev_descriptors ADD COLUMN pending INTEGER NOT NULL DEFAULT 0");
   }
 
-  const configure = Effect.fnUntraced(function* (pid: string) {
+  /** A start not yet delivered to its object: its saved descriptor, or undefined once delivered. */
+  const decodePending = Effect.fnUntraced(function* (pid: string) {
     const [saved] = sql.exec("SELECT value FROM dev_descriptors WHERE process=? AND pending=1", pid);
 
     if (saved === undefined) {
-      return;
+      return undefined;
     }
 
-    const descriptor = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(saved.value).pipe(
+    return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(saved.value).pipe(
       Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
     );
+  });
+  // The object's init may call back into this Project, so the build never waits on a delivery.
+  const deliver = Effect.fnUntraced(function* (pid: string, descriptor: typeof SavedDescriptor.Type) {
     yield* rpc(ProcessClient.make(processStub(env, name, descriptor.name)).configure(descriptor));
     sql.exec("UPDATE dev_descriptors SET pending=0 WHERE process=?", pid);
+  });
+  const configure = Effect.fnUntraced(function* (pid: string) {
+    const descriptor = yield* decodePending(pid);
+
+    if (descriptor !== undefined) {
+      yield* deliver(pid, descriptor);
+    }
   });
   /** A process ID's life from history, first or successor; an unknown ID is refused. */
   const resolved = (pid: string) =>
@@ -416,8 +431,6 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
         JSON.stringify({ ...descriptor, id: process.process, build: process.build }),
       );
     }
-
-    yield* configure(process.process);
   }
 
   // Routing follows history: an earlier ID of a name takes its name's policy.
@@ -499,13 +512,14 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   const from = Effect.fn(function* (parent: string | null = null) {
     return yield* fromHere({ by, for: config.person, seen: 0, parent, build: config.build }).pipe(Effect.orDie);
   });
-  const start = Effect.fnUntraced(function* (request: Start, origin: From) {
+  /** Places the process and records its descriptor; a first start's row stays pending until delivered. */
+  const place = Effect.fnUntraced(function* (request: Start, origin: From) {
     if (!Object.hasOwn(programs, request.code.program)) {
       return yield* new LedgerError({ reason: "refused" });
     }
 
     const program = yield* loader.load(request.code.program, `project:${name}/${request.name}`);
-    const result = yield* write(
+    return yield* write(
       Effect.gen(function* () {
         const result = yield* processes.start(request, origin);
         remember(request.name, program.declaration);
@@ -527,6 +541,9 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
         return result;
       }),
     );
+  });
+  const start = Effect.fnUntraced(function* (request: Start, origin: From) {
+    const result = yield* place(request, origin);
 
     if (request._tag === "first") {
       yield* configure(result.process);
@@ -558,7 +575,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
           )).process,
           rev: original.rev,
         }
-      : yield* start(
+      : yield* place(
           Start.cases.first.make({
             id: bootstrap.id,
             name: bootstrap.name,
@@ -566,6 +583,19 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
           }),
           yield* from(),
         );
+  // A malformed pending row still fails the build; only the deliveries run after it, as handle_continue.
+  const pending = yield* Effect.forEach(
+    sql.exec("SELECT process FROM dev_descriptors WHERE pending=1"),
+    (row) => Effect.map(decodePending(String(row.process)), (descriptor) => [String(row.process), descriptor] as const),
+    { concurrency: 1 },
+  );
+  yield* Effect.forkScoped(
+    Effect.forEach(
+      pending,
+      ([pid, descriptor]) => (descriptor === undefined ? Effect.void : deliver(pid, descriptor)),
+      { concurrency: 1, discard: true },
+    ),
+  );
   const wrapped = <A, E>(effect: Effect.Effect<A, E>) => complete(effect).pipe(Effect.provideContext(services));
   const own = Effect.fn("project.own")(function* (pid: string, id: string, stream: string, event: unknown) {
     if (!(yield* processes.isLive(pid))) {
@@ -850,6 +880,7 @@ const processLogic = Effect.fnUntraced(function* (
     },
     open: (client: string) => attributed(runner.open(client)),
     due: (at: number) => attributed(runner.due(at)),
+    init: () => attributed(runner.init()),
     restart: (request: unknown) =>
       Schema.decodeUnknownEffect(RestartRequest)(request).pipe(
         Effect.mapError(() => new LedgerError({ reason: "bad_row" })),

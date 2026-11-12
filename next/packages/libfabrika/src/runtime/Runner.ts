@@ -183,6 +183,9 @@ export class ProgramRunner extends Context.Service<
     readonly msg: (input: unknown) => Effect.Effect<Sent, RunnerFailure>;
     /** The object's alarm fired at `at`: the program's timer, if it asked for one by then. */
     readonly due: (at: number) => Effect.Effect<void, RunnerFailure>;
+    /** The new process's first turn, OTP's init/1: loads the program and arms its alarm. Safe to
+     *  call again: a live runner only catches up. */
+    readonly init: () => Effect.Effect<void, RunnerFailure>;
     readonly restart: (request: { readonly id: string; readonly build: string }) => Effect.Effect<void, RunnerFailure>;
   }
 >()("@kampus/libfabrika/ProgramRunner") {
@@ -1414,6 +1417,7 @@ export class ProgramRunner extends Context.Service<
         const open = call("runner.open");
         const msg = call("runner.step");
         const due = call("runner.due");
+        const init = call("runner.init");
         const restart = call("runner.restart.request");
 
         return {
@@ -1537,6 +1541,16 @@ export class ProgramRunner extends Context.Service<
                 ),
               ),
               time,
+            ),
+          init: () =>
+            init(
+              Effect.gen(function* () {
+                if (supervision === null || supervision.recovery._tag === "live") {
+                  yield* ready();
+                }
+
+                return { answer: undefined, jobs: [] };
+              }),
             ),
           restart: (request: { readonly id: string; readonly build: string }) =>
             restart(

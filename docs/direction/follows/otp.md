@@ -34,6 +34,7 @@ against main at `5b1171ed`. OTP's side is its documentation as read that day:
 | Strategies | `one_for_one`, `one_for_all`, `rest_for_one`, `simple_one_for_one` ([sup]) | `one_for_one` with one child; the rest not built, Tier 4 | differs, because Tier 1 has one child |
 | Restart types | `permanent`, `transient`, `temporary` ([sup]) | In effect `transient`: only a throw restarts (`runtime/internal/supervisor.ts:84-131`); no choice yet, Tier 4 | differs, because a program has no normal exit in Tier 1 |
 | A child that fails during start | `start_link` fails: the supervisor "first terminates all already started child processes with reason `shutdown` and then terminate itself", and restart strategies apply to children that started ([supref], read 2026-11-10) | The local stage's brain (workerd): if it dies before the stage's ready line, `startDev` fails with a `ControlError` and no replacement is started (`node/dev/dev.ts:322-334`, `next/apps/fabrika/dev.ts:81-84`); restarts and the brake apply after it (`node/dev/dev.ts:286-318`) | same; [0044](../../../.decisions/0044-a-brain-that-dies-starting-fails.md) writes it down, and no law checks the "no replacement" half yet (ticket 512) |
+| A start's answer | `gen_server:start_link` returns after the new process's `init/1` has run; work for after the start goes in `handle_continue` ([gen_server]) | A first start answers once the object's `configure` has saved the descriptor and run `ProgramRunner.init`, which loads the program and arms its alarm (`cloudflare/runtime.ts`, `configureProcess`); a start made during the Project's own build is delivered after that build, forked into its scope, as `handle_continue` | same; ticket 762 (A2), since a new process's `init` asks the Project for its status, and the build may not wait on that call |
 | Restart intensity | 1 in 5 s by default; more than MaxR in MaxT gives up ([supref]) | 5 in 5,000 ms by default (`runtime/internal/supervisor.ts:6-11`), with the edge counted (`processes/Process.ts:129-130`) | differs, because intensity must be at least the delivery limit, or a bad letter trips the brake before it is dead (`runtime/internal/recovery.ts:19`) |
 | Restart backoff | None: OTP restarts at once ([sup]) | 100 ms doubling to 800 ms, reset after 5 s live (`runtime/internal/supervisor.ts:11`, `:103-107`, `:147-149`) | differs, because a restart here is a wake, writes and a load ([experiment 100](../../../experiments/100-supervision-tree.md)) |
 | Past the limit | Ends its children and itself with `shutdown`; the parent decides ([sup]) | `down {why, crashes, until}`, then a new start at `until`, forever (`runtime/internal/supervisor.ts:116-136`) | differs, because Tier 1 has no parent (C4); about 276,000 entries a day for a program that always throws; 0016 closes it |
@@ -41,7 +42,7 @@ against main at `5b1171ed`. OTP's side is its documentation as read that day:
 | Shutdown | `brutal_kill`, a timeout or `infinity`; reverse start order ([sup]) | Exit is at once (`processes/ProcessManager.ts:182-214`); later writes are refused (`gateway/Gateway.ts:1350`, `:1356`) | differs, because steps are serial (`runtime/Runner.ts:224`), so nothing is half-written (C5) |
 | A busy process | The scheduler preempts each process after a count of reductions, so one busy loop cannot stall the others ([proc]) | Each process runs in its own Worker Loader isolate (`cloudflare/index.ts:25`), but `limits.cpuMs` is unset and a local workerd runs them on one thread: a 300 ms spin stalls every process ([experiment 173](../../../experiments/173-worker-loader.md)) | differs, because nothing caps a step yet; [0020](../../../.decisions/0020-programs-get-hard-walls.md) sets `cpuMs` from a measured step and a local step watchdog, built by P34c |
 
-Count: 28 rows, 9 same, 19 differ. Of the 19, 4 are not built yet (links, trap exit, three of the
+Count: 29 rows, 10 same, 19 differ. Of the 19, 4 are not built yet (links, trap exit, three of the
 four strategies, restart types), each waiting for Tier 4. One has no written reason yet: exit
 reasons (ticket 406). One is an open call: past the limit (ticket 404). One is decided and not built: a busy process (0020).
 
@@ -56,6 +57,7 @@ lives in its own object and learns of a crash by a letter, as OTP's supervisor l
 message, and isolation gets hard walls: quotas per program and a CPU limit per isolate.
 
 [sup]: https://www.erlang.org/doc/system/sup_princ.html
+[gen_server]: https://www.erlang.org/doc/apps/stdlib/gen_server.html
 [supref]: https://www.erlang.org/doc/apps/stdlib/supervisor.html
 [proc]: https://www.erlang.org/doc/system/ref_man_processes.html
 [erl]: https://www.erlang.org/doc/apps/erts/erlang.html
