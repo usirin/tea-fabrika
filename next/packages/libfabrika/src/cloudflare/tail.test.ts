@@ -6,6 +6,8 @@ import * as fc from "fast-check";
 import { workerLoader } from "./index.ts";
 import type { Env } from "./runtime.ts";
 
+type BoundTail = NonNullable<Parameters<ReturnType<typeof workerLoader>["load"]>[2]>;
+
 const PROCESS = "process_0000000000e008000000000001";
 const methods = ["describe", "init", "step", "fold", "upgrade", "reply", "admit", "check", "other"] as const;
 const outcomes = ["ok", "exception", "exceededCpu", "exceededMemory", "canceled", "other"] as const;
@@ -74,7 +76,7 @@ it("U4 U5 U6 tail closes words and never reads trace content or sends it to a Pr
                 env,
                 { project: "project-test", name: "checklist:1", process: PROCESS },
                 // oxlint-disable-next-line fabrika/no-type-assertions -- partial platform trace objects expose only the allowed timing fields
-                items as unknown as TraceItem[],
+                items as unknown as Parameters<typeof tail>[2],
               ).pipe(
                 Effect.provide(
                   Layer.succeed(
@@ -132,19 +134,15 @@ it("U8 each load, reload and successor carries exactly its own tail; bootstrap l
                   seen.push({ key, tails: code().tails });
                   return { getEntrypoint: () => ({ describe: () => Promise.resolve(declaration) }) };
                 },
-              } as unknown as WorkerLoader;
-              const load: (
-                name: string,
-                process: string,
-                tail?: Fetcher,
-              ) => ReturnType<ReturnType<typeof workerLoader>["load"]> = workerLoader(loader, {
+              } as unknown as Parameters<typeof workerLoader>[0];
+              const load = workerLoader(loader, {
                 checklist: { hash: "hash-test", source: "module" },
               }).load;
               const live = new Map([
                 ["checklist:1", 1],
                 ["checklist:2", 2],
               ]);
-              const tails = new Map<number, Fetcher>();
+              const tails = new Map<number, BoundTail>();
               let next = 2;
 
               for (const cell of tape) {
@@ -155,7 +153,7 @@ it("U8 each load, reload and successor carries exactly its own tail; bootstrap l
                 live.set(name, n);
                 const process = `process_0000000000e00800${String(n).padStart(10, "0")}`;
                 // oxlint-disable-next-line fabrika/no-type-assertions -- opaque platform tail identity, never invoked by this fake loader
-                const bound = tails.get(n) ?? ({ process, name } as unknown as Fetcher);
+                const bound = tails.get(n) ?? ({ process, name } as unknown as BoundTail);
                 tails.set(n, bound);
                 // The third argument is the process-bound tail. Bootstrap callers omit it.
                 yield* load("checklist", process, bound);
