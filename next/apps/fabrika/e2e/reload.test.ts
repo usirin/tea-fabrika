@@ -23,6 +23,7 @@ import {
   cli,
   counterSource,
   fixture,
+  fixtureBuild,
   instance,
   nextAnswer,
   PROGRAM,
@@ -306,6 +307,17 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               for (const forbidden of [home, yield* fs.realPath(home)]) {
                 for (const form of [forbidden, JSON.stringify(forbidden).slice(1, -1), encodeURIComponent(forbidden)]) {
                   expect(printed.includes(form), "a printed warning holds an absolute path").toBe(false);
+                }
+              }
+
+              // The real brain reaches dependencies whose diagnostic frames differ from simple imports.
+              const copy = yield* fixture;
+              yield* fixtureBuild(copy, path.join(home, "instance-build"));
+              const actual = warnings.mock.calls.map((args) => args.map(String).join(" ")).join("\n");
+
+              for (const forbidden of [ROOT, yield* fs.realPath(ROOT), home, copy.home]) {
+                for (const form of [forbidden, JSON.stringify(forbidden).slice(1, -1), encodeURIComponent(forbidden)]) {
+                  expect(actual.includes(form), "the real brain build printed an absolute path").toBe(false);
                 }
               }
             }),

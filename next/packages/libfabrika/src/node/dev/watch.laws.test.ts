@@ -26,7 +26,7 @@ const ROOT = new URL("../../../../../../", import.meta.url).pathname;
 
 /** Every real Rolldown watcher and result the laws saw, and which were closed. */
 const opened = vi.hoisted(() => ({
-  watchers: [] as Array<{ closed: boolean }>,
+  watchers: [] as Array<{ closed: boolean; repeat: Effect.Effect<void> }>,
   results: [] as Array<{ code: string; closed: boolean }>,
 }));
 
@@ -36,7 +36,7 @@ vi.mock("rolldown", async (original) => {
     ...actual,
     watch: (...args: Parameters<typeof actual.watch>) => {
       const watcher = actual.watch(...args);
-      const seen = { closed: false };
+      const seen = { closed: false, repeat: Effect.void };
       opened.watchers.push(seen);
       const close = watcher.close.bind(watcher);
       watcher.close = () => {
@@ -44,8 +44,50 @@ vi.mock("rolldown", async (original) => {
         return close();
       };
       const on = watcher.on.bind(watcher);
-      watcher.on = ((name: "event", listener: (event: import("rolldown").RolldownWatcherEvent) => void) =>
-        on(name, (event) => {
+      watcher.on = ((
+        name: "event",
+        listener: (event: import("rolldown").RolldownWatcherEvent) => void | Promise<void>,
+      ) => {
+        let cycle: Array<import("rolldown").RolldownWatcherEvent> = [];
+        return on(name, (event) => {
+          if (event.code === "START") {
+            cycle = [];
+          }
+
+          // Repeat notifications, without acquiring another result or changing any file bytes.
+          if (event.code === "ERROR") {
+            cycle.push({
+              ...event,
+              result: new Proxy(event.result, {
+                get(target, key) {
+                  if (key === "close") {
+                    // Replay owns no new Rolldown result to close.
+                    return async () => undefined;
+                  }
+
+                  return Reflect.get(target, key);
+                },
+              }),
+            });
+          } else if (event.code !== "BUNDLE_END") {
+            cycle.push(event);
+          }
+
+          if (event.code === "END") {
+            const completed = cycle.slice();
+            seen.repeat = Effect.forEach(
+              completed,
+              (notification) =>
+                Effect.tryPromise({
+                  try: async () => {
+                    await listener(notification);
+                  },
+                  catch: (cause: unknown): Error => new Error("the repeated Rolldown notification failed", { cause }),
+                }).pipe(Effect.orDie),
+              { discard: true, concurrency: 1 },
+            );
+          }
+
           if ((event.code === "BUNDLE_END" || event.code === "ERROR") && event.result !== undefined) {
             const result = { code: event.code, closed: false };
             opened.results.push(result);
@@ -57,7 +99,8 @@ vi.mock("rolldown", async (original) => {
           }
 
           return listener(event);
-        })) as typeof watcher.on;
+        });
+      }) as typeof watcher.on;
       return watcher;
     },
   };
@@ -166,7 +209,7 @@ const drain = <A>(queue: Queue.Queue<A>, ms: number) =>
   });
 
 describe("P15 slice 1: the watcher", () => {
-  it("L17/L18: every completed rebuild records its program, bytes, duration and outcome, including initial bundle and compiler failures, without leaking source through warnings", async () => {
+  it("L17/L18: every completed rebuild records its program, bytes, duration and outcome, including initial bundle and compiler failures, without leaking source through warnings or repeating a failure for unchanged bytes", async () => {
     const seen = new Set<string>();
     await fc.assert(
       fc.asyncProperty(fc.gen(), (g) =>
@@ -211,24 +254,32 @@ describe("P15 slice 1: the watcher", () => {
               });
               const installs: Array<Install> = [];
               const failures: Array<Failed> = [];
-              const answers = yield* Stream.runCollect(
-                watchPrograms({
-                  root: home,
-                  entry: path.join(home, "brain.ts"),
-                  programs: [selected],
-                  install: (code) =>
-                    Effect.sync(() => {
-                      installs.push(code);
-                      return { _tag: "loaded" as const, processes: [] };
-                    }),
-                  failed: (fact) =>
-                    Effect.sync(() => {
-                      failures.push(fact);
-                    }),
-                }).pipe(Stream.take(1)),
-              ).pipe(Effect.withTracer(tracer), Effect.timeout("10 seconds"));
-              expect(answers).toHaveLength(1);
-              expect(answers[0]).toMatchObject(
+              const answers = yield* Queue.unbounded<Stream.Success<ReturnType<typeof watchPrograms>>>();
+              const firstWatcher = opened.watchers.length;
+              const running = new Map<string, string>();
+              yield* Effect.forkScoped(
+                Stream.runForEach(
+                  watchPrograms({
+                    root: home,
+                    entry: path.join(home, "brain.ts"),
+                    programs: [selected],
+                    install: (code) =>
+                      Effect.sync(() => {
+                        installs.push(code);
+                        const same = running.get(code.program) === code.hash;
+                        running.set(code.program, code.hash);
+                        return same ? { _tag: "same" as const } : { _tag: "loaded" as const, processes: [] };
+                      }),
+                    failed: (fact) =>
+                      Effect.sync(() => {
+                        failures.push(fact);
+                      }),
+                  }),
+                  (answer) => Queue.offer(answers, answer),
+                ).pipe(Effect.withTracer(tracer)),
+              );
+              const answer = yield* Queue.take(answers).pipe(Effect.timeout("10 seconds"));
+              expect(answer).toMatchObject(
                 move === "fit"
                   ? { _tag: "loaded", program: selected.name }
                   : { _tag: "failed", reason: move === "syntax" ? "bundle" : "compiler" },
@@ -238,7 +289,7 @@ describe("P15 slice 1: the watcher", () => {
               const span = rebuilds[0]!;
               expect(span.status._tag).toBe("Ended");
               expect(span.attributes.get("program")).toBe(selected.name);
-              expect(span.attributes.get("outcome")).toBe(answers[0]!._tag);
+              expect(span.attributes.get("outcome")).toBe(answer._tag);
               expect(span.attributes.get("bytes")).toBe(
                 installs[0] === undefined ? 0 : new TextEncoder().encode(installs[0].source).byteLength,
               );
@@ -247,7 +298,7 @@ describe("P15 slice 1: the watcher", () => {
 
               for (const output of [
                 JSON.stringify([...span.attributes]),
-                JSON.stringify(answers),
+                JSON.stringify(answer),
                 JSON.stringify(failures),
                 JSON.stringify(warnings.mock.calls),
               ]) {
@@ -259,6 +310,23 @@ describe("P15 slice 1: the watcher", () => {
                   ]) {
                     expect(output.includes(form), "a rebuild output copied private input").toBe(false);
                   }
+                }
+              }
+
+              const repeats = g(fc.integer, { min: 1, max: 3 });
+
+              for (let n = 0; n < repeats; n++) {
+                yield* opened.watchers[firstWatcher]!.repeat;
+                const repeated = yield* drain(answers, 300);
+                expect(
+                  failures,
+                  "one failed save writes one code.failed fact, even after a repeated notification",
+                ).toHaveLength(move === "fit" ? 0 : 1);
+
+                for (const notification of repeated) {
+                  expect(notification, "unchanged file bytes produced a second change or failure").toMatchObject({
+                    _tag: "same",
+                  });
                 }
               }
 

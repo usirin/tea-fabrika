@@ -29,7 +29,9 @@ export const counterSource = Effect.gen(function* () {
 export const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const home = yield* fs.makeTempDirectoryScoped({ directory: "/tmp", prefix: "p15e." });
+  // Keep shared dependencies beside the fixture. A root in /tmp makes a valid relative importer
+  // contain the checkout's full path, which L17 correctly keeps out of its named outputs.
+  const home = yield* fs.makeTempDirectoryScoped({ directory: ROOT, prefix: ".p15e." });
   yield* fs.writeFileString(path.join(home, "package.json"), '{"type":"module"}');
   const pkg = path.join(home, "counter");
   yield* fs.makeDirectory(path.join(pkg, "src"), { recursive: true });
