@@ -566,10 +566,12 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   ...stored(h.dir),
                 ];
 
-                for (const [output, text] of outputs) {
-                  const decoded = text.replace(/%([0-9a-f]{2})/gi, (_, hex) =>
-                    String.fromCharCode(Number.parseInt(hex, 16)),
-                  );
+                const checkedOutputs = outputs.flatMap(([output, text]): ReadonlyArray<readonly [string, string]> => [
+                  [output, text],
+                  [output, percentDecoded(text)],
+                ]);
+
+                for (const [output, decoded] of checkedOutputs) {
                   expect(
                     /-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(decoded),
                     `${output} contains private key material`,
@@ -577,16 +579,18 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 }
 
                 for (const form of [`itm_${item}`, encodeURIComponent(`itm_${item}`)]) {
-                  for (const [output, text] of outputs.filter(([o]) => o !== "page" && !o.startsWith("home"))) {
+                  for (const [output, text] of checkedOutputs.filter(([o]) => o !== "page" && !o.startsWith("home"))) {
                     expect(text.includes(form), `${output} copies an item's name`).toBe(false);
                   }
                 }
 
                 for (const s of [...credentials, ...signatures]) {
-                  for (const form of [s, encodeURIComponent(s), btoa(s)]) {
+                  for (const form of [s, encodeURIComponent(s), btoa(s), JSON.stringify(s).slice(1, -1)]) {
                     // Raw database pages also hold Access.Signed.armored. Its logical records
                     // above check copies outside that one field; credentials still check every byte.
-                    const checked = signatures.includes(s) ? outputs.filter(([o]) => !o.startsWith("home")) : outputs;
+                    const checked = signatures.includes(s)
+                      ? checkedOutputs.filter(([o]) => !o.startsWith("home"))
+                      : checkedOutputs;
 
                     for (const [output, text] of checked) {
                       expect(text.includes(form), `${output} copies a secret`).toBe(false);
@@ -603,6 +607,19 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
     },
   );
 });
+
+/** Decode even partial or lowercase URL escapes, including a URL embedded in another URL. */
+const percentDecoded = (text: string): string => {
+  for (;;) {
+    const decoded = text.replace(/%([0-9a-f]{2})/gi, (_, hex) => String.fromCharCode(Number.parseInt(hex, 16)));
+
+    if (decoded === text) {
+      return decoded;
+    }
+
+    text = decoded;
+  }
+};
 
 /** What the instance kept in its home, its records and spans among them, by file: never the key files. */
 const stored = (dir: string): ReadonlyArray<readonly [string, string]> =>

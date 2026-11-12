@@ -30,7 +30,7 @@ type Resource = (typeof RESOURCES)[number];
 
 const Fault = Schema.Struct({
   at: Schema.Literals(RESOURCES),
-  kind: Schema.Literals(["setup", "test", "hold", "timeout"]),
+  kind: Schema.Literals(["setup", "test", "hold", "timeout", "trace"]),
 });
 
 /** The fault the supervisor planted for this child, if any. */
@@ -93,6 +93,10 @@ const note = (row: Readonly<Record<string, unknown>>) =>
     if (trace !== undefined) {
       appendFileSync(trace, `${JSON.stringify(row)}\n`);
     }
+
+    if (fault?.kind === "trace" && row.acquired === fault.at) {
+      throw new SetupFault({ at: fault.at });
+    }
   });
 
 /** One owned resource: acquired, noted, then the planted fault if it names this one; released within
@@ -103,9 +107,10 @@ const owned = <A, E, R>(
   release: (a: A) => Effect.Effect<unknown, unknown>,
   facts: (a: A) => Readonly<Record<string, unknown>> = () => ({}),
 ) =>
-  Effect.acquireRelease(acquire.pipe(Effect.tap((a) => note({ acquired: at, ...facts(a) }))), (a) =>
+  Effect.acquireRelease(acquire, (a) =>
     release(a).pipe(Effect.timeout("10 seconds"), Effect.ignore, Effect.andThen(note({ released: at }))),
   ).pipe(
+    Effect.tap((a) => note({ acquired: at, ...facts(a) })),
     Effect.tap(() =>
       fault?.at !== at
         ? Effect.void

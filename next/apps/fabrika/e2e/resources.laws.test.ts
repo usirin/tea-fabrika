@@ -31,8 +31,8 @@ const Row = Schema.Struct({
   home: Schema.optionalKey(Schema.String),
 });
 type Row = typeof Row.Type;
-type Fault = { readonly at: string; readonly kind: "setup" | "test" | "hold" | "timeout" };
-const KINDS = ["setup", "test", "hold", "timeout"] as const;
+type Fault = { readonly at: string; readonly kind: "setup" | "test" | "hold" | "timeout" | "trace" };
+const KINDS = ["setup", "test", "hold", "timeout", "trace"] as const;
 type Ended = { readonly code: number | null; readonly signal: NodeJS.Signals | null; readonly ms: number };
 
 const rows = (file: string): ReadonlyArray<Row> =>
@@ -250,7 +250,7 @@ const walk = async (target: Target, context: TestContext) => {
     ]),
   );
   const kinds = new Set<string>();
-  const available = target === FIRST_WINDOW ? KINDS : KINDS.filter((kind) => kind !== "timeout");
+  const available = target === FIRST_WINDOW ? KINDS : KINDS.filter((kind) => kind !== "timeout" && kind !== "trace");
   await fc.assert(
     fc.asyncProperty(
       fc.array(
@@ -291,6 +291,9 @@ describe("P14 slice 1: S1.6 browser and server resources close and the child sui
 describe("P14 slice 2, L16: the first-window suite's resources close and its child exits", () => {
   it("pinned: a Vitest timeout releases the first-window fixture's temp home before the worker exits", (context) =>
     scopedSuite(run({ at: "home", kind: "timeout" }, "SIGTERM", FIRST_WINDOW), context));
+
+  it("pinned: an acquisition trace failure releases the home whose release used to be registered after logging", (context) =>
+    scopedSuite(run({ at: "home", kind: "trace" }, "SIGTERM", FIRST_WINDOW), context));
 
   it(
     "generated fault walks over the first-window suite: success, setup failure, test failure and interruption after each reached acquisition",
