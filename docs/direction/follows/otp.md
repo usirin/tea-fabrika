@@ -17,6 +17,7 @@ against main at `5b1171ed`. OTP's side is its documentation as read that day:
 | Find a name's process | `whereis(Name)` ([erl]) | `status(name)` reads its current process (`processes/Process.ts:274-296`) | same |
 | Mailbox lifetime | In memory, gone with the process ([proc]) | `<name>/inbox` on the ledger, read again after a restart (`processes/ProcessManager.ts:279-300`) | differs, because delivery is at least once (C2) |
 | Mailbox order | Kept per sender and receiver ([proc]) | One total order per inbox, by `rev` (`processes/ProcessManager.ts:288`) | same, and stronger |
+| Send to another process | `Pid ! Msg` is asynchronous: it puts the message in the receiver's mailbox and returns, and the receiver takes it on its own turn ([proc]) | A Send saves the letter in the target's inbox through the Project, then the target's `mailed` only sets its one alarm; the alarm's turn steps the letter, also when the two are separate objects (`cloudflare/mail.ts:29-44`, `runtime/Runner.ts:1329-1337`) | same |
 | Selective receive | `receive` takes the first match and leaves the rest ([proc]) | None: every letter reaches `update` in inbox order (`runtime/Program.ts:506-515`) | differs, because one `update` takes every Msg, as in Elm (C5) |
 | A letter that always crashes | Nothing built in; the restart drops the mailbox | Counted per letter (`runtime/internal/recovery.ts:70-84`); at the limit, `<pid>/dead` and `refused {why: "dead"}` (`runtime/Runner.ts:515-531`) | differs, because a durable inbox would replay it forever (C2) |
 | A new pid per start | A restart is a new pid ([sup]) | A new `process_<26>` each start, with `restarted {after}` (`processes/ProcessManager.ts:125`, `:157-171`) | same |
@@ -40,8 +41,9 @@ against main at `5b1171ed`. OTP's side is its documentation as read that day:
 | Applications | A node runs many applications, each with its own top-level supervisor ([sup]); a `temporary` one that stops "is reported but no other applications are terminated" ([app]) | No applications yet; each program's supervisor sits in its own object (`runtime/internal/supervisor.ts:59`, `runtime/Runner.ts:310-431`), so one name's crash loop touches no other name | same in effect; [0018](../../../.decisions/0018-one-application-per-program.md) makes it explicit: one application per program, and no program's failure may stop another |
 | Shutdown | `brutal_kill`, a timeout or `infinity`; reverse start order ([sup]) | Exit is at once (`processes/ProcessManager.ts:182-214`); later writes are refused (`gateway/Gateway.ts:1350`, `:1356`) | differs, because steps are serial (`runtime/Runner.ts:224`), so nothing is half-written (C5) |
 | A busy process | The scheduler preempts each process after a count of reductions, so one busy loop cannot stall the others ([proc]) | Each process runs in its own Worker Loader isolate (`cloudflare/index.ts:25`), but `limits.cpuMs` is unset and a local workerd runs them on one thread: a 300 ms spin stalls every process ([experiment 173](../../../experiments/173-worker-loader.md)) | differs, because nothing caps a step yet; [0020](../../../.decisions/0020-programs-get-hard-walls.md) sets `cpuMs` from a measured step and a local step watchdog, built by P34c |
+| A state's timeout | `gen_statem`'s state timeout: a named state sets a timer, and when it fires a message arrives in that state; leaving the state cancels it ([statem]) | The merger's `waiting` step holds the time, `wake(model)` gives it to the runner, and the runner saves it as the object's one alarm and sends `timer` when it is due; a `timer` from a wait the merger has left changes nothing (`next/programs/pipeline/src/Merger.ts:347`, `runtime/Runner.ts:186`) | differs, because the alarm is saved, so the wait is still there after a restart ([0105](../../../.decisions/0105-a-durable-object-never-stays-awake-on-its-own.md)); OTP's timer is in memory and goes with the process |
 
-Count: 28 rows, 9 same, 19 differ. Of the 19, 4 are not built yet (links, trap exit, three of the
+Count: 30 rows, 10 same, 20 differ. Of the 20, 4 are not built yet (links, trap exit, three of the
 four strategies, restart types), each waiting for Tier 4. One has no written reason yet: exit
 reasons (ticket 406). One is an open call: past the limit (ticket 404). One is decided and not built: a busy process (0020).
 
@@ -60,3 +62,4 @@ message, and isolation gets hard walls: quotas per program and a CPU limit per i
 [proc]: https://www.erlang.org/doc/system/ref_man_processes.html
 [erl]: https://www.erlang.org/doc/apps/erts/erlang.html
 [app]: https://www.erlang.org/doc/apps/kernel/application.html
+[statem]: https://www.erlang.org/doc/system/statem.html#state-time-outs

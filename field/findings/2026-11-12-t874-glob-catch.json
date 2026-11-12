@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-12-t874-glob-catch",
+  "date": "2026-11-12",
+  "by": "plan",
+  "model": null,
+  "rule": "dead_code",
+  "location": {
+    "path": "next/programs/pipeline/src/Change.ts",
+    "line": 11
+  },
+  "says": "In next/, Glob's guards leave no explicit picomatch 4.0.7 validation throw reachable in compiles with default options.",
+  "proof": "Read Change.ts and Change.test.ts from origin/main at head. Installed picomatch lib/picomatch.js:59 throws for an empty string; lib/parse.js:368 throws for 65537 letters. Node probes reproduced both. Glob instrumentation recorded zero picomatch calls for those inputs. Bracket throws require strictBrackets; lib/picomatch.js:343-346 swallows RegExp errors unless debug is true. Neither option is supplied. Original and call-deleted source-derived Glob copies agreed on boundary examples and 500 binary-string cases, seed 119120.",
+  "cost": "Repeated mutation-gap work cannot produce a sound default-validation test that kills this survivor.",
+  "head": "4f6405448b5b62aff114458b6645aa5fb0e3628a",
+  "ticket": "usirin/tea-fabrika#874",
+  "pr": null
+}

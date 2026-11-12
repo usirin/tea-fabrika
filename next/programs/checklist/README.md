@@ -18,18 +18,20 @@ one of four states:
 | `new` | just added; it has no time yet |
 | `open {since}` | waiting since `since`, in milliseconds since 1970 |
 | `late {since}` | waiting a day or more |
-| `checked {note}` | done; `note` is `null` for now |
+| `checked {note}` | done; `note` is the sender's short text, or `null` when it left none |
 
 | Input | Who may send it | What it does |
 |---|---|---|
 | `add {name}` | a person | adds a `new` item |
 | `rename {name, to}` | a person | gives the item a new name, same state |
 | `remove {name}` | a person | takes the item out |
-| `check {name}` | a person or an agent | the item is `checked` |
+| `check {name, note?}` | a person or an agent | the item is `checked`, keeping `note` (1 to 256 characters, `NOTE_MOST`) |
 | `uncheck {name}` | a person or an agent | a checked item is `new` again, so it gets a fresh time |
 
 `check` on a checked item, or `uncheck` on one that is not, changes nothing. It is not refused, so
-an agent that repeats itself is not told no.
+an agent that repeats itself is not told no. A second `check` keeps the first note, whatever note
+it carries: to change a note, uncheck and check again. A note is data inside `checked`, never a
+state; nothing reads it to decide what is legal next.
 
 ## State is saved for you
 
@@ -74,6 +76,8 @@ The checklist answers:
   `left` counts the items not checked. A window draws it and a watcher gets it.
 - **Query `left`:** a read port. It answers from the view (`view.left`) and changes nothing; it is
   declared in `inputs` with `Input.cases.read.make`.
+- **Query `items`:** a second read port, answering `view.items`: every item's name, state and note,
+  in list order. An agent reads it to find what to check.
 - **Output `done`:** `finished(model)` is `{ items: [...names] }` once there is at least one item
   and every one is checked, else `null`. It is declared in `outputs`; the runner does not send
   outputs yet.
@@ -92,6 +96,14 @@ The registration's `refused` function gives the program's words for `taken` and 
 the item. The parent keeps each tile's last refusal until its next press. The field describes that
 line, and the page says it once in its polite region. Unknown word reasons use `Not done (reason).`;
 free text uses `Not done.`. Keys and editing names arrive in a later slice.
+
+## The agent's half
+
+An agent may send `check` and `uncheck` and read `left` and `items`; `add`, `rename` and `remove`
+are a person's. An agent checks an item with a note to say what it found, and the person reads the
+note in the view. A note over 256 characters, or an empty one, does not decode, so the runner
+answers `bad_msg` and saves nothing. `uncheck` drops the note from the model; the saved letter
+still holds it, with who wrote it and when.
 
 ## Its laws
 

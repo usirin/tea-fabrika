@@ -27,8 +27,8 @@
 #     did not catch up, or main moved after the checks),
 #     freshmain.ts runs `pnpm lint` on the head merged with it and refuses a red one, a conflict or
 #     a fetch that fails. No flag skips it. The tests are not run again (ticket 552)
-#   - prints sizecap.ts's one line, the product lines against 0087's cap, before it waits on the
-#     checks. It is advice: it never stops a merge until a replay lets it block
+#   - prints sizecap.ts's one line, the pull request's product lines, before it waits on the
+#     checks. It is advice only: no number caps a pull request (0099), so it never stops a merge
 #   - trusts commits only as one pull_request_target run of main's commits.yaml for this ticket
 #   - once the squash is on main, closes each ticket the PR description names on a line of its
 #     own, `fabrika close ticket <N>`, and prints what it closed (0015)
@@ -383,6 +383,14 @@ checks_at() {
 	runs=$(read_gh api "repos/$GH_REPO/commits/$1/check-runs?per_page=100" \
 		-q '.check_runs[]|"\(.name)\t\(.status)\t\(.conclusion)\t\(.html_url // "")"') || exit 1
 	runs=$(printf '%s\n' "$runs" | awk -F'\t' '$1!="lint" && $1!="ci-required (draft)"')
+	# A skipped job keeps its name's expression unevaluated, so on a docs-only change GitHub reports
+	# check.yaml's `check` job by its raw text. It counts as `check` only beside the ready run's own
+	# `ci-required`, so a draft run's skip never stands in for it.
+	runs=$(printf '%s\n' "$runs" | awk -F'\t' -v OFS='\t' '
+		{ row[NR]=$0; if ($1=="ci-required") ready=1 }
+		END { for (i=1; i<=NR; i++) { $0=row[i]
+			if (ready && $3=="skipped" && $1 ~ /^github\.event\.pull_request\.draft && /) $1="check"
+			print } }')
 	# A red job prints with its link, so nobody has to look it up.
 	bad=$(printf '%s\n' "$runs" | awk -F'\t' '$2=="completed" && $3!="success" && $3!="skipped" && $3!="neutral" {
 		print $1": "$3 ($4 == "" ? "" : ", " $4) }')
@@ -502,8 +510,8 @@ else
 	esac
 fi
 rmdir "$LOCK"; held=no
-# 0087's cap: one line with the pull request's product lines against `[review] lines`. Advice only
-# until the replay on merged pull requests lets it block; it never stops a merge.
+# One line with the pull request's product lines, which asks about slicing past sizecap.ts's
+# advice number. Advice only: no number caps a pull request (0099), so it never stops a merge.
 if size=$(node "$LEAD/sizecap.ts" diff origin/main "$tip"); then echo "pr $pr: $size"; else echo "pr $pr: size not counted"; fi
 # A head that caught up (or already held main) waits for every check on this exact sha, up to an
 # hour, then for a trusted commits run. A green head that did not catch up was read whole above.

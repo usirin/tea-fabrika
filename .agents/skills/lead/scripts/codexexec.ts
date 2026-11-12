@@ -5,7 +5,8 @@
 // count and the stop come from `Agent.makeAgents` unchanged.
 //
 //   codex exec --json -o <last> -C <folder> -m <model> -c model_reasoning_effort="medium" \
-//     -c sandbox_mode="workspace-write" -c approval_policy="never" -c developer_instructions="..." \
+//     -c sandbox_mode="workspace-write" -c allow_login_shell=false -c approval_policy="never" \
+//     -c developer_instructions="..." \
 //     [resume <thread>] <prompt>
 //
 // Why next to the ACP rows: on this laptop the ACP adapter's Codex turns ended after about 90
@@ -20,11 +21,20 @@
 //
 // A turn is done when Codex wrote a last message (`-o`), as the shell wrapper it copies says. The
 // last message file lives in a temp folder the turn's scope gives back.
+//
+// A command's shell is never a login shell: `-c allow_login_shell=false` (Codex's own key, its
+// config reference). Codex's default runs each command as `zsh -lc`, or sources a snapshot of a
+// login shell, and a login shell's startup files put Homebrew's or a version manager's folders
+// before the pinned Node that `boxEnv` put first, so vitest refused to start on Node 22 and steps
+// answered for laws they never ran (field, 2026-11-11). Before each turn, `probeArgs` asks the
+// same shell, in Codex's own sandbox (`codex sandbox`) and with the same overrides, which Node it
+// finds, and a turn whose shell finds another than the pin fails to start, before any model call.
 
 import { Agent } from "@kampus/fabrika-old";
 import { rawOfLine } from "@kampus/fabrika-old/agents/codex";
 import { Effect, FileSystem, Option, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { holdsPin, NODE_PROBE } from "./boxnode.ts";
 
 /** What a turn may do in its folder: change it, or only read it (a plan, a review). */
 export type Access = "write" | "read";
@@ -33,6 +43,11 @@ export interface CodexExecConfig {
   readonly access: Access;
   /** The whole environment Codex runs in: the caller's, as `boxEnv` gives it. */
   readonly env: Readonly<Record<string, string | undefined>>;
+  /**
+   * The Node the repo pins (`repoNode`), which the box's shell must find before a turn starts;
+   * `null` when the repo pins none, and then nothing is asked.
+   */
+  readonly pin: string | null;
   /** The program to start; a bare name is found on the env's PATH. */
   readonly codex?: string;
 }
@@ -42,6 +57,27 @@ export const CAPACITY = /at capacity|rate limit|503|overloaded/i;
 
 /** A config value as TOML: a JSON string is a TOML basic string, but for DEL, which TOML takes only escaped. */
 const tomlText = (text: string) => JSON.stringify(text).replaceAll("\x7f", "\\u007f");
+
+/**
+ * How Codex runs a command, the same for a turn and for its probe: the sandbox, and a shell that
+ * is never a login shell, so no profile sets the PATH again (see the top).
+ */
+export const routeArgs = (access: Access): string[] => [
+  "-c",
+  `sandbox_mode=${tomlText(access === "write" ? "workspace-write" : "read-only")}`,
+  "-c",
+  "allow_login_shell=false",
+];
+
+/** The probe's command line: `NODE_PROBE` in `shell`, in Codex's own sandbox, on `routeArgs`. */
+export const probeArgs = (access: Access, shell: string): string[] => [
+  "sandbox",
+  ...routeArgs(access),
+  "--",
+  shell,
+  "-c",
+  NODE_PROBE,
+];
 
 export interface ExecAsk {
   readonly access: Access;
@@ -72,8 +108,7 @@ export const execArgs = (a: ExecAsk): string[] => [
   a.folder,
   ...(a.model === null ? [] : ["-m", a.model]),
   ...(a.effort === null ? [] : ["-c", `model_reasoning_effort=${tomlText(a.effort)}`]),
-  "-c",
-  `sandbox_mode=${tomlText(a.access === "write" ? "workspace-write" : "read-only")}`,
+  ...routeArgs(a.access),
   "-c",
   'approval_policy="never"',
   ...(a.system === null || a.system.trim() === "" ? [] : ["-c", `developer_instructions=${tomlText(a.system)}`]),
@@ -96,6 +131,43 @@ const lastWord = (text: string): Agent.Raw => ({ _tag: "said", text });
 /** The tail kept of what Codex said went wrong, for a failure's message and the capacity check. */
 const TAIL = 2_000;
 
+/**
+ * Asks the box's shell which Node it finds, on the turn's own route, and fails the start unless it
+ * is the pin. The shell is the user's (`SHELL`), the one Codex runs commands in.
+ */
+const probe = (config: CodexExecConfig, folder: string) =>
+  Effect.gen(function* () {
+    if (config.pin === null) {
+      return;
+    }
+
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const args = probeArgs(config.access, config.env.SHELL ?? "/bin/sh");
+    const said = yield* spawner
+      .string(
+        ChildProcess.make(config.codex ?? "codex", args, {
+          cwd: folder,
+          env: config.env,
+          extendEnv: false,
+          stdin: "ignore",
+        }),
+      )
+      .pipe(
+        Effect.timeout("30 seconds"),
+        Effect.orElseSucceed(() => ""),
+      );
+
+    if (!holdsPin(said, config.pin)) {
+      return yield* Effect.fail(
+        Agent.failed(
+          "start",
+          `the box's shell finds no Node ${config.pin}, so a test run there would be refused: ` +
+            `\`${NODE_PROBE}\` printed ${JSON.stringify(said.trim())}`,
+        ),
+      );
+    }
+  });
+
 /** `codex exec` as an adapter of the agents interface. */
 export const codexExecAdapter = (
   config: CodexExecConfig,
@@ -114,6 +186,10 @@ export const codexExecAdapter = (
           if (turn.system._tag === "replace") {
             return yield* Effect.fail(Agent.failed("start", "codex-exec takes only an append system prompt"));
           }
+
+          yield* probe(config, turn.folder).pipe(
+            Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+          );
 
           const dir = yield* fs
             .makeTempDirectoryScoped({ prefix: "codex-exec-" })

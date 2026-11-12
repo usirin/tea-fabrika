@@ -253,6 +253,8 @@ const rowParts: Readonly<Record<string, string>> = {
   "next-transport": "transport",
   "next-telemetry": "data",
   "next-ledger": "data",
+  "next-ci": "data",
+  "next-codehost": "data",
   "next-settings": "data", // T664: layer 2 beside the ledger, and node/settings/ imports it
   "next-processes": "coordination",
   "next-presence": "coordination",
@@ -869,9 +871,11 @@ describe("every library file has exactly one row", () => {
 
           expect(rowsAt(REAL, `next/${src}/${folder}/${inner}${file}.ts`)).toHaveLength(1);
           // Which files fail, not what the message says.
-          expect(faults(tree).map((fault) => fault.split(/:| imports /)[0])).toEqual(
-            [`${src}/${stray}/${inner}${file}.ts`, `${src}/${loose}.ts`].sort(),
-          );
+          expect(
+            faults(tree)
+              .map((fault) => fault.split(/:| imports /)[0])
+              .sort(),
+          ).toEqual([`${src}/${stray}/${inner}${file}.ts`, `${src}/${loose}.ts`].sort());
         },
       ),
       {
@@ -1174,6 +1178,8 @@ describe("layers", () => {
       "next-presence": 3,
       "next-jobs": 3,
       "next-packs": 3,
+      "next-ci": 2,
+      "next-codehost": 2,
       "next-ledger": 2,
       "next-transport": 2,
       "next-settings": 2, // T664's approved plan: settings sits on layer 2, above telemetry

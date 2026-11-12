@@ -92,6 +92,16 @@
       "paths": ["next/packages/libfabrika/src/ledger"]
     },
     {
+      "name": "next-codehost",
+      "layer": 2,
+      "paths": ["next/packages/libfabrika/src/codehost"]
+    },
+    {
+      "name": "next-ci",
+      "layer": 2,
+      "paths": ["next/packages/libfabrika/src/ci"]
+    },
+    {
       "name": "next-transport",
       "layer": 2,
       "paths": ["next/packages/libfabrika/src/transport"]
@@ -116,6 +126,7 @@
       "paths": [
         "next/packages/libfabrika/src/Id.ts",
         "next/packages/libfabrika/src/ProcessId.ts",
+        "next/packages/libfabrika/src/SpanTag.ts",
         "next/packages/libfabrika/src/Sql.ts",
         "next/packages/libfabrika/src/Rev.ts"
       ]
@@ -399,6 +410,12 @@
       "to": "next/packages/libfabrika/src/processes/Process.test-support.ts",
       "sites": 1,
       "reason": "until ticket 641, 2026-11-10: this test reaches for storage() in processes/Process.test-support.ts, which is another module on the same layer. Ticket 641 moves storage() down beside the ledger test support."
+    },
+    {
+      "from": "next/packages/libfabrika/src/telemetry/internal/sums.test.ts",
+      "to": "next/packages/libfabrika/src/ledger/NodeSqlite.ts",
+      "sites": 1,
+      "reason": "until ticket 641, 2026-11-11: this law opens real SQLite through the Node driver, as measurements.test.ts does. Ticket 641 moves the laws into a suite that takes a Sql maker."
     }
   ]
 }

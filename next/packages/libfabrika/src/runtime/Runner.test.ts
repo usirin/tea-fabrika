@@ -1288,13 +1288,13 @@ describe("p35 Cmd order, replay and recorded failures", () => {
     );
   }
 
-  for (const name of ["queue", "chaos"]) {
+  for (const name of ["fabrika/chaos", "chaos", "queue"]) {
     it.effect.prop(
-      `plant, dispatch fire by name alone: fire in ${name} respects its owning program`,
+      `fire in ${name} is owned only by the exact qualified chaos program`,
       { generated: Schema.NonEmptyString },
       ({ generated }) =>
         Effect.forEach(
-          [name, generated],
+          [name, generated, `${generated}/chaos`, `${generated}/fabrika/chaos`],
           (value) =>
             Effect.promise(async () => {
               const w = await world({ name: value });
@@ -1302,12 +1302,12 @@ describe("p35 Cmd order, replay and recorded failures", () => {
                 Effect.gen(function* () {
                   const r: Runner = yield* w.ProgramRunner;
                   yield* r.msg(w.input(1, { type: "fire" }));
-                  expect(w.fireCalls()).toBe(value === "chaos" ? 1 : 0);
+                  expect(w.fireCalls()).toBe(value === "fabrika/chaos" ? 1 : 0);
                   expect(yield* resultLetters).toHaveLength(1);
                   expect((yield* resultLetters)[0]?.body).toMatchObject({
                     m: {
-                      type: value === "chaos" ? "fire_ok" : "fire_err",
-                      ...(value === "chaos" ? {} : { reason: "bad_cmd" }),
+                      type: value === "fabrika/chaos" ? "fire_ok" : "fire_err",
+                      ...(value === "fabrika/chaos" ? {} : { error: { _tag: "bad_cmd" }, reason: "bad_cmd" }),
                     },
                   });
                 }).pipe(Effect.provide(w.layer())),

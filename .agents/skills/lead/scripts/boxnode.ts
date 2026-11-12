@@ -17,6 +17,12 @@
 //
 // With no Volta, no pin or an answer that is not the pin, the PATH stays as it is, and one line on
 // stderr says why. A PATH here is split on `:`; this tooling runs on macOS and Linux only.
+//
+// A PATH set here holds only if no shell's startup files set it again. A login shell's do: on a
+// Mac, /etc/zprofile's `path_helper` and a profile's `brew shellenv` put their folders first, so
+// `zsh -lc 'node -v'` printed Homebrew's Node or a Volta shim's (field, 2026-11-11). So a box's
+// shell is never a login shell (the `codex-exec` rows), and `NODE_PROBE` asks the box's own shell which
+// Node it finds before a step starts: `holdsPin` reads the answer.
 
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { Effect, FileSystem, Option, Schema } from "effect";
@@ -68,6 +74,15 @@ export const pnpmBin = (said: string): string | null => {
   const program = said.trim();
   const dir = program.includes("\n") || !program.endsWith("/pnpm") ? null : holder(program);
   return dir === null || dir.endsWith("/.volta/bin") ? null : dir;
+};
+
+/** What a box's shell runs to show its Node: the bare `node`, then the one `pnpm exec` finds. */
+export const NODE_PROBE = "node -v; pnpm exec node -v";
+
+/** Whether `NODE_PROBE` printed the pin on both lines, and nothing else: no line, no Node. */
+export const holdsPin = (said: string, pin: string): boolean => {
+  const lines = said.trim().split("\n");
+  return lines.length === 2 && lines.every((line) => line.trim() === `v${pin}`);
 };
 
 type Env = Readonly<Record<string, string | undefined>>;

@@ -131,11 +131,13 @@ export const lawUnfenced = (l: Service) =>
 /** P3. A holder that stops renewing loses the ticket when its lease runs out; its late writes are refused. */
 export const lawLost = (l: Service, ttlMs = 500, graceMs = 1000) =>
   Effect.gen(function* () {
-    const law = "P3. a lost lease fences the old holder";
+    // Pinned to ticket 870's CI regression: concurrent laws exhausted the short live-lease window.
+    const law = "pinned: P3. a lost lease fences the old holder, ticket 870";
     const { list, step, check } = steps();
     const T = freshTicket("p3");
-    const old = yield* proc(l, ttlMs);
+    const old = yield* proc(l, 30_000);
     yield* old.run(claim(T, laneId("L1")));
+    const claimedAt = Date.now();
     const hold = yield* old.run(Lanes.use((s) => s.hold(T)));
     // The process is gone, frozen or cut off: nothing renews its lease.
     yield* old.close;
@@ -145,7 +147,9 @@ export const lawLost = (l: Service, ttlMs = 500, graceMs = 1000) =>
     }
 
     const next = yield* proc(l, 30_000);
+    const claimGapMs = Date.now() - claimedAt;
     check("claimed while the lease lives", yield* next.run(claim(T, laneId("L2"))), "L1");
+    yield* step("short renew", l.renew(hold.name, hold.fence, ttlMs), "ok");
     yield* Effect.sleep(Duration.millis(ttlMs + graceMs));
     check("claimed once it ran out", yield* next.run(claim(T, laneId("L2"))), "L2");
     const late: Fact = { type: "released", ticket: T, lane: laneId("L1") };
@@ -157,7 +161,8 @@ export const lawLost = (l: Service, ttlMs = 500, graceMs = 1000) =>
     );
     yield* next.close;
     check("rows under the lease", (yield* l.readStream(factsOf(ticketName(T)))).length, 0);
-    return verdict(law, list);
+    const result = verdict(law, list);
+    return { ...result, numbers: `${result.numbers}; claim gap: ${claimGapMs} ms` };
   });
 
 /** P4. `n` processes claim one ticket at once, `rounds` times: one claim lands, and all are told its lane. */

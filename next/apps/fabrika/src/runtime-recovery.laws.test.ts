@@ -12,6 +12,8 @@ import { revokeText } from "@kampus/libfabrika/access/Text";
 import { programBox } from "@kampus/libfabrika/box";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { copied, type ExitReason, fcBadReason, fcExitReason } from "@kampus/libfabrika/processes/Process.test-support";
+import { Program } from "@kampus/libfabrika/runtime/Program";
+import { send } from "@kampus/libfabrika/runtime/Send";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import {
   commitReply,
@@ -56,6 +58,7 @@ const projectObject = (ctx: DurableObjectState, env: Env) => {
     read: (...args: Parameters<ProjectCalls["read"]>) => run((p) => p.read(...args)),
     wait: (...args: Parameters<ProjectCalls["wait"]>) => run((p) => p.wait(...args)),
     append: (...args: Parameters<ProjectCalls["append"]>) => run((p) => p.append(...args)),
+    mail: (...args: Parameters<ProjectCalls["mail"]>) => run((p) => p.mail(...args)),
     inbox: (...args: Parameters<ProjectCalls["inbox"]>) => run((p) => p.inbox(...args)),
     own: (...args: Parameters<ProjectCalls["own"]>) => run((p) => p.own(...args)),
     publish: (...args: Parameters<ProjectCalls["publish"]>) => run((p) => p.publish(...args)),
@@ -98,6 +101,7 @@ const processObject = (ctx: DurableObjectState, env: Env) => {
     descriptor: () => Effect.runPromise(processDescriptor(ctx)),
     open: (client: string) => run((p) => p.open(client)),
     msg: (input: unknown) => run((p) => p.msg(input)),
+    mailed: (trace?: { readonly traceId: string; readonly spanId: string }) => run((p) => p.mailed(trace)),
     due: (at: number) => run((p) => p.due(at)),
     restart: (request: { id: string; build: string }) => run((p) => p.restart(request)),
     alarm: () => run((p) => p.alarm()),
@@ -203,6 +207,144 @@ const approvals = {
   wake: () => null,
 } as const;
 
+/** @internal */
+const RequestModel = Schema.TaggedUnion({
+  idle: {},
+  waiting: { ref: Schema.String },
+  answered: { ref: Schema.String, value: Schema.Int },
+  failed: { ref: Schema.String, reason: Schema.String },
+});
+/** @internal */
+type RequestModel = typeof RequestModel.Type;
+
+/** `to` and `claim` let a law aim one request elsewhere, or have it claim another sender. */
+const RequestStart = Schema.Struct({
+  type: Schema.Literal("start"),
+  ref: Schema.NonEmptyString,
+  value: Schema.Int,
+  to: Schema.optionalKey(Schema.NonEmptyString),
+  claim: Schema.optionalKey(Schema.NonEmptyString),
+  parent: Schema.optionalKey(Schema.String),
+});
+
+const Answer = Schema.Struct({
+  type: Schema.Literal("answer"),
+  ref: Schema.String,
+  value: Schema.Int,
+  parent: Schema.optionalKey(Schema.String),
+});
+
+/** @internal */
+const RequestMsg = Schema.Union([RequestStart, Answer]);
+
+const idle = RequestModel.cases.idle.make({});
+
+/** @internal The requester named `self`, whose requests go to `peer`. */
+const mailRequester = (config: { readonly self: string; readonly peer: string }) => {
+  const machine = Machine.make({
+    model: RequestModel,
+    msg: RequestMsg,
+    cmds: [send],
+    init: (loaded) => [loaded ?? idle, []],
+    update: {
+      start: (s, m) => {
+        if (s._tag === "waiting") {
+          return [s, []];
+        }
+
+        const body = { type: "request", ref: m.ref, value: m.value, reply: config.self };
+        // A claimed sender rides beside the operands, as a program could try; the host binds the real one.
+        const input =
+          m.claim === undefined
+            ? { to: m.to ?? config.peer, m: body }
+            : { to: m.to ?? config.peer, m: body, source: m.claim };
+        return [RequestModel.cases.waiting.make({ ref: m.ref }), [send(input)]];
+      },
+      answer: (s, m) =>
+        s._tag === "waiting" && s.ref === m.ref
+          ? [RequestModel.cases.answered.make({ ref: m.ref, value: m.value }), []]
+          : [s, []],
+      send_ok: (s) => [s, []],
+      send_err: (s, m) =>
+        s._tag === "waiting" &&
+        m.cmd.m !== null &&
+        typeof m.cmd.m === "object" &&
+        "ref" in m.cmd.m &&
+        m.cmd.m.ref === s.ref
+          ? [RequestModel.cases.failed.make({ ref: s.ref, reason: m.error._tag }), []]
+          : [s, []],
+    },
+  });
+  return Program.make({
+    name: `requester-${config.self}`,
+    machine,
+    state: { v: 1, upgrades: [] },
+    view: (s) => s,
+    refuse: (s, m) => (m.type === "start" && s._tag === "waiting" ? { reason: "busy" } : null),
+    inputs: { start: "Start a request", answer: "An answer from a responder" },
+    outputs: {},
+    writes: {},
+    wake: () => null,
+  });
+};
+
+/** @internal */
+const ResponseModel = Schema.TaggedStruct("ready", {
+  /** Requests answered. */
+  answered: Schema.Int,
+  /** Send outcomes seen, so an outcome is a message that changes the model. */
+  queued: Schema.Int,
+  refused: Schema.Int,
+});
+/** @internal */
+type ResponseModel = typeof ResponseModel.Type;
+
+const Request = Schema.Struct({
+  type: Schema.Literal("request"),
+  ref: Schema.NonEmptyString,
+  value: Schema.Int,
+  reply: Schema.NonEmptyString,
+  parent: Schema.optionalKey(Schema.String),
+});
+
+const Approve = Schema.Struct({ type: Schema.Literal("approve"), parent: Schema.optionalKey(Schema.String) });
+/** @internal */
+const ResponseMsg = Schema.Union([Request, Approve]);
+
+const machine = Machine.make({
+  model: ResponseModel,
+  msg: ResponseMsg,
+  cmds: [send],
+  init: (loaded) => [loaded ?? ResponseModel.make({ answered: 0, queued: 0, refused: 0 }), []],
+  update: {
+    request: (s, m) => [
+      { ...s, answered: s.answered + 1 },
+      [send({ to: m.reply, m: { type: "answer", ref: m.ref, value: m.value + 1 } })],
+    ],
+    approve: (s) => [s, []],
+    send_ok: (s) => [{ ...s, queued: s.queued + 1 }, []],
+    send_err: (s) => [{ ...s, refused: s.refused + 1 }, []],
+  },
+});
+
+/** @internal */
+const mailResponder = Program.make({
+  name: "responder",
+  machine,
+  state: { v: 1, upgrades: [] },
+  view: (s) => s,
+  refuse: (_s, m) => (m.type === "request" && m.value < 0 ? { reason: "negative" } : null),
+  inputs: {
+    request: "Answer a request",
+    approve: { description: "Approve", personOnly: true },
+  },
+  outputs: {},
+  writes: {},
+  wake: () => null,
+});
+
+const requestProgram = mailRequester({ self: "requester:1", peer: "responder:1" });
+
 const closers: Array<() => Promise<void>> = [];
 
 afterEach(async () => {
@@ -297,6 +439,7 @@ type Entry = {
   readonly values: Map<string, unknown>;
   timer: ReturnType<typeof setTimeout> | undefined;
   alarm: number | null;
+  held?: boolean;
 };
 
 type Lost = { readonly at: number; readonly side: "before" | "after" } | null;
@@ -310,6 +453,8 @@ const world = (
   table.programs["fabrika/checklist"] = { hash: "checklist-a", source: "checklist" };
   table.programs.approvals = { hash: "approvals-a", source: "approvals" };
   table.programs.poison = { hash: "poison-a", source: "poison" };
+  table.programs[requestProgram.name] = { hash: "requester-a", source: "requester" };
+  table.programs[mailResponder.name] = { hash: "responder-a", source: "responder" };
   const key = identity(),
     db = new DatabaseSync(":memory:");
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the platform handles used by the real Project service
@@ -322,6 +467,7 @@ const world = (
     interrupted = gate();
   let project: ProjectObject;
   let beforeCommit = async () => {};
+  let afterMail = async () => {};
   let signs = 0,
     commits = 0,
     newCalls = 0,
@@ -331,7 +477,7 @@ const world = (
   const schedule = (entry: Entry) => {
     clearTimeout(entry.timer);
 
-    if (entry.alarm === null || closed) {
+    if (entry.alarm === null || entry.held || closed) {
       return;
     }
 
@@ -383,6 +529,7 @@ const world = (
       window: key.raw,
       port: 18787,
       build: "brain-test",
+      mail: { grants: { "requester:1": ["responder:1"], "responder:1": ["requester:1"] } },
     }),
     // Every Project RPC the real class hands off, so new Project calls reach the real service too.
     PROJECT: {
@@ -399,6 +546,14 @@ const world = (
                 return (...args: Parameters<ProjectObject["sign"]>) => {
                   signs++;
                   return project.sign(...args);
+                };
+              }
+
+              if (method === "mail") {
+                return async (...args: Parameters<ProjectObject["mail"]>) => {
+                  const reply = await project.mail(...args);
+                  await afterMail();
+                  return reply;
                 };
               }
 
@@ -503,9 +658,17 @@ const world = (
     LOADER: {
       get: (id: string) => ({
         getEntrypoint: () => {
-          if (id.startsWith("poison-")) {
+          if (id.startsWith("poison-") || id.startsWith("requester-") || id.startsWith("responder-")) {
             // The real box: its declaration carries the program's own maxDeliveries.
-            const Box = programBox(poisonProgram(flow.limit), "poison-a");
+            const program = id.startsWith("requester-")
+              ? requestProgram
+              : id.startsWith("responder-")
+                ? mailResponder
+                : poisonProgram(flow.limit);
+            const Box = programBox(
+              program,
+              id.startsWith("requester-") ? "requester-a" : id.startsWith("responder-") ? "responder-a" : "poison-a",
+            );
             const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
             return {
               describe: () => box.describe(),
@@ -650,6 +813,43 @@ const world = (
 
       await project.info();
     },
+    holdMail: (hold: () => Promise<void>) => {
+      afterMail = hold;
+    },
+    holdAlarm: (pid: string, held: boolean) => {
+      const entry = processFor(pid);
+      entry.held = held;
+      schedule(entry);
+    },
+    reopenProcess: async (pid: string) => {
+      const entry = processFor(pid);
+      clearTimeout(entry.timer);
+      await entry.object.runtime.dispose();
+      entry.object = processObject(entry.ctx, env);
+      schedule(entry);
+    },
+    startMail: async (role: "requester" | "responder") =>
+      (
+        await project.start(
+          Start.cases.first.make({
+            id: `mail-${role}`,
+            name: `${role}:1`,
+            code: {
+              program: role === "requester" ? requestProgram.name : mailResponder.name,
+              hash: `${role}-a`,
+            },
+          }),
+          {
+            by: key.fingerprint,
+            for: PERSON,
+            sentAt: SENT,
+            seen: 0,
+            parent: null,
+            traceId: TRACE,
+            build: "brain-test",
+          },
+        )
+      ).process,
     startPoison: async (name: string) =>
       (
         await project.start(Start.cases.first.make({ id: name, name, code: { program: "poison", hash: "poison-a" } }), {
@@ -1235,3 +1435,93 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
     expect([...done]).toEqual(expect.arrayContaining(["start", "throw", "exit", "bad", "retry", "reopen"]));
   }, 600_000);
 });
+
+const mailModel = (w: ReturnType<typeof world>, pid: string) => {
+  const db = w.process(pid).db;
+  const table = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='process_state'").get();
+
+  if (table === undefined) {
+    return null;
+  }
+
+  const row = db.prepare("SELECT checkpoint FROM process_state WHERE process=?").get(pid);
+  return row === undefined ? null : JSON.parse(String(row.checkpoint)).saved.model;
+};
+
+const mailRequest = (pid: string, ref: string) => ({
+  pid,
+  letter: `start-${ref}`,
+  m: { type: "start", ref, value: 7 },
+  sentAt: SENT,
+  seen: 0,
+});
+
+const oneExchange = async (w: ReturnType<typeof world>, requester: string, responder: string, ref: string) => {
+  await until(
+    "the saved requester answers without a view call",
+    async () => mailModel(w, requester),
+    (model) => model?._tag === "answered",
+  );
+  expect(mailModel(w, requester)).toMatchObject({ _tag: "answered", ref, value: 8 });
+  expect(mailModel(w, responder)).toMatchObject({ answered: 1 });
+  const requests = await w.project.read("responder:1/inbox", 0, "audit");
+  expect(requests.filter((row) => Reflect.get(Object(row.body), "m")?.ref === ref)).toHaveLength(1);
+  const receipts = await w.project.read("requester:1/outbox", 0, "audit");
+  expect(receipts.filter((row) => Reflect.get(Object(row.body), "ref") === ref)).toHaveLength(1);
+  await until(
+    "the answered Send leaves no sender alarm",
+    () => w.process(requester).object.savedAlarm(),
+    (at) => at == null,
+  );
+};
+
+// scenario: only a test-owned platform alarm holds eviction strictly before the target's drain.
+it("scenario: W2h, a target reopened before its alarm fires drains the saved letter once", async () => {
+  const w = world();
+  const requester = await w.startMail("requester");
+  const responder = await w.startMail("responder");
+  const client = await w.admit();
+  w.holdAlarm(responder, true);
+  expect(await w.project.route(client, "process.send", mailRequest(requester, "held-target"))).toMatchObject({
+    _tag: "ok",
+    result: { _tag: "accepted" },
+  });
+  expect(await w.process(responder).object.savedAlarm()).toBeTypeOf("number");
+  expect(mailModel(w, responder)?.answered ?? 0).toBe(0);
+  await w.reopenProcess(responder);
+  expect(await w.process(responder).object.savedAlarm()).toBeTypeOf("number");
+  w.holdAlarm(responder, false);
+  await oneExchange(w, requester, responder, "held-target");
+}, 30_000);
+
+// scenario: a held Project RPC puts eviction after the receipt save and before queued reaches the sender.
+it("scenario: W3, an evicted sender retries its owed Send from its alarm and adds no receipt or letter", async () => {
+  const w = world();
+  const requester = await w.startMail("requester");
+  const responder = await w.startMail("responder");
+  const client = await w.admit();
+  const release = gate();
+  let first = true;
+  w.holdAlarm(requester, true);
+  w.holdMail(async () => {
+    if (!first) {
+      return;
+    }
+
+    first = false;
+    await release.promise;
+  });
+  const sending = w.project.route(client, "process.send", mailRequest(requester, "held-sender")).catch(() => undefined);
+  await until(
+    "Project mail is saved and its reply is held",
+    async () => !first,
+    (held) => held,
+  );
+  expect(await w.process(requester).object.savedAlarm(), "the owed Send already owns an alarm").toBeTypeOf("number");
+  expect(await w.project.read("requester:1/outbox", 0, "audit")).toHaveLength(1);
+  await w.reopenProcess(requester);
+  release.resolve();
+  await sending;
+  w.holdAlarm(requester, false);
+  await oneExchange(w, requester, responder, "held-sender");
+}, 30_000);

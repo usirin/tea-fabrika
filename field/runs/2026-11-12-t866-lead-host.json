@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-12",
+  "run": "2026-11-12-t866-lead-host",
+  "ticket": "866",
+  "pr": "1057",
+  "started": "2026-11-12T06:52:00-08:00",
+  "ended": "2026-11-12T06:54:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": "claude-fable-5-2",
+  "effort": null,
+  "outcome": "pass",
+  "why": "next/ only. The lead's host checks for ticket 866 at d8b41b0b2, by one helper agent. Scenario H1 in worker-mail.test.ts ran on the real local instance (workerd through Alchemy): green in 7.8 s, then 3.2 s on a second run. The alarm law file passed, 1 test. One full typecheck passed. One plant: with the clamp removed, H1 went red, and on the first add, not the second: the answer was an error with reason unreachable where accepted was expected. So on this head a fresh checklist process is unreachable from its first add without the fix. Tokens are the subagent total; no dollar figure was reported.",
+  "tokens": 88331,
+  "tools": 8,
+  "minutes": 1.6,
+  "note": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": 88331,
+  "plants": [
+    {
+      "law": "next/apps/fabrika/src/worker-mail.test.ts:568",
+      "plant": "next/packages/libfabrika/src/cloudflare/runtime.ts:857, the alarm time passed without the clamp",
+      "result": "red"
+    }
+  ]
+}

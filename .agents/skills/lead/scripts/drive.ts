@@ -476,9 +476,22 @@ const readAnswer = (report: string): typeof Said.Type => {
   return Said.cases.one.make({ verb, to: m[2]?.toLowerCase() ?? "", reason });
 };
 
+const AnswerAlone = Schema.fromJsonString(Schema.Struct({ verb: Schema.String, reason: Schema.String }));
+
+/**
+ * The text a review's verdict is read from: the report, or, when the report is the typed answer
+ * alone, that answer's `reason`. A review sometimes puts its whole report there (tickets 869 and
+ * 871, 2026-11-12), and a correct merge-ready was refused.
+ */
+const verdictText = (report: string) =>
+  Option.match(Schema.decodeUnknownOption(AnswerAlone)(report.trim()), {
+    onNone: () => report,
+    onSome: (answer) => answer.reason,
+  });
+
 /** A review is merge-ready only when its first line says so and no line says `changes: <n>`, n above 0. */
 const mergeReady = (report: string) => {
-  const lines = outsideFences(report).map((l) => l.replace(/^[`*#\s]+/, ""));
+  const lines = outsideFences(verdictText(report)).map((l) => l.replace(/^[`*#\s]+/, ""));
   return /^merge-ready\b/i.test(lines[0] ?? "") && !lines.some((l) => /^changes:\s*0*[1-9]/i.test(l));
 };
 
@@ -597,7 +610,18 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
       }
 
       if (ask.step === "tests" && read.commits === 0) {
-        return stuck("no_commit", "answered done with no commit");
+        // A review may ask only for plant records that already ran (ticket 850): the answer's
+        // plants are the work, and the chain hands them to the next review's brief.
+        const plants = answer?.plants ?? [];
+
+        if (plants.length === 0 || read.changed > 0) {
+          return stuck("no_commit", "answered done with no commit");
+        }
+
+        return {
+          outcome: { kind: "done", part: false, head: read.head },
+          reason: `no commit: ${plants.length} plant records at ${read.head.slice(0, 8)}. ${said.reason}`,
+        };
       }
 
       if (ask.step === "review" && !mergeReady(read.report)) {
@@ -1454,6 +1478,8 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           fault: faultFrom(outcome, e.reason),
           exit: ok ? e.exit : 30,
           report: writtenReport(ask),
+          // The plants the answer named, so a later review's brief carries them (ticket 850).
+          ...(e.plants === undefined ? {} : { plants: e.plants }),
           kept: keep,
           ended,
           phases: first === null || ready === null ? phases : [...phases, { name: "agent_start", ms: first - ready }],

@@ -35,6 +35,12 @@ const here = Ci.local;             // today's [[checks.run]], in this process
 const hosts = Ci.ownHosts;         // a job is a lease on the ledger; our machines pull it
 ```
 
+*2026-11-12: the merge queue left `CodeHost`. fabrika provides the queue itself, as its own
+programs ([0107](../../.decisions/0107-fabrika-provides-the-merge-queue.md)), so in `next/`
+`CodeHost` holds no queue and `CodeHostWrites` has no `enqueue`: the contract is `change`, `update`
+and `merge` (`next/packages/libfabrika/src/codehost/CodeHost.ts`). It said, in the block above:
+`CodeHost`, "the merge queue", and `CodeHostWrites`, "enqueue".*
+
 ## Decided 2026-10-25: every edge is a service, even with one Layer
 
 ```ts

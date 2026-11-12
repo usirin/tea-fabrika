@@ -637,6 +637,7 @@
         "fabrika/no-question-word-key": "error",
         "fabrika/no-hand-tag": "error",
         "fabrika/one-store-hook": "error",
+        "fabrika/one-machine-per-file": "error",
         "fabrika/no-stage-word": "error",
         "eslint/no-restricted-imports": [
           "error",
@@ -710,6 +711,7 @@
         "fabrika/no-question-word-key": "error",
         "fabrika/no-hand-tag": "error",
         "fabrika/one-store-hook": "error",
+        "fabrika/one-machine-per-file": "error",
         "fabrika/no-stage-word": "error",
         "eslint/no-restricted-imports": [
           "error",
@@ -825,6 +827,11 @@
       "rules": { "fabrika/no-wall-clock": "off" }
     },
     {
+      // Shared law suites and helpers contain fixture machines, not exported product machines.
+      "files": ["next/**/*Test.ts", "next/**/*.test-support.ts"],
+      "rules": { "fabrika/one-machine-per-file": "off" }
+    },
+    {
       // A resource is released by the scope that acquired it, never by an after-hook that a thrown
       // error or a killed test can skip (0061). Setup hooks stay.
       "files": ["next/**/*.ts", "next/**/*.tsx"],
@@ -841,6 +848,7 @@
         "fabrika/no-effect-run-outside-edge": "off",
         "fabrika/effect-functions": "off",
         "fabrika/no-hand-tag": "off",
+        "fabrika/one-machine-per-file": "off",
         "fabrika/one-store-hook": "off",
         "react/refs": "off",
         "react/immutability": "off",
@@ -859,6 +867,7 @@
         "fabrika/prefer-schema-arbitrary": "warn",
         "fabrika/effect-functions": "off",
         "fabrika/no-hand-tag": "off",
+        "fabrika/one-machine-per-file": "off",
         "fabrika/one-store-hook": "off"
       }
     },
@@ -869,6 +878,7 @@
       "rules": {
         "fabrika/effect-functions": "off",
         "fabrika/no-hand-tag": "off",
+        "fabrika/one-machine-per-file": "off",
         "fabrika/one-store-hook": "off"
       }
     },
@@ -951,6 +961,8 @@
           {
             "src": "next/packages/libfabrika/src",
             "modules": [
+              "codehost",
+              "ci",
               "telemetry",
               "ledger",
               "transport",
@@ -964,8 +976,8 @@
               "gateway"
             ],
             "folders": ["node", "cloudflare", "coordination"],
-            "files": ["index", "Id", "Testing", "ProcessId", "Sql", "Rev"],
-            "values": ["ProcessId", "Sql", "Rev"]
+            "files": ["index", "Id", "Testing", "ProcessId", "Sql", "Rev", "SpanTag"],
+            "values": ["ProcessId", "Sql", "Rev", "SpanTag"]
           }
         ],
         "eslint/no-restricted-imports": [
@@ -1198,6 +1210,8 @@
       // files are renamed and their barrels are gone.
       "files": [
         "next/packages/libfabrika/src/telemetry/**",
+        "next/packages/libfabrika/src/codehost/**",
+        "next/packages/libfabrika/src/ci/**",
         "next/packages/libfabrika/src/ledger/**",
         "next/packages/libfabrika/src/processes/**",
         "next/packages/libfabrika/src/presence/**",
@@ -1214,6 +1228,8 @@
       // A module's `internal/` file is camelCase (0032). It comes after the override above, so it wins there.
       "files": [
         "next/packages/libfabrika/src/telemetry/internal/**",
+        "next/packages/libfabrika/src/codehost/internal/**",
+        "next/packages/libfabrika/src/ci/internal/**",
         "next/packages/libfabrika/src/ledger/internal/**",
         "next/packages/libfabrika/src/processes/internal/**",
         "next/packages/libfabrika/src/presence/internal/**",

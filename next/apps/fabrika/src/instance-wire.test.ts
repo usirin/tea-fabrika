@@ -762,7 +762,6 @@ describe("P12 real dev.ts wire", () => {
       const response = await c.call(method, {
         process: "counter:1",
         personOnly: false,
-        by: s.key.fingerprint,
       });
       expect(response.error?.data?.reason).toBe("unknown_method");
     }

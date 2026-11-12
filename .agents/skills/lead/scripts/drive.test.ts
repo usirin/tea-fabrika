@@ -1,73 +1,3 @@
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./pgrep.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./boxnode.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./codexexec.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./mutbox.ts?raw";
-import "./mutbox-entry.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./mutbox.Dockerfile?raw";
-import "../../mutation/scripts/run.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/limit.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/sample.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/scope.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box/BoxGit.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box/BoxGitProcess.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box/Remove.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box/Runs.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box/RunsProcess.ts?raw";
-import "./keepruns.sh?raw";
-import "./leakgrep.sh?raw";
-import "./fieldrow.py?raw";
-import "./runplan.sh?raw";
-import "./env.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./boxfiles.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./gc.ts?raw";
-import "./redact.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./botpush.mjs?raw";
-import "./clauderow.py?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./lane.ts?raw";
-import "../../plan/scripts/plancheck.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./sizecap.ts?raw";
-import "../../step-commit/scripts/exam.py?raw";
-import "../../step-commit/scripts/stepcommit.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./gcloop.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./flow/Beat.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./pr/Publish.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./pr/PullRequestsGh.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./pr/PushesProcess.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./publish.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./pr/PullRequests.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./pr/Pushes.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./pr/command.ts?raw";
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
@@ -509,6 +439,68 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
     );
   });
 
+  const judgedReview = (report: string, answer: Answer) =>
+    nameOf(
+      decide(
+        { ...ask, step: "review" },
+        {
+          head: ask.base,
+          commits: 0,
+          unsigned: [],
+          exam: [],
+          leaks: [],
+          left: [],
+          manifests: [],
+          plancheck: null,
+          changed: 0,
+          report,
+          problem: null,
+        },
+        answer,
+      ).outcome,
+    );
+  const layout = fc.constantFrom(
+    (a: Answer) => JSON.stringify(a),
+    (a: Answer) => `${JSON.stringify(a, null, 2)}\n`,
+  );
+
+  // Plants: read the JSON line itself as the verdict line (the code before tickets 869 and 871);
+  // take any answer-alone report as merge-ready; read only the reason's first line, so a
+  // `changes: n` line below it passes.
+  it("a review's report that is the typed answer alone is judged by the verdict in its reason", () => {
+    fc.assert(
+      fc.property(verdict, fc.option(back, { nil: "" }), chatter, layout, (first, sent, body, write) => {
+        const reason = [first, body, sent, "answer: done read-only review complete"].join("\n");
+        const answer: Answer = { verb: "done", to: null, reason, laws: null };
+        const ready = /merge-ready/.test(first) && sent === "";
+        expect(judgedReview(write(answer), answer)).toBe(ready ? "done" : "stuck:no_answer");
+      }),
+      options,
+    );
+  });
+
+  // Plant: read the verdict from the answer's reason whenever the report ends with the answer.
+  it("a report with words before its typed answer is judged by its own first line, never the reason", () => {
+    fc.assert(
+      fc.property(verdict, ready, layout, (first, claimed, write) => {
+        const answer: Answer = { verb: "done", to: null, reason: `${claimed}\nnothing blocks`, laws: null };
+        const report = [first, "report body", write(answer)].join("\n\n");
+        expect(judgedReview(report, answer)).toBe(/merge-ready/.test(first) ? "done" : "stuck:no_answer");
+      }),
+      options,
+    );
+  });
+
+  it("pinned: t869 review3's report, the answer alone with the verdict in its reason, is done (2026-11-12)", () => {
+    const answer: Answer = {
+      verb: "done",
+      to: null,
+      reason: "merge-ready; findings: 0\nFull diff matches the plan.\nanswer: done read-only review complete",
+      laws: null,
+    };
+    expect(judgedReview(JSON.stringify(answer), answer)).toBe("done");
+  });
+
   it("pinned: p16b review7's two answer lines under changes: 1 are stuck, not done (2026-11-10)", () => {
     const report = [
       "changes: 1; tickets: 2",
@@ -847,6 +839,41 @@ describe("the box's changes are read from its status, today's tooling", () => {
     expect(nameOf(sent.outcome)).toBe("send:tests:step_said");
     expect(sent.reason).toBe("a law");
     expect(nameOf(decide(ask, read).outcome)).toBe("stuck:step_said");
+  });
+
+  // Ticket 850: a review asked for plant records that already ran, the tests step answered them with
+  // no file change, and the gate ended it stuck:no_commit until the budget stopped the lane
+  // (acpcancel and sjob1, 2026-11-11). Plants run once, all red: drop the plants check (no plants
+  // passes); drop the clean-tree check (changed files pass); keep the old stuck for every tests step.
+  it("property: a tests step with no commit is done only when it names plants and left its tree clean", () => {
+    const plant = fc.record({
+      law: fc.constantFrom("L1", "L2", "A4"),
+      plant: fc.string({ maxLength: 20 }),
+      result: fc.constantFrom("red" as const, "green" as const),
+    });
+    fc.assert(
+      fc.property(fc.array(plant, { maxLength: 4 }), fc.nat({ max: 3 }), (plants, changed) => {
+        const read = {
+          head: ask.base,
+          commits: 0,
+          unsigned: [],
+          exam: [],
+          leaks: [],
+          left: [],
+          manifests: [],
+          plancheck: null,
+          changed,
+          report: "",
+          problem: null,
+        };
+        const said: Answer = { verb: "done", to: null, reason: "the records", laws: null, plants };
+        const j = decide({ ...ask, step: "tests" }, read, said);
+        const records = plants.length > 0 && changed === 0;
+        expect(nameOf(j.outcome)).toBe(records ? "done" : "stuck:no_commit");
+        expect(j.reason.includes("the records")).toBe(records);
+      }),
+      options,
+    );
   });
 });
 

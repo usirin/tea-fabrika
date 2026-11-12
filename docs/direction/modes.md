@@ -50,7 +50,10 @@ escape   global, mode "info"        did {does: "desk.exit", ...}; info off; mode
 
 - **`next/`:** all of it. Tier 1 has one real mode, the notes tile's reading and editing
   ([Tier 1's detail](../plan/tier-1-detail.md)), and it is the first test. The desk, its info mode
-  and a resize mode arrive with the desk in Tier 2.
+  and a resize mode arrive with the desk in Tier 2. *Changed 2026-11-11
+  ([0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): the notes tile left Tier 1
+  with notes, Tier 2's first real app, so this first test moves to Tier 2; Tier 1's program is the
+  checklist.*
 - **Today's version (`apps/fabrika`):** not changed by this note. Its info mode is the running
   example, read on main. Four small fixes are offered at
   [a tryout in today's version](#a-tryout-in-todays-version), none filed.

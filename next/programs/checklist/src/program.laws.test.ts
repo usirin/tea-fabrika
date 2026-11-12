@@ -2,6 +2,8 @@
 // Every list is a walk: it folds the real reducer from its real `init` and picks each next move
 // from the items that exist at that point, so a `check` names an item that is there, an `uncheck` a
 // checked one, a `rename` a free name. L9 and L10 run at the runner, in `RunnerTest.ts`.
+// Ticket 839, slice 1 (0137): `check` carries an optional note, the walk checks checked items too,
+// and L13 to L15 close ticket 847's gaps; L16 and L17 run at the runner.
 import { applyCell } from "@demlik/tea";
 import { propertyInvariant } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
@@ -30,7 +32,7 @@ type Msg =
   | { readonly type: "add"; readonly name: string }
   | { readonly type: "rename"; readonly name: string; readonly to: string }
   | { readonly type: "remove"; readonly name: string }
-  | { readonly type: "check"; readonly name: string }
+  | { readonly type: "check"; readonly name: string; readonly note?: string }
   | { readonly type: "uncheck"; readonly name: string }
   | { readonly type: "timer"; readonly at: number };
 
@@ -38,6 +40,20 @@ type Fresh = Exclude<Msg, { readonly type: "timer" }>;
 
 /** The plan's one day, written out here so the law does not read it from the code it checks. */
 const DAY = 86_400_000;
+
+/** The plan's longest note, written out here as `DAY` is: a schema wall, not a setting. */
+const MOST = 256;
+
+/** A note: none, 1 character, exactly `MOST`, or between, made of any text. */
+const Note = fc.option(
+  fc.oneof(
+    fc.constant("n"),
+    fc.constant("m".repeat(MOST)),
+    fc.string({ unit: "grapheme", minLength: 1, maxLength: 64 }).filter((s) => s.length <= MOST),
+    fc.string({ minLength: 2, maxLength: MOST - 1 }),
+  ),
+  { nil: undefined },
+);
 
 /** Four names per run, the 1 and 80 character edges among them. */
 const Pool = fc.uniqueArray(
@@ -53,7 +69,7 @@ const Gap = fc.oneof(
   { arbitrary: fc.integer({ min: 0, max: 3 * DAY }), weight: 1 },
 );
 
-const Move = fc.record({ kind: fc.nat({ max: 9 }), pick: fc.nat(), other: fc.nat(), gap: Gap });
+const Move = fc.record({ kind: fc.nat({ max: 10 }), pick: fc.nat(), other: fc.nat(), gap: Gap, note: Note });
 type Move = typeof Move extends fc.Arbitrary<infer A> ? A : never;
 
 const at = <A>(items: ReadonlyArray<A>, i: number): A | undefined => items[i % Math.max(items.length, 1)];
@@ -67,6 +83,12 @@ const choose = (m: Model, names: ReadonlyArray<string>, move: Move, clock: numbe
   const timer: Msg = { type: "timer", at: clock + move.gap };
   const name = at(here, move.pick);
   const fresh = at(free, move.other);
+  const check = (one: string | undefined): Msg =>
+    one === undefined
+      ? timer
+      : move.note === undefined
+        ? { type: "check", name: one }
+        : { type: "check", name: one, note: move.note };
 
   switch (move.kind) {
     case 0:
@@ -77,10 +99,11 @@ const choose = (m: Model, names: ReadonlyArray<string>, move: Move, clock: numbe
       return name === undefined || fresh === undefined ? timer : { type: "rename", name, to: fresh };
     case 4:
       return name === undefined ? timer : { type: "remove", name };
-    case 5: {
-      const one = at(unchecked, move.pick);
-      return one === undefined ? timer : { type: "check", name: one };
-    }
+    case 5:
+      return check(at(unchecked, move.pick));
+    // A second `check` on a checked item, with a note of its own (847, gap 1).
+    case 7:
+      return check(at(checked, move.pick));
     case 6: {
       const one = at(checked, move.pick);
       return one === undefined ? timer : { type: "uncheck", name: one };
@@ -126,7 +149,7 @@ const expected = (prev: Model, msg: Msg): ReadonlyArray<Item> => {
     case "check":
       return prev.items.map((i) =>
         i.name === msg.name && i.state._tag !== "checked"
-          ? { name: i.name, state: { _tag: "checked", note: null } }
+          ? { name: i.name, state: { _tag: "checked", note: msg.note ?? null } }
           : i,
       );
     case "uncheck":
@@ -183,8 +206,53 @@ const reached = (machine: ChecklistMachine) =>
 
 const left = (m: Model) => m.items.filter((i) => i.state._tag !== "checked").length;
 
+/** Each item as the plan's view shows it, from the independent record: its note only when checked. */
+const shownBy = (m: Model) =>
+  m.items.map((i) => ({ name: i.name, state: i.state._tag, note: i.state._tag === "checked" ? i.state.note : null }));
+
+/** A walk's Msgs with the record the plan's table folds from them, step by step, beside the real models. */
+const folded = (machine: ChecklistMachine, msgs: ReadonlyArray<Msg>) => {
+  const [first] = machine.init(null, {});
+  let model: Model = first;
+  let record: Model = first;
+  const steps: Array<{ model: Model; record: Model }> = [{ model, record }];
+
+  for (const msg of msgs) {
+    [model] = applyCell(machine, model, msg);
+    record = { items: expected(record, msg) };
+    steps.push({ model, record });
+  }
+
+  return steps;
+};
+
+/** One saved item made wrong in one field: a name off the 1 to 80 wall, an unknown state, a `since`
+ *  that is no integer, a note that is no string. */
+const Broken = fc.constantFrom(
+  (i: Item): unknown => ({ ...i, name: "" }),
+  (i: Item): unknown => ({ ...i, name: "x".repeat(81) }),
+  (i: Item): unknown => ({ ...i, state: { _tag: "gone" } }),
+  (i: Item): unknown => ({ ...i, state: { _tag: "open", since: 1.5 } }),
+  (i: Item): unknown => ({ ...i, state: { _tag: "checked", note: 7 } }),
+  (i: Item): unknown => ({ name: i.name }),
+);
+
+/** A Msg one field outside the plan's shape, on an otherwise good `check` or `rename`. */
+const Bad = fc.oneof(
+  fc.constantFrom("", "x".repeat(81)).map((name) => ({ type: "check", name })),
+  fc.constantFrom("", "x".repeat(81)).map((to) => ({ type: "rename", name: "a", to })),
+  fc.constantFrom("", "x".repeat(MOST + 1)).map((note) => ({ type: "check", name: "a", note })),
+  fc
+    .oneof(fc.integer(), fc.boolean(), fc.constant(null), fc.array(fc.string(), { maxLength: 2 }), fc.object())
+    .map((note) => ({ type: "check", name: "a", note })),
+  fc
+    .string({ minLength: 1, maxLength: 12 })
+    .filter((t) => !["add", "rename", "remove", "check", "uncheck", "timer"].includes(t))
+    .map((type) => ({ type, name: "a" })),
+);
+
 describe("ticket 806 the checklist's laws", () => {
-  it("L1: every move follows the slice 1 table at every tea step, and no step returns a Cmd", async () => {
+  it("L1: every move follows the table, a note on check and the first note kept on a checked item, at every tea step, and no step returns a Cmd", async () => {
     const { checklistMachine } = await load();
     propertyInvariant(
       checklistMachine,
@@ -312,7 +380,7 @@ describe("ticket 806 the checklist's laws", () => {
     );
   });
 
-  it("L7: query left answers the count of items not checked, equal to view.left", async () => {
+  it("L7: query left answers a non-negative integer equal to an independent count of items not checked, and to view.left", async () => {
     const { checklistMachine, checklist } = await load();
     const port = checklist.inputs.left;
     // The query takes no input: its schema is `Null`, and its answer reads the view alone.
@@ -323,8 +391,13 @@ describe("ticket 806 the checklist's laws", () => {
       walked(checklistMachine).map((w) => w.msgs),
       ({ next }) => {
         const view = checklist.view.select(next);
+        const answer: unknown = port.answer(view);
         return (
-          (view.left === left(next) && port.answer(view) === left(next)) ||
+          (Number.isInteger(answer) &&
+            typeof answer === "number" &&
+            answer >= 0 &&
+            view.left === left(next) &&
+            answer === left(next)) ||
           `left ${view.left}, answer ${String(port.answer(view))}, want ${left(next)}`
         );
       },
@@ -359,7 +432,73 @@ describe("ticket 806 the checklist's laws", () => {
     );
   });
 
-  it("L11 type: an input key that is no Msg type, or a query on a field the view lacks, does not compile", async () => {
+  it("L13: query items and view.items answer each item's name, state and the note the walk wrote, in list order", async () => {
+    const { checklist } = await load();
+    const port = checklist.inputs.items;
+    expect(port._tag).toBe("read");
+    expect(Schema.decodeUnknownSync(port.schema)(null)).toBeNull();
+    fc.assert(
+      fc.property(walked(checklist.machine), ({ msgs }) => {
+        for (const { model, record } of folded(checklist.machine, msgs)) {
+          const view = checklist.view.select(model);
+          expect(view.items, "the view's items are the record's").toEqual(shownBy(record));
+          expect(port.answer(view), "the items query answers the record's").toEqual(shownBy(record));
+        }
+      }),
+      { seed: SEED, numRuns: RUNS },
+    );
+  });
+
+  it("L14: every reached model and walked Msg goes through the program's schemas back to itself, a reached model one field wrong does not, and a main-shaped model still decodes at v 1", async () => {
+    const { checklist } = await load();
+    const model = checklist.state.schema;
+    const roundTrip = (m: Model) => Schema.decodeUnknownSync(model)(Schema.encodeSync(model)(m));
+    const decodes = (u: unknown) => Result.isSuccess(Schema.decodeUnknownResult(model)(u));
+    expect(checklist.state.v).toBe(1);
+    fc.assert(
+      fc.property(walked(checklist.machine), Broken, fc.nat(), ({ msgs }, broken, pick) => {
+        for (const { record } of folded(checklist.machine, msgs)) {
+          expect(roundTrip(record), "a reached model").toEqual(record);
+          // The schema is a wall, not a pass-through: the same model with one item made wrong is refused.
+          const items: ReadonlyArray<Item> =
+            record.items.length === 0 ? [{ name: "x", state: { _tag: "new" } }] : record.items;
+          const wrong = items.map((i, n) => (n === pick % items.length ? broken(i) : i));
+          expect(decodes({ items: wrong }), `a model with ${JSON.stringify(wrong)}`).toBe(false);
+        }
+
+        for (const msg of msgs) {
+          expect(Schema.decodeUnknownSync(checklist.msg)(msg), "a walked Msg").toEqual(msg);
+        }
+      }),
+      { seed: SEED, numRuns: RUNS },
+    );
+
+    for (const note of ["", "o".repeat(MOST + 44), null]) {
+      // pinned: main's saved shape, `note: NullOr(String)` with no length checks (plan, L14): an
+      // empty note and one past `MOST` still decode, so the saved state needs no upgrade and stays v 1.
+      const saved = { items: [{ name: "x", state: { _tag: "checked", note } }] };
+      expect(Schema.decodeUnknownSync(model)(saved), `a saved note of ${note?.length ?? "null"}`).toEqual(saved);
+    }
+  });
+
+  it("L15: a Msg one field outside the shape fails to decode through checklist.msg, and the same Msg made good decodes", async () => {
+    const { checklist } = await load();
+    const decodes = (u: unknown) => Result.isSuccess(Schema.decodeUnknownResult(checklist.msg)(u));
+    fc.assert(
+      fc.property(Bad, (bad) => {
+        expect(decodes(bad), JSON.stringify(bad)).toBe(false);
+        // The control: the good Msg it was made from decodes, so the refusal is the one field's.
+        expect(
+          decodes(
+            bad.type === "rename" ? { type: "rename", name: "a", to: "b" } : { type: "check", name: "a", note: "n" },
+          ),
+        ).toBe(true);
+      }),
+      { seed: SEED, numRuns: RUNS },
+    );
+  });
+
+  it("L11 type: an input key that is no Msg type, a query on a field the view lacks, or a check note that is not a string, does not compile", async () => {
     // A type law (plan, L11): the checks are the `@ts-expect-error` lines, read by the typecheck.
     const { checklist, checklistMachine } = await load();
     const spec = {
@@ -388,6 +527,20 @@ describe("ticket 806 the checklist's laws", () => {
     expectTypeOf(checklist.view.select).returns.toHaveProperty("left").toEqualTypeOf<number>();
     expectTypeOf(checklist.inputs).toHaveProperty("left");
     expectTypeOf(checklist.inputs).not.toHaveProperty("timer");
-    expect(Object.keys(checklist.inputs).sort()).toEqual(["add", "check", "left", "remove", "rename", "uncheck"]);
+    expectTypeOf(checklist.inputs).toHaveProperty("items");
+    type Check = Extract<typeof checklist.msg.Type, { readonly type: "check" }>;
+    expectTypeOf<Check["note"]>().toEqualTypeOf<string | undefined>();
+    // @ts-expect-error A check's note is a string or absent, never a number.
+    const numbered: Check = { type: "check", name: "x", note: 1 };
+    expect(numbered.name).toBe("x");
+    expect(Object.keys(checklist.inputs).sort()).toEqual([
+      "add",
+      "check",
+      "items",
+      "left",
+      "remove",
+      "rename",
+      "uncheck",
+    ]);
   });
 });

@@ -70,6 +70,12 @@ place that ran them is not the code host. `CodeHost` keeps pull requests,
 can-it-merge and the queue. See
 [the services fabrika needs](./services-and-our-own-ci.md).*
 
+*2026-11-12: the queue no longer lives with the code. fabrika provides the merge queue itself
+([0107](../../.decisions/0107-fabrika-provides-the-merge-queue.md)), so in `next/`
+`CodeHost.enqueue` is gone: `CodeHost` reads a change, updates it and performs the merge it is
+told, pinned to a head (`next/packages/libfabrika/src/codehost/CodeHost.ts`). It said, in the block
+above: "the queue lives with the code".*
+
 ## Why
 
 - A project tool should not need one hosting company to run.
