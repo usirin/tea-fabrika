@@ -24,6 +24,8 @@ import {
   type State,
 } from "./Process.ts";
 
+import { Quotas } from "./Quotas.ts";
+
 const tag = (word: string): string => `fab.process.${word}`;
 const id = (...parts: ReadonlyArray<Schema.Json>): string => JSON.stringify(parts);
 const Send = Schema.TaggedStruct("send", { m: Down });
@@ -73,6 +75,7 @@ export class ProcessManager extends Context.Service<
       ProcessManager,
       Effect.gen(function* () {
         const tx = yield* LedgerTransaction;
+        const quotas = Option.getOrUndefined(yield* Effect.serviceOption(Quotas));
         const fold = (turn: LedgerTurn) => ProcessTable.read(turn.read, caller.by);
         // The brain writes every line here; `from` keeps the call's person, parent and trace, and
         // `asked` keeps the caller's own key. The fold trusts `by` alone and never reads `asked`.
@@ -80,8 +83,25 @@ export class ProcessManager extends Context.Service<
           lineFor({ ...from, by: caller.by }, { ...event, asked: from.by });
         const checked = Effect.fnUntraced(function* <A>(
           step: (table: ProcessTable, turn: LedgerTurn) => Result.Result<A, ProcessError>,
+          recovery?: string,
         ) {
-          return yield* Effect.fromResult(yield* tx.transact((turn) => step(fold(turn), turn)));
+          return yield* Effect.fromResult(
+            yield* tx.transact((turn) => {
+              const run = () => step(fold(turn), turn);
+
+              if (quotas === undefined) {
+                return run();
+              }
+
+              if (recovery !== undefined) {
+                return quotas.recovering(recovery, run);
+              }
+
+              return caller.recipient._tag === "process"
+                ? quotas.ordinary(caller.recipient.process, run)
+                : quotas.infrastructure(run);
+            }),
+          );
         });
         const signal = (
           table: ProcessTable,
@@ -118,68 +138,71 @@ export class ProcessManager extends Context.Service<
             ? saved.value
             : yield* Effect.gen(function* () {
                 const process = yield* nextId;
-                return yield* checked((table, turn) => {
-                  const current = table.start(request, caller, from);
+                return yield* checked(
+                  (table, turn) => {
+                    const current = table.start(request, caller, from);
 
-                  if (Result.isFailure(current)) {
-                    return Result.fail(current.failure);
-                  }
+                    if (Result.isFailure(current)) {
+                      return Result.fail(current.failure);
+                    }
 
-                  if (Option.isSome(current.success)) {
-                    return Result.succeed(current.success.value);
-                  }
+                    if (Option.isSome(current.success)) {
+                      return Result.succeed(current.success.value);
+                    }
 
-                  if (table.collision(process)) {
-                    return Result.fail(new ProcessError({ reason: "id_collision" }));
-                  }
+                    if (table.collision(process)) {
+                      return Result.fail(new ProcessError({ reason: "id_collision" }));
+                    }
 
-                  if (request._tag === "first") {
-                    turn.append(
-                      ProcessTable.stream,
-                      id("registered", request.name),
-                      line(
-                        from,
-                        ProcessEvent.cases.registered.make({
-                          name: request.name,
-                          program: request.code.program,
-                          owner: caller.owner,
-                        }),
-                      ),
-                    );
-                  }
+                    if (request._tag === "first") {
+                      turn.append(
+                        ProcessTable.stream,
+                        id("registered", request.name),
+                        line(
+                          from,
+                          ProcessEvent.cases.registered.make({
+                            name: request.name,
+                            program: request.code.program,
+                            owner: caller.owner,
+                          }),
+                        ),
+                      );
+                    }
 
-                  const placed = turn.append(
-                    ProcessTable.events(request.name),
-                    request.id,
-                    line(
-                      from,
-                      ProcessEvent.cases.started.make({
-                        process,
-                        name: request.name,
-                        ...request.code,
-                      }),
-                    ),
-                  );
-
-                  if (request._tag === "again") {
-                    turn.append(
+                    const placed = turn.append(
                       ProcessTable.events(request.name),
-                      id("restarted", process),
+                      request.id,
                       line(
                         from,
-                        ProcessEvent.cases.restarted.make({
+                        ProcessEvent.cases.started.make({
                           process,
-                          after: request.after,
                           name: request.name,
-                          reason: request.reason,
-                          build: request.code.hash,
+                          ...request.code,
                         }),
                       ),
                     );
-                  }
 
-                  return Result.succeed({ process, rev: placed.rev });
-                });
+                    if (request._tag === "again") {
+                      turn.append(
+                        ProcessTable.events(request.name),
+                        id("restarted", process),
+                        line(
+                          from,
+                          ProcessEvent.cases.restarted.make({
+                            process,
+                            after: request.after,
+                            name: request.name,
+                            reason: request.reason,
+                            build: request.code.hash,
+                          }),
+                        ),
+                      );
+                    }
+
+                    return Result.succeed({ process, rev: placed.rev });
+                  },
+                  request._tag === "again" ? request.after : undefined,
+                );
               });
           yield* Effect.annotateCurrentSpan({
             "fab.process": answer.process,
@@ -231,7 +254,7 @@ export class ProcessManager extends Context.Service<
             }
 
             return Result.succeed(undefined);
-          });
+          }, process);
         }, Effect.tapError(failed));
         const monitor = Effect.fn("process.monitor")(function* (ref: string, process: string, from: From) {
           yield* Effect.annotateCurrentSpan({
@@ -308,7 +331,7 @@ export class ProcessManager extends Context.Service<
               line(from, ProcessEvent.cases.down.make({ process, ...policy })),
             );
             return Result.succeed(undefined);
-          });
+          }, process);
         }, Effect.tapError(failed));
         const receive = (process: string, after: Rev): Stream.Stream<Letter, Failure> =>
           Stream.unwrap(
@@ -373,7 +396,7 @@ export class ProcessManager extends Context.Service<
               }
 
               return Result.succeed(undefined);
-            });
+            }, process);
           }),
           start,
           exit,

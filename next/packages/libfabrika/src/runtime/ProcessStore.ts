@@ -6,8 +6,10 @@ import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { lineFor } from "../ledger/Log.ts";
 import { type From } from "../processes/Mailbox.ts";
 import { Activity } from "../processes/Process.ts";
+import type { Accounting } from "../processes/Quotas.ts";
 import { Rev } from "../Rev.ts";
 import { type Sql } from "../Sql.ts";
+import { recovering } from "./RecoveryStore.ts";
 
 /** What a process saves: its model as the runner keeps it, the turn it was in, and its Cmds. The
  *  runner gives `turn` and `cmds` their shapes; the store keeps them as JSON. */
@@ -91,6 +93,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
     sql: Sql,
     options: {
       readonly process: string;
+      readonly accounting?: Accounting;
       /** The object's storage calls, wrapped in Effect by its platform edge. Node uses SQL. */
       readonly storage?:
         | {
@@ -106,26 +109,31 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
       Effect.gen(function* () {
         const ledger = yield* Ledger;
         let ready = false;
-        const stored = Effect.fnUntraced(function* <A>(step: () => A) {
-          return yield* Effect.try({
-            try: () => {
-              if (!ready) {
-                for (const query of TABLES) {
-                  sql.exec(query);
+        const stored = Effect.fnUntraced(function* <A>(step: (at: number) => A) {
+          return yield* Effect.clockWith((clock) =>
+            Effect.try({
+              try: () => {
+                if (!ready) {
+                  for (const query of TABLES) {
+                    sql.exec(query);
+                  }
                 }
-              }
 
-              ready = true;
-              return step();
-            },
-            catch: (error) =>
-              new LedgerError({
-                reason: Schema.isSchemaError(error) ? "bad_row" : "storage",
-                message: String(error),
-                cause: error,
-              }),
-          });
+                ready = true;
+                return options.accounting === undefined
+                  ? step(clock.currentTimeMillisUnsafe())
+                  : options.accounting.protect(() => step(clock.currentTimeMillisUnsafe()));
+              },
+              catch: (error) =>
+                new LedgerError({
+                  reason: Schema.isSchemaError(error) ? "bad_row" : "storage",
+                  message: String(error),
+                  cause: error,
+                }),
+            }),
+          );
         });
+        const bytes = (text: string) => new TextEncoder().encode(text).length;
         return {
           select: Effect.fn("process.select")(function* (process: string) {
             return yield* ProcessStore.pipe(
@@ -134,7 +142,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
             );
           }),
           readActivity:
-            options.storage?.get !== undefined
+            options.accounting === undefined && options.storage?.get !== undefined
               ? options.storage.get("activity").pipe(
                   Effect.flatMap((raw) =>
                     raw === undefined
@@ -152,18 +160,38 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
                     : Schema.decodeUnknownSync(Schema.fromJsonString(Activity))(row.activity);
                 }),
           activity: Effect.fn("process.activity")(function* (value: typeof Activity.Type) {
-            if (options.storage !== undefined) {
+            if (options.storage !== undefined && options.accounting === undefined) {
               yield* options.storage.put("activity", value);
-              yield* options.storage.sync();
             } else {
-              // Node's synchronous SQLite commit needs no separate flush.
-              yield* stored(() => {
-                sql.exec(
-                  "INSERT INTO process_activity (process, activity) VALUES (?, ?) ON CONFLICT (process) DO UPDATE SET activity = excluded.activity",
-                  options.process,
-                  encodeActivity(value),
-                );
-              });
+              yield* stored((at) =>
+                sql.transaction(() => {
+                  const text = encodeActivity(value);
+                  const [old] = sql.exec("SELECT activity FROM process_activity WHERE process=?", options.process);
+
+                  if (old?.activity === text) {
+                    return;
+                  }
+
+                  options.accounting?.change(
+                    "activity",
+                    1,
+                    bytes(text) -
+                      (old === undefined ? 0 : bytes(String(old.activity))) +
+                      (old === undefined ? bytes(options.process) : 0),
+                    at,
+                    recovering(sql),
+                  );
+                  sql.exec(
+                    "INSERT INTO process_activity (process,activity) VALUES (?,?) ON CONFLICT(process) DO UPDATE SET activity=excluded.activity",
+                    options.process,
+                    text,
+                  );
+                }),
+              );
+            }
+
+            if (options.storage !== undefined) {
+              yield* options.storage.sync();
             }
           }),
           load: stored(() => {
@@ -171,9 +199,20 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
             return row === undefined ? null : decodeCheckpoint(row.checkpoint);
           }),
           save: (value, placed = []) =>
-            stored(() => {
+            stored((at) => {
               const text = encodeCheckpoint(value);
               sql.transaction(() => {
+                const [old] = sql.exec("SELECT checkpoint FROM process_state WHERE process=?", options.process);
+                const isRecovery = recovering(sql);
+                options.accounting?.change(
+                  "checkpoint",
+                  old?.checkpoint === text ? 0 : 1,
+                  bytes(text) -
+                    (old === undefined ? 0 : bytes(String(old.checkpoint))) +
+                    (old === undefined ? bytes(options.process) : 0),
+                  at,
+                  isRecovery,
+                );
                 sql.exec(
                   "INSERT INTO process_state (process, checkpoint) VALUES (?, ?) ON CONFLICT (process) DO UPDATE SET checkpoint = excluded.checkpoint",
                   options.process,
@@ -181,6 +220,22 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
                 );
 
                 for (const { id, rev, pos } of placed) {
+                  const [known] = sql.exec(
+                    "SELECT id FROM process_letters WHERE process=? AND id=?",
+                    options.process,
+                    id,
+                  );
+
+                  if (known === undefined) {
+                    options.accounting?.change(
+                      "checkpoint",
+                      1,
+                      bytes(JSON.stringify({ process: options.process, id, rev, pos })),
+                      at,
+                      isRecovery,
+                    );
+                  }
+
                   sql.exec(
                     "INSERT OR IGNORE INTO process_letters (process, id, rev, pos) VALUES (?, ?, ?, ?)",
                     options.process,

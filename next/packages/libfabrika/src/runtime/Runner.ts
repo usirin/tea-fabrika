@@ -51,6 +51,7 @@ import {
 import { InputId } from "../Id.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { MailRefusal } from "../processes/ProgramMail.ts";
+import type { Accounting } from "../processes/Quotas.ts";
 import * as Chaos from "./Chaos.ts";
 import {
   Alarm,
@@ -171,7 +172,12 @@ const failure = (reason: string) => Schema.TaggedStruct(reason, {}).make({});
 export type RunnerOptions = {
   /** The trusted wiring's policy. Without `maxDeliveries`, a letter is tried 3 times. */
   readonly policy?: Omit<Policy, "maxDeliveries"> & { readonly maxDeliveries?: number };
-  readonly recovery: { readonly sql: Sql; readonly name: string; readonly capacity: number };
+  readonly recovery: {
+    readonly sql: Sql;
+    readonly name: string;
+    readonly capacity: number;
+    readonly accounting?: Accounting;
+  };
   readonly fault?: (cut: string) => Effect.Effect<void, LedgerError>;
 };
 

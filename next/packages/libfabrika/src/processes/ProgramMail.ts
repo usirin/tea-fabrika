@@ -10,7 +10,14 @@ import type { State } from "./Process.ts";
 export type Grants = Readonly<Record<string, ReadonlyArray<string>>>;
 
 /** Why a delivery is refused for good. Other clients decode these by name. */
-export const MailRefusal = Schema.Literals(["no_name", "forbidden", "stale_sender", "bad_message", "id_reused"]);
+export const MailRefusal = Schema.Literals([
+  "no_name",
+  "forbidden",
+  "stale_sender",
+  "bad_message",
+  "id_reused",
+  "quota",
+]);
 
 export class ProgramMailError extends Schema.TaggedError<ProgramMailError>()("ProgramMailError", {
   /** A refusal, or `storage`: the ledger failed, and the same delivery may be tried again. */

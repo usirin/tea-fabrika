@@ -1,6 +1,6 @@
 // The settings fabrika itself declares (docs/direction/settings.md, "Is this a setting?"). A
 // schema's title and description are the words a refused value is explained with (S5).
-import { Schema } from "effect";
+import { ByteSize, Schema } from "effect";
 import * as Setting from "./Setting.ts";
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })).annotate({
@@ -65,4 +65,62 @@ export const gatewayWindow = Setting.make("gateway.window", {
   since: "0.0.0",
 });
 
-export const all = Setting.group({ port, version, gatewayLimit, gatewayWindow });
+const Bytes = Schema.ByteSizeFromString.check(
+  Schema.makeFilter((n) => ByteSize.toBigInt(n) > 0n, {
+    expected: "a positive byte size",
+  }),
+);
+
+const RecoveryAllowance = Schema.Struct({
+  writes: Positive,
+  bytes: Bytes,
+  letter: Schema.Struct({ writes: Positive, bytes: Bytes }),
+});
+
+/** Calibrated program ledger writes per rolling minute.
+ * @stability unstable
+ * @category settings
+ */
+export const writes = Setting.make("limits.writes", {
+  schema: Positive.check(Schema.isLessThanOrEqualTo(13_760)),
+  default: 13_760,
+  doc: "The most ledger writes one program may commit per rolling minute, including admitted steps.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+/** Attributable program storage, including steps charged ahead.
+ * @stability unstable
+ * @category settings
+ */
+export const storage = Setting.make("limits.storage", {
+  schema: Bytes.check(
+    Schema.makeFilter((n) => ByteSize.toBigInt(n) <= 1_000_000_000n, {
+      expected: "at most 1000000000 B",
+    }),
+  ),
+  default: ByteSize.bytes(1_000_000_000),
+  doc: "The most encoded ledger bytes one program may keep, at most decimal one GB.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+/** Separate measured recovery windows and per-letter replay room.
+ * @stability unstable
+ * @category settings
+ */
+export const recovery = Setting.make("limits.recovery", {
+  schema: Schema.Struct({ project: RecoveryAllowance, process: RecoveryAllowance }),
+  default: {
+    project: { writes: 160, bytes: ByteSize.bytes(74_080), letter: { writes: 10, bytes: ByteSize.bytes(5_469) } },
+    process: { writes: 290, bytes: ByteSize.bytes(207_410), letter: { writes: 50, bytes: ByteSize.bytes(18_790) } },
+  },
+  doc: "Recovery writes and bytes per rolling minute, plus each accepted letter's replay room.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+export const all = Setting.group({ port, version, gatewayLimit, gatewayWindow, writes, storage, recovery });

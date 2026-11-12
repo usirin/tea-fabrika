@@ -6,6 +6,7 @@ import { Effect, Equal, Layer, Option, Result, Schema } from "effect";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { lineFor, valueFor } from "../ledger/Log.ts";
+import { QuotaRefused } from "../ledger/WritePolicy.ts";
 import { short } from "../telemetry/Trace.ts";
 import { granted, mailId, businessRef } from "./internal/programMail.ts";
 import { inbox, letterBody, letterLine } from "./Mailbox.ts";
@@ -19,6 +20,7 @@ import {
   ProgramMailError,
   type Receipt,
 } from "./ProgramMail.ts";
+import { Quotas } from "./Quotas.ts";
 
 const tag = (word: string): string => `fab.mail.${word}`;
 
@@ -111,11 +113,20 @@ export const layer = (config: {
     ProgramMail,
     Effect.gen(function* () {
       const tx = yield* LedgerTransaction;
+      const quotas = Option.getOrUndefined(yield* Effect.serviceOption(Quotas));
       const manager = yield* ProcessManager;
       const transact = <A>(step: (turn: LedgerTurn) => A) =>
         tx
           .transact(step)
-          .pipe(Effect.mapError((error) => (error.reason === "refused" ? refuse("bad_message") : storage(error))));
+          .pipe(
+            Effect.mapError((error) =>
+              error.cause instanceof QuotaRefused
+                ? refuse("quota")
+                : error.reason === "refused"
+                  ? refuse("bad_message")
+                  : storage(error),
+            ),
+          );
       const lookup = (failure: ProcessError | LedgerError, refusal: typeof MailRefusal.Type) =>
         failure instanceof ProcessError ? refuse(refusal) : storage(failure);
       const deliver = Effect.fn("program_mail.deliver")(
@@ -163,34 +174,37 @@ export const layer = (config: {
 
             const target = yield* manager.status(delivery.to).pipe(Effect.mapError((e) => lookup(e, "no_name")));
             const committed = yield* transact((turn) => {
-              // A lifecycle write since the checks above: check again before anything is written.
-              if (heads(turn, names) !== seen) {
-                return Option.none();
-              }
+              const commit = () => {
+                // A lifecycle write since the checks above: check again before anything is written.
+                if (heads(turn, names) !== seen) {
+                  return Option.none();
+                }
 
-              const prior = saved(turn, delivery, m.value);
+                const prior = saved(turn, delivery, m.value);
 
-              if (Option.isSome(prior)) {
-                return prior;
-              }
+                if (Option.isSome(prior)) {
+                  return prior;
+                }
 
-              const id = mailId(delivery.command);
-              turn.append(inbox(delivery.to), id, letterLine(delivery.from, m.value));
-              turn.append(
-                outbox(delivery.source.name),
-                id,
-                lineFor(
-                  delivery.from,
-                  Mailed.make({
-                    command: delivery.command,
-                    source: { name: delivery.source.name, process: delivery.source.process },
-                    to: { name: delivery.to, state: target.state },
-                    ref: businessRef(m.value),
-                    grant: { source: delivery.source.name, to: delivery.to },
-                  }),
-                ),
-              );
-              return saved(turn, delivery, m.value);
+                const id = mailId(delivery.command);
+                turn.append(inbox(delivery.to), id, letterLine(delivery.from, m.value));
+                turn.append(
+                  outbox(delivery.source.name),
+                  id,
+                  lineFor(
+                    delivery.from,
+                    Mailed.make({
+                      command: delivery.command,
+                      source: { name: delivery.source.name, process: delivery.source.process },
+                      to: { name: delivery.to, state: target.state },
+                      ref: businessRef(m.value),
+                      grant: { source: delivery.source.name, to: delivery.to },
+                    }),
+                  ),
+                );
+                return saved(turn, delivery, m.value);
+              };
+              return quotas === undefined ? commit() : quotas.ordinary(delivery.source.process, commit);
             });
 
             if (Option.isSome(committed)) {

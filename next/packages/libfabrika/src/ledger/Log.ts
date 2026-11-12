@@ -69,6 +69,13 @@ export const Entry = Schema.Struct({
 });
 export type Entry = typeof Entry.Type;
 
+/** Canonical UTF-8 storage charge for a complete committed entry.
+ * @stability unstable
+ * @category encoding
+ */
+export const encodedBytes = (entry: Entry): number =>
+  new TextEncoder().encode(JSON.stringify(Schema.encodeSync(Entry)(entry))).length;
+
 /** An entry as its row holds it: the body as JSON text. */
 export const Row = Schema.Struct({ ...Entry.fields, body: Schema.fromJsonString(Schema.Json) });
 
@@ -85,6 +92,7 @@ export const Appended = Schema.TaggedUnion({
       "too_big",
       // Not the ledger's own answer: a writer above it refused a write that is not its to make.
       "forbidden",
+      "quota",
     ]),
   },
 });
