@@ -291,7 +291,7 @@ export const suite = (rig: Rig) =>
             }),
           );
         const replay = (tape: ReadonlyArray<Cell>) =>
-          Effect.forEach([true, false], (warm) => once(tape, warm), { concurrency: 1 });
+          Effect.forEach([true, false], (warm) => once(tape, warm), { concurrency: 1, discard: true });
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each scoped SQLite replay
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(replay(tape)));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async assertion returns a Promise
