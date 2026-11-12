@@ -2,7 +2,7 @@
 import { stringify } from "@decimalturn/toml-patch";
 import { Effect, Layer, Predicate, Result, Schema } from "effect";
 import { type AST, getStaticTOMLValue, ParseError, parseTOML } from "toml-eslint-parser";
-import * as Edit from "./internal/Edit.ts";
+import * as Edit from "./internal/edit.ts";
 import { Conflict, Syntax, Toml, type TomlDocument, TomlError, Value } from "./Toml.ts";
 
 const range = (node: AST.HasLocs): Edit.Range => ({ start: node.range[0], end: node.range[1] });
