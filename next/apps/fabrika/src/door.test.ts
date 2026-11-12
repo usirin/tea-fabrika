@@ -385,7 +385,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
       }),
     audit: (_process: string, message: unknown) =>
       Effect.sync(() => {
-        const checked = Schema.decodeUnknownSync(Input)(message);
+        const checked = Schema.decodeUnknownSync(Schema.toType(Input))(message);
         // The approval's answer is deliberately public metadata; the text of a comment is content.
         return checked._tag === "approve"
           ? Schema.encodeSync(Schema.toCodecJson(Input))(checked)

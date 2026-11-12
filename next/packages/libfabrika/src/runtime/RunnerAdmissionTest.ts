@@ -563,7 +563,7 @@ const walk = Effect.fnUntraced(function* (
       const message = Schema.decodeUnknownSync(Save)(original.envelope.input);
       const delivery =
         move === "legacy_refuse"
-          ? { ...original, envelope: { ...original.envelope, id: `legacy-${serial}` } }
+          ? { ...original, envelope: { ...original.envelope, id: `in-${yield* ids.next(Id.Process)}-${serial}` } }
           : { ...original, envelope: { ...original.envelope, input: { ...message, base: "invalid" } } };
       refusedBodies.push(message.body);
       const answer = yield* live.runner.msg(delivery);
@@ -639,8 +639,10 @@ const walk = Effect.fnUntraced(function* (
                   },
                 };
       const retried = move === "retry" ? prior.input : changed;
+      // Accepted placement permits new clocks on a resend; its body stays bound.
+      const sameAnswer = move === "retry" || (prior.first._tag === "accepted" && component < 2);
       expect(yield* live.runner.msg(retried)).toEqual(
-        move === "retry" ? prior.first : Sent.cases.refused.make({ reason: "id_reused" }),
+        sameAnswer ? prior.first : Sent.cases.refused.make({ reason: "id_reused" }),
       );
       expect(control.checks).toBe(beforeChecks);
       expect(control.updates).toBe(beforeUpdates);

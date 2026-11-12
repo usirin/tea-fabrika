@@ -257,12 +257,17 @@ for (const source of ["rpc", "decode"] as const) {
               }
 
               const receipt = yield* w.receipt(input.id);
+
               // First assert the durable record, even when the caller was also given a false dead answer.
-              expect(receipt).toMatchObject({
-                tries: crashes,
-                errors: Array.from({ length: crashes }, () => "TypeError"),
-                result: crashes === sample.limit ? { _tag: "refused", reason: "dead" } : null,
-              });
+              if (crashes === 0) {
+                expect(receipt, "transport failure during checking has no admitted input").toBeNull();
+              } else {
+                expect(receipt).toMatchObject({
+                  tries: crashes,
+                  errors: Array.from({ length: crashes }, () => "TypeError"),
+                  result: crashes === sample.limit ? { _tag: "refused", reason: "dead" } : null,
+                });
+              }
 
               if (move !== "throw") {
                 expect(w.calls()).toBe(beforeCalls);

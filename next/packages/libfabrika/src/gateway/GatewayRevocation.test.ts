@@ -219,6 +219,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
           notices.push({ client, news });
         }),
       inputs: { schema: input, personOnly: [], raw: [] },
+      audit: (_process, message) => Schema.encodeUnknownEffect(Schema.toCodecJson(input))(message),
       events: { personOnly: [] },
     }).pipe(Layer.provideMerge(env));
     return { layer, env };
