@@ -58,7 +58,11 @@ const make = (sql: Sql, options: { readonly build: string; readonly policy: Poli
             sql.exec("DELETE FROM gateway_limits WHERE until<=?", at);
             const row = sql.exec("SELECT until,value FROM gateway_limits WHERE sender=?", request.key)[0];
             const model = row === undefined ? Rate.machine.init(null, {})[0] : decode(row.value).model;
-            const [next, commands] = applyCell(Rate.machine, model, { type: "take", at, policy });
+            const [next, commands] = applyCell<
+              typeof Rate.Model.Type,
+              typeof Rate.machine.msg.Type,
+              ReturnType<typeof Rate.machine.init>[1][number]
+            >(Rate.machine, model, { type: "take", at, policy });
             const command = commands[0];
 
             if (command === undefined) {
