@@ -677,7 +677,7 @@ const inspect = Effect.fn("Remove.inspect")(function* (
  * Remove the box `name` under `boxes` when MAIN keeps all it saved. Never fails: every refusal is a
  * `kept` verdict, and what keepruns.sh said comes back beside it.
  */
-export const remove = Effect.fn("Remove.remove")(function* (name: string, where: { boxes: string; main: string }) {
+export const remove = Effect.fn("Remove.remove")(function* (name: string, folders: { boxes: string; main: string }) {
   if (invalid(name)) {
     return { shown: pythonRepr(name), runs: "", verdict: Verdict.cases.kept.make({ reason: "invalid name", code: 2 }) };
   }
@@ -698,7 +698,7 @@ export const remove = Effect.fn("Remove.remove")(function* (name: string, where:
     );
 
   const checked = Effect.gen(function* () {
-    const boxes = yield* loose(normal(path.resolve(where.boxes)));
+    const boxes = yield* loose(normal(path.resolve(folders.boxes)));
     const work = joined(boxes, name);
     const data = joined(boxes, `${name}-gitdata`);
 
@@ -714,7 +714,7 @@ export const remove = Effect.fn("Remove.remove")(function* (name: string, where:
       return yield* keep("missing or invalid pair");
     }
 
-    const main = normal(yield* d.realPath(path.resolve(where.main)));
+    const main = normal(yield* d.realPath(path.resolve(folders.main)));
     const outside = [above(normal(yield* d.realPath(work))), above(normal(yield* d.realPath(data)))];
 
     if (outside.some((parent) => parent !== boxes)) {
