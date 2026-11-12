@@ -148,7 +148,11 @@ const world = async (trace = TRACE, build = "counter-b") => {
     key = identity();
   const db = new DatabaseSync(join(home, "project.db"));
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture implements the platform members Project reads; only workerd can construct a full DurableObjectState
-  const ctx = { id: { name: "project-test" }, storage: storage(db) } as unknown as DurableObjectState;
+  const ctx = {
+    id: { name: "project-test" },
+    storage: storage(db),
+    exports: { IsolateTail: () => ({ fetch: async () => new Response() }) },
+  } as unknown as DurableObjectState;
   const descriptors = new Map<string, Descriptor>(),
     configured: Descriptor[] = [],
     received: Incoming[] = [],
