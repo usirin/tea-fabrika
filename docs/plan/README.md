@@ -60,12 +60,14 @@ ClientManagerLedger layer and migrates its callers. ProcessManager and SpanSink 
 later slices; this changes no Tier 1 row. The final contract bundle measures 259 loaded
 and 79 kept modules, matching the approved plan's sketch.
 
-**Tier 1, dated 2026-11-11.** 20 of [its 44 rows](./tier-1.md#the-pull-requests-one-at-a-time)
+**Tier 1, dated 2026-11-11.** 20 of [its 43 rows](./tier-1.md#the-pull-requests-one-at-a-time)
 are on main, plus P17a, half of P17, so `next/` is on main now: the exams (P1, P2, P8, P30, P32,
 P35), the spikes and the sheet's design pass (P3 to P5), the design package (P31), and the layers
 from P6 to P12 and P16, with P33, P34 and P37. *It said, dated 2026-11-09: 19 rows.* *Changed 2026-11-11
 (owner, [0111](../../.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md)): P43, the merge queue's first
-stage, joined Tier 1, so it has 44 rows; it said 43.* No Tier 1
+stage, joined Tier 1, so it has 44 rows; it said 43.* *Changed 2026-11-11 (owner,
+[0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): P20 and P22 left for Tier 2 with
+notes and P44, the checklist, joined, so it has 43 rows; it said 44.* No Tier 1
 row finished on 2026-11-11, so the count stays 20, but slices of seven rows merged that day (see
 below). *It said: no Tier 1 row merged on 2026-11-11.*
 
@@ -89,6 +91,13 @@ tests on their branches; P41's slice 2 (ticket 764) is at its tests step, draft
 branch, draft [PR 992](https://github.com/usirin/tea-fabrika/pull/992).
 [0132](../../.decisions/0132-a-path-pack-may-sit-anywhere.md) answers P40's question before its
 slice 2. The 2026-11-11 entry below says what was being built earlier that day.
+
+*2026-11-11:* the checklist is Tier 1's program, and notes is Tier 2's first real app
+([0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)). P44's first slice, the agent's
+half (ticket 839), is built as [PR 1019](https://github.com/usirin/tea-fabrika/pull/1019): the
+`items` read port, an optional `note` of 1 to 256 characters on `check`, where a checked item keeps
+its first note, and ticket 847's three gaps in the laws closed. P13 keeps its two platform slices,
+and P25 hands the bridge `[checklist]`. → the lead lands it once its steps pass
 
 *2026-11-11:* in `next/`, a running copy of fabrika is an instance in code too (ticket 681,
 [0080](../../.decisions/0080-a-running-copy-is-an-instance.md)): `local-instance.ts`,
