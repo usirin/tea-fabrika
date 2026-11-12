@@ -303,7 +303,8 @@ export const startWindow = Effect.fn("Window.start")(function* (options: WindowO
         const since = yield* Clock.currentTimeMillis;
         const url = `${options.origin.replace(/^http/, "ws")}/client/${encodeURIComponent(key.fingerprint)}/${encodeURIComponent(tab)}`;
         const ws = yield* sockets.dial(url).pipe(
-          Effect.catchTag("ClientSocketError", () => {
+          Effect.catchTag("ClientSocketError", (error) => {
+            emit({ type: "socket_failure", dial, op: "connect", error: error.error });
             emit({ type: "closed", dial, code: 1006, fingerprint: key.fingerprint, ms: 0 });
             return Effect.never;
           }),
@@ -517,7 +518,12 @@ export const startWindow = Effect.fn("Window.start")(function* (options: WindowO
             Queue.offerUnsafe(
               work,
               hello(nonce.nonce).pipe(
-                Effect.catch((error) => Effect.sync(() => emit({ type: "blocked", reason: error.error }))),
+                Effect.catch((error) =>
+                  Effect.sync(() => {
+                    emit({ type: "socket_failure", dial, op: "key", error: error.error });
+                    emit({ type: "blocked", reason: error.error });
+                  }),
+                ),
               ),
             );
           } else if (frame.method === "gateway.waiting") {
@@ -590,7 +596,7 @@ export const startWindow = Effect.fn("Window.start")(function* (options: WindowO
         return connections.get(cmd.dial)?.text("ping") ? null : yield* Effect.fail(F.closed.make({}));
       }),
       persist: Effect.fn("Client.persist")(function* () {
-        const claimed = yield* keys.claimPersist.pipe(Effect.mapError(() => F.failed.make({})));
+        const claimed = yield* keys.claimPersist;
 
         if (!claimed) {
           return false;
@@ -602,9 +608,7 @@ export const startWindow = Effect.fn("Window.start")(function* (options: WindowO
       }),
       record: Effect.fn("ClientRows.record")(function* (cmd) {
         const id = yield* ids.next(Id.Entry).pipe(Effect.mapError(() => F.failed.make({})));
-        yield* rows
-          .put(ClientRow.make({ id, tab, build: options.build, sentAt: yield* sentAt, record: cmd.record }))
-          .pipe(Effect.mapError(() => F.failed.make({})));
+        yield* rows.put(ClientRow.make({ id, tab, build: options.build, sentAt: yield* sentAt, record: cmd.record }));
         return null;
       }),
     },

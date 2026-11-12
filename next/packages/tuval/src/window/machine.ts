@@ -12,6 +12,7 @@ import {
   type WindowMsg as ProgramMsg,
 } from "@kampus/libfabrika";
 import { ClientKeyError } from "@kampus/libfabrika/transport/ClientKey";
+import { ClientRowsError, ErrorClass } from "@kampus/libfabrika/transport/ClientRows";
 import { Link, linkMachine, LinkMsg, ping, socketDial, timerDeps } from "@kampus/libfabrika/transport/Link";
 import { Predicate, Result, Schema } from "effect";
 
@@ -81,6 +82,12 @@ export const WindowModel = Schema.Struct({
 export type WindowModel = typeof WindowModel.Type;
 
 const Own = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("socket_failure"),
+    dial: Schema.Int,
+    op: Schema.Literals(["key", "connect"]),
+    error: ErrorClass,
+  }),
   Schema.Struct({ type: Schema.Literal("press"), tile: Schema.String, m: Schema.Json, via: Schema.optionalKey(Via) }),
   Schema.Struct({ type: Schema.Literal("tile"), id: Schema.String, msg: Schema.Unknown }),
   Schema.Struct({ type: Schema.Literal("view"), pid: Schema.String, note: Schema.Unknown }),
@@ -107,8 +114,8 @@ const key = Cmd.make("key", {
   err: ["ClientKeyError"],
 });
 
-const keyFailure = (error: unknown) => {
-  const decoded = Schema.decodeUnknownResult(ClientKeyError)(error);
+const platformFailure = (error: unknown) => {
+  const decoded = Schema.decodeUnknownResult(Schema.Union([ClientKeyError, ClientRowsError]))(error);
   return Result.isSuccess(decoded) ? decoded.success.error : ("other" as const);
 };
 
@@ -124,8 +131,17 @@ export const write = Cmd.make("write", {
   err: ["unreachable"],
 });
 
-const persist = Cmd.make("persist", { input: Schema.Struct({}), ok: Schema.Boolean, err: ["unsupported", "failed"] });
-const record = Cmd.make("record", { input: Schema.Struct({ record: ClientRecord }), ok: Schema.Null, err: ["failed"] });
+const persist = Cmd.make("persist", {
+  input: Schema.Struct({}),
+  ok: Schema.Boolean,
+  err: ["unsupported", "failed", "ClientKeyError"],
+});
+
+const record = Cmd.make("record", {
+  input: Schema.Struct({ record: ClientRecord }),
+  ok: Schema.Null,
+  err: ["failed", "ClientRowsError"],
+});
 
 type Out = ReadonlyArray<
   | ReturnType<typeof key>
@@ -504,10 +520,16 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
       },
       key_ok: (s, m): Step => [s, [record({ record: ClientRecord.cases.key.make({ result: m.value.found }) })]],
       key_err: (s, m): Step => {
-        const error = keyFailure(m.error);
+        const error = platformFailure(m.error);
         const [next, cmds] = linked(s, { type: "blocked", reason: error });
         return [next, [...cmds, record({ record: ClientRecord.cases.failure.make({ op: "key", error }) })]];
       },
+      socket_failure: (s, m): Step => [
+        s,
+        socketDial(s.link) === m.dial
+          ? [record({ record: ClientRecord.cases.failure.make({ op: m.op, error: m.error }) })]
+          : [],
+      ],
       now_ok: (s, m): Step => dated(s, step, m.cmd.n, m.value),
       now_err: (s, m): Step => [{ ...s, redate: [...new Set([...s.redate, m.cmd.n])] }, []],
       write_ok: (s): Step => [s, []],
@@ -734,7 +756,9 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
             record:
               m.error._tag === "unsupported"
                 ? ClientRecord.cases.failure.make({ op: "persist", error: "NotSupportedError" })
-                : ClientRecord.cases.persist.make({ result: "failed" }),
+                : m.error._tag === "ClientKeyError"
+                  ? ClientRecord.cases.failure.make({ op: "persist", error: platformFailure(m.error) })
+                  : ClientRecord.cases.persist.make({ result: "failed" }),
           }),
         ],
       ],
@@ -744,7 +768,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         s,
         m.cmd.record._tag === "failure"
           ? []
-          : [record({ record: ClientRecord.cases.failure.make({ op: "record", error: "other" }) })],
+          : [record({ record: ClientRecord.cases.failure.make({ op: "record", error: platformFailure(m.error) }) })],
       ],
       ping_ok: (s): Step => [s, []],
       ping_err: (s): Step => [s, []],
