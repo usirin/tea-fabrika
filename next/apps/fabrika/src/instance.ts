@@ -33,6 +33,7 @@ export const startDev = Effect.fn("instance.startDev")(function* (built: Omit<Bu
     },
     ...(options.limits === undefined ? {} : { limits: options.limits }),
     ...(options.mail === undefined ? {} : { mail: options.mail }),
+    ...(options.starts === undefined ? {} : { starts: options.starts }),
   });
   const checked = yield* readSettings({ INSTANCE: JSON.stringify(config) });
   return yield* start(

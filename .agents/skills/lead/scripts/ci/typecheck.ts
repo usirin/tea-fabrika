@@ -36,9 +36,10 @@ export const JOB = "typecheck";
 export const MINUTES = 20;
 
 /**
- * Seconds between two polls. One poll is one GitHub API call, of the 5,000 an hour a login gets:
- * a lane polling every 10 s spends at most 360 an hour, and twelve lanes 4,320, near the cap.
- * `CHAIN_TYPECHECK_EVERY` overrides it.
+ * Seconds between two polls. A poll that finds the job unchanged is a 304, which GitHub does not
+ * count against the 5,000 calls an hour a login gets (./ChecksGh.ts): a wait spends one call per
+ * change of the job, about four, where a poll every 10 s spent 6 a minute and 120 on a job that
+ * never came. `CHAIN_TYPECHECK_EVERY` overrides it.
  */
 export const EVERY = 10;
 

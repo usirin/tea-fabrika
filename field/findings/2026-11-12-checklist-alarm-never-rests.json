@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-12-checklist-alarm-never-rests",
+  "date": "2026-11-12",
+  "by": "p34cs4-measure",
+  "model": "claude-fable-5-2",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/Runner.ts",
+    "line": 1457
+  },
+  "says": "In next/, a checklist name whose second or later item is in state `new` fires its alarm without rest: the timer letter's id is `<process>/due/<wake>`, the checklist's wake for a new item is always 0, so the second timer letter is a resend that steps nothing, the item stays `new`, and the alarm is set to fire at once again.",
+  "proof": "Host runs of experiments/p34cs4-measure/measure.ts on a real local instance (workerd 1.20261026.1), 2026-11-12. In a 675 s run, 648 `add` inputs were accepted and the ledger holds 10 timer letters in all, two per process life: `at: 0` then `at: 86400000`. In the 253 s after its last input, with no client sending, the Project object still answered 40,710 `process.status` calls and about half as many `process.isLive` calls, and the two steady names' journals changed 47 and 48 times. A stack sample of workerd in that state showed it at 77% CPU, in SQLite writes and fsync. A second run of the same load recorded 16,241 `runner.due` calls in 420 s; it then left every list empty or fully checked, and the 251 s after its last input saw 1 `runner.due` call and 4 `process.status` calls.",
+  "cost": "One checklist with a second new item keeps a core busy and writes telemetry rows without end, and that item is never stamped `open` or `late`. It also adds about 12 journal row changes a minute per spinning name to any write count taken on today's main.",
+  "head": "2e131f42a71db1d5e43b072cb833b9033c065feb",
+  "ticket": "usirin/tea-fabrika#404",
+  "pr": null
+}

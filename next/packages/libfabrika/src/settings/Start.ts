@@ -1,6 +1,8 @@
 import { Schema } from "effect";
 import * as Snapshot from "./Snapshot.ts";
 
+const Text = Schema.NonEmptyString.check(Schema.isMaxLength(256));
+
 export const Origin = Schema.Struct({
   by: Schema.NonEmptyString,
   for: Schema.NonEmptyString,
@@ -24,6 +26,8 @@ export const Input = Schema.Struct({
   origin: Schema.optionalKey(Origin),
   limits: Schema.optionalKey(Schema.Struct({ recordBytes: Schema.Int.check(Schema.isGreaterThan(0)) })),
   mail: Schema.optionalKey(Schema.Struct({ grants: Schema.Record(Schema.String, Schema.Array(Schema.String)) })),
+  /** Which program may start which (P42): a right the host hands in, never a declared setting or a recorded fact. */
+  starts: Schema.optionalKey(Schema.Array(Schema.Struct({ source: Text, to: Text }))),
 });
 export type Input = typeof Input.Type;
 

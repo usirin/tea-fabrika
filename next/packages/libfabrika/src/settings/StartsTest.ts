@@ -92,6 +92,7 @@ export interface Input {
   };
   readonly limits?: { readonly recordBytes: number };
   readonly mail?: { readonly grants: Readonly<Record<string, ReadonlyArray<string>>> };
+  readonly starts?: ReadonlyArray<{ readonly source: string; readonly to: string }>;
 }
 
 // T843's test policy: every start fixture names it, so no test start leans on the declared default.
@@ -135,6 +136,7 @@ export interface Fixture {
   readonly start?: string;
   readonly limits?: { readonly recordBytes: number };
   readonly mail?: { readonly grants: Readonly<Record<string, ReadonlyArray<string>>> };
+  readonly starts?: ReadonlyArray<{ readonly source: string; readonly to: string }>;
 }
 
 // The calling platform supplies its synchronous hash driver. Snapshot.make still owns the encoding.
@@ -159,6 +161,7 @@ export const fixture = (config: Fixture, hash: (algorithm: Digest.Algorithm, dat
         },
         ...(config.limits === undefined ? {} : { limits: config.limits }),
         ...(config.mail === undefined ? {} : { mail: config.mail }),
+        ...(config.starts === undefined ? {} : { starts: config.starts }),
       };
     }).pipe(
       Effect.provideService(Digest.Digest, {
