@@ -11,7 +11,8 @@ import { Status } from "./BrainControl.ts";
 import { Children, Readiness } from "./BrainProbe.ts";
 import { BrainSpec } from "./BrainSpec.ts";
 
-const Input = Schema.Struct({ id: Id.Cmd });
+// tea checks a Cmd's input as the value update already holds, so the schema is its decoded side.
+const Input = Schema.toType(Schema.Struct({ id: Id.Cmd }));
 const Errors = ["Operation", "Conflict"] as const;
 const inspect = Cmd.make("inspect", { input: Input, ok: Status, err: Errors });
 const install = Cmd.make("install", { input: Input, ok: Schema.Null, err: Errors });
@@ -79,7 +80,8 @@ export const Model = Schema.TaggedUnion({
 type Model = typeof Model.Type;
 type Active = Extract<Model, { deadline: number }>;
 type Cell = readonly [Model, ReadonlyArray<Command>];
-const Error = Schema.TaggedUnion({ Operation: {}, Conflict: {} });
+// tea adds malformed_result to every settled error: a reply whose value fails its own schema.
+const Error = Schema.TaggedUnion({ Operation: {}, Conflict: {}, malformed_result: {} });
 const Observation = { at: Schema.Finite, next: Schema.optionalKey(Id.Cmd) };
 
 const responses = <const T extends Command["type"], S extends Schema.Top>(type: T, value: S) =>
@@ -135,7 +137,7 @@ const down = (m: Active) => ({ ...flow(m), action: "stop" as const });
 const matches = (m: Model, cmd: Command): m is Active =>
   active(m) && m.pending?.id === cmd.id && m.pending.type === cmd.type;
 
-const fail = (m: Active, reason: (typeof Error.Type)["_tag"] | "Timeout", command?: Command["type"]): Cell => [
+const fail = (m: Active, reason: typeof Failure.reason.Type, command?: Command["type"]): Cell => [
   Model.cases[m.action === "up" ? "failed_up" : "failed_stop"].make({
     sequence: m.sequence,
     reason,
@@ -167,7 +169,8 @@ const reply =
     return msg.at >= m.deadline ? fail(m, "Timeout") : handle(m, msg);
   };
 
-const error = (m: Active, msg: Extract<Msg, { error: unknown }>): Cell => fail(m, msg.error._tag);
+const error = (m: Active, msg: Extract<Msg, { error: unknown }>): Cell =>
+  fail(m, msg.error._tag === "Conflict" ? "Conflict" : "Operation");
 
 /**
  * Creates the machine for startup, ownership, deadlines and confirmed shutdown.

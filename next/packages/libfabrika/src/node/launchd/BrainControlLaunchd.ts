@@ -189,10 +189,10 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
   });
   const syncHome = Effect.scoped(
     Effect.gen(function* () {
-      const directory = yield* fs.open(spec.home, { flag: "r" }).pipe(Effect.mapError(storage));
-      yield* directory.sync.pipe(Effect.mapError(storage));
+      const directory = yield* fs.open(spec.home, { flag: "r" });
+      yield* directory.sync;
     }),
-  );
+  ).pipe(Effect.mapError(storage));
   const install = Effect.scoped(
     Effect.gen(function* () {
       yield* canonical;

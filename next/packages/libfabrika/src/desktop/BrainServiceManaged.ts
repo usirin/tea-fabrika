@@ -51,7 +51,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
   const life = BrainLife.machine({ spec, settings });
   let [model] = life.init(null, {});
   const settle = (msg: BrainLife.Msg) => {
-    const [next, cmds] = applyCell(life, model, msg);
+    const [next, cmds] = applyCell<typeof model, BrainLife.Msg, BrainLife.Command>(life, model, msg);
     model = next;
     return cmds;
   };
