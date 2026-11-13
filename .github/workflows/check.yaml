@@ -11,6 +11,11 @@ on:
   # the same head (changes.mjs's `jobs`, 0134's amendment of 2026-11-11).
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  # GitHub's merge queue tests each group on a temporary branch and takes a required check only from
+  # this event. It runs every job, as a push to main does: changes.mjs reads any event but
+  # `pull_request` as "run all". The group's own base and head replace `before` (see BASE below).
+  merge_group:
+    types: [checks_requested]
 
 # A newer push to the same pull request stops the run it replaces. Main's runs
 # all finish, one per commit. Only a new head cancels: the run that marking ready starts waits for
@@ -46,7 +51,7 @@ jobs:
           fetch-depth: 0
       - id: diff
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           EVENT: ${{ github.event_name }}
           DRAFT: ${{ github.event.pull_request.draft }}
@@ -68,7 +73,7 @@ jobs:
           fetch-depth: 0
       - id: diff
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           EVENT: ${{ github.event_name }}
           DRAFT: ${{ github.event.pull_request.draft }}
@@ -86,7 +91,7 @@ jobs:
       - run: node .github/ci/field-check.ts
         if: steps.diff.outputs.field == 'true'
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           EVENT: ${{ github.event_name }}
 
@@ -136,7 +141,7 @@ jobs:
       - name: promises
         if: ${{ needs.changes.outputs.build != 'false' }}
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: |
           if [ -n "$BASE" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ] \
             && git fetch --no-tags --depth=1 origin "$BASE"; then
