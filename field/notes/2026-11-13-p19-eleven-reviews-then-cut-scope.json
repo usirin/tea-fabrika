@@ -1,0 +1,18 @@
+{
+  "id": "2026-11-13-p19-eleven-reviews-then-cut-scope",
+  "date": "2026-11-13",
+  "lanes": [
+    "usirin/tea-fabrika#881"
+  ],
+  "stage": "review",
+  "kind": "friction",
+  "what": "next/ version. The P19 slice 1 lane (the brain as a launchd service on a Mac) went through eleven reviews. Decision 0076 sends a lane to the owner when 3 of its last 5 steps were sends back. That limit was not applied while it was reached, because the lanes run by hand and nothing counted. The owner chose to cut scope on 2026-11-13: the pull request lands now, and the one fault review 11 left is a tracker ticket. The fault: a kill inside a window of a few milliseconds can leave our own plist in a hidden .brain-* folder, and then removing the service from an empty path answers Conflict until the file is moved by hand.",
+  "cause": "In the hand-run pipeline the send-back count is read by the lead from memory, not by code. Each review found one more small fault, so no single send back looked like the limit.",
+  "person": true,
+  "primitive": "Check",
+  "fix": "A Check that counts the last 5 step outcomes of a lane from its state file and asks the owner on the third send back, as 0076 says.",
+  "test": "Property: for any list of 5 step outcomes with 3 or more sends back, the Check answers ask; with fewer, it does not.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1079"
+  ]
+}
