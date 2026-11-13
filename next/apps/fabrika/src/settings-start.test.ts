@@ -387,18 +387,24 @@ it.live("scenario: T753 L13 real Worker retries the same HTTP owner, shares warm
 
     expect(yield* probe).toEqual(cold);
     // Every RecordPart method shares one successful activation context.
-    const part = instance.record("settings-law", "spans/57");
+    const { write, read, content, deleteContent } = instance.record("settings-law", "spans/57");
+
+    // The stub's type leaves each method optional; a missing one is a broken binding, never a pass.
+    if (write === undefined || read === undefined || content === undefined || deleteContent === undefined) {
+      return yield* Effect.die(new Error("record binding is missing a method"));
+    }
+
     const record = Effect.fnUntraced(function* (method: "write" | "read" | "content" | "deleteContent") {
       const chain = Chain.cases.spans.make({});
 
       return yield* method === "write"
-        ? Effect.promise(() => part.write(chain, 57, []))
+        ? Effect.promise(() => write(chain, 57, []))
         : method === "read"
-          ? Effect.promise(() => part.read(chain, 57, 0))
+          ? Effect.promise(() => read(chain, 57, 0))
           : method === "content"
-            ? Effect.promise(() => part.content(chain, 57, "absent"))
+            ? Effect.promise(() => content(chain, 57, "absent"))
             : Effect.promise(() =>
-                part.deleteContent(chain, 57, "absent", { by: "test-person", at: 0, reason: "requested" }),
+                deleteContent(chain, 57, "absent", { by: "test-person", at: 0, reason: "requested" }),
               );
     });
 

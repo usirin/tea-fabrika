@@ -72,10 +72,12 @@ const composedName = async (): Promise<(m: unknown) => string | undefined> => {
   const door = typeof project === "object" && project !== null ? Reflect.get(project, "door") : undefined;
   expect(typeof door).toBe("function");
   const checked = await Effect.runPromise(readSettings(env));
+  // The door is read off an untyped capture, so its Effect is named here, as `runtime` is above.
+  const built: Effect.Effect<unknown, unknown, RecordedStart> = Reflect.apply(door, undefined, [
+    { deliver: () => Effect.void },
+  ]);
   await Effect.runPromise(
-    Reflect.apply(door, undefined, [{ deliver: () => Effect.void }]).pipe(
-      Effect.provideService(RecordedStart, { ...checked, receipt: StartsTest.receipt(input) }),
-    ),
+    built.pipe(Effect.provideService(RecordedStart, { ...checked, receipt: StartsTest.receipt(input) })),
   );
   const options = held.door.at(-1);
   const inputs = typeof options === "object" && options !== null ? Reflect.get(options, "inputs") : undefined;
