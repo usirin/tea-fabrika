@@ -10,6 +10,12 @@ import { Origin } from "./Sources.ts";
 
 export const options = { arbitrary: { seed: 119120, runs: 100 } };
 
+class PropertyFailure extends Schema.TaggedError<PropertyFailure>()("PropertyFailure", {
+  cause: Schema.Defect(),
+}) {}
+
+const propertyFailure = (cause: unknown) => new PropertyFailure({ cause });
+
 // Stateful walks use fast-check because the plan requires fc.array move recipes.
 export const law = <A>(
   name: string,
@@ -23,7 +29,7 @@ export const law = <A>(
   const options = { seed: 119120, numRuns: 100, ...(examples === undefined ? {} : { examples }) };
   it.effect(name, () =>
     // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's asynchronous property runner enters Effect
-    Effect.tryPromise({ try: () => fc.assert(property, options), catch: (cause: unknown) => cause }),
+    Effect.tryPromise({ try: () => fc.assert(property, options), catch: propertyFailure }),
   );
 };
 

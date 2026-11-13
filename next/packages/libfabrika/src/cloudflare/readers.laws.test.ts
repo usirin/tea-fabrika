@@ -34,6 +34,10 @@ import {
 } from "./runtime.ts";
 import * as SettingsTest from "./SettingsTest.ts";
 
+class EntryFailure extends Schema.TaggedError<EntryFailure>()("EntryFailure", {
+  cause: Schema.Defect(),
+}) {}
+
 const recordConstructor = vi.hoisted(() => {
   const slot: {
     value?: Effect.Effect<
@@ -1099,7 +1103,7 @@ SettingsTest.suite((recipe, secret) =>
                       );
               return Reflect.apply(runtime.runPromise, runtime, [work]);
             },
-            catch: (cause: unknown) => cause,
+            catch: (cause: unknown) => new EntryFailure({ cause }),
           });
       }
 
