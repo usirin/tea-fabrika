@@ -13,7 +13,7 @@ import { it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import { Entry, PAGE } from "@kampus/libfabrika/ledger/Log";
 import { Clock, Deferred, Effect, Fiber, Schema } from "effect";
-import { afterEach, describe, expect } from "vitest";
+import { afterEach, describe, expect, onTestFailed } from "vitest";
 import { heldPort } from "./port.test-support.ts";
 import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
 
@@ -84,6 +84,42 @@ const statusWithHost = (url: string, host: string) =>
     sent.end();
   });
 
+// T896: a passive record of one scenario's phases, printed only when it fails. It records facts and
+// never decides anything: no resend, no retry, no changed wait. No bodies and no raw process output.
+type Mark =
+  | { _tag: "entered" | "answered"; phase: string; index?: number | undefined }
+  | { _tag: "spawned" | "ready" | "child-error" }
+  | { _tag: "exited"; code: number | null; signal: string | null }
+  | { _tag: "socket"; event: "open" | "error" | "close"; code?: number }
+  | { _tag: "request"; id: number; method: string }
+  | { _tag: "response"; id: string | number }
+  | { _tag: "held"; facts: Array<Record<string, unknown>> };
+
+class Journal {
+  private readonly start = performance.now();
+  readonly rows: Array<Mark & { at: number }> = [];
+  // What a held child or socket looks like now, read once before cleanup kills it.
+  readonly looks: Array<() => Record<string, unknown>> = [];
+
+  mark(row: Mark) {
+    this.rows.push({ ...row, at: Math.round(performance.now() - this.start) });
+  }
+
+  async phase<A>(phase: string, run: () => Promise<A>, index?: number): Promise<A> {
+    this.mark({ _tag: "entered", phase, index });
+    const done = await run();
+    this.mark({ _tag: "answered", phase, index });
+    return done;
+  }
+
+  print() {
+    console.error(`T896 journal, ms since start\n${this.rows.map((row) => JSON.stringify(row)).join("\n")}`);
+  }
+}
+
+// The scenario that keeps a journal sets it; `afterEach` marks its cleanup there.
+let journal: Journal | undefined;
+
 const children: Array<ChildProcess> = [];
 const homes: Array<string> = [];
 const ports: Array<Effect.Effect<void>> = [];
@@ -116,11 +152,17 @@ const giveBack = async (held: Held) => {
 };
 
 afterEach(async () => {
+  const probe = journal;
+  journal = undefined;
+  probe?.mark({ _tag: "held", facts: probe.looks.map((look) => look()) });
+  probe?.mark({ _tag: "entered", phase: "cleanup" });
+
   for (const ws of sockets.splice(0)) {
     ws.close();
   }
 
   await giveBack(shared);
+  probe?.mark({ _tag: "answered", phase: "cleanup" });
 });
 
 const unusedPort = async (held: Held) => {
@@ -136,6 +178,7 @@ const launch = async (
   saved?: Saved,
   rateLimit = { limit: 100_000, window: 60_000 },
   source: "flags" | "env" | "file" = "flags",
+  probe?: Journal,
 ) => {
   readFileSync(join(APP, "dev.ts"), "utf8");
   const key = saved?.key ?? identity();
@@ -180,13 +223,26 @@ const launch = async (
     { cwd: APP, env, stdio: ["ignore", "pipe", "pipe"] },
   );
   held.children.push(child);
+  const ready = `{"ready":${JSON.stringify(url)},"build":`;
+
+  if (probe) {
+    probe.mark({ _tag: "spawned" });
+    child.once("exit", (code, signal) => probe.mark({ _tag: "exited", code, signal }));
+    child.once("error", () => probe.mark({ _tag: "child-error" }));
+    probe.looks.push(() => ({ child: child.pid, exitCode: child.exitCode, signal: child.signalCode }));
+  }
+
   let output = "";
-  child.stdout!.on("data", (b: Buffer) => {
+  const heard = (b: Buffer) => {
+    const before = output.includes(ready);
     output += b.toString();
-  });
-  child.stderr!.on("data", (b: Buffer) => {
-    output += b.toString();
-  });
+
+    if (!before && output.includes(ready)) {
+      probe?.mark({ _tag: "ready" });
+    }
+  };
+  child.stdout!.on("data", heard);
+  child.stderr!.on("data", heard);
 
   for (;;) {
     if (child.exitCode !== null) {
@@ -196,7 +252,7 @@ const launch = async (
     try {
       // The page is served while startup is still flushing the lifecycle outbox.
       // dev.ts emits ready only after that flush. Read history after its ready message.
-      if (output.includes(`{"ready":${JSON.stringify(url)},"build":`) && (await fetch(url)).ok) {
+      if (output.includes(ready) && (await fetch(url)).ok) {
         break;
       }
     } catch {
@@ -264,21 +320,39 @@ class Client {
   private readonly key: ReturnType<typeof identity>;
   private readonly tab: string;
 
-  constructor(base: string, key: ReturnType<typeof identity>, tab: string) {
+  private readonly probe: Journal | undefined;
+
+  constructor(base: string, key: ReturnType<typeof identity>, tab: string, probe?: Journal) {
     this.base = base;
     this.key = key;
     this.tab = tab;
+    this.probe = probe;
     this.ws = new WebSocket(`${base.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
     sockets.push(this.ws);
+    this.ws.addEventListener("open", () => probe?.mark({ _tag: "socket", event: "open" }));
     this.ws.addEventListener("error", () => {
+      probe?.mark({ _tag: "socket", event: "error" });
       this.closed = true;
     });
-    this.ws.addEventListener("close", () => {
+    this.ws.addEventListener("close", ({ code }) => {
+      probe?.mark({ _tag: "socket", event: "close", code });
       this.closed = true;
     });
     this.ws.addEventListener("message", ({ data }) => {
-      this.frames.push(data === "pong" ? "pong" : JSON.parse(String(data)));
+      const frame = data === "pong" ? "pong" : JSON.parse(String(data));
+
+      if (typeof frame !== "string" && frame.id !== undefined) {
+        probe?.mark({ _tag: "response", id: frame.id });
+      }
+
+      this.frames.push(frame);
     });
+    probe?.looks.push(() => ({
+      socket: this.ws.readyState,
+      closed: this.closed,
+      buffered: this.frames.length,
+      sent: this.serial,
+    }));
   }
 
   async next(test: (f: Frame | string) => boolean): Promise<any> {
@@ -335,6 +409,7 @@ class Client {
       await pause();
     }
 
+    this.probe?.mark({ _tag: "request", id, method });
     this.ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
     return this.next((f) => typeof f !== "string" && f.id === id);
   }
@@ -349,8 +424,8 @@ class Client {
   }
 }
 
-const connected = async (s: Awaited<ReturnType<typeof instance>>, tab = "tab-a") => {
-  const client = new Client(s.url, s.key, tab);
+const connected = async (s: Awaited<ReturnType<typeof instance>>, tab = "tab-a", probe?: Journal) => {
+  const client = new Client(s.url, s.key, tab, probe);
   const hello = await Effect.runPromise(client.hello());
   expect(hello.error).toBeUndefined();
   return client;
@@ -697,18 +772,22 @@ describe("P12 real dev.ts wire", () => {
     expect(await read(c, "counter:1/inbox")).toHaveLength(1);
   });
   it("scenario: p11 plant: reverse or repeat a page, or stop at the first page", async () => {
-    const s = await instance(),
-      c = await connected(s),
-      pid = await counter(c);
+    // T896: this scenario hung in CI with no sign of where. Its journal prints only if it fails.
+    const probe = new Journal();
+    journal = probe;
+    onTestFailed(() => probe.print());
+    const s = await probe.phase("launch", () => launch(shared, undefined, undefined, "flags", probe)),
+      c = await probe.phase("connect", () => connected(s, "tab-a", probe)),
+      pid = await probe.phase("counter", () => counter(c));
     const accepted: Array<{ rev: number; pos: number }> = [];
 
     for (let n = 0; n < PAGE + 3; n++) {
-      accepted.push(placing(await send(c, pid, `page-${n}`)));
+      accepted.push(placing(await probe.phase("send", () => send(c, pid, `page-${n}`), n)));
     }
 
-    const first = await read(c, "counter:1/inbox");
+    const first = await probe.phase("first page", () => read(c, "counter:1/inbox"));
     expect(first).toHaveLength(PAGE);
-    const second = await read(c, "counter:1/inbox", first.at(-1)!.rev);
+    const second = await probe.phase("second page", () => read(c, "counter:1/inbox", first.at(-1)!.rev));
     expect(second).toHaveLength(3);
     expect([...first, ...second].map(({ rev, pos }) => ({ rev, pos }))).toEqual(
       accepted.map(({ rev, pos }) => ({ rev, pos })),
