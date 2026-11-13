@@ -140,7 +140,11 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   run the steps by hand, each logged in `field/`, and the lead agent reads every diff, CI
   and the leak grep before a merge. `next/` does not wait on the pipeline. No builder starts
   before an approved plan and tests that exist
-  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). A plan that only builds a decided
+  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). After a review sends a lane back, one fix agent writes the law and the fix
+  together, with no separate tests and build steps
+  ([0177](./.decisions/0177-fix-round-is-one-agent.md)). A lane stops at its second sent-back
+  review: the lead lands what works and files the rest as a ticket
+  ([0176](./.decisions/0176-second-send-back-stops-lane.md)). A plan that only builds a decided
   note is approved by the lead session after its own read and draft check. It writes
   `Approved by the lead agent, builds <note>; body <sha256-12>` on line 1 and replaces that line
   after any body edit, including an appended amendment. A plan that raises a new design call
@@ -180,7 +184,8 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
 - **One fresh agent per step** (owner, 2026-11-09), and the lead drives with flows, never a lane agent ([0064](./.decisions/0064-the-lead-drives-with-flows.md)). Each step's agent reads the lane's state
   file, does its one step and writes the state file back for the next; no long driver carries a
   ticket. A drive script will chain the mechanical steps and start an agent only for judgment
-  (tracker ticket 341). The lead skill says how.
+  (tracker ticket 341). A recheck after a fix round resumes the same reviewer, never a fresh one
+  ([0177](./.decisions/0177-fix-round-is-one-agent.md)). The lead skill says how.
 - **No number caps a pull request's size** (owner, 2026-11-11): a plan still cuts big work into
   slices, each landing whole with its tests, by what works on its own and never to fit a count.
   Size picks who looks, and a warning drawn from our own merged pull requests only advises

@@ -11,6 +11,11 @@ You make the test writer's red laws green, in product code only, as the approved
 A brief names the ticket, the plan's path, the branch, and what this round fixes. This skill holds
 the rest.
 
+A fix round after a review is one agent doing both jobs: it writes the law and the fix together,
+with no tests step first ([0177](../../../.decisions/0177-fix-round-is-one-agent.md)). Its brief is
+[the lead skill's template](../lead/SKILL.md#when-a-review-sends-back), and it follows this skill
+for the product code.
+
 ## Steps
 
 1. **Read** `AGENTS.md` (all of it), then the approved plan, then the decided notes it builds. Say

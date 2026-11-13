@@ -51,7 +51,8 @@ Do not add a marker, key or readable file as proof of session identity.
 
 ## Review brief template
 
-Use this for the whole diff, including a re-review after fixes:
+Use this for the whole diff, including a re-review by a fresh reviewer. A recheck after a fix round
+uses [the recheck message](#when-a-review-sends-back) instead:
 
 ```text
 Use the review skill for the ticket below.
@@ -87,6 +88,82 @@ field/findings/. Do not start another review round for it.
 End with exactly one answer: line, as the last line.
 Keep the four reason labels in the review skill. A missed case in a named class checks the law;
 it does not reopen every test's merits.
+
+## When a review sends back
+
+A fix round is one agent and a recheck, and a lane stops at its second sent-back review
+([0177](../../../.decisions/0177-fix-round-is-one-agent.md),
+[0176](../../../.decisions/0176-second-send-back-stops-lane.md)).
+
+```mermaid
+flowchart TD
+  review["a review answers send build or send tests"] --> count{"the lane's second sent-back review?"}
+  count -- "no" --> fix["start one fix agent"]
+  fix --> recheck["resume the same reviewer"]
+  recheck --> review
+  count -- "yes" --> stop["stop the lane"]
+  stop --> left{"does what is left break the slice's main job?"}
+  left -- "no" --> cut["land what works, file the rest as a ticket"]
+  left -- "yes" --> owner["take it to the owner"]
+```
+
+1. **Count the lane's sent-back reviews.** The lane's state file has each step's outcome. `chain.ts`
+   does not count them yet, so you do.
+2. **On the first,** start one fix agent with the brief below. It writes the law and the fix
+   together: no tests step and no build step. Then resume the same reviewer, with what it already
+   read, and send it the recheck message below. Never start a fresh reviewer for a recheck.
+3. **On the second,** stop the lane. Land what works, file the rest as a tracker ticket
+   (`tracker_file`), and write the lane's field note in `field/notes/`. Take it to the owner only
+   if what is left breaks the slice's main job.
+
+A review that answers `send plan` is not a fix round: it goes back to the plan step, as today.
+The first pass is unchanged: plan, tests, build and one review, each by its own fresh agent.
+
+The fix agent's brief:
+
+```text
+Fix round for ticket <id>, <title>, <today's tooling or next/>.
+You do the tests step and the build step together, for the faults below only. Use the tests skill
+for how a law is written and the build skill for how product code is written.
+Branch: fabrikalfa/<name>, in the worktree <path>. Approved plan: <path>. Reviewed head: <full SHA>.
+
+Faults the review named:
+1. <path:line>: <what is wrong>. Input that shows it: <the call, the Msgs or the value>.
+2. <path:line>: <what is wrong>. Input that shows it: <the call, the Msgs or the value>.
+
+Write the law and the fix together, as small as the fault. For each fault, write its law, or
+extend the law that covers its class. See it fail on the reviewed head for that fault. Then fix
+the product code until it passes. Change nothing these faults do not need.
+Commit the law as the tests step and the fix as the build step, with the step-commit skill.
+
+Laptop caps: tests on a narrow path only, as `nice -n 19 pnpm exec vitest run --maxWorkers=1 <path>`,
+never the full suite. `pnpm lint` once. At most one `pnpm typecheck`, at the very end. One Electron
+app at a time. Every wait or poll loop runs in the background.
+
+Finish the whole round. An error, a timeout or a failing tool is an ordinary obstacle: work through
+it yourself. Stop only for a real blocker, such as a fault that needs a new design call, and say
+exactly what it is. End with each fault, its law at file:line, how you saw the law fail and then
+pass, and the new head's full SHA. Do not end with a list of what is left or an offer to continue.
+```
+
+The recheck message, sent to the resumed reviewer:
+
+```text
+Recheck for ticket <id>. A fix round answered your review.
+New head: <branch and full SHA>. The fix is <reviewed SHA>..<new SHA>.
+
+Faults you named:
+1. <path:line>: <the fault, in your words>
+2. <path:line>: <the fault, in your words>
+
+Check the fix for these faults and the new law's reach: read each line the fix changed and what
+calls it, and plant a break, by reading or in a scratch copy, to see that the new law reaches the
+fix. If you now think one of your findings was wrong, say so.
+A new fault you notice outside the fix is a finding row or ticket text for the lead. It sends the
+lane back only if it breaks the slice's main job.
+End with exactly one answer: line, as the last line: `answer: done <why>`, or
+`answer: send build <why>` (or `send tests`, `send plan`).
+```
 
 ## Lane brief template
 
@@ -130,11 +207,13 @@ Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-cod
   the branch, the signed heads, what ran and what is next. Nothing is carried in an agent's
   memory. A PR still merges only after every step ran, each by its own agent (plan, tests, build,
   one review saying merge-ready), with CI green and the leak grep clean. No step is ever
-  skipped. Only a new design call or an exam read that does not meet the bar (step 9) comes back to
+  skipped. A fix round after a sent-back review is the one exception: one agent does the tests and
+  build work, and the same reviewer is resumed ([above](#when-a-review-sends-back)). Only a new design call or an exam read that does not meet the bar (step 9) comes back to
   the lead. `chain.ts` (tracker ticket 341) chains the mechanical steps in code and starts an
   agent only where judgment is needed ([below](#run-a-whole-lane-with-chaints)). *It said (owner, 2026-11-08): one driver per ticket, start
   to finish. One driver ran for 11 hours, which was wasteful.*
-- **A step agent never writes another step's code or tests** (owner, 2026-11-08). The agent
+- **A step agent never writes another step's code or tests** (owner, 2026-11-08), except the fix
+  agent of a fix round (0177). The agent
   that hands work along fetches, reads the report, and runs what a Codex box cannot: e2e runs and
   screenshots.
 - Plan every row as soon as its tier opens, and start each test writer when its plan is approved.
@@ -369,6 +448,9 @@ scripts, stop the lane and start it again with `--start <step>`; it prints the c
   scope or drop. Tool stucks never count. Put `Estimate: <n> steps, $<d>` in the plan or the lane
   brief: twice it is the backstop and replaces `MaxSteps`. With none, the chain prints that it
   skipped the backstop. Never put these numbers in a step's brief.
+  Since [0176](../../../.decisions/0176-second-send-back-stops-lane.md) a lane stops at its second
+  sent-back review, whatever this window says. The chain does not count that yet, so
+  [the lead does](#when-a-review-sends-back). The backstop stands.
 - **Judgment** (an `ask:lead:question`, or a `stuck`): the chain runs one turn in the main
   checkout on the agents package's read-only Codex row, which cannot change the checkout, with the
   lane's state file and the step's report in its prompt. It answers one JSON object: `send` with a step and a note runs that step again
@@ -481,7 +563,8 @@ visible, and never weaken the rules to hide this message.
    one row file in `field/runs/` (`fieldrow.py` for Codex, `clauderow.ts` for a Claude agent, a
    driver included, once it has finished, or drive's `BOXES/<lane>-rows.jsonl`, each saved with
    `fieldfile.ts runs`), and one note file in `field/notes/` for anything that
-   broke, cost too much, needed a person or worked well. Send a fix to the step that owns the file.
+   broke, cost too much, needed a person or worked well. Send a fix to the step that owns the file;
+   when a review sent the lane back, follow [When a review sends back](#when-a-review-sends-back).
    A test that breaks on one machine or in a box leans on that machine: send it to tests to remove
    the dependency, never to catch the error ([0052](../../../.decisions/0052-tests-never-depend-on-the-machine.md)).
    Step-commit checks file owners.

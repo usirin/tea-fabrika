@@ -81,6 +81,21 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
    or beside it. Reading one function is not proof: run it, or show the two lines that disagree.
    With no proof, write nothing.
 
+## Recheck
+
+The lead resumes you after a fix round, with a message that names the new head and the faults you
+named ([0177](../../../.decisions/0177-fix-round-is-one-agent.md)). This is not a new review of the
+whole diff.
+
+- Check the fix for the faults you named: read each line it changed and what calls it.
+- Check that the new law reaches the fix. Plant a break, by reading or by running it in a scratch
+  copy, never in the branch. The fix agent wrote this law itself, so yours is the read that guards
+  it.
+- You may withdraw a finding of yours that was wrong. Say which, and why.
+- A new fault you notice outside the fix is a finding row, or ticket text for the lead. It does
+  not send the lane back unless it breaks the slice's main job.
+- End with the same `answer:` line, as the last line.
+
 ## Never
 
 - Change, stage or commit a file. Run a command that writes to the branch.

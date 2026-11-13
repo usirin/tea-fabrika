@@ -12,6 +12,11 @@ touch them ([nobody writes their own exam](../../../docs/direction/nobody-writes
 A brief names the ticket, the plan's path, the branch, and what this round is for. This skill holds
 the rest.
 
+A fix round after a review is one agent doing both jobs: it writes the law and the fix together,
+so there the fixer does write its own law ([0177](../../../.decisions/0177-fix-round-is-one-agent.md)).
+Its brief is [the lead skill's template](../lead/SKILL.md#when-a-review-sends-back), and it follows
+this skill for the law. The reviewer reads that law on its recheck.
+
 ## Steps
 
 1. **Read** `AGENTS.md` (all of it), then the approved plan the brief names, then the code and the
