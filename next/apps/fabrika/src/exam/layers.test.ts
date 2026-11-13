@@ -253,6 +253,7 @@ const rowParts: Readonly<Record<string, string>> = {
   "next-runtime": "app",
   "next-mcp": "mcp",
   "next-door": "door",
+  "next-schedules": "door", // T762: layer 6 beside the door; it imports only tea and effect today
   "next-node": "node",
   "next-workers": "workers",
 };
@@ -1143,6 +1144,7 @@ describe("layers", () => {
       "next-workers": 8,
       "next-libfabrika-entry": 7,
       "next-door": 6,
+      "next-schedules": 6,
       "next-runtime": 5,
       "next-access": 4,
       "next-processes": 3,
