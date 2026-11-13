@@ -97,10 +97,10 @@ const path = fc.oneof(
 
 const list = fc.array(path, { maxLength: 12 });
 
-it("main enables every job for every path list", () => {
+it("main and a merge queue's group enable every job for every path list", () => {
   fc.assert(
-    fc.property(list, (paths) => {
-      expect(ci.classify(paths, "push")).toEqual({ ...heavy, field: true });
+    fc.property(list, fc.constantFrom("push", "merge_group"), (paths, event) => {
+      expect(ci.classify(paths, event)).toEqual({ ...heavy, field: true });
     }),
     options,
   );
@@ -382,7 +382,7 @@ it("skill script and prose rules apply only at the repo root", () => {
 // runs the rest on the same head. Plants caught: a draft that still runs test, main honoring the
 // draft flag, a draft that skips typecheck, and a ready docs-only PR that builds (that one survived
 // until the pinned example below).
-const events = fc.constantFrom("pull_request", "push", "workflow_dispatch", "");
+const events = fc.constantFrom("pull_request", "push", "merge_group", "workflow_dispatch", "");
 const paths = fc.option(list, { nil: null });
 
 it("property: a ready pull request and every other event run what classify says, build with check", () => {
@@ -423,4 +423,27 @@ it("property: the draft flag never skips a job on main", () => {
     }),
     options,
   );
+});
+
+it("property: a merge queue's group runs every job, build included, and ignores the draft flag", () => {
+  fc.assert(
+    fc.property(paths, fc.boolean(), (paths, draft) => {
+      expect(Object.values(ci.jobs(paths, "merge_group", draft)).every(Boolean)).toBe(true);
+    }),
+    {
+      ...options,
+      // pinned: a group of Markdown alone is the case a pull request would skip.
+      examples: [[["docs/a.md"], true]],
+    },
+  );
+});
+
+it("scenario: a merge queue's group reads its paths from its base, as a push does", () => {
+  const calls: string[][] = [];
+  const run: Runner = (args) => {
+    calls.push(args);
+    return { status: 0, stdout: "docs/a.md\0" };
+  };
+  expect(ci.readPaths("b".repeat(40), "c".repeat(40), "merge_group", run)).toEqual(["docs/a.md"]);
+  expect(calls).toEqual([["diff", "--no-renames", "--name-only", "-z", "b".repeat(40), "c".repeat(40), "--"]]);
 });
