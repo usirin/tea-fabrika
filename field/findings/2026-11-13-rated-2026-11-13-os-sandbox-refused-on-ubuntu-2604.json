@@ -1,0 +1,8 @@
+{
+  "_tag": "rated",
+  "finding": "2026-11-13-os-sandbox-refused-on-ubuntu-2604",
+  "says": "fix",
+  "by": "owner",
+  "date": "2026-11-13",
+  "ticket": "kamp-us/tea-fabrika#901"
+}
