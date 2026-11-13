@@ -9,6 +9,30 @@ the order from before that day: `fabsh` and pipes in Tier 2, agents in Tier 5, r
 and thin slices in Tier 1. The changed Tier 1 follows in its own pull request. Until it lands,
 0159 wins wherever this page differs.
 
+**Proposed 2026-11-13, for the owner's read: what Tier 1 is now.** Tier 1 is the four primitives,
+`fabsh`, pipes, `summon` and `join`, working for real in `next/`, on the base its built rows
+already give. The pieces, in build order, and the mark on every row are in
+[the four primitives first](./tier-1.md#the-four-primitives-first). These pieces came in from
+other tiers:
+
+- From Tier 2: `fabsh` as a program in a tile, pipes (first for `fabsh`'s built-ins), and the desk
+  program with split, close and the prefix key
+  ([0279](../../.decisions/0279-tuval-is-a-package-desk-in-tier-2.md), amended by 0159).
+- From Tier 4: hands, only far enough to run an agent's turn (the lead's reading, from
+  [talk where you work](../direction/talk-where-you-work.md#in-next-summon-is-an-alias-with-a-session)).
+- From Tier 5: the link to the agent harnesses, `summon`, `@name` and the list of names
+  ([0157](../../.decisions/0157-summon-starts-an-agent-and-at-talks-to-it.md)), with the
+  [Tier 5 laws](#tier-5-laws-decided-2026-11-07) for any agent fabrika starts.
+- From the inbox's later tiers: the inbox past its thin row, so `@person` and an agent's message
+  reach it ([0151](../../.decisions/0151-a-thin-inbox-is-a-tier-1-row.md),
+  [0521](../../.decisions/0521-an-agents-message-is-an-inbox-row.md)).
+- From no tier: rooms and `join` ([0158](../../.decisions/0158-no-dms-only-rooms.md), the
+  [summon guidelines](../direction/summon-guidelines.md#rooms-mentions-and-turns-in-order)).
+
+The 15 rows the four do not need wait, and none leaves the plan. Until the cloud and recovery rows
+are built, daily work lives only in the laptop's ledger; that risk is open, the owner's. The tables
+below still show the order from before 2026-11-13.
+
 All the work on `next/` is one plan of seven tiers. Each tier is one pass across all five layers
 and across fabrika's six core ideas, and each ends with something a person can use. No layer and no
 core idea gets finished alone, and none waits for the tier that finishes it: every core idea gets a
@@ -400,3 +424,6 @@ Git history keeps the old wording.
 - 2026-11-13, [0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md): the next thing built is `fabsh`, pipes, `summon` and
   `join`, working for real, with whatever they need. Tier 1 changes to put them first, in its own
   pull request; no tier table above is changed yet.
+- 2026-11-13, proposed: the changed Tier 1, in
+  [the four primitives first](./tier-1.md#the-four-primitives-first). Pieces come in from Tiers 2,
+  4 and 5 and from no tier; 15 rows wait.

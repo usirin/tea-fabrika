@@ -58,9 +58,30 @@ request goes by hand, by its own agent, and is logged.
 *2026-11-13:* the order of work changed ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)). The next thing built in `next/` is `fabsh`,
 pipes, `summon` and `join`, working for real, with whatever they need (the window, a second tile and its
 keys, the link to the agent harnesses, rooms), so fabrika is built inside
-fabrika. Tier 1's rows that this needs come first and the others wait. The changed Tier 1 is not
-written yet: it follows in its own pull request, and until then 0159 wins over
-[the tiers](./tiers.md) and [Tier 1](./tier-1.md) where they differ. No row's count changes.
+fabrika. Tier 1's rows that this needs come first and the others wait. The changed Tier 1 is
+proposed in [the four primitives first](./tier-1.md#the-four-primitives-first), for the owner's
+read; until the owner says yes, 0159 wins over [the tiers](./tiers.md) and [Tier 1](./tier-1.md)
+where they differ. No row's count changes. *It said: the changed Tier 1 is not written yet.*
+
+*2026-11-13, proposed:* in that section, 27 of Tier 1's 44 rows are marked needed, 2 help and 15
+wait. The build order is the window, a person starting a program and the desk, `fabsh` in a tile,
+pipes for its built-ins, hands far enough to run a turn, `summon` with the agent link, `@name` with
+the inbox past its thin row, then rooms and `join`. Nothing in `next/` names `fabsh`, `summon` or a
+room yet. Open pull requests on Tier 1 rows: [1028](https://github.com/usirin/tea-fabrika/pull/1028)
+(P14), [1044](https://github.com/usirin/tea-fabrika/pull/1044) (P13),
+[1054](https://github.com/usirin/tea-fabrika/pull/1054) (P38),
+[1074](https://github.com/usirin/tea-fabrika/pull/1074) (P39),
+[1012](https://github.com/usirin/tea-fabrika/pull/1012) (P15),
+[1097](https://github.com/usirin/tea-fabrika/pull/1097) (P21),
+[1032](https://github.com/usirin/tea-fabrika/pull/1032) (P36), and drafts
+[1079](https://github.com/usirin/tea-fabrika/pull/1079) (P19),
+[1092](https://github.com/usirin/tea-fabrika/pull/1092) (P34c) and
+[1099](https://github.com/usirin/tea-fabrika/pull/1099) (P25). → the owner: read the section; pick
+on PR 1028 and PR 1044, past their budget stop with red laws
+([0076](../../.decisions/0076-a-lane-stops-at-its-budget.md)); walk S1 of the
+[summon guidelines](../direction/summon-guidelines.md#s1-one-grammar-typed-tokens-every-view-reads-it)
+before `fabsh` is built, and S2 to S7 before `summon`. The other open calls are listed in
+[the section](./tier-1.md#the-owners-walks-and-decisions-by-step), each tied to its step.
 
 *2026-11-12:* ticket 893 slice 1 in `next/` saves process view watchers across object sleep
 and removes a watch on publish after its Project route leaves. Unknown delivery failures retain
@@ -299,6 +320,8 @@ longer holds. A plan that only builds a decided note is approved by the lead age
 raises a new design call goes to the owner. When the lead fills agent slots, these lanes count as
 much as `next/` work and run beside Tier 1, never held back for it (owner, 2026-11-10,
 [0063](../../.decisions/0063-todays-app-lanes-share-the-slots.md)).
+
+- **The four primitives first, in `next/` ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)).** The changed Tier 1 is proposed, 2026-11-13, in [the four primitives first](./tier-1.md#the-four-primitives-first): what done means at the laptop, what is built, what is missing piece by piece, the build order, and the 15 rows that wait. → the owner reads it, picks on PR 1028 and PR 1044, then walks S1 before `fabsh` is built
 
 - **Configurable keys on today's app, ticket 174.** Two pull requests. Keys PR 1, change your keys without leaving the app, merged 2026-11-08 ([PR 505](https://github.com/usirin/tea-fabrika/pull/505)). Keys PR 2 brings program and mode keys into the same table. → the lead agent plans PR 2
 - **Design foundations on today's app, approved by the owner 2026-11-07.** [The build plan](./design-foundations.md): ticket 245, three pull requests, all merged 2026-11-08 ([499](https://github.com/usirin/tea-fabrika/pull/499), [506](https://github.com/usirin/tea-fabrika/pull/506), [519](https://github.com/usirin/tea-fabrika/pull/519)). → nothing
