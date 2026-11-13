@@ -12,6 +12,7 @@ import { from } from "../processes/Process.test-support.ts";
 import type * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { Input } from "../runtime/Program.ts";
 import { nth } from "../runtime/RepliesTest.ts";
+import * as StartsTest from "../settings/StartsTest.ts";
 import type { Sql } from "../Sql.ts";
 import { KeyLine, writeSshsig } from "../transport/Sshsig.ts";
 import { programBox } from "./box.ts";
@@ -45,7 +46,7 @@ export interface Harness {
     accept: () => number,
     usage: (object: string, rows: ReadonlyArray<typeof IsolateUsage.Usage.Type>) => void,
     loaded: (key: string, code: unknown) => void,
-  ) => Parameters<typeof projectLayer>[1];
+  ) => Omit<Parameters<typeof projectLayer>[1], "INSTANCE">;
 }
 
 /** The driver runs the generated Effect and checks coverage after all six walks. */
@@ -179,22 +180,28 @@ const projectWalk = Effect.fnUntraced(function* (
   );
 
   const url = "https://fabrika.test/p13-project";
+  const instance = StartsTest.fixture(
+    {
+      name: "p13-project",
+      person: from().for,
+      founder: line,
+      window: raw.toString("base64url"),
+      port: 18787,
+      build: BUILD,
+    },
+    (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  );
   const project = yield* ProjectService.pipe(
     Effect.provide(
-      projectLayer(ctx, env, {
-        config: {
-          name: "p13-project",
-          person: from().for,
-          founder: line,
-          window: raw.toString("base64url"),
-          port: 0,
-          build: BUILD,
-          rateLimit: { limit: 100_000, window: 60_000 },
+      projectLayer(
+        ctx,
+        { ...env, INSTANCE: JSON.stringify(instance) },
+        {
+          programs: { counter: { hash: BUILD, source: "" } },
+          bootstrap: [{ name: NAME, id: "project-start", program: "counter" }],
+          door: harness.door(url, ProjectInput),
         },
-        programs: { counter: { hash: BUILD, source: "" } },
-        bootstrap: { name: NAME, id: "project-start", program: "counter" },
-        door: harness.door(url, ProjectInput),
-      }),
+      ),
     ),
   );
   const client = yield* project.connect();

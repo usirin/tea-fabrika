@@ -16,7 +16,7 @@ const Kind = Access.Grant.fields.as;
  * @stability unstable
  * @category models
  */
-export const words: Record<typeof Kind.Type, string> = { window: "window", agent: "agent" };
+export const words: Record<typeof Kind.Type, string> = { window: "window", agent: "agent", hands: "hands" };
 
 /**
  * Schema for one waiting key, shared by its tabs. A pass is a digest only.

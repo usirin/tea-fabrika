@@ -269,7 +269,7 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
       Effect.sync(() => {
         notices.push({ client, news });
       }),
-    inputs: { schema: Schema.Json, log: Schema.Json, personOnly: [], raw: [] },
+    inputs: { schema: Schema.Json, personOnly: [], raw: [] },
     events: { personOnly: [] },
   };
   let life = yield* Layer.build(store.gateway(options));

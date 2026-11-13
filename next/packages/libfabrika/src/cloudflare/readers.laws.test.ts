@@ -247,7 +247,7 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
               const runtime = projectRuntime(ctx, env, {
                 config: local,
                 programs: {},
-                bootstrap: { id: "boot", name: "boot", program: "missing" },
+                bootstrap: [{ id: "boot", name: "boot", program: "missing" }],
                 door: () => Effect.die("consumer before start"),
               });
               yield* Effect.addFinalizer(() => runtime.disposeEffect);
@@ -1062,7 +1062,7 @@ SettingsTest.suite((recipe, secret) =>
               : projectRuntime(ctx, env, {
                   config,
                   programs: { fixture: { hash: "fixture", source: "fixture" } },
-                  bootstrap: { id: "bootstrap-fixture", name: "bootstrap", program: "fixture" },
+                  bootstrap: [{ id: "bootstrap-fixture", name: "bootstrap", program: "fixture" }],
                   door: () => Effect.succeed({} as GatewayCalls),
                 });
         close = Effect.promise(() => runtime.dispose());

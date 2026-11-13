@@ -211,7 +211,7 @@ StartsTest.law(
         Effect.sync(() =>
           projectRuntime(ctx, env, {
             programs: {},
-            bootstrap: { id: "unexpected", name: "unexpected", program: "unexpected" },
+            bootstrap: [{ id: "unexpected", name: "unexpected", program: "unexpected" }],
             door: () => Effect.sync(unexpected).pipe(Effect.andThen(Effect.die("unexpected consumer construction"))),
           }),
         ),
