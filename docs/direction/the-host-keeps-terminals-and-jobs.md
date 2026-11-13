@@ -66,6 +66,7 @@ tiles.attach("tile-b", "term-1"); // tile B shows the same terminal, counter in 
 - **The layout is the app's.** Which tile sits where, splits and folds, as in
   [fold, not tabs](./fold-not-tabs.md). The host knows
   no layout, the way an X server knows nothing of i3's tree.
+  *Correction, 2026-11-13: in today's version the host does keep the desk, layout and focus, and steps it (`apps/fabrika/src/host/serve.ts:344`, `apps/fabrika/src/desk/desk.ts:147`). Each page only shows it.*
 - **Traces do not change.** A job's trace id is still its JobRecord's key
   ([a JobRecord holds its trace](./a-job-record-holds-its-trace.md)), and a
   child run still joins its leader's trace.
