@@ -73,6 +73,10 @@ The known way: on Unix, a deleted user's cron jobs stop running. `userdel` runs 
 "should remove any at/cron/print jobs etc. owned by the user to be removed"
 ([login.defs(5), `USERDEL_CMD`](https://man7.org/linux/man-pages/man5/login.defs.5.html)).
 
+The known way for what is left running: on Unix a process whose parent is gone is an orphan. It
+keeps running and stays in the process list. Kubernetes uses the same word for an object whose
+owner was deleted.
+
 ## Decision
 
 **A start with no member's input behind it belongs to the brain or to the process owner.**
@@ -84,6 +88,11 @@ The known way: on Unix, a deleted user's cron jobs stop running. `userdel` runs 
 - A process keeps the member who owns it: the member whose input started it. That is the member a
   timer's start is checked against, with 0170's check.
 - When that member is removed from the instance, their timers stop.
+- A removed member's processes keep running, and their saved state stays. They only lose the
+  writes made under the process owner, so a timer's write is refused. A write another member's
+  input causes is still that member's (0261).
+- The process list marks such a process as one whose owner was removed, and any member may stop
+  it. Nothing is stopped for them.
 
 **Words**
 
@@ -96,10 +105,11 @@ The known way: on Unix, a deleted user's cron jobs stop running. `userdel` runs 
   asked.
 - A timer's start goes through the same check as a typed one, so it needs no rule of its own.
 - The glossary gets one row, `process owner`.
+- The mark is read from what is already recorded: the process's owner and the member's removal.
+  A sweep that stops such processes after a time is not decided and can be added later.
 
 **Not decided here:**
 
-- What happens to a removed member's running processes and their saved state.
 - Who may take those processes over.
 - Who owns a process the brain starts at boot.
 - Whether a restarted process, which is a new process, keeps the owner of the one it replaces.
