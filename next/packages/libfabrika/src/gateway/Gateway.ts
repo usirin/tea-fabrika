@@ -1242,9 +1242,13 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       }
 
       // Once its input row exists, a binding keeps that metadata across selector changes.
-      const priorRecord = yield* Stream.runHead(
-        ledger.read("gateway/inputs", 0).pipe(Stream.filter((entry) => entry.id === binding.id)),
-      );
+      // A binding this call allocated carries a new ID, so no row can hold it and nothing is read.
+      const priorRecord =
+        binding.id === inputId
+          ? Option.none()
+          : yield* Stream.runHead(
+              ledger.read("gateway/inputs", 0).pipe(Stream.filter((entry) => entry.id === binding.id)),
+            );
 
       if (Option.isSome(priorRecord)) {
         yield* Schema.decodeUnknownEffect(Schema.is(InputId)(binding.id) ? InputEvent : LegacyInputEvent)(
