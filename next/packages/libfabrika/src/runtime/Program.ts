@@ -3,6 +3,7 @@
 // would, and never runs a Cmd: the runner does that, after the input is saved.
 import { applyCell, msgKeysOf, type AnyCmdDef } from "@demlik/tea";
 import { Effect, Option, Predicate, Result, Schema, type SchemaIssue } from "effect";
+import * as SchemaTransformation from "effect/SchemaTransformation";
 import { ParentText } from "../coordination/index.ts";
 import { Deliveries, Policy } from "./internal/recovery.ts";
 
@@ -362,6 +363,85 @@ const makeEffect = Effect.fn("program.make")(function* <
 
 export const Program = { schema: Declaration, make, makeEffect };
 
+type PortFields<M, K extends string> = M extends Typed ? (K extends M["type"] ? Omit<M, "type"> : never) : never;
+
+type PortSchema<P extends typeof Declaration.Type, K extends string> = string extends K
+  ? Declared
+  : K extends keyof P["inputs"]
+    ? P["inputs"][K] extends Pick<typeof InputSchema.cases.read.Type, "_tag"> & {
+        readonly schema: infer S extends Declared;
+      }
+      ? S
+      : unknown extends P["msg"]["Type"]
+        ? Declared
+        : Schema.Codec<PortFields<P["msg"]["Type"], K>, unknown>
+    : Declared;
+
+const Payload = Schema.Record(Schema.String, Schema.Json).check(
+  Schema.makeFilter((value) => !Object.hasOwn(value, "type")),
+);
+
+const Fields = Schema.Record(Schema.String, Schema.Unknown);
+
+/** Narrows a JSON value to its object case. `Predicate.isObject` alone leaves a type no rest pattern takes. */
+const isJsonObject = (u: Schema.Json): u is Schema.JsonObject => Predicate.isObject(u);
+
+// Keep the Msg's codecs and checks intact. Only add and remove the port's discriminator.
+const writePortCodec = (msg: Declared, key: string) =>
+  Payload.pipe(
+    Schema.decodeTo(
+      Schema.toCodecJson(msg),
+      SchemaTransformation.transform<Schema.Json, Readonly<Record<string, Schema.Json>>>({
+        decode: (value) => ({ ...value, type: key }),
+        encode: (wire) => {
+          if (!isJsonObject(wire)) {
+            return {};
+          }
+
+          const { type: _, ...value } = wire;
+          return value;
+        },
+      }),
+    ),
+    Schema.decodeTo(Fields.check(Schema.makeFilter((m) => m.type === key))),
+    Schema.decodeTo(
+      Fields,
+      SchemaTransformation.transform({
+        decode: (m) => {
+          const { type: _, ...fields } = Predicate.isObject(m) ? m : {};
+          return fields;
+        },
+        encode: (fields) => ({ ...fields, type: key }),
+      }),
+    ),
+  );
+
+/**
+ * Returns the schema of one of a program's ports, or none when the program declares no port by
+ * that name. A read port gives its own schema. A write port gives a codec for its Msg's fields
+ * without `type`, which decodes and checks them with the Msg's own JSON codec.
+ *
+ * @stability unstable
+ * @category getters
+ */
+export function port<P extends typeof Declaration.Type, K extends string>(
+  program: P,
+  key: K,
+): Option.Option<PortSchema<P, K>>;
+export function port(program: typeof Declaration.Type, key: string): Option.Option<Declared> {
+  const input = Object.hasOwn(program.inputs, key) ? program.inputs[key] : undefined;
+
+  if (input === undefined) {
+    return Option.none();
+  }
+
+  if (input._tag === "read") {
+    return Option.some(input.schema);
+  }
+
+  return Option.some(writePortCodec(program.msg, key));
+}
+
 /** A JSON object: an event as it travels inside a write. Its declared schema gives its `_tag`. */
 const Event = Schema.Record(Schema.String, Schema.Json);
 
@@ -504,7 +584,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
   const decodeModel = Schema.decodeUnknownResult(program.state.schema);
   const encodeModel = Schema.encodeUnknownResult(program.state.schema);
   const encodeView = Schema.encodeUnknownResult(program.view.data);
-  const decodeMsg = Schema.decodeUnknownResult(program.msg);
+  const decodeMsg = Schema.decodeUnknownResult(Schema.toCodecJson(program.msg));
 
   /** A model as the program's own value, or ProgramDown with `reason`. */
   const model = (raw: unknown, reason: ProgramDown["reason"]): unknown => {
@@ -517,7 +597,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     return decoded.success;
   };
 
-  /** A Msg as the machine takes it: a settled Cmd Msg, or one the program's Msg schema decodes. */
+  /** A Msg as the machine takes it: a settled Cmd Msg, or one the Msg schema's JSON codec decodes. */
   const message = (raw: unknown, saved: boolean): Option.Option<Typed> => {
     const typed = decodeTyped(raw);
 

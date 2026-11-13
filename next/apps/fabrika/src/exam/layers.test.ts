@@ -1170,6 +1170,7 @@ describe("layers", () => {
       "next-node": 9,
       "next-workers": 8,
       "next-libfabrika-entry": 7,
+      "next-mcp": 6,
       "next-door": 6,
       "next-desktop-core": 6,
       "next-schedules": 6,

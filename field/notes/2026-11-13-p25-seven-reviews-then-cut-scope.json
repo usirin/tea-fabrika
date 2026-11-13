@@ -1,0 +1,18 @@
+{
+  "id": "2026-11-13-p25-seven-reviews-then-cut-scope",
+  "date": "2026-11-13",
+  "lanes": [
+    "usirin/tea-fabrika#888"
+  ],
+  "stage": "review",
+  "kind": "friction",
+  "what": "next/ version. In next/'s hand-run pipeline, the P25 slice 1 lane (a program's ports reach an agent as MCP tools) had seven reviews, and each one sent it back. The loop was review, tests, build, review again. The owner ruled on 2026-11-13 that a lane stops at its second sent-back review, and the lead lands what works and tickets the rest. Scope was cut: the last review left one fault (a port whose field is a shared type with a description does not list as an MCP tool, and no shipped program has such a port), and that fault became a tracker ticket with three smaller test gaps and one open call.",
+  "cause": "Decision 0076 stops a lane when 3 of the last 5 steps were sent back. A loop of review, tests, build puts only 2 send-backs in any 5 steps, so the count never fired.",
+  "person": true,
+  "primitive": "Check",
+  "fix": "A lane stops at its second sent-back review, counted on reviews and not on steps. The lead lands what works and files the rest as a ticket.",
+  "test": "Replay: a lane with review, tests, build, review, tests, build, review must stop at the second sent-back review. The count over the last 5 steps must not be what decides it.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1099"
+  ]
+}

@@ -120,7 +120,7 @@ const encodeAnswer = (schema: unknown, value: unknown): Schema.Json => {
   return Schema.decodeUnknownSync(Schema.Json)(Schema.encodeUnknownSync(schema)(value));
 };
 
-/** True when `m` names a write port and decodes against that port's schema. */
+/** True when `m` names a write port and that port schema's JSON codec decodes it. */
 const admits = (inputs: Readonly<Record<string, Input>>, m: unknown): boolean => {
   const typed = Schema.decodeUnknownOption(Typed)(m);
 
@@ -129,7 +129,11 @@ const admits = (inputs: Readonly<Record<string, Input>>, m: unknown): boolean =>
   }
 
   const port = inputs[typed.value.type];
-  return port !== undefined && port._tag === "write" && Result.isSuccess(Schema.decodeUnknownResult(port.schema)(m));
+  return (
+    port !== undefined &&
+    port._tag === "write" &&
+    Result.isSuccess(Schema.decodeUnknownResult(Schema.toCodecJson(port.schema))(m))
+  );
 };
 
 const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Schema.Json => {
