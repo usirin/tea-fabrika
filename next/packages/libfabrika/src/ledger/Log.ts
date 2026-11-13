@@ -102,5 +102,8 @@ export type Appended = typeof Appended.Type;
 export const Waited = Schema.TaggedUnion({ ready: { rev: Rev }, parked: {} });
 export type Waited = typeof Waited.Type;
 
+/** Cloudflare's row limit: the most bytes one entry's row holds, the bound past which `append` answers `too_big`. */
+export const ROW_BYTES = 2_000_000;
+
 /** The most entries one read answers. A guess: far under an object call's message for small events. */
 export const PAGE = 256;

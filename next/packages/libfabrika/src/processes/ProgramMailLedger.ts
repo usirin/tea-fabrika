@@ -1,7 +1,8 @@
 // Program mail on the ledger, next/ (P41 slice 1). One transaction saves the receipt in the source's
 // outbox and the letter in the target's inbox, both under the command's `/mail` ID. A repeat answers
 // the first receipt and appends nothing; a stale sender, a name outside the host's grant or a
-// missing name writes nothing at all, and a send never registers or starts a name.
+// missing name writes nothing at all, and a send never registers or starts a name. Besides the host's
+// grant, a child and the program that started it reach each other (P42), and nobody else does.
 import { Effect, Equal, Layer, Option, Result, Schema } from "effect";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
@@ -129,6 +130,16 @@ export const layer = (config: {
           );
       const lookup = (failure: ProcessError | LedgerError, refusal: typeof MailRefusal.Type) =>
         failure instanceof ProcessError ? refuse(refusal) : storage(failure);
+      /** A child and the program that started it may mail each other with no host grant (P42). The
+       *  right is read by name from the first life's requester, so a restart under the name keeps it. */
+      const related = (source: string, to: string) =>
+        transact((turn) => {
+          const table = manager.table(turn);
+          return (
+            Option.exists(table.starter(to), (name) => name === source) ||
+            Option.exists(table.starter(source), (name) => name === to)
+          );
+        });
       const deliver = Effect.fn("program_mail.deliver")(
         function* (delivery: Delivery) {
           yield* Effect.annotateCurrentSpan({
@@ -168,7 +179,10 @@ export const layer = (config: {
               return yield* refuse("stale_sender");
             }
 
-            if (!granted(config.grants, delivery.source.name, delivery.to)) {
+            if (
+              !granted(config.grants, delivery.source.name, delivery.to) &&
+              !(yield* related(delivery.source.name, delivery.to))
+            ) {
               return yield* refuse("forbidden");
             }
 
