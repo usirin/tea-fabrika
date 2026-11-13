@@ -63,6 +63,9 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
   const throttle = yield* Schema.decodeUnknownEffect(Declarations.brainThrottle.schema)(
     settings.values["desktop.brain-throttle"],
   ).pipe(Effect.mapError(unsupported));
+  const poll = yield* Schema.decodeUnknownEffect(Declarations.brainPoll.schema)(
+    settings.values["desktop.brain-poll"],
+  ).pipe(Effect.mapError(unsupported));
   const job = yield* Schema.decodeUnknownEffect(Job)({
     Label: label,
     ProgramArguments: [spec.executable, ...spec.args],
@@ -76,8 +79,10 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
   const run = Effect.fnUntraced(function* (executable: string, args: ReadonlyArray<string>) {
     return yield* Effect.scoped(
       Effect.gen(function* () {
+        // An interrupted command gets one poll interval after SIGTERM, then SIGKILL: a command that
+        // ignores SIGTERM would otherwise hold this scope, and the caller's operation lock, forever.
         const handle = yield* spawner.spawn(
-          ChildProcess.make(executable, args, { extendEnv: false, env: {}, stdin: "ignore" }),
+          ChildProcess.make(executable, args, { extendEnv: false, env: {}, stdin: "ignore", forceKillAfter: poll }),
         );
         const text = (stream: typeof handle.stdout) =>
           stream.pipe(
