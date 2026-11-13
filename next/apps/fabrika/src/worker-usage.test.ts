@@ -361,7 +361,9 @@ it.layer(
       Effect.gen(function* () {
         const world = yield* World;
         const { instance, built, send, home } = world;
-        const checklist = yield* start(world, "checklist:1", "fabrika/checklist");
+        // P14 slice 2: the app boots `checklist:1` itself, so this scenario starts its own under the
+        // next name and measures only the steps it sent.
+        const checklist = yield* start(world, "checklist:2", "fabrika/checklist");
         yield* send(checklist, "add", { type: "add", name: "milk" });
         yield* send(checklist, "rename", { type: "rename", name: "milk", to: "bread" });
         yield* send(checklist, "remove", { type: "remove", name: "bread" });
@@ -376,7 +378,7 @@ it.layer(
           build: built.programs["fabrika/checklist"]?.hash ?? "missing",
         });
         const started = yield* until(
-          invoke(instance.project(PROJECT), "read", "processes/checklist:1", 0, "usage-probe").pipe(
+          invoke(instance.project(PROJECT), "read", "processes/checklist:2", 0, "usage-probe").pipe(
             Effect.flatMap(Schema.decodeUnknownEffect(lifecycle)),
           ),
           (rows) => rows.some((row) => row.body.after === checklist),

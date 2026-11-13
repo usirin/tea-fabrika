@@ -221,7 +221,10 @@ export const devServer = (h: Home, env: Readonly<Record<string, string>> = {}) =
         }
 
         // oxlint-disable-next-line fabrika/no-promises -- edge: the readiness probe is one HTTP fetch
-        const ok = yield* Effect.tryPromise({ try: () => fetch(url), catch: (cause: unknown): unknown => cause }).pipe(
+        const ok = yield* Effect.tryPromise({
+          try: () => fetch(url),
+          catch: (cause) => new DevFailed({ output: String(cause) }),
+        }).pipe(
           Effect.map((r) => r.ok),
           Effect.orElseSucceed(() => false),
         );

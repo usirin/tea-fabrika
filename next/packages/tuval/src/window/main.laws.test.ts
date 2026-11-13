@@ -26,7 +26,7 @@ import { ClientRows, ClientRowsError, ErrorClass } from "@kampus/libfabrika/tran
 import { ClientSocket, ClientSocketError } from "@kampus/libfabrika/transport/ClientSocket";
 import { backoff, CAP, linkTimer } from "@kampus/libfabrika/transport/Link";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
-import { Effect, Exit, Fiber, Layer, Option, Queue, Random, Schema, Scope, Stream } from "effect";
+import { Deferred, Effect, Exit, Fiber, Layer, Option, Queue, Random, Schema, Scope, Stream } from "effect";
 import * as Clock from "effect/Clock";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -68,6 +68,17 @@ const Call = Schema.fromJsonString(
 
 const decodeFrame = Schema.decodeUnknownOption(Call);
 
+/** A notice that makes the page say hello: a nonce to sign, from the first challenge or a grant. */
+const asksHello = Schema.is(
+  Schema.Struct({
+    method: Schema.Literals(["challenge", "client.granted"]),
+    params: Schema.Struct({ nonce: Schema.String }),
+  }),
+);
+
+/** Moves TestClock in steps, reading the run's link after each. */
+const tick = (ms: number) => TestClock.adjust(ms).pipe(Effect.andThen(Effect.yieldNow));
+
 /** What the scripted door answers: the walk turns these off one by one. */
 type Script = {
   pong: boolean;
@@ -86,9 +97,44 @@ const peer = (script: Script, pong: () => void = () => {}) => {
   const ids = new Map<string, number | string>(); // the last id of each method the page called
   let knocks = 0;
   let open: Queue.Queue<SocketEvent> | null = null;
-  const message = (frame: unknown) => Queue.offerUnsafe(open!, { event: "message", data: JSON.stringify(frame) });
+  // The page signs each hello with real WebCrypto, which TestClock does not move. So the door counts,
+  // for each socket still open, the nonces it gave that no `initialize` has answered yet, and a walk
+  // waits on `quiet` before it moves the clock: no virtual time passes while real work is running.
+  const owed = new Map<Queue.Queue<SocketEvent>, number>();
+  let waiting: Deferred.Deferred<void> | null = null;
+  const settled = () => [...owed.values()].every((n) => n === 0);
+  const wake = () => {
+    if (waiting !== null && settled()) {
+      Deferred.doneUnsafe(waiting, Effect.void);
+      waiting = null;
+    }
+  };
+  const owe = (events: Queue.Queue<SocketEvent>, n: number) => {
+    const before = owed.get(events);
 
-  const answer = (text: string): boolean => {
+    // A socket already released owes nothing.
+    if (before !== undefined) {
+      owed.set(events, before + n);
+      wake();
+    }
+  };
+  const quiet = Effect.suspend(() => {
+    if (settled()) {
+      return Effect.void;
+    }
+
+    waiting ??= Deferred.makeUnsafe<void>();
+    return Deferred.await(waiting);
+  });
+  const message = (frame: unknown) => {
+    if (asksHello(frame)) {
+      owe(open!, 1);
+    }
+
+    return Queue.offerUnsafe(open!, { event: "message", data: JSON.stringify(frame) });
+  };
+
+  const answer = (text: string, events: Queue.Queue<SocketEvent>): boolean => {
     sent.push(text);
 
     if (text === "ping") {
@@ -112,6 +158,8 @@ const peer = (script: Script, pong: () => void = () => {}) => {
     const result = (value: unknown) => message({ jsonrpc: "2.0", id: frame.id, result: value });
 
     if (frame.method === "initialize") {
+      owe(events, -1);
+
       if (script.waiting) {
         message({ jsonrpc: "2.0", id: frame.id, error: { data: { reason: "not_granted" } } });
         return true;
@@ -148,27 +196,29 @@ const peer = (script: Script, pong: () => void = () => {}) => {
           resources.sockets++;
           const events = yield* Queue.unbounded<SocketEvent>();
           open = events;
+          owed.set(events, 0);
           Queue.offerUnsafe(events, { event: "open" });
-          Queue.offerUnsafe(events, {
-            event: "message",
-            data: JSON.stringify({ jsonrpc: "2.0", method: "challenge", params: { nonce: `nonce_${dials.length}` } }),
-          });
-          return {
-            events: Stream.fromQueue(events).pipe(
-              Stream.onStart(Effect.sync(() => void resources.streams++)),
-              Stream.ensuring(Effect.sync(() => void resources.ended++)),
-            ),
-            send: answer,
-            close: (code: number) => {
-              Queue.offerUnsafe(events, { event: "close", code });
-            },
-          };
+          message({ jsonrpc: "2.0", method: "challenge", params: { nonce: `nonce_${dials.length}` } });
+          return events;
         }),
-        () =>
+        (events) =>
           Effect.sync(() => {
             resources.released++;
             open = null;
+            owed.delete(events);
+            wake();
           }),
+      ).pipe(
+        Effect.map((events) => ({
+          events: Stream.fromQueue(events).pipe(
+            Stream.onStart(Effect.sync(() => void resources.streams++)),
+            Stream.ensuring(Effect.sync(() => void resources.ended++)),
+          ),
+          send: (text: string) => answer(text, events),
+          close: (code: number) => {
+            Queue.offerUnsafe(events, { event: "close", code });
+          },
+        })),
       ),
   });
   return {
@@ -178,6 +228,8 @@ const peer = (script: Script, pong: () => void = () => {}) => {
     resources,
     knocks: () => knocks,
     message: (frame: unknown) => open !== null && message(frame),
+    /** Moves TestClock once every hello the door asked for is sent, or its socket is gone. */
+    tick: (ms: number) => quiet.pipe(Effect.andThen(tick(ms))),
   };
 };
 
@@ -217,9 +269,6 @@ const services = (socket: Layer.Layer<ClientSocket>, rows: Array<unknown>) =>
     Layer.succeed(ClientRows, { put: (row: unknown) => Effect.sync(() => void rows.push(row)) }),
     Id.Generator.layer,
   );
-
-/** Moves TestClock in steps, reading the run's link after each. */
-const tick = (ms: number) => TestClock.adjust(ms).pipe(Effect.andThen(Effect.yieldNow));
 
 const press = { type: "press", tile: "tile_1", m: { type: "check", name: "item 0" }, via: "button" } as const;
 
@@ -360,7 +409,7 @@ describe("L10: real runtime progress", () => {
         const run = yield* booting.ready;
         const idleNow = Effect.gen(function* () {
           const idle = yield* Effect.forkChild(run.idle());
-          yield* tick(1);
+          yield* door.tick(1);
           expect(idle.pollUnsafe() !== undefined, "a Cmd is still running").toBe(true);
           yield* Fiber.interrupt(idle);
         });
@@ -370,12 +419,12 @@ describe("L10: real runtime progress", () => {
 
           if (state.link._tag === "waiting_grant") {
             if (door.knocks() < 2 || pick % 3 === 0) {
-              yield* tick(30_000);
+              yield* door.tick(30_000);
               yield* idleNow;
             } else {
               script.waiting = false;
               door.message({ jsonrpc: "2.0", method: "client.granted", params: { nonce: "grant_nonce" } });
-              yield* tick(500);
+              yield* door.tick(500);
             }
           } else if (state.link._tag === "online") {
             const open = state.tiles.find((t) => t.reach._tag === "open");
@@ -397,10 +446,10 @@ describe("L10: real runtime progress", () => {
               });
             }
 
-            yield* tick(500);
+            yield* door.tick(500);
             yield* idleNow;
           } else {
-            yield* tick(500);
+            yield* door.tick(500);
           }
         }
 
@@ -415,7 +464,7 @@ describe("L10: real runtime progress", () => {
         const previousPong = lastPong;
 
         for (let n = 0; n < 20 && lastPong === previousPong; n++) {
-          yield* tick(500);
+          yield* door.tick(500);
           yield* idleNow;
         }
 
@@ -427,14 +476,14 @@ describe("L10: real runtime progress", () => {
         const link = run.getState().link;
 
         while (clock.currentTimeMillisUnsafe() < lastPong + 10_000 && run.getState().link._tag === "online") {
-          yield* tick(500);
+          yield* door.tick(500);
         }
 
         expect(run.getState().link, "the silent dial left online within 10 s").not.toEqual(link);
         expect(run.getState().link._tag).not.toBe("online");
         // Every Cmd finished: the run goes idle once its Cmds settle, unanswered calls and all.
         const idle = yield* Effect.forkChild(run.idle());
-        yield* tick(1_000);
+        yield* door.tick(1_000);
         expect(idle.pollUnsafe() !== undefined, "a Cmd is still running").toBe(true);
         yield* Fiber.interrupt(idle);
         // Every row the run kept carries the tab, the build and its own time from a Cmd.
@@ -455,7 +504,7 @@ describe("L10: real runtime progress", () => {
         const stopped = run.getState();
         const outputs = { dials: door.dials.length, sent: door.sent.length, rows: rows.length };
         // Outlive both the beat and the retry cap. A surviving timer or Sub would do work.
-        yield* tick(60_000);
+        yield* door.tick(60_000);
         expect(run.getState(), "no timer folds after the owner closes").toEqual(stopped);
         expect({ dials: door.dials.length, sent: door.sent.length, rows: rows.length }).toEqual(outputs);
         expect(
@@ -550,7 +599,7 @@ describe("L9: failure classes through the real runtime", () => {
           const run = yield* booting.ready;
 
           for (const pick of moves) {
-            yield* tick(500);
+            yield* door.tick(500);
             const state = run.getState();
 
             if (state.link._tag === "waiting_grant") {
@@ -569,7 +618,7 @@ describe("L9: failure classes through the real runtime", () => {
             }
           }
 
-          yield* tick(1);
+          yield* door.tick(1);
           yield* run.idle();
           expect(injected, "the real service reached the failing operation").toBeGreaterThan(0);
           const failures = rows.filter((row) => row.record._tag === "failure" && row.record.op === op);
@@ -646,7 +695,7 @@ describe("L12: wire formats are refused as typed values", () => {
         const run = yield* booting.ready;
 
         for (let n = 0; n < 6; n++) {
-          yield* tick(500);
+          yield* door.tick(500);
         }
 
         expect(run.getState().link._tag).toBe("online");
@@ -655,10 +704,10 @@ describe("L12: wire formats are refused as typed values", () => {
         const beforeMalformed = run.getState();
         // The open's answer arrives malformed: an empty struct, then a view of the wrong type.
         door.message({ jsonrpc: "2.0", id: opened?.id, result: {} });
-        yield* tick(500);
+        yield* door.tick(500);
         expect(run.getState().flight, "a malformed open answer settled a flight").toEqual(beforeMalformed.flight);
         door.message({ jsonrpc: "2.0", id: opened?.id, result: { rev: 1, view: { items: "one", left: 1 } } });
-        yield* tick(500);
+        yield* door.tick(500);
         expect(run.getState().client.views, "nothing malformed was installed").toEqual({});
         // The run still folds: a well-formed notice with its pid installs.
         door.message({
@@ -666,14 +715,14 @@ describe("L12: wire formats are refused as typed values", () => {
           method: "view.whole",
           params: { pid: PID, type: "whole", rev: 4, view: list(4) },
         });
-        yield* tick(500);
+        yield* door.tick(500);
         expect(run.getState().client.views[PID]).toEqual({ rev: 4, view: list(4) });
         expect(run.getState().link._tag).toBe("online");
         // A press goes out; its answer comes back refused with no reason, then with a reason that is
         // not a string. Neither is an answer: the letter stays out and no tile shows a refusal.
         script.send = false;
         yield* run.dispatch(press);
-        yield* tick(500);
+        yield* door.tick(500);
         const sends = door.sent
           .flatMap((t) => Option.toArray(decodeFrame(t)))
           .filter((f) => f.method === "process.send");
@@ -681,7 +730,7 @@ describe("L12: wire formats are refused as typed values", () => {
         const id = sends.at(-1)!.id;
         door.message({ jsonrpc: "2.0", id, result: { _tag: "refused" } });
         door.message({ jsonrpc: "2.0", id, result: { _tag: "refused", reason: 7 } });
-        yield* tick(500);
+        yield* door.tick(500);
         expect(run.getState().client.pending, "a malformed refusal removed the letter").toHaveLength(1);
         expect(run.getState().tiles.map((t) => t.refusal)).toEqual([null]);
         expect(run.getState().link._tag).toBe("online");

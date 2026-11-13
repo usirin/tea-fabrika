@@ -291,7 +291,8 @@ const served = Effect.gen(function* () {
     root: repo,
     entry: path.join(app, "e2e/chaos-revoke.worker.test-support.ts"),
     out: path.join(home, "dist"),
-    programs: [...programs, { name: "fabrika/checklist", package: "@kampus/checklist", export: "checklist" }],
+    // P14 slice 2: the app's table lists `fabrika/checklist` itself.
+    programs,
     files: [],
     ledger: [],
     chaos: false,
@@ -328,7 +329,9 @@ const served = Effect.gen(function* () {
   const started = yield* invoke(instance.project(PROJECT), "start", [
     Start.cases.first.make({
       id: "checklist-start",
-      name: "checklist:1",
+      // P14 slice 2: the real entry boots `checklist:1` itself, so the proof starts its own target
+      // under the next name, owned by this test's root key.
+      name: "checklist:2",
       code: { program: "fabrika/checklist", hash: source.hash },
     }),
     from,
@@ -362,7 +365,7 @@ const until = Effect.fn("RevokeTest.until")(function* <A, E, R>(
 const RevokeTest = { PERSON, PROJECT, SENT, served, connect, invoke, until };
 
 const NAME = "chaos:revoke";
-const TARGET = "checklist:1";
+const TARGET = "checklist:2";
 const SEED = 119120;
 
 it.live(

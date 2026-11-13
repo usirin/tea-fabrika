@@ -158,6 +158,8 @@ const CALLBACK_GIVES_UP = "6 seconds";
 const world = async (trace = TRACE, build = "counter-b", options: { readonly callback?: boolean } = {}) => {
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
   table.programs["fabrika/counter"] = { hash: "counter-a", source: "counter" };
+  // P14 slice 2: the app boots `checklist:1` after `counter:1`, so the table holds its program too.
+  table.programs["fabrika/checklist"] = { hash: "checklist-a", source: "checklist" };
   table.programs.approvals = { hash: "approvals-a", source: "approvals" };
   const home = mkdtempSync(join(tmpdir(), "p12-r-")),
     key = identity();
@@ -396,9 +398,15 @@ const bends: ReadonlyArray<(name: string) => string> = [
 // registered name, or tries a current name bent into a slashed one, which is refused.
 const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<number>) => {
   const names = ["counter:1"];
+  // P14 slice 2: the boot's second entry. The walk starts only the counter's code, so this stays
+  // the one process of another program, under its own name.
+  const other = { name: "checklist:1", program: "fabrika/checklist" };
+  const others = (list: ReadonlyArray<{ readonly name: string; readonly program: string }>) =>
+    list.filter((p) => p.program !== "fabrika/counter").map((p) => ({ name: p.name, program: p.program }));
   let refused = 0;
   expect(w.configured.map((d) => ({ name: d.name, program: d.program }))).toEqual([
     { name: "counter:1", program: "fabrika/counter" },
+    other,
   ]);
   const [started] = await w.run(w.p.read("processes/counter:1", 0, "audit"));
   expect(JSON.stringify(started)).toContain('"fabrika/counter"');
@@ -420,9 +428,10 @@ const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<nu
     }
 
     const info = await w.run(w.p.info);
-    expect(info.map((p) => p.name).sort()).toEqual([...names].sort());
-    expect(info.every((p) => p.program === "fabrika/counter")).toBe(true);
-    expect(w.configured.every((d) => d.program === "fabrika/counter" && !d.name.includes("/"))).toBe(true);
+    expect(info.map((p) => p.name).sort()).toEqual([...names, other.name].sort());
+    expect(others(info)).toEqual([other]);
+    expect(others(w.configured)).toEqual([other]);
+    expect(w.configured.every((d) => !d.name.includes("/"))).toBe(true);
   }
 
   expect(refused).toBeGreaterThan(0);
@@ -607,8 +616,10 @@ describe("P12 Project authority", () => {
     const w = await building;
     expect(Option.isSome(built), "the Project's build waited on its own bootstrap's configure").toBe(true);
     expect(w.configured.filter((d) => d.id === w.p.boot.process)).toHaveLength(1);
-    expect(w.statuses, "the bootstrap's configure saw the Project answer its status").toMatchObject([
-      { _tag: "ok", value: { state: { process: w.p.boot.process } } },
+    // P14 slice 2: the boot is a list, so each entry's configure calls back once, in the list's order.
+    expect(w.statuses, "each boot entry's configure saw the Project answer its status").toMatchObject([
+      { _tag: "ok", value: { name: "counter:1", state: { process: w.p.boot.process } } },
+      { _tag: "ok", value: { name: "checklist:1" } },
     ]);
   }, 15_000);
 
