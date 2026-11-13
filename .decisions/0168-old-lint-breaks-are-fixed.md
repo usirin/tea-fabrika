@@ -75,6 +75,8 @@ as debt, and a new rule turns on where its breaks are at zero (owner, 2026-11-13
 - **A new rule starts at zero.** Its breaks are fixed first. Where that is too much for one pull
   request, the rule turns on folder by folder, each folder when it reaches zero, so the gate
   closes behind the work.
+- **code-graph's list stays.** `unreachable-ledger.json`, the list for exports nobody uses, is
+  how code-graph works, so it is kept ([0006](0006-no-unused-exports.md)). It still only shrinks.
 - **One inline ignore stays:** `edge:`, for a line that is right where the rule does not fit, with
   its reason. It is not a way to postpone a fix.
 - **Fast track.** A pull request that fixes listed breaks carries out this decision, so it merges
@@ -96,8 +98,5 @@ as debt, and a new rule turns on where its breaks are at zero (owner, 2026-11-13
   first, and the rule turns on folder by folder.
 - `AGENTS.md`'s lines about a list that only shrinks go when the files go.
 - Not decided here:
-  - `unreachable-ledger.json`, the list for exports nobody uses, 3 entries. That check is
-    code-graph's, not oxlint's. Its entries can be fixed the same way; whether its file goes too
-    is the owner's to say.
   - `compiler-ledger.json`, empty today, whose rows
     [0464](0464-every-compiler-finding-fails-the-build.md) asks the owner to approve.
