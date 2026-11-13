@@ -183,6 +183,27 @@ const ran = (flags: Record<string, boolean>): Record<string, Job> => {
   return needs;
 };
 
+// 0174: a merge queue's group skips jobs by its paths, and the queue takes this one check from it.
+it("property: a merge queue's group passes with the jobs its paths skip; it fails when a job it needs skips", () => {
+  fc.assert(
+    fc.property(
+      paths,
+      fc.constantFrom(...gated),
+      fc.constantFrom("skipped", "failure", "cancelled"),
+      (p, name, end) => {
+        const group = jobs(p, "merge_group", false);
+        expect(judge(ran(group)).pass).toBe(true);
+        fc.pre(group[name]);
+        const needs = ran(group);
+        needs[name] = { result: end };
+        expect(judge(needs).pass).toBe(false);
+      },
+    ),
+    // pinned: Markdown alone, where every gated job skips.
+    { ...options, examples: [[["docs/a.md"], "check", "skipped"]] },
+  );
+});
+
 it("property: a draft passes with its heavy jobs skipped; a ready PR fails when a job it needs skips", () => {
   fc.assert(
     fc.property(

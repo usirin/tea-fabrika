@@ -97,13 +97,46 @@ const path = fc.oneof(
 
 const list = fc.array(path, { maxLength: 12 });
 
-it("main and a merge queue's group enable every job for every path list", () => {
+// 0174 narrowed this law: a merge queue's group left it, and follows its paths (below).
+it("main, and every event that is no pull request or merge queue's group, enables every job for every path list", () => {
   fc.assert(
-    fc.property(list, fc.constantFrom("push", "merge_group"), (paths, event) => {
+    fc.property(list, fc.constantFrom("push", "workflow_dispatch", ""), (paths, event) => {
       expect(ci.classify(paths, event)).toEqual({ ...heavy, field: true });
     }),
     options,
   );
+});
+
+// 0174: a merge queue's run starts only the checks its changed files need.
+it("property: a merge queue's group gets the flags a pull request gets for the same paths", () => {
+  fc.assert(
+    fc.property(fc.option(list, { nil: null }), (paths) => {
+      expect(ci.classify(paths, "merge_group")).toEqual(ci.classify(paths, "pull_request"));
+    }),
+    {
+      ...options,
+      examples: [
+        // pinned: Markdown alone, the one-file decision that started 18 of 18 jobs in the queue.
+        [[".decisions/0174-a-queue-run-follows-its-paths.md"]],
+        // pinned: next/ alone, where a pull request skips test and e2e.
+        [["next/packages/libfabrika/src/a.ts"]],
+      ],
+    },
+  );
+});
+
+it("scenario: a merge queue's group of Markdown skips the heavy jobs, and one of next/ files runs check and next", () => {
+  // scenario: the two cases named in 0174, written out so the flags are read here and not only
+  // compared with a pull request's.
+  const quiet = { check: false, typecheck: false, test: false, next: false, e2e: false, field: false };
+  expect(ci.jobs(["docs/a.md"], "merge_group", false)).toEqual({ ...quiet, build: false });
+  expect(ci.jobs(["next/packages/libfabrika/src/a.ts"], "merge_group", false)).toEqual({
+    ...heavy,
+    test: false,
+    e2e: false,
+    field: false,
+    build: true,
+  });
 });
 
 it("skill prose and safe paths skip heavy jobs; field follows rows", () => {
@@ -425,15 +458,20 @@ it("property: the draft flag never skips a job on main", () => {
   );
 });
 
-it("property: a merge queue's group runs every job, build included, and ignores the draft flag", () => {
+// 0174 narrowed this law: the group no longer runs every job, and it is still never a draft.
+it("property: a merge queue's group runs what a ready pull request runs, and ignores the draft flag", () => {
   fc.assert(
     fc.property(paths, fc.boolean(), (paths, draft) => {
-      expect(Object.values(ci.jobs(paths, "merge_group", draft)).every(Boolean)).toBe(true);
+      expect(ci.jobs(paths, "merge_group", draft)).toEqual(ci.jobs(paths, "pull_request", false));
     }),
     {
       ...options,
-      // pinned: a group of Markdown alone is the case a pull request would skip.
-      examples: [[["docs/a.md"], true]],
+      examples: [
+        // pinned: a code group with the draft flag set, where a draft pull request would skip test.
+        [["apps/fabrika/src/a.ts"], true],
+        // pinned: a group of Markdown alone builds nothing, as a ready docs-only pull request.
+        [["docs/a.md"], true],
+      ],
     },
   );
 });
