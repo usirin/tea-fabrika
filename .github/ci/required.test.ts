@@ -204,6 +204,27 @@ it("property: a merge queue's group passes with the jobs its paths skip; it fail
   );
 });
 
+// 0175: a push to main skips today's e2e when no file of today's version changed.
+it("property: a push passes with the jobs its paths skip; it fails when a job it needs skips", () => {
+  fc.assert(
+    fc.property(
+      paths,
+      fc.constantFrom(...gated),
+      fc.constantFrom("skipped", "failure", "cancelled"),
+      (p, name, end) => {
+        const push = jobs(p, "push", false);
+        expect(judge(ran(push)).pass).toBe(true);
+        fc.pre(push[name]);
+        const needs = ran(push);
+        needs[name] = { result: end };
+        expect(judge(needs).pass).toBe(false);
+      },
+    ),
+    // pinned: next/ alone, where e2e skips on main.
+    { ...options, examples: [[["next/packages/libfabrika/src/a.ts"], "check", "skipped"]] },
+  );
+});
+
 it("property: a draft passes with its heavy jobs skipped; a ready PR fails when a job it needs skips", () => {
   fc.assert(
     fc.property(
