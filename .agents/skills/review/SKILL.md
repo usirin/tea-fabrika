@@ -11,6 +11,8 @@ merge ([how a change lands](../../../docs/plan/README.md#how-a-change-lands)).
 
 A brief names the ticket, the plan's path, the branch, and anything this round must look at. This
 skill holds the rest.
+[`AGENTS.md`, "Finish your task"](../../../AGENTS.md#finish-your-task) says when to keep going, what needs
+no approval and how to write the report.
 
 Never print npm, pnpm or env settings. The runner strips secret settings and redacts saved output.
 
@@ -48,7 +50,8 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
    - The tests report records a plant and its result for each new law. A law with no recorded plant
      run is not done. A committed plant test is a defect; a lint rule's own planted lines are not
      one. Plant a break yourself where a law looks weak, in your head or in a scratch copy, never in
-     the branch.
+     the branch. In a read-only box a command that writes ends your turn with no answer, so plant by
+     reading there.
    - A law moved onto a schema's Arbitrary keeps its old reach.
    - If secrets must stay out of records, URLs or spans, the plan's Law cell has `[secrets]` and
      the law generates flows: made-up words, keys and passes, operation orders, refusals and
@@ -89,8 +92,8 @@ whole diff.
 
 - Check the fix for the faults you named: read each line it changed and what calls it.
 - Check that the new law reaches the fix. Plant a break, by reading or by running it in a scratch
-  copy, never in the branch. The fix agent wrote this law itself, so yours is the read that guards
-  it.
+  copy where your box lets you write, never in the branch. The fix agent wrote this law itself, so
+  yours is the read that guards it.
 - You may withdraw a finding of yours that was wrong. Say which, and why.
 - A new fault you notice outside the fix is a finding row, or ticket text for the lead. It does
   not send the lane back unless it breaks the slice's main job.

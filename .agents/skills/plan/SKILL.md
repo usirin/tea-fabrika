@@ -8,6 +8,8 @@ description: Write the plan for one tea-fabrika pull request, read-only, as the 
 Your final message is the whole plan, in Markdown. The lead saves it and approves it, or sends it back.
 Return it unsigned, including when reviewing or revising a plan. Only the lead session may fill
 the blank approval line.
+[`AGENTS.md`, "Finish your task"](../../../AGENTS.md#finish-your-task) says when to keep going, what needs
+no approval and how to write for a reader who saw none of the work.
 
 ## Steps
 
@@ -46,7 +48,7 @@ the blank approval line.
 - End the Size section with `Estimate: <n> steps, $<d>`, the lane's budget: chain.ts stops a lane
   at twice it ([0076](../../../.decisions/0076-a-lane-stops-at-its-budget.md)). `n` is the steps
   you expect: tests, build, review, plus one per likely send-back. `d` is their list-price dollars,
-  priced from similar steps in `field/runs.jsonl`.
+  priced from similar steps in `field/runs/`, and the older rows in `field/runs.jsonl`.
 - Say what fact is lost if it is not recorded now.
 - Split a big plan into pull requests that each land whole, ordered by what the owner sees first.
   Give the files table a "Product lines expected" column (a number, or a word such as `tests` or

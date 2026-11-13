@@ -24,6 +24,14 @@ Use the build skill for ticket 277, door fixes, next/. Plan at ../door-PLAN.md.
 Laws d1 to d3 are red. This round: make them green in door.ts, answer.ts and hello.ts.
 ```
 
+A brief does not repeat what every agent reads in
+[`AGENTS.md`, "Finish your task"](../../../AGENTS.md#finish-your-task): finish the whole task, the routine steps
+that need no approval, and a report a reader with no context can follow.
+
+When you answer an agent's ask, resume an agent or send work back, say exactly what to do: the file, the
+fault, the input that shows it and what done looks like, as [the recheck message](#when-a-review-sends-back)
+does. A bare "continue" or "go" makes the agent guess what you meant, and a wrong guess costs a round.
+
 A brief never prints npm, pnpm or environment settings (owner, 2026-11-08), not even to show a
 step where they come from. A run once printed a token to a local log that way. Name the setting
 and say where it is set; never echo its value. `pnpm config list` and `env` stay out of briefs.
@@ -272,7 +280,7 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   skill named in its prompt. Its `stream-json` goes to the events file, and `clauderow.ts` writes
   the field row with tokens and list-price dollars.
 - Claude runs under `sandbox-exec`: it cannot read `~/.fabrika/step-keys`, the leak words or
-  `~/.codex`, and it writes only its box and caches. It commits with plain git. drive then signs its
+  `~/.codex`, and it writes only its box and caches. It commits nothing: drive commits and signs its
   work as one commit through `stepcommit.sh`, with main's own signer, never the box's code.
 - A mutation step's Stryker run happens first, in a container (`mutbox.ts`, 0045): drive runs it on
   the step's start head with the tests the brief names on one line, `RELATED=<paths>`, and with
@@ -742,7 +750,9 @@ commit does not clear it.
 ## Never
 
 - Write a step's work, run git inside a box, or reset a branch to take a step's work over.
-- Rebase, force-push or `gh pr update-branch`, except a stacked child moved with `gh stack` (0004).
+- Rebase, force-push or `gh pr update-branch`, except a stacked child moved with `gh stack` (0004): a
+  rewrite breaks every signed link and can drop a push another session made. Bring a branch up to date
+  with a merge of main.
 - Read, print or copy a key. Leave a box, a claim or a half-open pull request behind without saying so.
 
 ## When a run teaches something

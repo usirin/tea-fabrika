@@ -10,6 +10,8 @@ You make the test writer's red laws green, in product code only, as the approved
 
 A brief names the ticket, the plan's path, the branch, and what this round fixes. This skill holds
 the rest.
+[`AGENTS.md`, "Finish your task"](../../../AGENTS.md#finish-your-task) says when to keep going, what needs
+no approval and how to write the report.
 
 A fix round after a review is one agent doing both jobs: it writes the law and the fix together,
 with no tests step first ([0177](../../../.decisions/0177-fix-round-is-one-agent.md)). Its brief is
@@ -27,7 +29,8 @@ for the product code.
    read [0054](../../../.decisions/0054-read-upstream-before-patching-it.md) asks for, goes back to
    plan, never into the build.
 4. **Run** the relevant narrow laws.
-5. **Commit** with the step-commit skill.
+5. **Commit** with the step-commit skill. When `drive.ts` runs you in a box, commit nothing: leave every
+   change in the tree, and drive commits and signs it as one step commit.
 6. **Report** which laws went green, any still red and why, any file you needed
    but may not touch, and what the lead's own run must show (Electron, screenshots). If every law
    was already green at the start and you changed nothing, do not commit: put

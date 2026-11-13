@@ -11,6 +11,8 @@ touch them ([nobody writes their own exam](../../../docs/direction/nobody-writes
 
 A brief names the ticket, the plan's path, the branch, and what this round is for. This skill holds
 the rest.
+[`AGENTS.md`, "Finish your task"](../../../AGENTS.md#finish-your-task) says when to keep going, what needs
+no approval and how to write the report.
 
 A fix round after a review is one agent doing both jobs: it writes the law and the fix together,
 so there the fixer does write its own law ([0177](../../../.decisions/0177-fix-round-is-one-agent.md)).
@@ -83,7 +85,8 @@ this skill for the law. The reviewer reads that law on its recheck.
 4. **Fix test-side type errors** the build's product edits cause (a `// @ts-expect-error <why>` on a
    case that is invalid on purpose, or a reshaped test that still proves the refusal). Keep every
    law.
-5. **Commit** with the step-commit skill. In a box use `--commit-only`; fetch signs the run.
+5. **Commit** with the step-commit skill. When `drive.ts` runs you in a box, commit nothing: leave every
+   change in the tree, and drive commits and signs it as one step commit.
 6. **Report** each new law with `file:line` and how you saw it fail, each plant you ran for it (the
    file and line you broke, and the law's result), anything in the plan you found wrong, and any
    red that is a sandbox limit. Your answer's JSON object lists the plants under `plants`, each
@@ -115,7 +118,8 @@ The test config and typecheck.sh hold worker, home and typecheck limits.
 ## Never
 
 - The builder's uncommitted edits stay exactly as they are.
-- Read, print or copy a key file. Push.
+- Read, print or copy a key file. Push by hand: `stepcommit.sh` pushes for you, and in a box `drive.ts`
+  does.
 - Write a law that cannot fail, or one whose plant you did not run and record. A plant that needs
   the build's file is written and named in the report as "after build", and runs at review.
 - Hold `done` for a part your box cannot do. Work until every part this box allows is done. A
