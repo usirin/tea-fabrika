@@ -111,6 +111,12 @@ refuse those ids; a refused or throwing notice is skipped and counted on its spa
 The tile and dismissal on each device are slice 2; the gateway's delivery is slice 3. Those slices
 wait on the owner. This finishes no Tier 1 row, so the merged count stays 21 of 44.
 
+*2026-11-12:* P21 slice 1, tracker ticket 887, builds `next/`'s menu bar extra machine,
+pure `Menu.view`, `PersonCheck` contract and declared `desktop.link-ttl`. The check keeps
+the row shown at the click, and browser passes expire and work once. It draws nothing and
+starts no Electron or gateway work. P21 stays open for slices 2 to 4; the finished-row count
+stays 21 of 44.
+
 *2026-11-12:* P17, Tier 1's chaos row, is done in `next/`: P17b's third slice, the checklist faults
 and the real local p90 revoke, merged as [PR 1058](https://github.com/usirin/tea-fabrika/pull/1058), and p90 passes on main. That makes
 21 of Tier 1's 43 rows (44 since P45, a thin inbox, joined the same day, [0151](../../.decisions/0151-a-thin-inbox-is-a-tier-1-row.md)). P34c's third slice, each isolate call's CPU and wall time recorded, merged

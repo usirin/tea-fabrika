@@ -65,4 +65,19 @@ export const gatewayWindow = Setting.make("gateway.window", {
   since: "0.0.0",
 });
 
-export const all = Setting.group({ port, version, gatewayLimit, gatewayWindow });
+/**
+ * Setting for a one-time browser link's lifetime in whole milliseconds.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const desktopLinkTtl = Setting.make("desktop.link-ttl", {
+  schema: Positive,
+  default: 60_000,
+  doc: "How long a one-time browser link lives in milliseconds.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+export const all = Setting.group({ port, version, gatewayLimit, gatewayWindow, desktopLinkTtl });
