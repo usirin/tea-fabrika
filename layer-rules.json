@@ -112,6 +112,11 @@
       "paths": ["next/packages/libfabrika/src/transport"]
     },
     {
+      "name": "next-repositories",
+      "layer": 2,
+      "paths": ["next/packages/libfabrika/src/repositories"]
+    },
+    {
       "name": "next-settings",
       "layer": 2,
       "paths": ["next/packages/libfabrika/src/settings"]
