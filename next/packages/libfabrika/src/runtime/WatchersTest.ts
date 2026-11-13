@@ -6,7 +6,7 @@ import { type Update, WatcherManager } from "./Entry.ts";
 import { nth } from "./RepliesTest.ts";
 import type { Database } from "./RepliesTest.ts";
 import { Gone, Unreachable, WatcherManagerError } from "./WatcherManager.ts";
-import { Watchers } from "./Watchers.ts";
+import { Watchers, WatchersError } from "./Watchers.ts";
 import * as WatchersSql from "./WatchersSql.ts";
 
 const failStore = (): never => {
@@ -42,7 +42,7 @@ const fails = Effect.fnUntraced(function* <A, E, R>(
 
   if (Exit.isFailure(exit)) {
     expect(Cause.hasFails(exit.cause)).toBe(true);
-    const error = Cause.squash(exit.cause) as { _tag: string; reason: { _tag: string; cause: unknown } };
+    const error = Schema.decodeUnknownSync(Schema.toType(WatchersError))(Cause.squash(exit.cause));
     expect(error._tag).toBe("WatchersError");
     expect(error.reason._tag).toBe(reason);
     expect(error.reason.cause).toBeDefined();

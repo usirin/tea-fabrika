@@ -2,7 +2,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema } from "effect";
 import { nth } from "../runtime/RepliesTest.ts";
-import { Publication, WatcherManager } from "../runtime/WatcherManager.ts";
+import { Publication, WatcherManager, WatcherManagerError } from "../runtime/WatcherManager.ts";
 import type { Sql } from "../Sql.ts";
 import * as Publish from "./Publish.ts";
 import * as WatcherManagerRemote from "./WatcherManagerRemote.ts";
@@ -71,7 +71,7 @@ describe("watcher delivery evidence, next/", () => {
             }
 
             expect(Cause.hasFails(exit.cause)).toBe(true);
-            const error = Cause.squash(exit.cause) as { _tag: string; reason: { _tag: string; cause: unknown } };
+            const error = Schema.decodeUnknownSync(Schema.toType(WatcherManagerError))(Cause.squash(exit.cause));
             expect(error._tag).toBe("WatcherManagerError");
             expect(error.reason.cause).toBeDefined();
             return error.reason._tag;
