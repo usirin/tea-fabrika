@@ -94,9 +94,9 @@ describe("ticket 884 the inbox program, slice 1", () => {
   it.effect.prop(
     "I4: the view decodes through inboxView and keeps every row field in order",
     {
-      model: Arbitrary.all({
-        rows: Arbitrary.array(Arbitrary.schema(inboxMachine.model.fields.rows.value), { maxLength: 40 }),
-      }),
+      model: Arbitrary.schema(inboxMachine.model).pipe(
+        Arbitrary.map((model) => ({ ...model, rows: model.rows.slice(0, 40) })),
+      ),
     },
     ({ model }) =>
       Effect.gen(function* () {
