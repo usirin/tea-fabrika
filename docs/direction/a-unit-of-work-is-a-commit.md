@@ -9,6 +9,11 @@ step signs a link from tree to tree that survives the squash. Changed by the own
 today's tooling signs at fetch in MAIN, after checking the recorded run and file owners. Agents
 still commit. This replaces the 2026-11-05 agent-signs call.
 
+*Changed 2026-11-13 (owner, [0161](../../.decisions/0161-no-step-signing-by-hand.md)): today's
+hand-run tooling stops signing. A step's commit is a plain commit, and CI no longer decides from a
+signature there. The builder still never touches the exam. This note stays the design for `next/`'s
+own pipeline.*
+
 *Changed 2026-11-08 (owner): code signs each step's commits, not the step's agent. The lead's
 fetch signs them as it pulls a box's branch (`box.sh fetch --sign <step>`), with that step's key.
 The key stays one per step, and CI still decides from the signature. Built for today's
