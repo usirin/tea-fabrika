@@ -39,7 +39,7 @@ import { ProcessManager, remoteProcessManager, type ProcessCalls } from "../proc
 import { ProgramMail, type ProgramMailError, type Delivery, type Grants } from "../processes/ProgramMail.ts";
 import * as ProgramMailLedger from "../processes/ProgramMailLedger.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
-import { Alarm, CheckedWriter, Recording, WatcherManager, type Incoming } from "../runtime/Entry.ts";
+import { Alarm, CheckedWriter, Recording, type Incoming } from "../runtime/Entry.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
 import { ProgramDown } from "../runtime/Program.ts";
@@ -71,7 +71,9 @@ import { workerLoader, type ProgramSource } from "./index.ts";
 import { mailLayer } from "./mail.ts";
 import type { RecordShape } from "./objects.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient } from "./platform.ts";
+import * as Publish from "./Publish.ts";
 import { bind as bindTail } from "./tail.ts";
+import * as WatcherManagerRemote from "./WatcherManagerRemote.ts";
 
 const Event = Schema.declare<Parameters<typeof lineFor>[1]>(
   (value): value is Parameters<typeof lineFor>[1] =>
@@ -580,13 +582,10 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
       .pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
     return remember(life.name, program.declaration);
   });
-  const notify = Effect.fnUntraced(function* (client: string, news: unknown) {
-    const [row] = sql.exec("SELECT connection FROM dev_clients WHERE client=?", client);
-
-    if (row !== undefined) {
-      yield* rpc(GatewayClient.make(env.CONNECTION.getByName(String(row.connection))).notify(client, news));
-    }
-  });
+  const publish = Publish.make(sql, (connection, client, news) =>
+    rpc(GatewayClient.make(env.CONNECTION.getByName(connection)).notify(client, news)),
+  );
+  const notify = (client: string, news: unknown) => publish(client, news).pipe(Effect.asVoid);
   sql.exec(
     "CREATE TABLE IF NOT EXISTS dev_clients (client TEXT PRIMARY KEY, connection TEXT NOT NULL, session TEXT NOT NULL)",
   );
@@ -831,13 +830,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
           session,
         );
       }),
-    publish: (client: string, update: unknown) =>
-      notify(
-        client,
-        typeof update === "object" && update !== null && "type" in update
-          ? { method: update.type === "whole" ? "view.whole" : "view.patch", params: update }
-          : update,
-      ),
+    publish,
     connect: () => wrapped(door.connect()),
     challenge: (client: ConnectionId) => wrapped(door.challenge(client)),
     initialize: (client: ConnectionId, input: unknown, trusted: { url: string; tab: string; name: string }) =>
@@ -1021,9 +1014,6 @@ const processLogic = Effect.fnUntraced(function* (
         ),
       ),
   });
-  const publish = Effect.fn("process.publish")(function* (client: string, update: unknown) {
-    yield* rpc(p.publish(client, update));
-  });
   const dependencies = Layer.mergeAll(
     mailLayer(env, project),
     Layer.succeed(CheckedWriter, {
@@ -1047,9 +1037,7 @@ const processLogic = Effect.fnUntraced(function* (
         return yield* rpc(p.own(active, id, stream, event, { traceId: span.traceId, spanId: span.spanId }));
       }),
     }),
-    Layer.succeed(WatcherManager, {
-      publish: (client, update) => publish(client, update).pipe(Effect.ignore),
-    }),
+    WatcherManagerRemote.layer((client, update) => rpc(p.publish(client, update))),
     Layer.succeed(Alarm, {
       // Keep the program's wake; the platform requires a positive alarm time.
       set: (at) =>

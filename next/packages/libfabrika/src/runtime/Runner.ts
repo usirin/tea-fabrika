@@ -57,6 +57,7 @@ import { ExitReason } from "../processes/ExitReason.ts";
 import { ProcessName } from "../processes/Process.ts";
 import { MailRefusal } from "../processes/ProgramMail.ts";
 import * as Chaos from "./Chaos.ts";
+import type { WatcherManager } from "./Entry.ts";
 import {
   Alarm,
   CheckedWriter,
@@ -66,7 +67,6 @@ import {
   ProgramLoader,
   Recording,
   type View,
-  WatcherManager,
 } from "./Entry.ts";
 import { fromFailure } from "./internal/exitReason.ts";
 import { Failure, Policy } from "./internal/recovery.ts";
@@ -80,6 +80,9 @@ import * as RepliesSql from "./RepliesSql.ts";
 import { Queued, SendInput } from "./Send.ts";
 import { ExitInput, StartChildInput } from "./StartChild.ts";
 import { StepFault } from "./StepFault.ts";
+import type { WatchersError } from "./Watchers.ts";
+import { Watchers } from "./Watchers.ts";
+import * as WatchersSql from "./WatchersSql.ts";
 
 export { defaultPolicy, Supervision } from "./internal/supervisor.ts";
 
@@ -308,7 +311,7 @@ export class ProgramRunner extends Context.Service<
         let woke = false;
         const mailbox = yield* Mailbox;
         const checked = yield* CheckedWriter;
-        const watchers = yield* WatcherManager;
+        const watches = yield* Watchers.pipe(Effect.provide(WatchersSql.layer(options.recovery.sql, initial)));
         const alarm = yield* Alarm;
         const recording = yield* Recording;
         const sessions = yield* Effect.serviceOption(SessionManager);
@@ -331,7 +334,6 @@ export class ProgramRunner extends Context.Service<
         let alarmAt: number | null | undefined;
         /** Writes left dispatched by an earlier process life: retried once loaded. */
         let retry: ReadonlyArray<Dispatched> = [];
-        const clients = new Set<string>();
 
         const now = Effect.map(DateTime.now, DateTime.formatIso);
         /** The current trace: every runner call runs inside its own span. */
@@ -953,14 +955,12 @@ export class ProgramRunner extends Context.Service<
           if (after.pos !== before.pos) {
             const patch = diff(before.view, after.view);
 
-            for (const client of clients) {
-              yield* watchers.publish(client, {
-                type: "patch",
-                base: before.pos,
-                rev: after.pos,
-                patch,
-              });
-            }
+            yield* watches.publish({
+              type: "patch",
+              base: before.pos,
+              rev: after.pos,
+              patch,
+            });
           }
 
           yield* setAlarm();
@@ -1662,18 +1662,7 @@ export class ProgramRunner extends Context.Service<
                   return yield* new RunnerError({ reason: "bad_client" });
                 }
 
-                clients.delete(client);
-
-                if (clients.size >= 1024) {
-                  const oldest = clients.values().next();
-
-                  if (!oldest.done) {
-                    clients.delete(oldest.value);
-                  }
-                }
-
-                clients.add(client);
-                yield* watchers.publish(client, {
+                yield* watches.open(client, {
                   type: "whole",
                   rev: state.pos,
                   view: state.view,
@@ -1998,7 +1987,15 @@ export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError"
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
-type RunnerFailure = LedgerError | ProgramDown | RunnerError | SinkError | ProcessError | NotGranted | RepliesError;
+type RunnerFailure =
+  | LedgerError
+  | ProgramDown
+  | RunnerError
+  | SinkError
+  | ProcessError
+  | NotGranted
+  | RepliesError
+  | WatchersError;
 
 const cmdType = (job: Dispatched): string =>
   Option.match(decodeTyped(job.cmd), { onNone: () => "", onSome: (c) => c.type });
