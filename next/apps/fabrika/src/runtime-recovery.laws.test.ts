@@ -492,6 +492,7 @@ const world = (
   // Keyed by the storage name the runtime asks for, so the runtime alone decides which IDs share one.
   const processes = new Map<string, Entry>(),
     attempts: Descriptor[] = [],
+    deliveries: Array<Promise<"configured" | "failed">> = [],
     received: Incoming[] = [],
     entered = gate(),
     interrupted = gate();
@@ -502,6 +503,7 @@ const world = (
   let signs = 0,
     commits = 0,
     newCalls = 0,
+    inits = 0,
     lostDone = false,
     stepFault: "none" | "rpc" | "decode" = "none",
     closed = false;
@@ -674,7 +676,14 @@ const world = (
                     return;
                   }
 
-                  return current.object.configure(descriptor);
+                  const delivery = current.object.configure(descriptor);
+                  deliveries.push(
+                    delivery.then(
+                      () => "configured" as const,
+                      () => "failed" as const,
+                    ),
+                  );
+                  return delivery;
                 };
               }
 
@@ -714,7 +723,10 @@ const world = (
             const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
             return {
               describe: () => box.describe(),
-              init: (saved: unknown) => box.init(saved),
+              init: (saved: unknown) => {
+                inits++;
+                return box.init(saved);
+              },
               step: async (model: unknown, msg: unknown) => {
                 // Transport faults before the program: they decide nothing about the input.
                 if (stepFault === "rpc") {
@@ -755,7 +767,10 @@ const world = (
                   },
               cmds: approval ? ["write"] : [],
             }),
-            init: (saved: unknown) => Effect.runPromise(execution.init(saved)),
+            init: (saved: unknown) => {
+              inits++;
+              return Effect.runPromise(execution.init(saved));
+            },
             step: (model: unknown, msg: unknown) => Effect.runPromise(execution.step(model, msg)),
             fold: (model: unknown, msg: unknown) => Effect.runPromise(execution.fold(model, msg)),
             upgrade: (saved: unknown) => Effect.runPromise(execution.upgrade(saved)),
@@ -827,6 +842,13 @@ const world = (
     attempts,
     received,
     entered: entered.promise,
+    /** How each start the Project delivered ended at its object, once the first one has ended. */
+    delivered: async () => {
+      await entered.promise;
+      return Promise.all(deliveries);
+    },
+    /** How many times a program's init ran: each is one process's first turn after a load. */
+    inits: () => inits,
     process: processFor,
     /** Every process store's rows for one letter's delivery receipt. */
     receipts: (letter: string) =>
@@ -983,19 +1005,37 @@ const world = (
 
 StartsTest.law(
   "T753 L16 real first/later process steps, recovery and successors keep the shared instance gate",
-  fc.tuple(fc.array(fc.nat(), { minLength: 12, maxLength: 20 })),
-  ([choices]) =>
+  fc.tuple(fc.boolean(), fc.array(fc.nat(), { minLength: 12, maxLength: 20 })),
+  ([refusedStart, choices]) =>
     Effect.gen(function* () {
       const costs = { calls: 0, reads: 0, appends: 0 };
       const w = yield* Effect.acquireRelease(
         Effect.sync(() => world("healthy", { limit: null, lost: null }, costs)),
         (owned) => Effect.promise(() => owned.close()),
       );
+      // A first start pays the gate at configure: the Project's build sends it, and configureProcess
+      // builds the process's services, gate first, before it runs the first turn. So the refusal is
+      // planted before the Project's first build, and the walk below starts from how that configure ended.
+      w.refuseSettings(refusedStart);
       const [first] = yield* Effect.promise(() => w.project.info());
-      expect(costs).toEqual({ calls: 0, reads: 2, appends: 1 });
+      const delivered = yield* Effect.promise(() => w.delivered());
+      w.refuseSettings(false);
+      expect(delivered).toEqual([refusedStart ? "failed" : "configured"]);
+      expect(costs).toEqual({
+        // The Project's own gate is local SQL and makes no call. The 1 is configure's settingsStart (SettingsStartsRemote.record).
+        calls: 1,
+        // 2 are the Project's own record: one finds no start, one reads back its receipt (SettingsStartsLedger.record).
+        // A passed configure adds 1, the lookup that finds that start. A refused call never reaches the Project.
+        reads: 2 + (refusedStart ? 0 : 1),
+        // The Project's own record is the only append: a process's call finds the start and writes nothing.
+        appends: 1,
+      });
+      // No first turn before the gate: a refused configure never runs the program's init, a passed one runs it once.
+      expect(w.inits()).toBe(refusedStart ? 0 : 1);
       let pid = first!.process;
       const client = yield* Effect.promise(() => w.admit());
-      let built = false;
+      // A passed configure left the object's services built. A refused one left nothing built.
+      let built = !refusedStart;
       let restarts = 0;
       let count = 0;
 
@@ -1017,11 +1057,14 @@ StartsTest.law(
         const before = { ...costs };
 
         if (move === "refuse") {
+          const turns = w.inits();
           w.refuseSettings(true);
           expect(Exit.isFailure(yield* Effect.exit(Effect.promise(() => owner.object.open("settings-audit"))))).toBe(
             true,
           );
+          // A refused entry is 1 call that never reaches the Project: no read, no append, and no turn.
           expect(costs).toEqual({ calls: before.calls + 1, reads: before.reads, appends: before.appends });
+          expect(w.inits()).toBe(turns);
           w.refuseSettings(false);
         }
 
@@ -1029,8 +1072,12 @@ StartsTest.law(
         const opened = yield* Effect.promise(() => owner.object.open("settings-audit"));
         expect(opened).toMatchObject({ view: { count } });
         expect(costs).toEqual({
+          // 1 for the refused entry above, and 1 settingsStart for a cold object's entry. A built object
+          // keeps its services (SettingsRuntime's cache holds a success for good), so it calls nothing.
           calls: before.calls + (move === "refuse" ? 1 : 0) + (built ? 0 : 1),
+          // A cold entry's call is 1 read at the Project, the lookup that finds the saved start.
           reads: before.reads + (built ? 0 : 1),
+          // The start was recorded by the Project's own build, so no entry appends.
           appends: before.appends,
         });
         built = true;
@@ -1064,6 +1111,7 @@ StartsTest.law(
           yield* Effect.promise(() => owner.object.alarm());
         }
 
+        // A step, an alarm, a successor and a second open all run on the built object: 0 calls, reads and appends.
         expect(costs).toEqual(warm);
       }
     }),
