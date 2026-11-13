@@ -107,3 +107,15 @@ working for real, with whatever they need.**
   one name in a room; how a pipe carries one program's output to the next one's input;
   where a summoned agent runs (0078's default, the laptop, holds until hands say otherwise); which
   program is built first inside fabrika.
+
+## Amendments
+
+- 2026-11-13 (owner): no shortcut for any piece the four primitives need. Each is built the way
+  its decision or note designs it, and today's version shows what working means for it. So the
+  second tile comes with the desk program ([0279](0279-tuval-is-a-package-desk-in-tier-2.md)), with
+  split, close and the prefix key, never a fixed layout first. That call was listed above as not
+  decided.
+- 2026-11-13 (lead, a narrowing of this file's own words): the bullet about a program with its own
+  React view names the programs the four primitives do not need, such as the tracker and the
+  ticket page. A piece the four need is in scope even when it has a view of its own: `fabsh`'s
+  view, the desk, and wherever a room's talk is shown.
