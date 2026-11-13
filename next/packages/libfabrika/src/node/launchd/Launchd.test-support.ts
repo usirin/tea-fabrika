@@ -29,7 +29,11 @@ const failure = (method: string) =>
 
 export const open = Effect.fn("LaunchdTest.open")(function* (
   fault: BrainFilesTest.Fault | "spawn" = "none",
-  answer: Response = { code: 0, stdout: "", stderr: "" },
+  answer: Response | ((args: ReadonlyArray<string>, spec: BrainSpec) => Effect.Effect<Response>) = {
+    code: 0,
+    stdout: "",
+    stderr: "",
+  },
   input: Partial<BrainSpec> = {},
   directoryName = "",
 ) {
@@ -66,9 +70,10 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
 
         const args = command.args.map((arg) => String(arg));
         seen.push({ executable: command.command, args, options: command.options });
+        const supplied = typeof answer === "function" ? yield* answer(args, spec) : answer;
         let response: Response = {
-          ...answer,
-          stderr: answer.stderr.replace("test.p19.brain", (args.at(-1) ?? "").split("/").at(-1) ?? ""),
+          ...supplied,
+          stderr: supplied.stderr.replace("test.p19.brain", (args.at(-1) ?? "").split("/").at(-1) ?? ""),
         };
 
         if (command.command.endsWith("launchctl") && !args.includes("print")) {

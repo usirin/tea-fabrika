@@ -1,10 +1,18 @@
 // P19 next/. These unit laws replace only the native process boundary. Native XML is L13's check.
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { Cause, Context, Effect, Exit, FileSystem, Layer, Schema } from "effect";
+import { Cause, Context, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Schema } from "effect";
+import { TestClock } from "effect/testing";
+import * as Outside from "../../desktop/BrainControl.test-support.ts";
+import { BrainControl } from "../../desktop/BrainControl.ts";
 import * as FilesTest from "../../desktop/BrainFilesTest.ts";
 import { BrainProbe, Readiness, Children } from "../../desktop/BrainProbe.ts";
 import { BrainService } from "../../desktop/BrainService.ts";
+import * as Managed from "../../desktop/BrainServiceManaged.ts";
+import type { BrainSpec } from "../../desktop/BrainSpec.ts";
+import { Archive } from "../../telemetry/Archive.ts";
+import { RecordManager } from "../../telemetry/Records.ts";
+import { SpanSink } from "../../telemetry/Sink.ts";
 import { SinkError, SpanRow } from "../../telemetry/Trace.ts";
 import * as ServiceLaunchd from "./BrainServiceLaunchd.ts";
 import * as LaunchdTest from "./Launchd.test-support.ts";
@@ -40,6 +48,119 @@ const Job = Schema.Struct({
   ThrottleInterval: Schema.Int,
   AbandonProcessGroup: Schema.Boolean,
 });
+
+it.effect.prop(
+  "L2/L5 removal at or after the stop deadline restores the real plist and can be retried",
+  [Schema.Boolean, Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 5 }))],
+  ([initiallyLoaded, late]) =>
+    Effect.gen(function* () {
+      const outside = yield* Outside.make({ job: initiallyLoaded ? Outside.loaded() : Outside.absent });
+      const disk = yield* LaunchdTest.open(
+        "none",
+        Effect.fnUntraced(function* (args: ReadonlyArray<string>, spec: BrainSpec) {
+          if (args.includes("bootout")) {
+            yield* outside.observe({ job: Outside.absent });
+          }
+
+          if (!args.includes("print")) {
+            return { code: 0, stdout: "", stderr: "" };
+          }
+
+          if ((yield* outside.read).job._tag === "absent") {
+            return {
+              code: 113,
+              stdout: "",
+              stderr: 'Could not find service "test.p19.brain" in domain for user gui: 501\n',
+            };
+          }
+
+          return {
+            code: 0,
+            stderr: "",
+            stdout: [
+              `${args.at(-1)} = {`,
+              "\tstate = running",
+              `\tprogram = ${spec.executable}`,
+              "\targuments = {",
+              ...[spec.executable, ...spec.args].map((arg) => `\t\t${arg}`),
+              "\t}",
+              "\tenvironment = {",
+              "\t\tELECTRON_RUN_AS_NODE => 1",
+              `\t\tFABRIKA_HOME => ${spec.home}`,
+              `\t\tFABRIKA_BUILD => ${spec.build}`,
+              "\t}",
+              "\tpid = 81",
+              "}",
+            ].join("\n"),
+          };
+        }),
+      );
+      yield* disk.control.install;
+      const original = yield* disk.read;
+      expect(original).not.toBeNull();
+      const removalObservations: Array<string | null> = [];
+      const removed = yield* Deferred.make<void>();
+      const reply = yield* Deferred.make<void>();
+      const control = Layer.succeed(BrainControl, {
+        ...disk.control,
+        remove: disk.control.remove.pipe(
+          Effect.tap(() =>
+            Effect.gen(function* () {
+              removalObservations.push(yield* disk.read);
+
+              // A native completion can arrive after its work succeeded but before the driver accepts its reply.
+              if (removalObservations.length === 1) {
+                yield* Deferred.succeed(removed, undefined);
+                yield* Deferred.await(reply);
+              }
+            }),
+          ),
+          Effect.uninterruptible,
+        ),
+      });
+      const context = yield* Layer.build(
+        Managed.layer(disk.spec, disk.settings).pipe(
+          Layer.provide(
+            Layer.mergeAll(
+              control,
+              Layer.succeed(BrainProbe, {
+                ready: Effect.succeed(Readiness.cases.ready.make({})),
+                cleanup: Effect.succeed(Children.cases.gone.make({})),
+              }),
+              Layer.succeed(SpanSink, {
+                batch: (work) => work,
+                flush: Effect.succeed({ sent: 0 }),
+                summaries: () => Effect.succeed([]),
+                sums: () => Effect.succeed([]),
+              }),
+              RecordManager.memory(1_000_000),
+              Archive.memory,
+            ),
+          ),
+        ),
+      );
+      const brain = Context.get(context, BrainService);
+      const stopping = yield* Effect.forkScoped(brain.stop);
+      yield* Deferred.await(removed);
+      yield* TestClock.adjust(Number(disk.settings.values["desktop.brain-stop-timeout"]) + late);
+      yield* Deferred.succeed(reply, undefined);
+      const expired = yield* Fiber.await(stopping);
+      expect(Exit.isFailure(expired) ? Cause.squash(expired.cause) : null).toMatchObject({
+        _tag: "BrainServiceError",
+        reason: { _tag: "Timeout", action: "stop" },
+      });
+      expect(removalObservations).toEqual([null]);
+      expect(yield* disk.read).toBe(original);
+      expect(disk.seen.filter((call) => call.args.includes("bootout"))).toHaveLength(initiallyLoaded ? 1 : 0);
+      const from = disk.seen.length;
+      expect(Exit.isSuccess(yield* brain.stop.pipe(Effect.exit))).toBe(true);
+      expect(disk.seen.slice(from).find((call) => call.executable.endsWith("launchctl"))?.args[0]).toBe("print");
+      expect(removalObservations).toEqual([null, null]);
+      expect(yield* disk.read).toBeNull();
+      expect(disk.seen.filter((call) => call.args.includes("bootout"))).toHaveLength(initiallyLoaded ? 1 : 0);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  options,
+);
 
 it.effect.prop(
   "L7 install compiles checked JSON with exact argv and a closed environment",
