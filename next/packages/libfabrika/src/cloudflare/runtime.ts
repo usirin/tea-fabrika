@@ -165,16 +165,18 @@ export const settingsFailure = <A, E, R>(work: Effect.Effect<A, E | Starts.Start
     ),
   );
 
-export const settingsWire = <R, E>(context: Effect.Effect<Context.Context<R>, E>) => ({
-  runPromise: <A, E2>(work: Effect.Effect<A, E2, R>) =>
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC sends only fixed settings failure summaries
-    Effect.runPromise(
-      settingsFailure(context).pipe(
-        Effect.mapError((error) => (error instanceof LedgerError ? new LedgerError({ reason: error.reason }) : error)),
-        Effect.flatMap((services) => Effect.provideContext(work, services)),
-      ),
-    ),
-});
+/** An object's services as its RPC methods reach them: a failed build leaves only its fixed summary. */
+export const settingsWire = <R, E>(context: Effect.Effect<Context.Context<R>, E>) => {
+  const contextEffect = settingsFailure(context).pipe(
+    Effect.mapError((error) => (error instanceof LedgerError ? new LedgerError({ reason: error.reason }) : error)),
+  );
+  return {
+    contextEffect,
+    runPromise: <A, E2>(work: Effect.Effect<A, E2, R>) =>
+      // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC sends only fixed settings failure summaries
+      Effect.runPromise(contextEffect.pipe(Effect.flatMap((services) => Effect.provideContext(work, services)))),
+  };
+};
 
 export interface ProjectDoorOptions {
   readonly sql: Sql;
@@ -331,7 +333,7 @@ const checkedValue = Effect.fnUntraced(function* <A>(
 export const configureProcess = Effect.fn("process.configure")(function* <E>(
   ctx: DurableObjectState,
   descriptor: Descriptor,
-  runtime: ManagedRuntime.ManagedRuntime<ProcessService, E>,
+  runtime: { readonly contextEffect: Effect.Effect<Context.Context<ProcessService>, E> },
   drain = false,
 ) {
   const storage = StorageClient.make(ctx.storage);

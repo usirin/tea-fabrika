@@ -7,6 +7,7 @@ import { Clock, Effect, FileSystem, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
+import * as RecordWireTest from "./record-wire.test-support.ts";
 
 const PROJECT = "scheduled-job-alarm";
 const NAME = "beat:1";
@@ -111,15 +112,14 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
       expect(code).toBeDefined();
       yield* Effect.gen(function* () {
         const held = yield* Effect.acquireRelease(heldPort(), (port) => port.release);
-        const options = {
+        const options = RecordWireTest.startupFixture({
           home,
           name: PROJECT,
           person: PERSON,
           founder,
           window: raw,
           port: held.port,
-          rateLimit: { limit: 100_000, window: 60_000 },
-        };
+        });
         const instance = yield* localInstance(built, options);
         const from: From = {
           by: fingerprint,
