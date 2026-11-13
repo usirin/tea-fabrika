@@ -2,6 +2,13 @@
 import { Effect, Layer } from "effect";
 import { Answer, PersonCheck, PersonCheckError, Unavailable } from "./PersonCheck.ts";
 
+/**
+ * Creates a `PersonCheck` layer that gives one scripted answer per ask, in order. An `unavailable` entry, or an
+ * ask past the end of the list, fails with `PersonCheckError`.
+ *
+ * @stability unstable
+ * @category layers
+ */
 export const layer = (
   answers: ReadonlyArray<"touch" | "click" | "declined" | "unavailable">,
 ): Layer.Layer<PersonCheck> =>

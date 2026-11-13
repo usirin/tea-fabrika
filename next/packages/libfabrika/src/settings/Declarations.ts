@@ -67,6 +67,7 @@ export const gatewayWindow = Setting.make("gateway.window", {
 
 /**
  * Setting for a one-time browser link's lifetime in whole milliseconds.
+ *
  * @stability unstable
  * @category settings
  */

@@ -1,5 +1,6 @@
 /**
  * Menu bar extra state and items. Checks and signatures are commands, never I/O here.
+ *
  * @stability unstable
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
@@ -11,6 +12,7 @@ const Kind = Access.Grant.fields.as;
 
 /**
  * Words for every admitted client kind. A new kind must have words before it can be drawn.
+ *
  * @stability unstable
  * @category models
  */
@@ -18,6 +20,7 @@ export const words: Record<typeof Kind.Type, string> = { window: "window", agent
 
 /**
  * Schema for one waiting key, shared by its tabs. A pass is a digest only.
+ *
  * @stability unstable
  * @category schemas
  */
@@ -37,6 +40,7 @@ const Tabs = Schema.TaggedUnion({ known: { online: Schema.Int }, unknown: {} });
 
 /**
  * Schema for an admitted client, with its current tab count or an unknown probe result.
+ *
  * @stability unstable
  * @category schemas
  */
@@ -123,7 +127,9 @@ const openWindow = Cmd.make("open_window", { input: Schema.Struct({}), ok: Schem
 const quit = Cmd.make("quit", { input: Schema.Struct({}), ok: Schema.Null, err: [] });
 
 /**
- * Schema for the ordered items a popover draws and labels for its controls.
+ * Schema for one item a popover draws, with its words: the status, an empty note, a waiting key, an admitted
+ * client or an action.
+ *
  * @stability unstable
  * @category schemas
  */
@@ -179,8 +185,9 @@ const unique = <A extends { readonly key: string }>(rows: ReadonlyArray<A>): Rea
 ];
 
 /**
- * Creates the menu's one machine with the loaded link lifetime and live-link switch.
- * Its model is temporary; restart always starts with fresh rows and no pending confirmation.
+ * Creates the menu's one machine from a browser link's lifetime and whether that link is offered. Its model is
+ * never loaded: every start is idle and connecting, with no rows, no clients and no check in flight.
+ *
  * @stability unstable
  * @category constructors
  */
@@ -338,8 +345,10 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
   });
 
 /**
- * Returns status, waiting keys, admitted clients and actions, in that order.
- * Every state has words, including an empty list and an unknown tab count.
+ * Returns the items to draw, in order: the status, a note when no key waits and no client is let in, the waiting
+ * keys, the admitted clients, then the actions. Every item has words, also for an unknown tab count and while a
+ * check runs.
+ *
  * @stability unstable
  * @category getters
  */
