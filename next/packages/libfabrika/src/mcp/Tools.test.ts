@@ -423,23 +423,139 @@ const fieldSchema = (field: typeof Field.Type, name: string) => {
   }
 };
 
-// A-Wire's odd member: one more port, `odd`, whose single field has no JSON form, or is free JSON.
-// A free JSON field lists as `{}`, an open schema, and an agent is handed a closed one (0210).
-const OddField = Schema.Literals(["map", "set", "declared", "unknown", "json"]);
-const Odd = Schema.Struct({ field: OddField, personOnly: Schema.Boolean });
+// A-Wire's odd member, widened by Amendment A-Closed: one more port, `odd`, that holds an open leaf at
+// a drawn depth inside closed wrappers. An open leaf has no JSON form, or is free JSON: it lists as a
+// schema that takes any JSON there, and an agent is handed a closed one (0210).
+type Part = Schema.Top & Schema.Codec<unknown, unknown>;
+const OpenLeaf = Schema.Literals(["map", "set", "declared", "unknown", "json", "any", "object"]);
 
-const oddSchema = (field: typeof OddField.Type) =>
-  field === "map"
-    ? Schema.instanceOf(Map)
-    : field === "set"
-      ? Schema.instanceOf(Set)
-      : field === "unknown"
-        ? Schema.Unknown
-        : field === "json"
-          ? Schema.Json
-          : Schema.declare((u): u is () => unknown => Predicate.isFunction(u), { expected: "a function" });
+const Wrapper = Schema.Literals([
+  "field",
+  "optional",
+  "array",
+  "array_min",
+  "record",
+  "tuple",
+  "tuple_rest",
+  "struct_rest",
+  "set",
+  "union",
+  "nullable",
+  "suspend",
+]);
 
-const makeForm = (form: Declaration & { readonly odd?: typeof Odd.Type }) => {
+const Wrappers = Schema.Array(Wrapper).check(Schema.isMaxLength(4));
+const OddPort = Schema.Literals(["write", "read", "person_only"]);
+const Odd = Schema.Struct({ leaf: OpenLeaf, wrappers: Wrappers, port: OddPort });
+const ClosedLeaf = Schema.Literals(["string", "finite", "int", "boolean", "literal", "literals"]);
+const Held = Schema.Struct({ leaf: ClosedLeaf, wrappers: Wrappers, read: Schema.Boolean });
+
+const openLeaf = (leaf: typeof OpenLeaf.Type): Part => {
+  switch (leaf) {
+    case "map":
+      return Schema.instanceOf(Map);
+    case "set":
+      return Schema.instanceOf(Set);
+    case "declared":
+      return Schema.declare((u): u is () => unknown => Predicate.isFunction(u), { expected: "a function" });
+    case "unknown":
+      return Schema.Unknown;
+    case "json":
+      return Schema.Json;
+    case "any":
+      return Schema.Any;
+    case "object":
+      return Schema.ObjectKeyword;
+  }
+};
+
+/** A closed leaf: its schema, a value it takes, and a value of the wrong type that is never null. */
+const closedLeaf = (leaf: typeof ClosedLeaf.Type): readonly [schema: Part, right: unknown, wrong: unknown] => {
+  switch (leaf) {
+    case "string":
+      return [Schema.String, "s", 7];
+    case "finite":
+      return [Schema.Finite, 1.5, "s"];
+    case "int":
+      return [Schema.Int, 3, 1.5];
+    case "boolean":
+      return [Schema.Boolean, true, "true"];
+    case "literal":
+      return [Schema.Literal("on"), "on", "off"];
+    case "literals":
+      return [Schema.Literals(["left", "right"]), "left", "middle"];
+  }
+};
+
+/** `inner` one level down. `beside` is the struct-with-rest's own field, and `at` names a recursive part. */
+const wrap = (wrapper: typeof Wrapper.Type, inner: Part, beside: Part, at: string): Part => {
+  switch (wrapper) {
+    case "field":
+      return Schema.Struct({ g: inner });
+    case "optional":
+      return Schema.Struct({ g: Schema.optionalKey(inner) });
+    case "array":
+      return Schema.Array(inner);
+    case "array_min":
+      return Schema.Array(inner).check(Schema.isMinLength(1));
+    case "record":
+      return Schema.Record(Schema.String, inner);
+    case "tuple":
+      return Schema.Tuple([Schema.String, inner]);
+    case "tuple_rest":
+      return Schema.TupleWithRest(Schema.Tuple([Schema.String]), [inner]);
+    case "struct_rest":
+      return Schema.StructWithRest(Schema.Struct({ a: beside }), [Schema.Record(Schema.String, inner)]);
+    case "set":
+      return Schema.ReadonlySet(inner);
+    case "union":
+      return Schema.Union([Schema.TaggedStruct("none", {}), Schema.TaggedStruct("some", { held: inner })]);
+    case "nullable":
+      return Schema.NullOr(inner);
+    case "suspend": {
+      const tree: Part = Schema.suspend((): Part =>
+        Schema.Struct({ held: inner, children: Schema.Array(tree) }),
+      ).annotate({ identifier: at });
+      return tree;
+    }
+  }
+};
+
+/** The JSON value that holds `value` at the wrapper's nested place, with `good` in its other places. */
+const embed = (wrapper: typeof Wrapper.Type, value: unknown, good: unknown): unknown => {
+  switch (wrapper) {
+    case "field":
+    case "optional":
+      return { g: value };
+    case "array":
+    case "array_min":
+      return [good, value];
+    case "record":
+      return { k: value };
+    case "tuple":
+      return ["s", value];
+    case "tuple_rest":
+      return ["s", good, value];
+    case "struct_rest":
+      return { a: good, k: value };
+    case "set":
+      return [value];
+    case "union":
+      return { _tag: "some", held: value };
+    case "nullable":
+      return value;
+    case "suspend":
+      return { held: good, children: [{ held: value, children: [] }] };
+  }
+};
+
+/** `leaf` inside `wrappers`, the first one innermost. A struct-with-rest's own field is `beside`, or what it wraps. */
+const nest = (leaf: Part, wrappers: ReadonlyArray<typeof Wrapper.Type>, beside?: Part) =>
+  wrappers.reduce((inner, wrapper, depth) => wrap(wrapper, inner, beside ?? inner, `odd_tree_${depth}`), leaf);
+
+type OddPart = { readonly schema: Part; readonly port: typeof OddPort.Type };
+
+const makeForm = (form: Declaration & { readonly odd?: OddPart }) => {
   const members = form.members.map((member, i) => {
     const fields = Object.fromEntries(
       member.fields.map((field, n) => {
@@ -484,8 +600,10 @@ const makeForm = (form: Declaration & { readonly odd?: typeof Odd.Type }) => {
     );
   }
 
-  if (form.odd !== undefined) {
-    parts.push(Schema.Struct({ type: Schema.Literal("odd"), held: oddSchema(form.odd.field) }));
+  const odd = form.odd;
+
+  if (odd !== undefined && odd.port !== "read") {
+    parts.push(Schema.Struct({ type: Schema.Literal("odd"), held: odd.schema }));
   }
 
   parts.push(Schema.Struct({ type: Schema.Literal("timer"), internal_timer: Schema.Int }));
@@ -507,17 +625,19 @@ const makeForm = (form: Declaration & { readonly odd?: typeof Odd.Type }) => {
         : plain;
   // The negative forms deliberately contain wire values outside tea's Msg type.
   const msg = schema as Schema.Codec<Message, unknown>;
-  const hidden: ReadonlyArray<string> = [...form.personOnly, ...(form.odd?.personOnly === true ? ["odd"] : [])];
-  const keys = [
+  const hidden: ReadonlyArray<string> = [...form.personOnly, ...(odd?.port === "person_only" ? ["odd"] : [])];
+  const writes = [
     ...new Set([...form.members.flatMap((m) => m.tags), ...(outside === undefined ? [] : ["a"])]),
-    ...(form.odd === undefined ? [] : ["odd"]),
+    ...(odd === undefined || odd.port === "read" ? [] : ["odd"]),
   ];
+  const asked = odd?.port === "read" ? { odd: odd.schema } : {};
+  const keys = [...writes, ...Object.keys(asked)];
   const machine = Machine.make({
     model: Schema.Null,
     msg,
     cmds: [],
     init: () => [null, []],
-    update: Object.fromEntries([...keys, "timer"].map((key) => [key, (m: null) => [m, []]])),
+    update: Object.fromEntries([...writes, "timer"].map((key) => [key, (m: null) => [m, []]])),
   });
   const program = Program.make({
     name: "pack/drawn",
@@ -525,9 +645,17 @@ const makeForm = (form: Declaration & { readonly odd?: typeof Odd.Type }) => {
     state: { v: 1, upgrades: [] },
     view: () => null,
     refuse: () => null,
-    inputs: Object.fromEntries(
-      keys.map((key) => [key, hidden.includes(key) ? { description: key, personOnly: true as const } : key]),
-    ),
+    inputs: {
+      ...Object.fromEntries(
+        writes.map((key) => [key, hidden.includes(key) ? { description: key, personOnly: true as const } : key]),
+      ),
+      ...Object.fromEntries(
+        Object.entries(asked).map(([key, schema]) => [
+          key,
+          Input.cases.read.make({ schema, description: key, answer: () => null }),
+        ]),
+      ),
+    },
     outputs: {},
     writes: {},
     wake: () => null,
@@ -583,6 +711,8 @@ const Forms = {
     odd: Arbitrary.schema(Odd),
     stranger: Arbitrary.schema(Schema.String),
   }),
+  // A supported declaration and one more port made only of closed parts.
+  Closed: Arbitrary.all({ description: Arbitrary.schema(Supported), held: Arbitrary.schema(Held) }),
   Sent: visibleForm.pipe(Arbitrary.flatMap(sent)),
   Outside: visibleForm.pipe(
     Arbitrary.flatMap((description) =>
@@ -1129,14 +1259,16 @@ it.effect.prop(
   options(300),
 );
 
+// Amendment A-Closed: a port lists only if no place inside its input schema, at any depth, takes any JSON.
 it.prop(
-  "W4: a visible port with a field that has no JSON form, or is free JSON, fails the list by name, and no call is read",
+  "W4: a visible port that takes any JSON at any depth, or holds a value with no JSON form, fails the list by name, and no call is read",
   { sample: Forms.Odd },
   ({ sample: { description, odd, stranger } }) => {
-    const form = makeForm({ ...description, odd });
+    const schema = nest(openLeaf(odd.leaf), odd.wrappers, Schema.String);
+    const form = makeForm({ ...description, odd: { schema, port: odd.port } });
     const result = Tools.list([form.program]);
 
-    if (odd.personOnly) {
+    if (odd.port === "person_only") {
       expect(Result.isSuccess(result), "the same field on a person-only port lists").toBe(true);
 
       if (Result.isSuccess(result)) {
@@ -1157,6 +1289,96 @@ it.prop(
   },
   options(200),
 );
+
+// The other half, so refusing every port cannot pass: closed parts list, and stay closed where they nest.
+it.prop(
+  "W4: a port made only of closed parts lists, and its schema and its call refuse a wrong type at the nested place",
+  { sample: Forms.Closed },
+  ({ sample: { description, held } }) => {
+    const [leaf, right, wrong] = closedLeaf(held.leaf);
+    const form = makeForm({
+      ...description,
+      odd: { schema: nest(leaf, held.wrappers), port: held.read ? "read" : "write" },
+    });
+    const [good, bad] = held.wrappers.reduce<readonly [unknown, unknown]>(
+      ([good, bad], wrapper) => [embed(wrapper, good, good), embed(wrapper, bad, good)],
+      [right, wrong],
+    );
+    const validate = validator(toolFor(form, "odd").inputSchema);
+    const value = (nested: unknown) => (held.read ? nested : { held: nested });
+    expect(validate({ value: value(good) }), "the listed schema takes a good value").toBe(true);
+    expect(validate({ value: value(bad) }), "the listed schema refuses the wrong type").toBe(false);
+    expect(Tools.read([form.program], "drawn_odd", { value: value(good) })._tag).toBe(held.read ? "query" : "write");
+    expect(Tools.read([form.program], "drawn_odd", { value: value(bad) })).toEqual({
+      _tag: "refused",
+      reason: "bad_input",
+    });
+  },
+  options(200),
+);
+
+const plain: Declaration = {
+  members: [{ tags: ["a"], fields: ["text"], wrap: "plain" }],
+  personOnly: [],
+  nest: [],
+  whole: "plain",
+};
+
+for (const leaf of ["map", "set", "declared", "unknown", "json"] as const) {
+  // pinned: W4's first five fields, each directly on a port. Review 6 found the law drew nothing deeper;
+  // they stay by name so the widened law keeps the cases it started with.
+  it(`pinned: W4 a ${leaf} field directly on a port fails the list by name, and lists when person-only`, () => {
+    const schema = openLeaf(leaf);
+
+    for (const port of ["write", "read"] as const) {
+      failure(Tools.list([makeForm({ ...plain, odd: { schema, port } }).program]), "unsupported_schema", "drawn_odd");
+    }
+
+    const hidden = Tools.list([makeForm({ ...plain, odd: { schema, port: "person_only" } }).program]);
+    expect(Result.isSuccess(hidden) && hidden.success.map((t) => t.name)).toEqual(["ps", "drawn_a"]);
+  });
+}
+
+const review6: ReadonlyArray<readonly [name: string, schema: Part]> = [
+  ["Array(Unknown)", Schema.Array(Schema.Unknown)],
+  ["Array(Json)", Schema.Array(Schema.Json)],
+  ["Record(String, Json)", Schema.Record(Schema.String, Schema.Json)],
+  ["Record(String, Unknown)", Schema.Record(Schema.String, Schema.Unknown)],
+  ["ObjectKeyword", Schema.ObjectKeyword],
+  ["ReadonlySet(Unknown)", Schema.ReadonlySet(Schema.Unknown)],
+  ["Array(Unknown) with a minimum length", Schema.Array(Schema.Unknown).check(Schema.isMinLength(1))],
+  ["TupleWithRest(Tuple([String]), [Unknown])", Schema.TupleWithRest(Schema.Tuple([Schema.String]), [Schema.Unknown])],
+  ["Struct({ g: Array(Unknown) })", Schema.Struct({ g: Schema.Array(Schema.Unknown) })],
+  [
+    "StructWithRest(Struct({ a }), [Record(String, Unknown)])",
+    Schema.StructWithRest(Schema.Struct({ a: Schema.String }), [Schema.Record(Schema.String, Schema.Unknown)]),
+  ],
+];
+
+for (const [name, schema] of review6) {
+  // pinned: review 6's holes. Each listed as a tool and took any JSON one level down.
+  it(`pinned: W4 review 6's ${name} field fails the list by name`, () => {
+    for (const port of ["write", "read"] as const) {
+      failure(Tools.list([makeForm({ ...plain, odd: { schema, port } }).program]), "unsupported_schema", "drawn_odd");
+    }
+  });
+}
+
+const empties: ReadonlyArray<readonly [name: string, schema: Part]> = [
+  ["a Schema.Never field", Schema.Never],
+  ["a nested Schema.Struct with no fields", Schema.Struct({})],
+  ["a Schema.Struct with no fields one level down", Schema.Struct({ g: Schema.Struct({}) })],
+];
+
+for (const [name, schema] of empties) {
+  // vector: Amendment A-Closed names both: a field that can never hold a value, and a nested struct with
+  // no fields, are refused like an open one. Neither can be drawn as an open leaf, so each is fixed.
+  it(`vector: W4 ${name} fails the list by name`, () => {
+    for (const port of ["write", "read"] as const) {
+      failure(Tools.list([makeForm({ ...plain, odd: { schema, port } }).program]), "unsupported_schema", "drawn_odd");
+    }
+  });
+}
 
 const probes: ReadonlyArray<readonly [name: string, value: Readonly<Record<string, string>>, expected: Wire.Msg]> = [
   ["Schema.BigInt", { n: "123" }, { type: "big", n: 123n }],
