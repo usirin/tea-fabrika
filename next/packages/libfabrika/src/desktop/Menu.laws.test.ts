@@ -665,7 +665,7 @@ it.effect.prop(
             }
 
             if (msg.type === "rows") {
-              const count = live && msg.at < lifetime && msg.rows.length > 0 ? 1 : 0;
+              const count: number = live && msg.at < lifetime && msg.rows.length > 0 ? 1 : 0;
 
               if (cmds.filter((c) => c.type === "sign_grant").length !== count) {
                 return "the loaded lifetime did not decide whether a pass signs";
