@@ -14,7 +14,7 @@ import { Digest, SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import { build } from "./src/build.ts";
 import { localInstance } from "./src/local-instance.ts";
-import { Settings } from "./src/settings.ts";
+import { Quotas, Settings } from "./src/settings.ts";
 
 class InstanceError extends Schema.TaggedError<InstanceError>()("InstanceError", {
   reason: Schema.String,
@@ -35,10 +35,14 @@ const settings = Object.fromEntries(
 
 // The saved state of a home: its founding facts. A port saved there by an older start is read
 // only to say that it is no longer used.
-const Saved = Settings.mapFields(({ port, rateLimit: _rateLimit, ...fields }) => ({
+// Its limits hold only the record cap: the quota values come from the settings on every start.
+const Saved = Settings.mapFields(({ port, rateLimit: _rateLimit, limits: _limits, ...fields }) => ({
   ...fields,
   port: Schema.optionalKey(port),
+  limits: Schema.optionalKey(Schema.Struct({ recordBytes: Schema.Int.check(Schema.isGreaterThan(0)) })),
 }));
+
+const encodeQuotas = Schema.encodeEffect(Quotas);
 
 /** The entries that hold a value, as one record. */
 const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) =>
@@ -147,10 +151,18 @@ const command = Command.make("dev", flags, (options) => {
           .writeFileString(file, JSON.stringify(state), { mode: 0o600 })
           .pipe(Effect.mapError((cause) => new InstanceError({ reason: "settings", cause })));
         const built = yield* build({ out: path.join(home, "build") });
+        // The checked settings give the quota values, each as its declared schema encodes it.
+        const quotas = yield* encodeQuotas({
+          writes: loaded.values.writes,
+          storage: loaded.values.storage,
+          recovery: loaded.values.recovery,
+        }).pipe(Effect.mapError((cause) => new InstanceError({ reason: "settings", cause })));
         const instance = yield* localInstance(built, {
           ...state,
           port: loaded.values.port,
           rateLimit: { limit: loaded.values.gatewayLimit, window: loaded.values.gatewayWindow },
+          // A home that saved no record cap takes the record part's own, in cloudflare/record.ts.
+          limits: { recordBytes: state.limits?.recordBytes ?? 1_000_000_000, ...quotas },
           home,
         });
 
