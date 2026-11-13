@@ -102,6 +102,7 @@ describe("T878 composed repository opening", () => {
                 },
               });
               const counted = Layer.succeed(Toml, {
+                ...parser,
                 parse: (text: string) => {
                   parsed.push(text);
                   return parser.parse(text);
