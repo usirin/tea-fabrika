@@ -1,3 +1,4 @@
+import { readlinkSync, symlinkSync } from "node:fs"; // edge: Effect's FileSystem takes and gives a link's target as text, and a target that is not valid UTF-8 needs bytes
 // P19 next/. Scoped real disk, controlled process edge. This never executes launchctl or plutil.
 import { NodeServices } from "@effect/platform-node";
 import {
@@ -64,6 +65,8 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
     ? Effect.succeed(null)
     : fs.makeTempDirectoryScoped({ directory: home, prefix: ".competing-" });
   let swapped: BrainFilesTest.Dirent | null = null;
+  // The competing writer writes once. A later removal races nobody.
+  let raced = false;
   let failing = true;
   let directoryFault = fault === "directory-sync";
   const events: Array<string> = [],
@@ -225,17 +228,49 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
     yield* fs.chmod(file, mode);
     return BrainFilesTest.Dirent.cases.file.make({ bytes, mode });
   });
-  const replace = Effect.fnUntraced(function* (checkpoint: BrainFilesTest.Replacement["checkpoint"]) {
+  // A link's target as the bytes on disk. `readLink` gives text, which loses what is not UTF-8.
+  const linkBytes = (file: string) => Effect.sync(() => Array.from(readlinkSync(file, "buffer")));
+  const links = Effect.gen(function* () {
+    const held: Array<ReadonlyArray<number>> = [];
+
+    for (const folder of (yield* fs.readDirectory(home)).filter((name) => name.startsWith(".brain-"))) {
+      for (const name of yield* fs.readDirectory(path.join(home, folder))) {
+        const file = path.join(home, folder, name);
+
+        if ((yield* fs.lstat(file)).type === "SymbolicLink") {
+          held.push(yield* linkBytes(file));
+        }
+      }
+    }
+
+    const stat = yield* fs
+      .lstat(plist)
+      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(null)));
+    return { path: stat?.type === "SymbolicLink" ? yield* linkBytes(plist) : null, held };
+  });
+  const replace = Effect.fnUntraced(function* (
+    checkpoint: BrainFilesTest.Replacement["checkpoint"],
+    // Our plist's bytes, read right before the capture took it.
+    ours: string,
+  ) {
     if (replacement?.checkpoint !== checkpoint || competing === null) {
       return;
     }
 
+    raced = true;
     const entry = replacement.competing;
     const staged = path.join(competing, "dirent");
 
-    if (entry._tag === "file") {
-      yield* fs.writeFileString(staged, entry.bytes);
-      yield* fs.chmod(staged, entry.mode);
+    if (entry._tag === "opaque") {
+      yield* Effect.sync(() => symlinkSync(Buffer.from(entry.target), staged));
+
+      // A file system that refuses these bytes throws above. One that changes them stops here.
+      if ((yield* linkBytes(staged)).join() !== entry.target.join()) {
+        return yield* Effect.die("this file system did not keep the link's target bytes");
+      }
+    } else if (entry._tag === "file" || entry._tag === "private" || entry._tag === "copy") {
+      yield* fs.writeFileString(staged, entry._tag === "copy" ? ours : entry.bytes);
+      yield* fs.chmod(staged, entry._tag === "file" ? entry.mode : 0o600);
     } else if (entry._tag === "symlink") {
       const target = path.join(home, "other.plist");
 
@@ -293,13 +328,18 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
       }).pipe(Effect.andThen(fault === "publish" ? Effect.fail(failure("link")) : fs.link(from, to))),
     // Removal captures the plist by renaming it away. A competing writer can land on either side.
     rename: (from, to) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         events.push("replaced");
-      }).pipe(
-        Effect.andThen(from === plist ? replace("before-capture") : Effect.void),
-        Effect.andThen(fs.rename(from, to)),
-        Effect.andThen(from === plist ? replace("after-capture") : Effect.void),
-      ),
+
+        if (from !== plist || replacement === undefined || raced) {
+          return yield* fs.rename(from, to);
+        }
+
+        const ours = yield* fs.readFileString(plist);
+        yield* replace("before-capture", ours);
+        yield* fs.rename(from, to);
+        yield* replace("after-capture", ours);
+      }),
   });
   const settings = yield* ServiceTest.timing(flags);
   const context = yield* Layer.build(
@@ -329,6 +369,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
     entries: fs.readDirectory(home).pipe(Effect.orDie),
     dirent: dirent(plist).pipe(Effect.orDie),
     swapped: Effect.sync(() => swapped),
+    links: links.pipe(Effect.orDie),
   };
 });
 
