@@ -61,12 +61,13 @@ same turn, and never waits for a code pull request or the end of the day (owner,
 
 A new version of fabrika is growing in `next/`, built on
 [the five layers](./docs/direction/a-local-first-sync-engine.md). As of 2026-11-12,
-`next/` is on main, and 21 of Tier 1's 43 rows have merged
+`next/` is on main, and 21 of Tier 1's 44 rows have merged
 ([where we are](./docs/plan/README.md#where-we-are-now); 39 since 2026-11-10, when the owner
 added P38, [0069](./.decisions/0069-choices-are-settings.md), 43 since the four thin slices,
 P39 to P42, [0088](./.decisions/0088-six-slices-in-tier-1.md), 44 since the merge queue's first stage, P43,
-[0111](./.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md), and 43 since the checklist replaced two rows,
-[0137](./.decisions/0137-tier-1s-program-is-the-checklist.md)). Everything
+[0111](./.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md), 43 since the checklist replaced two rows,
+[0137](./.decisions/0137-tier-1s-program-is-the-checklist.md), and 44 since a thin inbox, P45,
+[0151](./.decisions/0151-a-thin-inbox-is-a-tier-1-row.md)). Everything
 else (`packages/`, `programs/`, `apps/`) is today's
 version. It keeps running for daily use until the new one takes each job over
 ([clean slate](./docs/direction/clean-slate.md)).
