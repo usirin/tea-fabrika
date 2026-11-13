@@ -993,7 +993,7 @@ describe("P12 Project configure recovery", () => {
       ]);
       // The next reopen delivers the same descriptor once and clears pending.
       await vi.waitFor(() => expect(Number(row().pending)).toBe(0), { timeout: 2_000 });
-      expect(w.attempts).toHaveLength(fault === "healthy" ? 1 : 2);
+      expect(w.attempts.filter((attempt) => attempt.name === "counter:1")).toHaveLength(fault === "healthy" ? 1 : 2);
 
       for (const attempt of w.attempts.filter((attempt) => attempt.name === "counter:1")) {
         expect(attempt).toEqual(descriptor);

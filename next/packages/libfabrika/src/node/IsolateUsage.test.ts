@@ -605,7 +605,7 @@ it.effect(
                 rateLimit: { limit: 100_000, window: 60_000 },
               },
               programs: { "usage-fixture": { hash: "fixture-build", source: "fixture" } },
-              bootstrap: { name: "bootstrap:1", id: "bootstrap", program: "usage-fixture" },
+              bootstrap: [{ name: "bootstrap:1", id: "bootstrap", program: "usage-fixture" }],
               door: (options) =>
                 Effect.sync(() => {
                   policy = options.policy;

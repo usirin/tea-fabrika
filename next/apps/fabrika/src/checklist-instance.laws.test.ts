@@ -162,7 +162,7 @@ const processObject = (ctx: DurableObjectState, env: Env) => {
   const run = <A, E>(use: (p: ProcessCalls) => Effect.Effect<A, E>) => runtime.runPromise(ProcessService.use(use));
   return {
     runtime,
-    configure: (descriptor: Descriptor) => Effect.runPromise(configureProcess(ctx, descriptor)),
+    configure: (descriptor: Descriptor) => Effect.runPromise(configureProcess(ctx, descriptor, runtime)),
     descriptor: () => Effect.runPromise(processDescriptor(ctx)),
     call: (method: string, args: ReadonlyArray<unknown>) =>
       run((p) => Reflect.apply(Reflect.get(p, method), p, args) as Effect.Effect<unknown, unknown>),
@@ -340,6 +340,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
         key,
         env,
         configured,
+        startsPending: () => db.prepare("SELECT process FROM dev_descriptors WHERE pending>0").all().length,
         heard,
         published,
         from,
@@ -428,6 +429,7 @@ describe("L21: the boot list", () => {
               Effect.gen(function* () {
                 const w = yield* world();
                 expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit())), "the boot failed").toBe(true);
+                yield* Effect.promise(() => vi.waitFor(() => expect(w.startsPending()).toBe(0), { timeout: 2_000 }));
                 expect(
                   w.configured.map((d) => d.name),
                   "the boot list started once each, in order",
@@ -448,6 +450,9 @@ describe("L21: the boot list", () => {
                     const before = w.configured.length;
                     const reopened = yield* w.reopen;
                     expect(Exit.isSuccess(reopened), "a reopen failed").toBe(true);
+                    yield* Effect.promise(() =>
+                      vi.waitFor(() => expect(w.startsPending()).toBe(0), { timeout: 2_000 }),
+                    );
                     expect(w.configured.length, "a reopen started an entry again").toBe(before);
                     expect(yield* placings(w), "a reopen changed a first placing").toEqual(first);
                     yield* call(w, (p) => p.register(client, "test-connection", "test-session"));
