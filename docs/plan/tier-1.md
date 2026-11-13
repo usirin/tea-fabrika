@@ -201,7 +201,7 @@ In build order. "Decide first" lists only what no decision answers yet.
 - Not built: P42 past slice 1; `fabrika/tezgah` with split, close and the prefix key, its layout
   and focus as a process in the brain (0274); each window running the prefix itself (0278).
 - Decide first: whether focus is the window's own or the desk process's, where 0279 and 0274 read
-  two ways (below; the first walk due). How `fabsh` may start any program when a start right names
+  two ways (below; the first walk due). *2026-11-13: settled, see below; the open part is how a focus move fits 0278.* How `fabsh` may start any program when a start right names
   one exact pair (open; no decision found). Whether the desk's commands need the palette now: 0278 says every command also
   has a shell word and a palette entry (`.decisions/0278-each-window-runs-its-own-prefix.md:33`), and the palette is in Tier 6 (open).
 
@@ -325,7 +325,7 @@ them.
 | 0 | Nothing: the merge queue is decided (0162) |
 | 1 | Nothing: the lead picks on PR 1028 and PR 1044, past their budget stop with red laws (0162) |
 | the first cloud deploy | A yes after reading `alchemy plan` (0295); whether one yes covers the quick deploys after it |
-| 2 | 0279 against 0274 on focus: the window's own, or a desk process in the brain (the first walk due); how `fabsh` may start any program; whether the palette comes now (0278, 0157) |
+| 2 | How a focus move fits 0278's "no network wait" (applied in the window at once and then confirmed by the brain, or not), and whether a window opens a project from the brain's list in a browser tab; how `fabsh` may start any program; whether the palette comes now (0278, 0157) |
 | 3 | S1, with what a line may hold and which built-in words `fabsh` has |
 | 4 | How a pipe carries one output to the next input |
 | 6 | S2 to S7 (proposed; S6 carries a decided part); where a summoned agent runs; 0517 against 0157; S3 against A5 on names, since the one list of names is built here |
@@ -385,6 +385,10 @@ Listed, not resolved.
   process (`.decisions/0279-tuval-is-a-package-desk-in-tier-2.md:26`). 0274 puts tiles, focus and layout in a process in the brain (`.decisions/0274-the-desktop-is-a-platform-free-core.md:42`).
   0159 amends 0279 in its timing only, so whether focus is the window's or the desk process's
   still reads two ways.
+  *2026-11-13: settled. 0159 brings the desk program now, with a second tile, so the stopgap in 0279
+  ended and focus is the desk process's, one per workspace, as 0274 and
+  [0277](../../.decisions/0277-size-belongs-to-the-viewer.md) say. Focus per window stays a named fast
+  follow in 0277, not decided.*
 - **The glossary's `room` row against R3.** The row's example is `fork #bug-17 at 12 as bar`
   (`.glossary/TERMS.md:421`); R3 decided no message numbers and the order `as bar at "footer"`
   (`docs/direction/summon-guidelines.md:537`). R3 wins. The row is not fixed here: it gets its own
