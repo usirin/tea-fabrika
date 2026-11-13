@@ -414,295 +414,303 @@ it.effect("U3 batched refused spans keep only hourly counts, including batches w
   }),
 );
 
-it.effect("U8 Process and rebuilt Project runtimes bind every load to its own process", () =>
-  Effect.gen(function* () {
-    const once = (tape: ReadonlyArray<boolean>) =>
-      Effect.scoped(
-        Effect.gen(function* () {
-          const log = yield* open;
-          const state = yield* open;
-          let next = 1;
-          const data = Layer.mergeAll(
-            LedgerSql.layer(log.sql, { reader: "project-test" }),
-            LedgerTransactionSql.layer(log.sql),
-          ).pipe(Layer.provide(quiet));
-          const context = yield* Layer.build(
-            ProcessManager.layer(
-              {
-                owner: Owner.cases.brain.make({}),
-                recipient: Recipient.cases.client.make({ client: "test", session: PID }),
-                by: FROM.by,
+// 100 runs took 50.4 s and 58.4 s in CI (runs 43324397786 and 43323883004), and passed 60 s once
+// (43321257103, ticket 889). Budget 2 s per run, 3.4 times the slowest passing run.
+const u8Runs = { seed: 119120, numRuns: 100 };
+
+it.effect(
+  "U8 Process and rebuilt Project runtimes bind every load to its own process",
+  () =>
+    Effect.gen(function* () {
+      const once = (tape: ReadonlyArray<boolean>) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const log = yield* open;
+            const state = yield* open;
+            let next = 1;
+            const data = Layer.mergeAll(
+              LedgerSql.layer(log.sql, { reader: "project-test" }),
+              LedgerTransactionSql.layer(log.sql),
+            ).pipe(Layer.provide(quiet));
+            const context = yield* Layer.build(
+              ProcessManager.layer(
+                {
+                  owner: Owner.cases.brain.make({}),
+                  recipient: Recipient.cases.client.make({ client: "test", session: PID }),
+                  by: FROM.by,
+                },
+                Effect.sync(() => `process_0000000000e00800${String(++next).padStart(10, "0")}`),
+              ).pipe(Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data)))),
+            );
+            const manager = Context.get(context, ProcessManager);
+            const ledger = Context.get(context, Ledger);
+            yield* manager
+              .start(
+                Start.cases.first.make({
+                  id: "boot",
+                  name: NAME,
+                  code: { program: "usage-fixture", hash: "fixture-build" },
+                }),
+                FROM,
+              )
+              .pipe(Effect.provideContext(context));
+            const rpc = <A, E>(work: Effect.Effect<A, E>) =>
+              Effect.runPromise(work.pipe(Effect.provideContext(context)));
+            const ok = <A, E>(work: Effect.Effect<A, E>) =>
+              rpc(Effect.map(work, (value) => ProcessReplies.cases.ok.make({ value })));
+            const project = {
+              read: (stream: string, after: number) => rpc(Stream.runCollect(ledger.read(stream, after))),
+              append: (...args: Parameters<typeof ledger.append>) => rpc(ledger.append(...args)),
+              processStatus: (...args: Parameters<typeof manager.status>) => ok(manager.status(...args)),
+              processStart: (...args: Parameters<typeof manager.start>) => ok(manager.start(...args)),
+              processExit: (...args: Parameters<typeof manager.exit>) => ok(manager.exit(...args)),
+              processIsLive: (...args: Parameters<typeof manager.isLive>) => rpc(manager.isLive(...args)),
+              publish: () => Promise.resolve(),
+            };
+            const saved = { id: PID, name: NAME, program: "usage-fixture", build: "fixture-build", owner: OWNER };
+            const values = new Map<string, unknown>([["descriptor", saved]]);
+            const bound = new Map<object, IsolateUsageTest.Props>();
+            const seen: Array<{ key: string; tails: ReadonlyArray<object> | undefined }> = [];
+            const execution = nodeExecution(fixture(() => {}));
+            const loopbacks = {
+              IsolateTail: ({ props }: { props: IsolateUsageTest.Props }) => {
+                const tail = { fetch: () => Promise.resolve(new Response()) };
+                bound.set(tail, props);
+                return tail;
               },
-              Effect.sync(() => `process_0000000000e00800${String(++next).padStart(10, "0")}`),
-            ).pipe(Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data)))),
-          );
-          const manager = Context.get(context, ProcessManager);
-          const ledger = Context.get(context, Ledger);
-          yield* manager
-            .start(
-              Start.cases.first.make({
-                id: "boot",
-                name: NAME,
-                code: { program: "usage-fixture", hash: "fixture-build" },
-              }),
-              FROM,
-            )
-            .pipe(Effect.provideContext(context));
-          const rpc = <A, E>(work: Effect.Effect<A, E>) => Effect.runPromise(work.pipe(Effect.provideContext(context)));
-          const ok = <A, E>(work: Effect.Effect<A, E>) =>
-            rpc(Effect.map(work, (value) => ProcessReplies.cases.ok.make({ value })));
-          const project = {
-            read: (stream: string, after: number) => rpc(Stream.runCollect(ledger.read(stream, after))),
-            append: (...args: Parameters<typeof ledger.append>) => rpc(ledger.append(...args)),
-            processStatus: (...args: Parameters<typeof manager.status>) => ok(manager.status(...args)),
-            processStart: (...args: Parameters<typeof manager.start>) => ok(manager.start(...args)),
-            processExit: (...args: Parameters<typeof manager.exit>) => ok(manager.exit(...args)),
-            processIsLive: (...args: Parameters<typeof manager.isLive>) => rpc(manager.isLive(...args)),
-            publish: () => Promise.resolve(),
-          };
-          const saved = { id: PID, name: NAME, program: "usage-fixture", build: "fixture-build", owner: OWNER };
-          const values = new Map<string, unknown>([["descriptor", saved]]);
-          const bound = new Map<object, IsolateUsageTest.Props>();
-          const seen: Array<{ key: string; tails: ReadonlyArray<object> | undefined }> = [];
-          const execution = nodeExecution(fixture(() => {}));
-          const loopbacks = {
-            IsolateTail: ({ props }: { props: IsolateUsageTest.Props }) => {
-              const tail = { fetch: () => Promise.resolve(new Response()) };
-              bound.set(tail, props);
-              return tail;
-            },
-          };
-          // oxlint-disable-next-line fabrika/no-type-assertions -- only native object handles are supplied; processRuntime and its loader are real
-          const ctx = {
-            id: { name: JSON.stringify(["project-test", NAME]) },
-            storage: {
-              sql: {
-                exec: state.sql.exec,
-                get databaseSize() {
-                  return state.sql.size();
+            };
+            // oxlint-disable-next-line fabrika/no-type-assertions -- only native object handles are supplied; processRuntime and its loader are real
+            const ctx = {
+              id: { name: JSON.stringify(["project-test", NAME]) },
+              storage: {
+                sql: {
+                  exec: state.sql.exec,
+                  get databaseSize() {
+                    return state.sql.size();
+                  },
+                },
+                transactionSync: state.sql.transaction,
+                get: (key: string) => Promise.resolve(values.get(key)),
+                put: (key: string, value: unknown) => {
+                  values.set(key, value);
+                  return Promise.resolve();
+                },
+                delete: (key: string) => Promise.resolve(values.delete(key)),
+                sync: () => Promise.resolve(),
+                setAlarm: () => Promise.resolve(),
+                deleteAlarm: () => Promise.resolve(),
+              },
+              exports: loopbacks,
+            } as unknown as Parameters<typeof processRuntime>[0];
+            // oxlint-disable-next-line fabrika/no-type-assertions -- native RPC handles and loader transport only; ledger, manager, runner and bindings stay real
+            const env = {
+              PROJECT: { getByName: () => project },
+              RECORD: { getByName: () => ({ write: () => Promise.resolve(Written.cases.written.make({})) }) },
+              LOADER: {
+                get: (key: string, code: () => { tails?: ReadonlyArray<object> }) => {
+                  seen.push({ key, tails: code().tails });
+                  return {
+                    getEntrypoint: () => ({
+                      describe: () =>
+                        Promise.resolve({
+                          name: "usage-fixture",
+                          v: 1,
+                          inputs: { add: { write: true, personOnly: false } },
+                          writes: {},
+                          cmds: [],
+                        }),
+                      init: (saved: unknown) => rpc(execution.init(saved)),
+                      fold: (model: unknown, msg: unknown) => rpc(execution.fold(model, msg)),
+                    }),
+                  };
                 },
               },
-              transactionSync: state.sql.transaction,
-              get: (key: string) => Promise.resolve(values.get(key)),
-              put: (key: string, value: unknown) => {
-                values.set(key, value);
-                return Promise.resolve();
-              },
-              delete: (key: string) => Promise.resolve(values.delete(key)),
-              sync: () => Promise.resolve(),
-              setAlarm: () => Promise.resolve(),
-              deleteAlarm: () => Promise.resolve(),
-            },
-            exports: loopbacks,
-          } as unknown as Parameters<typeof processRuntime>[0];
-          // oxlint-disable-next-line fabrika/no-type-assertions -- native RPC handles and loader transport only; ledger, manager, runner and bindings stay real
-          const env = {
-            PROJECT: { getByName: () => project },
-            RECORD: { getByName: () => ({ write: () => Promise.resolve(Written.cases.written.make({})) }) },
-            LOADER: {
-              get: (key: string, code: () => { tails?: ReadonlyArray<object> }) => {
-                seen.push({ key, tails: code().tails });
-                return {
-                  getEntrypoint: () => ({
-                    describe: () =>
-                      Promise.resolve({
-                        name: "usage-fixture",
-                        v: 1,
-                        inputs: { add: { write: true, personOnly: false } },
-                        writes: {},
-                        cmds: [],
-                      }),
-                    init: (saved: unknown) => rpc(execution.init(saved)),
-                    fold: (model: unknown, msg: unknown) => rpc(execution.fold(model, msg)),
-                  }),
-                };
-              },
-            },
-          } as unknown as Env;
-          const runtime = yield* Effect.acquireRelease(
-            Effect.sync(() =>
-              processRuntime(ctx, env, { "usage-fixture": { hash: "fixture-build", source: "fixture" } }),
-            ),
-            (held) => Effect.promise(() => held.dispose()),
-          );
-          const service = yield* Effect.promise(() => runtime.runPromise(ProcessService));
-          yield* service.open("first");
+            } as unknown as Env;
+            const runtime = yield* Effect.acquireRelease(
+              Effect.sync(() =>
+                processRuntime(ctx, env, { "usage-fixture": { hash: "fixture-build", source: "fixture" } }),
+              ),
+              (held) => Effect.promise(() => held.dispose()),
+            );
+            const service = yield* Effect.promise(() => runtime.runPromise(ProcessService));
+            yield* service.open("first");
 
-          for (const [n, replace] of tape.entries()) {
-            if (replace) {
-              yield* service.restart({ id: `restart-${n}`, build: "fixture-build" });
+            for (const [n, replace] of tape.entries()) {
+              if (replace) {
+                yield* service.restart({ id: `restart-${n}`, build: "fixture-build" });
+              }
+
+              yield* service.open(`client-${n}`);
+              const status = yield* manager.status(NAME).pipe(Effect.provideContext(context));
+              expect(status.state._tag).toBe("live");
+
+              if (status.state._tag === "live") {
+                expect(seen.at(-1)?.key).toBe(`fixture-build/${status.state.process}`);
+              }
             }
 
-            yield* service.open(`client-${n}`);
-            const status = yield* manager.status(NAME).pipe(Effect.provideContext(context));
-            expect(status.state._tag).toBe("live");
+            expect(seen.length).toBeGreaterThan(0);
 
-            if (status.state._tag === "live") {
-              expect(seen.at(-1)?.key).toBe(`fixture-build/${status.state.process}`);
+            for (const load of seen) {
+              expect(load.tails).toHaveLength(1);
+              expect(load.tails?.map((tail) => bound.get(tail))).toEqual([
+                { project: "project-test", name: NAME, process: load.key.slice("fixture-build/".length) },
+              ]);
             }
-          }
 
-          expect(seen.length).toBeGreaterThan(0);
-
-          for (const load of seen) {
-            expect(load.tails).toHaveLength(1);
-            expect(load.tails?.map((tail) => bound.get(tail))).toEqual([
-              { project: "project-test", name: NAME, process: load.key.slice("fixture-build/".length) },
-            ]);
-          }
-
-          // The Project also loads policies for a name started outside its own cached start path.
-          const projectStore = yield* open;
-          const projectValues = new Map<string, unknown>();
-          // oxlint-disable-next-line fabrika/no-type-assertions -- the Project receives only native SQL, storage and loopback handles
-          const projectCtx = {
-            id: { name: "project-test" },
-            storage: {
-              sql: {
-                exec: projectStore.sql.exec,
-                get databaseSize() {
-                  return projectStore.sql.size();
+            // The Project also loads policies for a name started outside its own cached start path.
+            const projectStore = yield* open;
+            const projectValues = new Map<string, unknown>();
+            // oxlint-disable-next-line fabrika/no-type-assertions -- the Project receives only native SQL, storage and loopback handles
+            const projectCtx = {
+              id: { name: "project-test" },
+              storage: {
+                sql: {
+                  exec: projectStore.sql.exec,
+                  get databaseSize() {
+                    return projectStore.sql.size();
+                  },
+                },
+                transactionSync: projectStore.sql.transaction,
+                get: (key: string) => Promise.resolve(projectValues.get(key)),
+                put: (key: string, value: unknown) => {
+                  projectValues.set(key, value);
+                  return Promise.resolve();
                 },
               },
-              transactionSync: projectStore.sql.transaction,
-              get: (key: string) => Promise.resolve(projectValues.get(key)),
-              put: (key: string, value: unknown) => {
-                projectValues.set(key, value);
-                return Promise.resolve();
+              exports: loopbacks,
+            } as unknown as Parameters<typeof projectLayer>[0];
+            const descriptors = new Map<string, typeof saved>();
+            // oxlint-disable-next-line fabrika/no-type-assertions -- native Process RPC handles only; descriptors come from the processes started below
+            const projectEnv = {
+              ...env,
+              PROCESS: {
+                getByName: (object: string) => ({
+                  configure: () => Promise.resolve(),
+                  descriptor: () => Promise.resolve(descriptors.get(object)),
+                }),
               },
-            },
-            exports: loopbacks,
-          } as unknown as Parameters<typeof projectLayer>[0];
-          const descriptors = new Map<string, typeof saved>();
-          // oxlint-disable-next-line fabrika/no-type-assertions -- native Process RPC handles only; descriptors come from the processes started below
-          const projectEnv = {
-            ...env,
-            PROCESS: {
-              getByName: (object: string) => ({
-                configure: () => Promise.resolve(),
-                descriptor: () => Promise.resolve(descriptors.get(object)),
-              }),
-            },
-          } as unknown as Env;
-          let policy: Parameters<ProjectOptions["door"]>[0]["policy"] = () =>
-            Effect.die("Project door not initialized");
-          const beforeProject = seen.length;
-          const projectOptions: ProjectOptions = {
-            config: {
-              name: "project-test",
-              person: FROM.for,
-              founder: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-              window: null,
-              port: 18787,
-              build: "fixture-build",
-              rateLimit: { limit: 100_000, window: 60_000 },
-            },
-            programs: { "usage-fixture": { hash: "fixture-build", source: "fixture" } },
-            bootstrap: { name: "bootstrap:1", id: "bootstrap", program: "usage-fixture" },
-            door: (options) =>
-              Effect.sync(() => {
-                policy = options.policy;
-                const unused = () => Effect.die("Unexpected door call in loader law");
-                return {
-                  connect: unused,
-                  challenge: unused,
-                  initialize: unused,
-                  target: unused,
-                  route: unused,
-                  knock: unused,
-                  grant: unused,
-                  disconnect: unused,
-                  sign: unused,
-                  append: unused,
-                  retire: () => Effect.void,
-                  checkDelivery: unused,
-                };
-              }),
-          };
-          const projectServices = yield* Layer.build(projectLayer(projectCtx, projectEnv, projectOptions));
-          const p = Context.get(projectServices, ProjectService);
-          const bootstrap = seen.slice(beforeProject);
-          expect(bootstrap.length).toBeGreaterThan(0);
-
-          for (const load of bootstrap) {
-            expect(load.key.startsWith("fixture-build/project:")).toBe(true);
-            expect(load.tails).toBeUndefined();
-          }
-
-          // An independent manager writes to the real Project log, like another starter.
-          const starters = yield* Layer.build(
-            ProcessManager.layer(
-              {
-                owner: Owner.cases.brain.make({}),
-                recipient: Recipient.cases.client.make({ client: "starter", session: PID }),
-                by: "brain:project-test",
+            } as unknown as Env;
+            let policy: Parameters<ProjectOptions["door"]>[0]["policy"] = () =>
+              Effect.die("Project door not initialized");
+            const beforeProject = seen.length;
+            const projectOptions: ProjectOptions = {
+              config: {
+                name: "project-test",
+                person: FROM.for,
+                founder: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                window: null,
+                port: 18787,
+                build: "fixture-build",
+                rateLimit: { limit: 100_000, window: 60_000 },
               },
-              Effect.sync(() => `process_0000000000e00800${String(++next).padStart(10, "0")}`),
-            ).pipe(Layer.provide(LedgerTransactionSql.layer(projectStore.sql).pipe(Layer.provide(quiet)))),
-          );
-          const starter = Context.get(starters, ProcessManager);
+              programs: { "usage-fixture": { hash: "fixture-build", source: "fixture" } },
+              bootstrap: { name: "bootstrap:1", id: "bootstrap", program: "usage-fixture" },
+              door: (options) =>
+                Effect.sync(() => {
+                  policy = options.policy;
+                  const unused = () => Effect.die("Unexpected door call in loader law");
+                  return {
+                    connect: unused,
+                    challenge: unused,
+                    initialize: unused,
+                    target: unused,
+                    route: unused,
+                    knock: unused,
+                    grant: unused,
+                    disconnect: unused,
+                    sign: unused,
+                    append: unused,
+                    retire: () => Effect.void,
+                    checkDelivery: unused,
+                  };
+                }),
+            };
+            const projectServices = yield* Layer.build(projectLayer(projectCtx, projectEnv, projectOptions));
+            const p = Context.get(projectServices, ProjectService);
+            const bootstrap = seen.slice(beforeProject);
+            expect(bootstrap.length).toBeGreaterThan(0);
 
-          for (const [n] of tape.entries()) {
-            const name = `policy:${n}`;
-            const first = yield* starter.start(
-              Start.cases.first.make({
-                id: `first-${n}`,
-                name,
-                code: { program: "usage-fixture", hash: "fixture-build" },
-              }),
-              FROM,
+            for (const load of bootstrap) {
+              expect(load.key.startsWith("fixture-build/project:")).toBe(true);
+              expect(load.tails).toBeUndefined();
+            }
+
+            // An independent manager writes to the real Project log, like another starter.
+            const starters = yield* Layer.build(
+              ProcessManager.layer(
+                {
+                  owner: Owner.cases.brain.make({}),
+                  recipient: Recipient.cases.client.make({ client: "starter", session: PID }),
+                  by: "brain:project-test",
+                },
+                Effect.sync(() => `process_0000000000e00800${String(++next).padStart(10, "0")}`),
+              ).pipe(Layer.provide(LedgerTransactionSql.layer(projectStore.sql).pipe(Layer.provide(quiet)))),
             );
-            const restarted = yield* p.processExit(first.process, ExitReason.cases.normal.make({}), FROM);
-            expect(restarted._tag).toBe("ok");
-            const successor = yield* starter.start(
-              Start.cases.again.make({
-                id: `again-${n}`,
-                name,
-                after: first.process,
-                reason: "restart",
-                code: { program: "usage-fixture", hash: "fixture-build" },
-              }),
-              FROM,
+            const starter = Context.get(starters, ProcessManager);
+
+            for (const [n] of tape.entries()) {
+              const name = `policy:${n}`;
+              const first = yield* starter.start(
+                Start.cases.first.make({
+                  id: `first-${n}`,
+                  name,
+                  code: { program: "usage-fixture", hash: "fixture-build" },
+                }),
+                FROM,
+              );
+              const restarted = yield* p.processExit(first.process, ExitReason.cases.normal.make({}), FROM);
+              expect(restarted._tag).toBe("ok");
+              const successor = yield* starter.start(
+                Start.cases.again.make({
+                  id: `again-${n}`,
+                  name,
+                  after: first.process,
+                  reason: "restart",
+                  code: { program: "usage-fixture", hash: "fixture-build" },
+                }),
+                FROM,
+              );
+              const after = successor.process;
+              descriptors.set(JSON.stringify(["project-test", name]), { ...saved, id: after, name });
+              yield* policy(after);
+              const load = seen.at(-1);
+              expect(load?.key).toBe(`fixture-build/${after}`);
+              expect(load?.tails).toHaveLength(1);
+              expect(load?.tails?.map((tail) => bound.get(tail))).toEqual([
+                { project: "project-test", name, process: after },
+              ]);
+            }
+
+            // Rebuild with an empty policy cache over the populated, reopened Project log.
+            const live = yield* p.info;
+            expect(live).toHaveLength(tape.length + 1);
+            yield* projectStore.reopen;
+            const beforeRestore = seen.length;
+            const restored = yield* Layer.build(projectLayer(projectCtx, projectEnv, projectOptions));
+            expect(yield* Context.get(restored, ProjectService).info).toEqual(live);
+            const restoredLoads = seen.slice(beforeRestore);
+            const bootstrapLoads = restoredLoads.filter((load) => load.key.startsWith("fixture-build/project:"));
+            expect(bootstrapLoads).toHaveLength(1);
+            expect(bootstrapLoads[0]?.tails).toBeUndefined();
+            const programLoads = restoredLoads.filter((load) => !load.key.startsWith("fixture-build/project:"));
+            expect(programLoads.map((load) => load.key).sort()).toEqual(
+              live.map((process) => `fixture-build/${process.process}`).sort(),
             );
-            const after = successor.process;
-            descriptors.set(JSON.stringify(["project-test", name]), { ...saved, id: after, name });
-            yield* policy(after);
-            const load = seen.at(-1);
-            expect(load?.key).toBe(`fixture-build/${after}`);
-            expect(load?.tails).toHaveLength(1);
-            expect(load?.tails?.map((tail) => bound.get(tail))).toEqual([
-              { project: "project-test", name, process: after },
-            ]);
-          }
 
-          // Rebuild with an empty policy cache over the populated, reopened Project log.
-          const live = yield* p.info;
-          expect(live).toHaveLength(tape.length + 1);
-          yield* projectStore.reopen;
-          const beforeRestore = seen.length;
-          const restored = yield* Layer.build(projectLayer(projectCtx, projectEnv, projectOptions));
-          expect(yield* Context.get(restored, ProjectService).info).toEqual(live);
-          const restoredLoads = seen.slice(beforeRestore);
-          const bootstrapLoads = restoredLoads.filter((load) => load.key.startsWith("fixture-build/project:"));
-          expect(bootstrapLoads).toHaveLength(1);
-          expect(bootstrapLoads[0]?.tails).toBeUndefined();
-          const programLoads = restoredLoads.filter((load) => !load.key.startsWith("fixture-build/project:"));
-          expect(programLoads.map((load) => load.key).sort()).toEqual(
-            live.map((process) => `fixture-build/${process.process}`).sort(),
-          );
-
-          for (const process of live) {
-            const load = programLoads.find((load) => load.key === `fixture-build/${process.process}`);
-            expect(load?.tails).toHaveLength(1);
-            expect(load?.tails?.map((tail) => bound.get(tail))).toEqual([
-              { project: "project-test", name: process.name, process: process.process },
-            ]);
-          }
-        }),
-      );
-    // Every tape exercises a successor; later moves reload the live process or replace it.
-    const tape = fc.array(fc.boolean(), { minLength: 1, maxLength: 8 }).map((moves) => [true, ...moves]);
-    const property = fc.asyncProperty(tape, (moves) => Effect.runPromise(once(moves)));
-    yield* Effect.promise(() => fc.assert(property, { seed: 119120 }));
-  }),
+            for (const process of live) {
+              const load = programLoads.find((load) => load.key === `fixture-build/${process.process}`);
+              expect(load?.tails).toHaveLength(1);
+              expect(load?.tails?.map((tail) => bound.get(tail))).toEqual([
+                { project: "project-test", name: process.name, process: process.process },
+              ]);
+            }
+          }),
+        );
+      // Every tape exercises a successor; later moves reload the live process or replace it.
+      const tape = fc.array(fc.boolean(), { minLength: 1, maxLength: 8 }).map((moves) => [true, ...moves]);
+      const property = fc.asyncProperty(tape, (moves) => Effect.runPromise(once(moves)));
+      yield* Effect.promise(() => fc.assert(property, u8Runs));
+    }),
+  { timeout: u8Runs.numRuns * 2_000 },
 );
