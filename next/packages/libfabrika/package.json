@@ -80,6 +80,7 @@
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
+    "ajv": "catalog:",
     "fast-check": "catalog:",
     "react": "catalog:",
     "typescript": "catalog:",

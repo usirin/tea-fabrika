@@ -26,6 +26,8 @@ catalog:
   '@anthropic-ai/claude-agent-sdk': 0.3.316
   # The os sandbox (packages/fabrika/src/sandbox/os.ts), held exact: 0.0.x, as experiments 127, 128 and 137 ran it.
   '@anthropic-ai/sandbox-runtime': 0.0.81
+  # The tests' JSON Schema validator (P25 slice 1), the version the lockfile already holds through the MCP SDK.
+  ajv: 8.20.0
   '@demlik/code-graph': 0.15.0
   '@demlik/structure-sweep': 0.4.1
   '@demlik/tea': 0.25.0
