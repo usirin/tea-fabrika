@@ -18,4 +18,4 @@ export class WatcherManager extends Context.Service<
   {
     readonly publish: (client: string, update: Update) => Effect.Effect<void, WatcherManagerError>;
   }
->()("@kampus/libfabrika/runtime/Entry.WatcherManager") {}
+>()("@kampus/libfabrika/runtime/WatcherManager") {}
