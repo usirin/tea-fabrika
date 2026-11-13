@@ -9,6 +9,7 @@ import {
   address,
   effectLaw,
   expectRefused,
+  product,
   recover,
   setup,
   signed,
@@ -31,11 +32,12 @@ export interface Door {
   ) => IO<unknown>;
 }
 
-const loadDoor = () => import("./GatewayEmail.ts").then((value: Door) => value);
+// A door that is missing dies, so its law fails and no refusal law reads it as a refusal.
+const loadDoor = Effect.orDie(product<Door>("../gateway/GatewayEmail.ts"));
 
-effectLaw("P36.04 another device, purpose or ledger cannot redeem a code", (h) =>
+effectLaw("not built: P36 / P36.04 another device, purpose or ledger cannot redeem a code", (h) =>
   Effect.gen(function* () {
-    const door = yield* Effect.promise(loadDoor);
+    const door = yield* loadDoor;
     yield* setup(h);
     const challenge = yield* h.recovery.issueRecovery(binding());
     const value = Redacted.value(h.mails.at(-1)!.code);
@@ -72,9 +74,9 @@ effectLaw("P36.04 another device, purpose or ledger cannot redeem a code", (h) =
   }),
 );
 
-effectLaw("P36.07 changed signed fields and wrong-ledger text are refused", (h) =>
+effectLaw("not built: P36 / P36.07 changed signed fields and wrong-ledger text are refused", (h) =>
   Effect.gen(function* () {
-    const door = yield* Effect.promise(loadDoor);
+    const door = yield* loadDoor;
     const { MemberEvent } = yield* Effect.promise(() => import("../access/Access.ts"));
     const { verifySshsig } = yield* Effect.promise(() => import("../transport/Sshsig.ts"));
     const key = yield* testKey(h.flow.seed);
@@ -204,9 +206,9 @@ it.effect.prop(
   EFFECT,
 );
 
-effectLaw("P36.22 malformed outside input returns a fixed refusal with no raw body", (h) =>
+effectLaw("not built: P36 / P36.22 malformed outside input returns a fixed refusal with no raw body", (h) =>
   Effect.gen(function* () {
-    const door = yield* Effect.promise(loadDoor);
+    const door = yield* loadDoor;
     const body = { outside: h.flow.outside, address: address(h.flow), code: h.flow.malformed };
     const result = yield* Effect.exit(door.handleEmail({ purpose: "setup", binding: binding(), body }, h.recovery));
     expect(result._tag).toBe("Failure");

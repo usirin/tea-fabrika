@@ -1,6 +1,10 @@
 // P36, next/ only. Test contracts, fixtures and observations. Nothing here decides whether an
 // email request is allowed. P28/P24/P26 stand-ins return only the answers P36 consumes.
-import { beforeAll, expect, it } from "@effect/vitest";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import type { Machine } from "@demlik/tea/effect";
+import { beforeAll, expect, it, vi } from "@effect/vitest";
 import { Clock, Deferred, Effect, Exit, Logger, Redacted, Schema, Semaphore, Tracer } from "effect";
 import * as Arbitrary from "effect/Arbitrary";
 import { TestClock } from "effect/testing";
@@ -286,19 +290,91 @@ export interface Dependencies {
   readonly personCheck: IO<"touch">;
 }
 
-// These names are the tests' checked P36 contract. Assignments check against the real module as
-// soon as it lands. No catch supplies a fake implementation or a passing answer.
+// P36 is not built. Its laws land before its build, the way P8's did (docs/plan/tier-1.md, row
+// P8): a law is skipped, named "not built: P36", only while every source below is absent. Once one
+// exists, every law runs on the real modules and fails until the build is whole. Source presence,
+// never a caught import error. Paths are read from this folder.
+export const SOURCES = [
+  "Email.ts",
+  "EmailSecrets.ts",
+  "EmailRecovery.ts",
+  "Challenge.ts",
+  "RecoveryEmail.ts",
+  "Recovery.ts",
+  "index.ts",
+  "../cloudflare/EmailSender.ts",
+  "../gateway/GatewayEmail.ts",
+] as const;
+
+export type Source = (typeof SOURCES)[number];
+
+const sourceFile = (source: Source) => join(import.meta.dirname, source);
+
+/** Whether P36's build has started: one of its sources is on disk. */
+export const built = (): boolean => SOURCES.some((source) => existsSync(sourceFile(source)));
+
+/** What a law takes from Vitest to skip itself. */
+export type Skips = { readonly skip: (note?: string) => never };
+
+/** First line of every P36 law: skip while P36 is not built, run on the real modules after. */
+export const started = (ctx: Skips): void => {
+  if (!built()) {
+    ctx.skip("not built: P36 email recovery");
+  }
+};
+
+/**
+ * A P36 product module, loaded by path only when a law runs, and read through the contract `A`
+ * the laws declare for it. A missing file or export fails the law that reads it.
+ */
+export const product = <A>(source: Source): Effect.Effect<A, unknown> =>
+  // oxlint-disable-next-line fabrika/no-promises -- edge: Vitest loads the product module by path at the test boundary, so every law registers before the build
+  Effect.tryPromise(() => vi.importActual<A>(pathToFileURL(sourceFile(source)).href));
+
+// These names are the tests' P36 contract. The laws read the real modules through them. When P36's
+// tests step meets real sources, it names each module in a plain import, so these are checked
+// against the modules' own types. No catch supplies a fake implementation or a passing answer.
 export interface Domain {
   readonly EmailFact: Schema.Top;
   readonly verifiedText: (fact: unknown) => string;
 }
 
-// oxlint-disable-next-line fabrika/no-promises -- edge: Node loads the product module lazily so Vitest can register every law before build
-export const loadDomain = Effect.tryPromise(() => import("./Email.ts"));
-// oxlint-disable-next-line fabrika/no-promises -- edge: Node loads the private store module at the test boundary
-export const loadStore = Effect.tryPromise(() => import("./EmailSecrets.ts"));
-// oxlint-disable-next-line fabrika/no-promises -- edge: Node loads the recovery module at the test boundary
-export const loadService = Effect.tryPromise(() => import("./EmailRecovery.ts"));
+export interface StoreModule {
+  readonly makeEmailStore: (storage: PrivateStorage) => Store;
+}
+
+export interface ServiceModule {
+  readonly makeEmailRecovery: (dependencies: Dependencies) => IO<Recovery>;
+}
+
+/** What a live device shows for one email `added`. It offers nothing to press. */
+export interface Notice {
+  readonly actions: ReadonlyArray<unknown>;
+  readonly update: (message: unknown) => readonly [unknown, ReadonlyArray<unknown>];
+}
+
+export type NoticeView = (fact: {
+  readonly added: string;
+  readonly label: string;
+  readonly location: string;
+  readonly at: number | null;
+}) => Notice;
+
+/** A tea machine made with `Machine.make`, with the schemas it was made from. */
+export type Made<S, M extends { type: string }, C extends { readonly type: string }, Ctx> = Machine<
+  S,
+  M,
+  C,
+  never,
+  Ctx
+> & {
+  readonly model: Schema.Codec<S, unknown>;
+  readonly msg: Schema.Codec<M, unknown>;
+};
+
+export const loadDomain = product<Domain>("Email.ts");
+export const loadStore = product<StoreModule>("EmailSecrets.ts");
+export const loadService = product<ServiceModule>("EmailRecovery.ts");
 
 export const parentAnswers = (flow: Flow) => {
   const calls: string[] = [];
@@ -332,18 +408,23 @@ export interface RecoveryParent {
 }
 
 // P28's parent path is reconciled when its own exam moves to main's modules.
-// oxlint-disable-next-line fabrika/no-promises -- edge: Node loads P28 at the test boundary after its exam has moved
-export const loadParent: Effect.Effect<RecoveryParent, unknown> = Effect.tryPromise(() => import("./Recovery.ts"));
+export const loadParent = product<RecoveryParent>("Recovery.ts");
 
-export function pureModule<A>(load: () => Promise<A>): () => A {
+/**
+ * A P36 module for laws that are not Effects: loaded once before the file's laws, and only when P36
+ * is built. A law calls `started(ctx)` first, so the reader below never runs while it is not.
+ */
+export function pureModule<A>(source: Source): () => A {
   let loaded: A | undefined;
   let failure: unknown;
   beforeAll(() => {
-    // oxlint-disable-next-line fabrika/no-promises -- edge: module loading returns a Promise at the Vitest boundary
-    const loading = Effect.tryPromise(load);
+    if (!built()) {
+      return;
+    }
+
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Vitest waits for its setup hook Promise
     return Effect.runPromise(
-      loading.pipe(
+      product<A>(source).pipe(
         Effect.tap((value) =>
           Effect.sync(() => {
             loaded = value;
@@ -367,12 +448,12 @@ export function pureModule<A>(load: () => Promise<A>): () => A {
 }
 
 // Plants are applied to product code once after build, never registered as tests.
-export function pureLaw<A>(name: string, arb: Arbitrary.Arbitrary<A>, ready: () => void, check: (a: A) => void) {
+export function pureLaw<A>(name: string, arb: Arbitrary.Arbitrary<A>, check: (a: A) => void) {
   it.prop(
     name,
     { flow: arb },
-    ({ flow }) => {
-      ready();
+    ({ flow }, ctx) => {
+      started(ctx);
       check(flow);
     },
     PURE,
@@ -383,8 +464,9 @@ export function effectLaw(name: string, check: (h: Harness) => IO<void>, arb = f
   it.effect.prop(
     name,
     { flow: arb },
-    ({ flow }) =>
+    ({ flow }, ctx) =>
       Effect.gen(function* () {
+        started(ctx);
         const h = yield* harness(flow);
         yield* check(h);
       }),
@@ -692,7 +774,7 @@ export const harness = (flow: Flow, beforeAppend: IO<void> = Effect.void, afterA
         return "touch" as const;
       }),
     };
-    const make = () => serviceModule.makeEmailRecovery(dependencies) as IO<Recovery>;
+    const make = () => serviceModule.makeEmailRecovery(dependencies);
     let recovery: Recovery = yield* make();
     const reopen = Effect.gen(function* () {
       store = storeModule.makeEmailStore(storage);
@@ -701,8 +783,7 @@ export const harness = (flow: Flow, beforeAppend: IO<void> = Effect.void, afterA
       return recovery;
     });
     const observe = Effect.gen(function* () {
-      // oxlint-disable-next-line fabrika/no-promises -- edge: Node module loading or WebCrypto returns a Promise at this test boundary
-      const { noticeView } = yield* Effect.tryPromise(() => import("./RecoveryEmail.ts"));
+      const { noticeView } = yield* product<{ readonly noticeView: NoticeView }>("RecoveryEmail.ts");
 
       for (const row of rows) {
         if (typeof row.fact === "object" && row.fact !== null && "_tag" in row.fact && row.fact._tag === "added") {

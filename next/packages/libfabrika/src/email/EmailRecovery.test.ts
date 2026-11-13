@@ -2,6 +2,7 @@
 import { expect, it } from "@effect/vitest";
 import { Deferred, Effect, Exit, Fiber, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";
+import type { Access } from "../access/Access.ts";
 import {
   EPOCH,
   EFFECT,
@@ -18,14 +19,16 @@ import {
   harness,
   setup,
   signed,
+  started,
   tags,
   testKey,
   verified,
   wrong,
   type Edge,
+  type Row,
 } from "./Email.test-support.ts";
 
-effectLaw("P36.05 setup requires a right code and live person signature", (h) =>
+effectLaw("not built: P36 / P36.05 setup requires a right code and live person signature", (h) =>
   Effect.gen(function* () {
     for (const role of ["window", "agent", "recovery", "email", "unknown"] as const) {
       for (let n = 0; n < Math.max(1, h.flow.roles[role === "unknown" ? "person" : role]); n++) {
@@ -47,15 +50,20 @@ effectLaw("P36.05 setup requires a right code and live person signature", (h) =>
 
 // Plants after build: defer the added; write a waiting fact first; reply before append.
 it.effect.prop(
-  "0138 the right code lets the device in at once with exactly one email-signed added",
+  "not built: P36 / 0138 the right code lets the device in at once with exactly one email-signed added",
   { flow: RecoveryFlow },
-  ({ flow }) =>
+  ({ flow }, ctx) =>
     Effect.gen(function* () {
+      started(ctx);
       const h = yield* harness(flow);
       yield* setup(h);
       const { Add, MemberEvent, admitted } = yield* Effect.promise(() => import("../access/Access.ts"));
       const { addText } = yield* Effect.promise(() => import("../access/Text.ts"));
-      const { foldAccessEntries } = yield* Effect.promise(() => import("../access/AccessFold.ts"));
+      // P36 adds this fold to the access module: the ledger's rows, with each one's arrival.
+      const foldAccessEntries: (rows: ReadonlyArray<Row>, ledger: string) => Access = Reflect.get(
+        yield* Effect.promise(() => import("../access/AccessFold.ts")),
+        "foldAccessEntries",
+      );
       const { verifySshsig } = yield* Effect.promise(() => import("../transport/Sshsig.ts"));
       const person = yield* testKey(flow.seed.map((byte) => (byte + 1) % 256));
       const window = yield* testKey(flow.seed.map((byte) => (byte + 2) % 256));
@@ -107,10 +115,11 @@ it.effect.prop(
 
 // Plant after build: hand the client success before the append finishes.
 it.effect.prop(
-  "0138 redemption cannot reply while the added append is still blocked",
+  "not built: P36 / 0138 redemption cannot reply while the added append is still blocked",
   { flow: RecoveryFlow },
-  ({ flow }) =>
+  ({ flow }, ctx) =>
     Effect.gen(function* () {
+      started(ctx);
       const entered = yield* Deferred.make<void>();
       const release = yield* Deferred.make<void>();
       const finished = yield* Deferred.make<void>();
@@ -145,10 +154,11 @@ it.effect.prop(
 
 // Plants after build: sign a changed add or another device after consuming its code.
 it.effect.prop(
-  "P36.14 redemption signs only the exact addition bound to its challenge",
+  "not built: P36 / P36.14 redemption signs only the exact addition bound to its challenge",
   { flow: RecoveryFlow },
-  ({ flow }) =>
+  ({ flow }, ctx) =>
     Effect.gen(function* () {
+      started(ctx);
       const h = yield* harness(flow);
       yield* setup(h);
       const challenge = yield* h.recovery.issueRecovery(binding());
@@ -175,10 +185,12 @@ it.effect.prop(
 // Plants after build: strand a redeeming row; accept a changed retry; allocate another add id;
 // lose a durable append when the write succeeded but its acknowledgement failed.
 it.effect.prop(
-  "P36.13 failed append, lost replies, retries and reopen keep one added and one add id",
+  "not built: P36 / P36.13 failed append, lost replies, retries and reopen keep one added and one add id",
   { flow: RetryFlow },
-  ({ flow }) =>
+  ({ flow }, ctx) =>
     Effect.gen(function* () {
+      started(ctx);
+
       // Both failure points run in every generated flow, preserving the old pre-append reach.
       for (const persisted of [false, true]) {
         let loseReply = false;
@@ -263,7 +275,7 @@ it.effect.prop(
   EFFECT,
 );
 
-effectLaw("P36.22 failed send, storage or crypto never becomes a successful fact", (h) =>
+effectLaw("not built: P36 / P36.22 failed send, storage or crypto never becomes a successful fact", (h) =>
   Effect.gen(function* () {
     const cases: ReadonlyArray<Edge> = ["send", "store.read", "store.write", "store.commit", "hash"];
 

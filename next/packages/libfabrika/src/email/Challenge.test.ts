@@ -22,17 +22,24 @@ import {
   tags,
   pureModule,
   harness,
+  started,
   type Harness,
+  type Made,
 } from "./Email.test-support.ts";
 
-const module = pureModule(() => import("./Challenge.ts"));
+// The brain's challenge machine. The law reads its saved states as the store wrote them, so the
+// contract leaves the Model's cases to the machine.
+const module = pureModule<{
+  readonly challenge: Made<unknown, { readonly type: string }, { readonly type: string }, object>;
+}>("Challenge.ts");
 
 // Plants after build: reset a saved try count; reopen used/ended as open; discard a pending add.
 it.effect.prop(
-  "P36.02 P36.03 P36.13 every saved Challenge state survives JSON and init without resetting",
+  "not built: P36 / P36.02 P36.03 P36.13 every saved Challenge state survives JSON and init without resetting",
   { flow: RetryFlow },
-  ({ flow }) =>
+  ({ flow }, ctx) =>
     Effect.gen(function* () {
+      started(ctx);
       const h = yield* harness(flow);
       const machine = module().challenge;
       const reached: Array<typeof machine.model.Type> = [];
@@ -125,7 +132,7 @@ it.effect.prop(
   EFFECT,
 );
 
-effectLaw("P36.01 six digits, including leading zeroes; only a hash persists", (h) =>
+effectLaw("not built: P36 / P36.01 six digits, including leading zeroes; only a hash persists", (h) =>
   Effect.gen(function* () {
     const challenge = yield* h.recovery.issueSetup(binding(), Redacted.make(address(h.flow)));
     const mail = h.mails.at(-1)!;
@@ -147,49 +154,51 @@ effectLaw("P36.01 six digits, including leading zeroes; only a hash persists", (
 const attempt = (h: Harness, id: string, value: string) =>
   h.recovery.redeem(id, Redacted.make(value), added(h.flow), signed(binding().person));
 
-effectLaw("P36.02 ten-minute expiry and five total tries hold across concurrent calls and reopen", (h) =>
-  Effect.gen(function* () {
-    yield* setup(h);
+effectLaw(
+  "not built: P36 / P36.02 ten-minute expiry and five total tries hold across concurrent calls and reopen",
+  (h) =>
+    Effect.gen(function* () {
+      yield* setup(h);
 
-    // All three boundaries are controls in every generated flow.
-    for (const offset of [-1, 0, 1] as const) {
+      // All three boundaries are controls in every generated flow.
+      for (const offset of [-1, 0, 1] as const) {
+        yield* TestClock.setTime(EPOCH);
+        const challenge = yield* h.recovery.issueRecovery(binding());
+        const value = Redacted.value(h.mails.at(-1)!.code);
+        yield* TestClock.setTime(challenge.until + offset);
+        const outcome = yield* Effect.exit(attempt(h, challenge.id, value));
+        expect(outcome._tag === "Success").toBe(offset < 0);
+      }
+
       yield* TestClock.setTime(EPOCH);
-      const challenge = yield* h.recovery.issueRecovery(binding());
-      const value = Redacted.value(h.mails.at(-1)!.code);
-      yield* TestClock.setTime(challenge.until + offset);
-      const outcome = yield* Effect.exit(attempt(h, challenge.id, value));
-      expect(outcome._tag === "Success").toBe(offset < 0);
-    }
+      let challenge = yield* h.recovery.issueRecovery(binding());
+      let value = Redacted.value(h.mails.at(-1)!.code);
 
-    yield* TestClock.setTime(EPOCH);
-    let challenge = yield* h.recovery.issueRecovery(binding());
-    let value = Redacted.value(h.mails.at(-1)!.code);
+      for (let n = 0; n < 4; n++) {
+        yield* expectRefused(attempt(h, challenge.id, wrong(value)));
+      }
 
-    for (let n = 0; n < 4; n++) {
-      yield* expectRefused(attempt(h, challenge.id, wrong(value)));
-    }
+      for (let n = 0; n <= h.flow.reopens; n++) {
+        yield* h.reopen;
+      }
 
-    for (let n = 0; n <= h.flow.reopens; n++) {
+      // Try five may succeed. A test that simply refuses every attempt must fail here.
+      expect((yield* attempt(h, challenge.id, value)).id).toBeTypeOf("string");
+      challenge = yield* h.recovery.issueRecovery(binding());
+      value = Redacted.value(h.mails.at(-1)!.code);
+      const original = challenge;
+      yield* Effect.forEach(
+        Array.from({ length: 5 }, () => 0),
+        () => expectRefused(attempt(h, original.id, wrong(value))),
+        { concurrency: 5 },
+      );
       yield* h.reopen;
-    }
 
-    // Try five may succeed. A test that simply refuses every attempt must fail here.
-    expect((yield* attempt(h, challenge.id, value)).id).toBeTypeOf("string");
-    challenge = yield* h.recovery.issueRecovery(binding());
-    value = Redacted.value(h.mails.at(-1)!.code);
-    const original = challenge;
-    yield* Effect.forEach(
-      Array.from({ length: 5 }, () => 0),
-      () => expectRefused(attempt(h, original.id, wrong(value))),
-      { concurrency: 5 },
-    );
-    yield* h.reopen;
-
-    yield* expectRefused(attempt(h, challenge.id, value));
-  }),
+      yield* expectRefused(attempt(h, challenge.id, value));
+    }),
 );
 
-effectLaw("P36.03 replacement and successful use end the old challenge", (h) =>
+effectLaw("not built: P36 / P36.03 replacement and successful use end the old challenge", (h) =>
   Effect.gen(function* () {
     yield* setup(h);
     const first = yield* h.recovery.issueRecovery(binding());
@@ -221,7 +230,7 @@ effectLaw("P36.03 replacement and successful use end the old challenge", (h) =>
   }),
 );
 
-effectLaw("P36.13 lost replies and reopen produce one final added", (h) =>
+effectLaw("not built: P36 / P36.13 lost replies and reopen produce one final added", (h) =>
   Effect.gen(function* () {
     yield* setup(h);
     const { challenge, value, receipt } = yield* recover(h);

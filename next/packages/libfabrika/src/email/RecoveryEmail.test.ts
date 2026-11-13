@@ -14,10 +14,38 @@ import {
   pureModule,
   loadParent,
   parentAnswers,
+  started,
+  type Binding,
+  type Made,
+  type NoticeView,
 } from "./Email.test-support.ts";
-import type { Msg } from "./RecoveryEmail.ts";
 
-const email = pureModule(() => import("./RecoveryEmail.ts"));
+// The asking device's child, as the plan gives it. The laws read a state's tag, and `added` once in.
+type Model =
+  | { readonly _tag: "off" | "asking" | "checking" | "failed" }
+  | { readonly _tag: "in"; readonly added: string };
+
+type Msg =
+  | { readonly type: "recover" }
+  | { readonly type: "issued"; readonly challenge: { readonly id: string; readonly until: number } }
+  | { readonly type: "code"; readonly secret: string }
+  | { readonly type: "old"; readonly old: "lost" | "kept" }
+  | { readonly type: "checked"; readonly check: "touch" }
+  | { readonly type: "redeemed"; readonly added: string }
+  | {
+      readonly type: "failed";
+      readonly reason: "wrong_code" | "expired" | "exhausted" | "send" | "storage";
+    }
+  | { readonly type: "tick"; readonly now: number };
+
+// What the child asks its parent to do. Each has one answer below.
+type Command = { readonly type: "issue" | "old" | "check" | "redeem" };
+type Ctx = { readonly cloud: boolean; readonly binding: Binding };
+
+const email = pureModule<{
+  readonly recoveryEmail: Made<Model, Msg, Command, Ctx>;
+  readonly noticeView: NoticeView;
+}>("RecoveryEmail.ts");
 
 // A strict table means a new message needs a generator before CI accepts it.
 const messages: MsgArbitraryTable<Msg> = {
@@ -56,7 +84,8 @@ const walk = (cloud: boolean) =>
   );
 
 // Plant after build: init resets a reachable failed/asking/checking/in state.
-it("P36.10 RecoveryEmail restores every saved state without admitting another device", () => {
+it("not built: P36 / P36.10 RecoveryEmail restores every saved state without admitting another device", (ctx) => {
+  started(ctx);
   const machine = email().recoveryEmail;
   fc.assert(
     fc.property(
@@ -87,7 +116,8 @@ it("P36.10 RecoveryEmail restores every saved state without admitting another de
 });
 
 // Plants after build: enter in on checked alone; on issued alone; or on a timer.
-it("P36.10 no generated Msg makes RecoveryEmail in without an appended added", () => {
+it("not built: P36 / P36.10 no generated Msg makes RecoveryEmail in without an appended added", (ctx) => {
+  started(ctx);
   const machine = email().recoveryEmail;
   fc.assert(
     fc.property(
@@ -129,7 +159,7 @@ it("P36.10 no generated Msg makes RecoveryEmail in without an appended added", (
   );
 });
 
-pureLaw("P36.10 local setup keeps the sheet path and offers no email action", RecoveryFlow, email, (flow) => {
+pureLaw("not built: P36 / P36.10 local setup keeps the sheet path and offers no email action", RecoveryFlow, (flow) => {
   const machine = email().recoveryEmail;
   const ctx = { cloud: false, binding: binding() };
   const [start] = machine.init(null, ctx);
@@ -141,10 +171,11 @@ pureLaw("P36.10 local setup keeps the sheet path and offers no email action", Re
 
 // The success control stops a child that refuses all messages from passing the negative law.
 it.effect.prop(
-  "P36.26 P28 parent steps email and asks about the old device before PersonCheck",
+  "not built: P36 / P36.26 P28 parent steps email and asks about the old device before PersonCheck",
   { flow: RecoveryFlow },
-  ({ flow }) =>
+  ({ flow }, test) =>
     Effect.gen(function* () {
+      started(test);
       const parent = yield* loadParent;
       const { calls, services } = parentAnswers(flow);
       const [model] = parent.Recovery.init({ cloud: true });
@@ -183,7 +214,8 @@ it.effect.prop(
 // The live-device notice is a view, not a third control machine. A host passes ordinary
 // messages to the view's handler; none may write toward the brain.
 // Plant after build: add a cancel/not-me action or emit a Cmd for any notice message.
-it("0138 every generated message on the live-device notice yields no Cmd", () => {
+it("not built: P36 / 0138 every generated message on the live-device notice yields no Cmd", (ctx) => {
+  started(ctx);
   fc.assert(
     fc.property(msg, (message) => {
       const notice = email().noticeView({

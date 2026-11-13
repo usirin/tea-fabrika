@@ -1,9 +1,13 @@
 // P36, next/: 0138 applies the email addition and its drops in one Access fold.
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
-import { beforeAll } from "@effect/vitest";
 import { Schema } from "effect";
 import * as Arbitrary from "effect/Arbitrary";
-import type { Add, Signed, MemberEvent } from "./Access.ts";
+import { admitted } from "./Access.ts";
+import type { Access, Add, Signed, MemberEvent } from "./Access.ts";
+import * as AccessFold from "./AccessFold.ts";
+import * as Text from "./Text.ts";
 
 const EPOCH = 1_800_000_000_000;
 const PURE = { arbitrary: { seed: 119120, runs: 100, size: 40, maxDiscards: 500, maxShrinks: 200, concurrency: 1 } };
@@ -25,14 +29,6 @@ const VerificationFlow = Arbitrary.schema(Flow);
 const MembershipFlow = VerificationFlow;
 const AuthorityFlow = VerificationFlow;
 type Row = { readonly fact: unknown; readonly arrivedAt: number | null; readonly parent: string | null };
-
-function pureModule<A>(load: () => Promise<A>): () => A {
-  let loaded: A;
-  beforeAll(async () => {
-    loaded = await load();
-  });
-  return () => loaded;
-}
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const LEDGER = "ledger_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -105,9 +101,47 @@ const initial = (flow: Flow): ReadonlyArray<MemberEvent> => [
   })),
 ];
 
-const access = pureModule(() => import("./Access.ts"));
-const fold = pureModule(() => import("./AccessFold.ts"));
-const domain = pureModule(() => import("./Text.ts"));
+// P36 is not built. Its laws land before its build, the way P8's did (docs/plan/tier-1.md, row
+// P8): a law is skipped, named "not built: P36", only while every P36 source is absent. Once one
+// exists, every law runs on the real module and fails until the build is whole. Source presence,
+// never a caught import error. This module sits below `email/`, so it keeps the list itself (0062):
+// P36's new files, and the two names P36 adds to this module's own files.
+const FILES = [
+  "../email/Email.ts",
+  "../email/EmailSecrets.ts",
+  "../email/EmailRecovery.ts",
+  "../email/Challenge.ts",
+  "../email/RecoveryEmail.ts",
+  "../email/Recovery.ts",
+  "../email/index.ts",
+  "../cloudflare/EmailSender.ts",
+  "../gateway/GatewayEmail.ts",
+];
+
+const built = (): boolean =>
+  FILES.some((file) => existsSync(join(import.meta.dirname, file))) ||
+  Reflect.has(AccessFold, "foldAccessEntries") ||
+  Reflect.has(Text, "verifiedText");
+
+/** First line of every law here: skip while P36 is not built, run on the real module after. */
+const started = (ctx: { readonly skip: (note?: string) => never }): void => {
+  if (!built()) {
+    ctx.skip("not built: P36 email recovery");
+  }
+};
+
+// The two names are the laws' contract with P36's build, read by name from the real files. A
+// missing one fails the law that calls it.
+const access = () => ({ admitted });
+
+const fold = (): { readonly foldAccessEntries: (rows: ReadonlyArray<Row>, ledger: string) => Access } => ({
+  foldAccessEntries: Reflect.get(AccessFold, "foldAccessEntries"),
+});
+
+const domain = (): { readonly verifiedText: (fact: unknown) => string } => ({
+  verifiedText: Reflect.get(Text, "verifiedText"),
+});
+
 const EMAIL = "email-key";
 
 const verification = (flow: Flow) => ({
@@ -136,9 +170,10 @@ const addition = (flow: Flow): Row => ({
 
 // Plants after build: trust sentAt; accept a verification appended after the addition.
 it.prop(
-  "P36.06 only an earlier ledger verification permits recovery, regardless of sentAt",
+  "not built: P36 / P36.06 only an earlier ledger verification permits recovery, regardless of sentAt",
   { flow: VerificationFlow },
-  ({ flow }) => {
+  ({ flow }, ctx) => {
+    started(ctx);
     const add = addition(flow);
     const rows = history(flow);
     expect(
@@ -175,9 +210,10 @@ it.prop(
 
 // Plants after build: defer drops; drop a second root; keep a descendant admitted.
 it.prop(
-  "P36.15 the added applies selected drops at once, cascades, and keeps equal roots and founding",
+  "not built: P36 / P36.15 the added applies selected drops at once, cascades, and keeps equal roots and founding",
   { flow: MembershipFlow },
-  ({ flow }) => {
+  ({ flow }, ctx) => {
+    started(ctx);
     const before = history(flow);
     const members = fold().foldAccessEntries([...before, addition(flow)], LEDGER);
     expect(access().admitted(members, "new-window-0")).toEqual({
@@ -203,9 +239,10 @@ it.prop(
 
 // Plant after build: give email the authority of a person key.
 it.prop(
-  "P36.14 email rank permits only a person added naming this person's earlier verification",
+  "not built: P36 / P36.14 email rank permits only a person added naming this person's earlier verification",
   { flow: AuthorityFlow },
-  ({ flow }) => {
+  ({ flow }, ctx) => {
+    started(ctx);
     const rows = history(flow);
     const baseline = fold().foldAccessEntries(rows, LEDGER);
     const add = added(flow);
@@ -249,9 +286,10 @@ it.prop(
 );
 
 it.prop(
-  "P36.14 email verification is ledger-bound and keeps an immutable private address reference",
+  "not built: P36 / P36.14 email verification is ledger-bound and keeps an immutable private address reference",
   { flow: AuthorityFlow },
-  ({ flow }) => {
+  ({ flow }, ctx) => {
+    started(ctx);
     expect(
       fold()
         .foldAccessEntries([...history(flow), addition(flow)], "other-ledger")
@@ -266,9 +304,10 @@ it.prop(
 
 // Plants after build: special email rank; under the email key; hide it from Access.keys.
 it.prop(
-  "0138 an email-added device has the same member shape as device and sheet recovery",
+  "not built: P36 / 0138 an email-added device has the same member shape as device and sheet recovery",
   { flow: MembershipFlow },
-  ({ flow }) => {
+  ({ flow }, ctx) => {
+    started(ctx);
     const rows = history(flow);
     const email = fold().foldAccessEntries([...rows, addition(flow)], LEDGER);
 
@@ -316,9 +355,10 @@ it.prop(
 
 // Plants after build: refuse Remove for email roots; permit an email-signed revoke.
 it.prop(
-  "0138 any other live person may Remove an email-added root and all its descendants",
+  "not built: P36 / 0138 any other live person may Remove an email-added root and all its descendants",
   { flow: MembershipFlow },
-  ({ flow }) => {
+  ({ flow }, ctx) => {
+    started(ctx);
     const kept = { ...flow, old: "kept" as const };
     const rows = [...history(kept), addition(kept)];
     const grant = initial(kept).find(

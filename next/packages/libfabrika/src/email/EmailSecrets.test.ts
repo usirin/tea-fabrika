@@ -10,6 +10,7 @@ import {
   assertPrivate,
   fullFlow,
   harness,
+  started,
   type Output,
 } from "./Email.test-support.ts";
 
@@ -35,10 +36,11 @@ for (const [name, outputs] of [
   ["brain private key", publicOutputs],
 ] as const) {
   it.effect.prop(
-    `P36.${name === "code" ? "19" : name === "address" ? "20" : "21"} [secrets] ${name} stays out of every named output`,
+    `not built: P36 / P36.${name === "code" ? "19" : name === "address" ? "20" : "21"} [secrets] ${name} stays out of every named output`,
     { flow: SecretFlow },
-    ({ flow }) =>
+    ({ flow }, ctx) =>
       Effect.gen(function* () {
+        started(ctx);
         const h = yield* harness(flow);
         expect.hasAssertions();
         yield* fullFlow(h).pipe(Effect.withTracer(h.tracer), Effect.withLogger(h.logger));

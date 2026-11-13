@@ -8,6 +8,7 @@ import {
   assertPrivate,
   assertSecret,
   code,
+  started,
   testKey,
 } from "@kampus/libfabrika/email/Email.test-support";
 import { Effect, Exit, Schema } from "effect";
@@ -42,10 +43,11 @@ const RecordedOutputs = Schema.Record(Schema.Literals(OUTPUTS), Schema.Array(Sch
 // P36.19/P36.20/P36.21 also cover outputs that a service alone cannot emit.
 // Plants after build: leak the generated code/address/key into each output, including URL encodings.
 it.effect.prop(
-  "P36.19 P36.20 P36.21 [secrets] generated app flows inspect URLs, frames, models, health and every named output",
+  "not built: P36 / P36.19 P36.20 P36.21 [secrets] generated app flows inspect URLs, frames, models, health and every named output",
   { flow: SecretFlow },
-  ({ flow }) =>
+  ({ flow }, ctx) =>
     Effect.gen(function* () {
+      started(ctx);
       const instance = yield* openInstance({ seed: flow.seed, code: flow.code });
       const original = yield* device(instance, "original");
       yield* checkedAddress(instance, original, address(flow));
@@ -125,10 +127,11 @@ it.effect.prop(
 
 // Plants after build: tell only the asking device; keep the notice only in memory; skip reconnect.
 it.effect.prop(
-  "P36.16 live devices see an email-added notice once, reconnect reads the fact, dropped devices get removal",
+  "not built: P36 / P36.16 live devices see an email-added notice once, reconnect reads the fact, dropped devices get removal",
   { flow: Arbitrary.schema(IntegrationFlow) },
-  ({ flow }) =>
+  ({ flow }, ctx) =>
     Effect.gen(function* () {
+      started(ctx);
       const instance = yield* openInstance();
 
       const devices = yield* Effect.forEach(
@@ -175,10 +178,11 @@ it.effect.prop(
 // P36.17 is kept. Its timing changes with 0138: no timer or alarm is needed.
 // Plant after build: leave a removed device's live connection open.
 it.effect.prop(
-  "P36.17 the added closes removed connections with 4003 and admits the new window through Gateway",
+  "not built: P36 / P36.17 the added closes removed connections with 4003 and admits the new window through Gateway",
   { flow: Arbitrary.schema(IntegrationFlow) },
-  ({ flow }) =>
+  ({ flow }, ctx) =>
     Effect.gen(function* () {
+      started(ctx);
       const instance = yield* openInstance();
 
       const old = yield* device(instance, "old");
@@ -207,8 +211,10 @@ it.effect.prop(
 // scenario: real Electron, three temporary homes, a stand-in sender and a test clock.
 // A person's flow across homes is not generated. The other home must survive the selected drops.
 // Plants after build: Cancel button; success before added; missing notice; Remove fails to revoke.
-it.effect("scenario: P36.26 setup, immediate recovery, another home's notice and list Remove", () =>
+// The label stays first in the title, where the law-shape rule reads it.
+it.effect("scenario: not built: P36 / P36.26 setup, immediate recovery, another home's notice and list Remove", (ctx) =>
   Effect.gen(function* () {
+    started(ctx);
     const instance = yield* openInstance();
     const a = yield* launch(instance, "Device A");
     yield* play(() => a.page.getByRole("button", { name: "Cloudflare" }).click());

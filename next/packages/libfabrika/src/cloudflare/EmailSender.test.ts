@@ -7,8 +7,10 @@ import {
   address,
   code,
   EPOCH,
+  product,
   pureLaw,
   pureModule,
+  started,
   type EmailSender,
 } from "../email/Email.test-support.ts";
 
@@ -16,31 +18,35 @@ interface WorkerEmail {
   readonly emailSender: (binding: { readonly send: (message: unknown) => Effect.Effect<void, unknown> }) => EmailSender;
 }
 
-const loadWorker: () => Promise<WorkerEmail> = () => import("./EmailSender.ts");
+const SOURCE = "../cloudflare/EmailSender.ts";
+const worker = pureModule<WorkerEmail>(SOURCE);
 
-const worker = pureModule(loadWorker);
+pureLaw(
+  "not built: P36 / P36.22 Worker sender uses only its injected binding and returns fixed send errors",
+  flows,
+  (_flow) => {
+    // The synchronous constructor must not read an environment credential or send anything.
+    const sent: unknown[] = [];
+    const sender = worker().emailSender({
+      send: (message: unknown) =>
+        Effect.sync(() => {
+          sent.push(message);
+        }),
+    });
+    expect(sent).toEqual([]);
+    expect(sender.send).toBeTypeOf("function");
 
-pureLaw("P36.22 Worker sender uses only its injected binding and returns fixed send errors", flows, worker, (_flow) => {
-  // The synchronous constructor must not read an environment credential or send anything.
-  const sent: unknown[] = [];
-  const sender = worker().emailSender({
-    send: (message: unknown) =>
-      Effect.sync(() => {
-        sent.push(message);
-      }),
-  });
-  expect(sent).toEqual([]);
-  expect(sender.send).toBeTypeOf("function");
-
-  expect(sent).toEqual([]);
-});
+    expect(sent).toEqual([]);
+  },
+);
 
 it.effect.prop(
-  "P36.22 Worker binding accepts typed mail and refuses a failed send safely",
+  "not built: P36 / P36.22 Worker binding accepts typed mail and refuses a failed send safely",
   { flow: flows },
-  ({ flow }) =>
+  ({ flow }, ctx) =>
     Effect.gen(function* () {
-      const module = yield* Effect.promise(loadWorker);
+      started(ctx);
+      const module = yield* product<WorkerEmail>(SOURCE);
       const sent: unknown[] = [];
       const sender = module.emailSender({
         send: (message: unknown) =>
