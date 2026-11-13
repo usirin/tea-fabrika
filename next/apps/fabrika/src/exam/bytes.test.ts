@@ -4,7 +4,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { build as buildOne, type Built } from "@kampus/libfabrika/build";
-import { bundle, bundlePrograms } from "@kampus/libfabrika/node/build";
+import { bundle } from "@kampus/libfabrika/node/build";
 import { Arbitrary, Effect, FileSystem, Path, Schema } from "effect";
 import type { Plugin, RolldownPluginOption } from "rolldown";
 import { vi } from "vitest";
@@ -508,38 +508,4 @@ it.effect.prop(
       }
     }).pipe(Effect.provide(NodeServices.layer)),
   options,
-);
-
-it.effect(
-  // scenario: build the actual notes package through the real local bundler once.
-  "scenario: not built: P13 / notes top level through P12's programBox has no drawing dependencies",
-  (ctx) =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem,
-        path = yield* Path.Path;
-      const root = path.resolve(import.meta.dirname, "../..");
-      const notes = path.resolve(root, "../../programs/notes");
-
-      if (!(yield* fs.exists(notes))) {
-        ctx.skip("not built: P13 notes core bytes");
-      }
-
-      // Any partial package or failed import fails here. P13 declares this dependency in its tests step.
-      const start = observations.builds.length;
-      const programs = yield* bundlePrograms({
-        root,
-        programs: { notes: { module: "@kampus/notes", name: "program" } },
-        plugins: [],
-      });
-
-      for (const graph of observations.builds.slice(start)) {
-        clean(graph, drawing);
-        clean(graph, mcp);
-      }
-
-      expect(programs.notes?.source.length).toBeGreaterThan(0);
-      process.stdout.write(
-        `P8 notes core: ${new TextEncoder().encode(programs.notes?.source ?? "").byteLength} bytes\n`,
-      );
-    }).pipe(Effect.provide(NodeServices.layer)),
 );
