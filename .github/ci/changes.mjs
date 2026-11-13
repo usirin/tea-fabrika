@@ -50,7 +50,15 @@ const safe = (path) => rows(path) || markdown(path);
 const old = (path) => today.some((tree) => path.startsWith(tree)) && !path.startsWith("packages/fabrika-design/");
 
 /**
- * A PR skips a job only when every path is explicitly safe for that job.
+ * An event whose jobs follow its changed paths: a pull request, and a merge queue's group, which
+ * is one pull request's change on top of the queue (0174). Every other event runs every job, so
+ * each push to main still runs the full set right after the merge.
+ * @param {string} event
+ */
+const scoped = (event) => event === "pull_request" || event === "merge_group";
+
+/**
+ * A scoped event skips a job only when every path is explicitly safe for that job.
  * Amendment 3: field's runner starts on every event; this flag gates its install
  * and row check, so Markdown in field/ alone does not install Effect.
  * @param {readonly string[] | null} paths
@@ -58,7 +66,7 @@ const old = (path) => today.some((tree) => path.startsWith(tree)) && !path.start
  * @returns {Flags}
  */
 export const classify = (paths, event) => {
-  if (event !== "pull_request" || paths === null || paths.length === 0) {
+  if (!scoped(event) || paths === null || paths.length === 0) {
     return { ...all };
   }
 
@@ -88,7 +96,7 @@ export const classify = (paths, event) => {
  * and `pnpm build`). A draft pull request runs only the fast jobs: changes, field, typecheck and
  * check's lint (owner, 2026-11-11, 0134's amendment). Marking it ready starts a run with
  * `draft` false, so the full set runs on that head before it can merge. Only a pull request can
- * be a draft; on any other event the flag is ignored.
+ * be a draft; on any other event, a merge queue's group included, the flag is ignored.
  * @param {readonly string[] | null} paths
  * @param {string} event
  * @param {boolean} draft
@@ -110,7 +118,8 @@ export const validSha = (sha) => /^[a-f0-9]{40}$/.test(sha) && !/^0+$/.test(sha)
 const git = (args) => spawnSync("git", args, { encoding: "utf8", maxBuffer: 2 ** 28 });
 
 /**
- * No shell interpolation. PR paths start at the merge base; pushes use before.
+ * No shell interpolation. PR paths start at the merge base; pushes use before, and a merge
+ * queue's group uses its own base, the commit it was built on, so the diff is the group's change.
  * A rename is a deletion and an addition. NUL preserves all legal Git names.
  * @param {string} base
  * @param {string} head

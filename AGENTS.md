@@ -528,7 +528,8 @@ brief carries these caps. Each one came from a laptop that became unusable.
   picks only the tests that reach them. What a test's scripts read is derived from the scripts, never
   written in the test (`oxlint-plugins/script-reads.mjs`; `pnpm lint` fails on a script no test reaches).
   Other Markdown that a program or skill reads counts as code.
-  Anything else, and every push to main, runs all jobs, so the full suite runs after the merge. A run that
+  Anything else, and every push to main, runs all jobs, so the full suite runs after the merge. A merge queue's
+  run picks its jobs from its changed paths, as a ready pull request does ([0174](./.decisions/0174-a-queue-run-follows-its-paths.md)). A run that
   needs what CI lacks (Electron shots, a stage with workerd) still runs here. With two or more code agents running:
   `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at the very end. `tsgo` takes
   about 8 cores, so small jobs add up.

@@ -12,8 +12,9 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   # GitHub's merge queue tests each group on a temporary branch and takes a required check only from
-  # this event. It runs every job, as a push to main does: changes.mjs reads any event but
-  # `pull_request` as "run all". The group's own base and head replace `before` (see BASE below).
+  # this event. It picks its jobs from the group's changed paths, as a ready pull request does
+  # (0174); a push to main still runs every job. The group's own base and head give those paths
+  # (see BASE below).
   merge_group:
     types: [checks_requested]
 
