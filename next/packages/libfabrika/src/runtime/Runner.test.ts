@@ -42,8 +42,9 @@ import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { type SpanRow } from "../telemetry/Trace.ts";
 import { type Update as WatcherUpdate } from "./Entry.ts";
+import type { Execution } from "./Execution.ts";
 import { ProcessStore } from "./ProcessStore.ts";
-import { Input, Program } from "./Program.ts";
+import { Input, Program, ProgramDown } from "./Program.ts";
 
 const SEED = 119120;
 const PROCESS = Effect.runSync(processId);
@@ -408,6 +409,8 @@ const world = async (
     readonly storage?: ActivityStorage;
     readonly onStep?: () => void;
     readonly noPorts?: boolean;
+    readonly addPort?: Schema.Codec<(typeof Msg.members)[0]["Type"]>;
+    readonly execution?: (actual: Execution) => Execution;
   } = {},
 ) => {
   const { ProgramRunner } = await import("./Runner.ts");
@@ -450,7 +453,15 @@ const world = async (
             update: { ...machine.update, fire: (s: Model) => [s, [ghost({})]] as const },
           },
         }
-      : p;
+      : options.addPort === undefined
+        ? p
+        : {
+            ...p,
+            inputs: {
+              ...p.inputs,
+              add: Input.cases.write.make({ schema: options.addPort, description: "Add", personOnly: false }),
+            },
+          };
   const published = new Map<string, Update[]>();
   const alarms: Array<number | null> = [];
   const calls: Array<{ kind: string; id: string; parent: string | null }> = [];
@@ -653,6 +664,19 @@ const world = async (
               return Outcome.ok(null);
             }),
         },
+      ).pipe(
+        Layer.flatMap((context) => {
+          const actual = Context.get(context, ProgramLoader);
+          return Layer.succeed(ProgramLoader, {
+            load: (...args) =>
+              actual.load(...args).pipe(
+                Effect.map((loaded) => ({
+                  ...loaded,
+                  execution: options.execution?.(loaded.execution) ?? loaded.execution,
+                })),
+              ),
+          });
+        }),
       ),
       Layer.succeed(WatcherManager, {
         publish: (client: string, update: WatcherUpdate) =>
@@ -993,6 +1017,102 @@ describe("ticket 884, next/ brain mail", () => {
             yield* appendNotice(notice("good"), { type: "add", n: 2 });
             expect((yield* r.open("good")).view).toEqual({ ...before, count: 2 });
             expect((yield* steps).map((row) => body(row).input)).toEqual([notice("good")]);
+          }).pipe(Effect.provide(w.layer())),
+        );
+      }),
+    { arbitrary: { seed: SEED } },
+  );
+
+  it.live.prop(
+    "mail admission: a throwing port schema is skipped, later opens and valid mail work, and notices bypass the port",
+    [Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 30 }))],
+    ([n]) =>
+      Effect.promise(async () => {
+        const checked: Array<number> = [];
+        const w = await world({
+          addPort: Msg.members[0].check(
+            Schema.makeFilter((m) => {
+              checked.push(m.n);
+
+              if (m.n < 0) {
+                throw new Error("port schema failed");
+              }
+
+              return true;
+            }),
+          ),
+        });
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const r = yield* w.ProgramRunner;
+            const before = (yield* r.open("before")).view;
+            const mailbox = yield* Mailbox;
+            yield* mailbox.send(NAME, "throwing-port", { type: "add", n: -n }, from());
+            expect((yield* r.open("bad-port")).view).toEqual(before);
+            expect((yield* r.open("after-bad-port")).view).toEqual(before);
+            expect(checked).toEqual([-n]);
+            expect(yield* ProcessStore.use((s) => s.placed("throwing-port"))).toBeNull();
+            expect(yield* steps).toEqual([]);
+
+            // The same Msg is valid brain mail even though this client's port would throw.
+            yield* appendNotice(notice("bypass-port"), { type: "add", n: -n });
+            expect((yield* r.open("brain-mail")).view).toEqual({ ...before, count: -n });
+            expect(checked).toEqual([-n]);
+            yield* mailbox.send(NAME, "good-port", { type: "add", n: n + 1 }, from());
+            expect((yield* r.open("good-port")).view).toEqual({ ...before, count: 1 });
+            expect(checked).toEqual([-n, n + 1]);
+            expect((yield* r.open("after-good-port")).view).toEqual({ ...before, count: 1 });
+            expect((yield* steps).map((row) => body(row).input)).toEqual([notice("bypass-port"), "good-port"]);
+            expect((yield* read(PROCESS)).filter((row) => row._tag === "down")).toEqual([]);
+          }).pipe(Effect.provide(w.layer())),
+        );
+        w.reopen();
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const r = yield* w.ProgramRunner;
+            expect((yield* r.open("reopened")).view).toEqual({ ...initial, count: 1 });
+            expect(yield* steps).toHaveLength(2);
+            expect(checked).toEqual([-n, n + 1]);
+          }).pipe(Effect.provide(w.layer())),
+        );
+      }),
+    { arbitrary: { seed: SEED } },
+  );
+
+  it.live.prop(
+    "mail admission: RPC and decode failures propagate and the next open retries the same letter",
+    [
+      Schema.Literals(["rpc", "decode"]),
+      Schema.Literals(["admit", "step"]),
+      Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 30 })),
+    ],
+    ([source, point, n]) =>
+      Effect.promise(async () => {
+        let failing = true;
+        const error = new ProgramDown({ reason: "step", source });
+        const w = await world({
+          execution: (actual) => ({
+            ...actual,
+            admit: (m) => (failing && point === "admit" ? Effect.fail(error) : actual.admit(m)),
+            step: (model, m) => (failing && point === "step" ? Effect.fail(error) : actual.step(model, m)),
+          }),
+        });
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const r = yield* w.ProgramRunner;
+            const before = (yield* r.open("before")).view;
+            const mailbox = yield* Mailbox;
+            yield* mailbox.send(NAME, "retry-mail", { type: "add", n }, from());
+            expect(yield* failure(r.open("failed"))).toMatchObject({ _tag: "ProgramDown", reason: "step", source });
+            expect(yield* steps).toEqual([]);
+            expect(yield* ProcessStore.use((s) => s.placed("retry-mail"))).toBeNull();
+            failing = false;
+            expect((yield* r.open("retry")).view).toEqual({ ...before, count: n });
+            expect((yield* steps).map((row) => body(row).input)).toEqual(["retry-mail"]);
+            yield* mailbox.send(NAME, "later-mail", { type: "add", n: 1 }, from());
+            expect((yield* r.open("later")).view).toEqual({ ...before, count: n + 1 });
+            expect((yield* steps).map((row) => body(row).input)).toEqual(["retry-mail", "later-mail"]);
+            expect((yield* read(PROCESS)).filter((row) => row._tag === "down")).toEqual([]);
           }).pipe(Effect.provide(w.layer())),
         );
       }),
