@@ -31,8 +31,8 @@ It sits beside three rules that already hold:
 **Make it work, then make it better, then make it secure, in that order.**
 
 - A stuck thing gets the smallest change that makes it run. That change lands first.
-- The better version and the safer version each become a ticket, filed the same day. Neither holds
-  up the small change.
+- The better version and the safer version each become a ticket. Neither holds up the small
+  change.
 - Isolation or strictness whose only reason is other machines or strangers waits while fabrika runs
   on one laptop.
 - Small does not mean rough. The change that makes it run still passes its checks.
