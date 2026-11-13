@@ -1,6 +1,18 @@
 // P19 next/. Scoped real disk, controlled process edge. This never executes launchctl or plutil.
 import { NodeServices } from "@effect/platform-node";
-import { Context, Effect, FileSystem, Layer, Path, PlatformError, Schema, Sink, Stream } from "effect";
+import {
+  Context,
+  Deferred,
+  Effect,
+  FileSystem,
+  Layer,
+  Option,
+  Path,
+  PlatformError,
+  Schema,
+  Sink,
+  Stream,
+} from "effect";
 import { Digest } from "effect/crypto";
 import type { ChildProcess } from "effect/process";
 import { ChildProcessSpawner } from "effect/process";
@@ -15,6 +27,8 @@ type Response = {
   readonly stdout: string;
   readonly stderr: string;
   readonly signal?: string;
+  // A process that ignores SIGTERM. `started` runs once it is alive; `gone` is its own exit.
+  readonly stubborn?: { readonly started: Effect.Effect<void>; readonly gone: Effect.Effect<void> };
 };
 
 type Seen = {
@@ -37,6 +51,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
   input: Partial<BrainSpec> = {},
   directoryName = "",
   replacement?: BrainFilesTest.Replacement,
+  flags: Record<string, string> = {},
 ) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
@@ -111,38 +126,67 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
         }
 
         const bytes = (text: string) => Stream.make(new TextEncoder().encode(text));
+        const stubborn = supplied.stubborn;
+        const killed = yield* Deferred.make<void>();
+        const signaled = (signal: string) =>
+          Effect.fail(
+            PlatformError.systemError({
+              // oxlint-disable-next-line fabrika/no-hand-tag -- edge: match NodeChildProcessSpawner's native signal failure
+              _tag: "Unknown",
+              module: "ChildProcess",
+              method: "exitCode",
+              pathOrDescriptor: `${command.command} ${args.join(" ")}`,
+              // The installed platform-node 4.1.2 exposes termination signals only in this cause.
+              cause: new Error(`Process interrupted due to receipt of signal: '${signal}'`),
+            }),
+          );
         return yield* Effect.acquireRelease(
-          Effect.sync(() => {
+          Effect.suspend(() => {
             events.push("spawn");
-            return ChildProcessSpawner.makeHandle({
-              pid: ChildProcessSpawner.ProcessId(81),
-              exitCode:
-                response.signal === undefined
-                  ? Effect.succeed(ChildProcessSpawner.ExitCode(response.code))
-                  : Effect.fail(
-                      PlatformError.systemError({
-                        // oxlint-disable-next-line fabrika/no-hand-tag -- edge: match NodeChildProcessSpawner's native signal failure
-                        _tag: "Unknown",
-                        module: "ChildProcess",
-                        method: "exitCode",
-                        pathOrDescriptor: `${command.command} ${args.join(" ")}`,
-                        // The installed platform-node 4.1.2 exposes termination signals only in this cause.
-                        cause: new Error(`Process interrupted due to receipt of signal: '${response.signal}'`),
-                      }),
-                    ),
-              isRunning: Effect.succeed(false),
-              kill: () => Effect.void,
-              stdin: Sink.drain,
-              stdout: bytes(response.stdout),
-              stderr: bytes(response.stderr),
-              all: bytes(response.stdout + response.stderr),
-              getInputFd: () => Sink.drain,
-              getOutputFd: () => Stream.empty,
-              unref: Effect.succeed(Effect.void),
-            });
-          }),
+            return stubborn?.started ?? Effect.void;
+          }).pipe(
+            Effect.map(() =>
+              ChildProcessSpawner.makeHandle({
+                pid: ChildProcessSpawner.ProcessId(81),
+                exitCode:
+                  stubborn !== undefined
+                    ? Deferred.await(killed).pipe(Effect.andThen(signaled("SIGKILL")))
+                    : response.signal === undefined
+                      ? Effect.succeed(ChildProcessSpawner.ExitCode(response.code))
+                      : signaled(response.signal),
+                isRunning: Effect.succeed(false),
+                kill: () => Effect.void,
+                stdin: Sink.drain,
+                stdout: bytes(response.stdout),
+                stderr: bytes(response.stderr),
+                all: bytes(response.stdout + response.stderr),
+                getInputFd: () => Sink.drain,
+                getOutputFd: () => Stream.empty,
+                unref: Effect.succeed(Effect.void),
+              }),
+            ),
+          ),
           () =>
-            Effect.sync(() => {
+            Effect.gen(function* () {
+              if (stubborn !== undefined) {
+                // As platform-node 4.1.2's terminateProcessGroup: SIGTERM, then SIGKILL only after
+                // `forceKillAfter`. With no `forceKillAfter` it waits for the process's own exit.
+                events.push("SIGTERM");
+                const grace = command.options.forceKillAfter;
+
+                if (grace === undefined) {
+                  yield* stubborn.gone;
+                } else {
+                  // Its own exit ends the wait early, as the real spawner's exit listener does.
+                  const exited = yield* stubborn.gone.pipe(Effect.timeoutOption(grace));
+
+                  if (Option.isNone(exited)) {
+                    events.push("SIGKILL");
+                    yield* Deferred.succeed(killed, undefined);
+                  }
+                }
+              }
+
               events.push("release");
             }),
         );
@@ -154,7 +198,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
       return;
     }
 
-    // Rename a distinct inode, so an existing backup still holds the old job's bytes.
+    // Rename a distinct inode, so a captured copy still holds the old job's bytes.
     yield* fs.writeFileString(competing, replacement.bytes, { mode: 0o600 });
     yield* fs.chmod(competing, 0o600);
     yield* fs.rename(competing, plist);
@@ -194,18 +238,18 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
       Effect.sync(() => {
         events.push("publish");
         events.push(`publish:${from}`);
-      }).pipe(
-        Effect.andThen(from === plist ? replace("before-backup-link") : Effect.void),
-        Effect.andThen(fault === "publish" ? Effect.fail(failure("link")) : fs.link(from, to)),
-      ),
-    remove: (file, options) =>
-      (file === plist ? replace("before-unlink") : Effect.void).pipe(Effect.andThen(fs.remove(file, options))),
+      }).pipe(Effect.andThen(fault === "publish" ? Effect.fail(failure("link")) : fs.link(from, to))),
+    // Removal captures the plist by renaming it away. A competing writer can land on either side.
     rename: (from, to) =>
       Effect.sync(() => {
         events.push("replaced");
-      }).pipe(Effect.andThen(fs.rename(from, to))),
+      }).pipe(
+        Effect.andThen(from === plist ? replace("before-capture") : Effect.void),
+        Effect.andThen(fs.rename(from, to)),
+        Effect.andThen(from === plist ? replace("after-capture") : Effect.void),
+      ),
   });
-  const settings = yield* ServiceTest.timing();
+  const settings = yield* ServiceTest.timing(flags);
   const context = yield* Layer.build(
     Launchd.layer(spec, settings).pipe(Layer.provide(Layer.mergeAll(disk, spawner, Digest.layerWebCrypto))),
   );

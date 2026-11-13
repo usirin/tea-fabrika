@@ -164,6 +164,160 @@ it.effect.prop(
 );
 
 it.effect.prop(
+  "L4/L5 an interrupted native command that ignores SIGTERM is killed after one poll interval, and a retry starts",
+  [
+    Schema.Literals(["up", "stop"]),
+    Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000 })),
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 })),
+    Schema.Literals(["caller", "deadline"]),
+  ],
+  ([action, pick, poll, by]) =>
+    Effect.gen(function* () {
+      const timeout = 1_000;
+      const stuck = yield* Deferred.make<void>();
+      const gone = yield* Deferred.make<void>();
+      // One world per attempt: `stubbornAt` names the native command that ignores SIGTERM, or none.
+      const attempt = Effect.fnUntraced(function* (stubbornAt: number | null) {
+        let loaded = action === "stop";
+        let armed = false;
+        let commands = 0;
+        const disk = yield* LaunchdTest.open(
+          "none",
+          (args, spec) =>
+            Effect.sync(() => {
+              if (armed && commands++ === stubbornAt) {
+                return {
+                  code: 0,
+                  stdout: "",
+                  stderr: "",
+                  stubborn: { started: Deferred.succeed(stuck, undefined), gone: Deferred.await(gone) },
+                };
+              }
+
+              if (args.includes("bootstrap") || args.includes("bootout")) {
+                loaded = args.includes("bootstrap");
+              }
+
+              if (!args.includes("print")) {
+                return { code: 0, stdout: "", stderr: "" };
+              }
+
+              return loaded
+                ? {
+                    code: 0,
+                    stderr: "",
+                    stdout: [
+                      `${args.at(-1)} = {`,
+                      "\tstate = running",
+                      `\tprogram = ${spec.executable}`,
+                      "\targuments = {",
+                      ...[spec.executable, ...spec.args].map((arg) => `\t\t${arg}`),
+                      "\t}",
+                      "\tenvironment = {",
+                      "\t\tELECTRON_RUN_AS_NODE => 1",
+                      `\t\tFABRIKA_HOME => ${spec.home}`,
+                      `\t\tFABRIKA_BUILD => ${spec.build}`,
+                      "\t}",
+                      "\tpid = 81",
+                      "}",
+                    ].join("\n"),
+                  }
+                : {
+                    code: 113,
+                    stdout: "",
+                    stderr: 'Could not find service "test.p19.brain" in domain for user gui: 501\n',
+                  };
+            }),
+          undefined,
+          undefined,
+          undefined,
+          {
+            "desktop.brain-poll": String(poll),
+            "desktop.brain-start-timeout": String(timeout),
+            "desktop.brain-stop-timeout": String(timeout),
+          },
+        );
+
+        if (action === "stop") {
+          yield* disk.control.install;
+        }
+
+        armed = true;
+        const context = yield* Layer.build(
+          Managed.layer(disk.spec, disk.settings).pipe(
+            Layer.provide(
+              Layer.mergeAll(
+                Layer.succeed(BrainControl, disk.control),
+                Layer.succeed(BrainProbe, {
+                  ready: Effect.succeed(Readiness.cases.ready.make({})),
+                  cleanup: Effect.succeed(Children.cases.gone.make({})),
+                }),
+                Layer.succeed(SpanSink, {
+                  batch: (work) => work,
+                  flush: Effect.succeed({ sent: 0 }),
+                  check: Effect.void,
+                  summaries: () => Effect.succeed([]),
+                  sums: () => Effect.succeed([]),
+                }),
+                RecordManager.memory(1_000_000),
+                Archive.memory,
+              ),
+            ),
+          ),
+        );
+        return { disk, brain: Context.get(context, BrainService), from: disk.seen.length };
+      });
+      // A red run must not hang on the stubborn command: its own exit always arrives at the end.
+      yield* Effect.gen(function* () {
+        // The stubborn command is one this action really runs: a clean attempt counts them first.
+        const clean = yield* attempt(null);
+        yield* clean.brain[action];
+        const total = clean.disk.seen.length - clean.from;
+        expect(total).toBeGreaterThan(0);
+        const { disk, brain, from } = yield* attempt(pick % total);
+        const count = (event: string) => disk.events.filter((seen) => seen === event).length;
+        const running = yield* Effect.forkScoped(brain[action]);
+        yield* Deferred.await(stuck);
+        const retry = yield* Effect.forkScoped(brain[action]);
+
+        if (by === "caller") {
+          yield* Effect.forkScoped(Fiber.interrupt(running));
+        } else {
+          yield* TestClock.adjust(timeout);
+        }
+
+        // One tick short of the poll interval: asked to stop, not yet killed, the lock still held.
+        yield* TestClock.adjust(poll - 1);
+        const held = disk.seen.length;
+        expect({ term: count("SIGTERM"), kill: count("SIGKILL"), settled: running.pollUnsafe() !== undefined }).toEqual(
+          {
+            term: 1,
+            kill: 0,
+            settled: false,
+          },
+        );
+        expect(held - from).toBe((pick % total) + 1);
+        yield* TestClock.adjust(1);
+        expect({ term: count("SIGTERM"), kill: count("SIGKILL") }).toEqual({ term: 1, kill: 1 });
+        const first = yield* Fiber.await(running);
+        expect(Exit.isFailure(first)).toBe(true);
+
+        if (by === "deadline") {
+          expect(Exit.isFailure(first) ? Cause.squash(first.cause) : null).toMatchObject({
+            _tag: "BrainServiceError",
+            reason: { _tag: "Timeout", action },
+          });
+        }
+
+        expect(Exit.isSuccess(yield* Fiber.await(retry))).toBe(true);
+        expect(disk.seen.length).toBeGreaterThan(held);
+        expect(count("release")).toBe(count("spawn"));
+      }).pipe(Effect.ensuring(Deferred.succeed(gone, undefined)));
+    }).pipe(Effect.provide(NodeServices.layer)),
+  options,
+);
+
+it.effect.prop(
   "L7 install compiles checked JSON with exact argv and a closed environment",
   [NativeValue],
   ([word]) =>
