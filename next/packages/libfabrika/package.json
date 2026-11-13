@@ -28,6 +28,8 @@
     "./runtime/internal/*": null,
     "./gateway/*": "./src/gateway/*.ts",
     "./gateway/internal/*": null,
+    "./schedules/*": "./src/schedules/*.ts",
+    "./schedules/internal/*": null,
     "./settings/*": "./src/settings/*.ts",
     "./settings/internal/*": null,
     "./node/settings/*": "./src/node/settings/*.ts",
