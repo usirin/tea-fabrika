@@ -32,7 +32,9 @@ const open = Effect.gen(function* () {
     Effect.sync(() => {
       const db = new DatabaseSync(path);
       // Keep a durable file across reopens without creating a rollback journal on every write.
-      db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL");
+      // No disk sync per commit, as next/'s other test stores: no law cuts the power, a close keeps
+      // every commit, and the gateway's limiter and span sink commit on each call.
+      db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
       return { db, sql: nodeSql(db) };
     }),
     (held) => Effect.sync(() => held.db.isOpen && held.db.close()),
@@ -46,7 +48,7 @@ const open = Effect.gen(function* () {
   const reopen = Effect.sync(() => {
     handle.db.close();
     handle.db = new DatabaseSync(path);
-    handle.db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL");
+    handle.db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
     handle.sql = nodeSql(handle.db);
   });
   const gateway: TestSuite.Store["gateway"] = (options) => {
