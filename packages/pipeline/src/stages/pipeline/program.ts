@@ -780,14 +780,19 @@ type BodyEnd = StepEnd & {
 
 type Failure = NonNullable<FactOf<"ended">["failure"]>;
 
-/** A test writer's end, with the cause its run on the base gave, if it gave one. Pure. */
+/**
+ * A test writer's end, with the cause its run on the base gave, if it gave one. What the box last
+ * said on stderr goes on the ticket too: a box that ends at once with exit 1 otherwise reads as
+ * silent. Pure.
+ */
 const withFailure = (end: BodyEnd, failure: RunFailure | null): BodyEnd => {
   if (failure === null) {
     return end;
   }
 
   const { why, code, ms, tail } = failure;
-  return { ...end, failure: { why, code, ms, tail } };
+  const said = tail === "" ? [] : [`The box's last lines on stderr: ${inert(tail)}`];
+  return { ...end, problems: [...end.problems, ...said], failure: { why, code, ms, tail } };
 };
 
 const ended = (
