@@ -11,13 +11,15 @@ import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger"
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import { LedgerTransaction, type LedgerTurn } from "@kampus/libfabrika/ledger/LedgerTransaction";
 import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
+import * as Audit from "@kampus/libfabrika/runtime/Audit";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
-import { Cause, Effect, Exit, Layer, Option, Schema, Stream, Tracer } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Result, Schema, Stream, Tracer } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
+import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Gateway } from "./door.ts";
@@ -29,6 +31,39 @@ const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";
 const SENT = "2026-11-08T04:00:00.000Z";
 const Input = Schema.TaggedUnion({ comment: { text: Schema.String } });
 const text = fc.string({ minLength: 1, maxLength: 100 });
+
+const decodeText = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Json));
+
+// SQL columns and span fields can hold another JSON document.
+const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
+  if (typeof value === "string") {
+    const prior = cache.get(value);
+
+    if (prior !== undefined) {
+      return prior;
+    }
+
+    const decoded = decodeText(value);
+    const result = [
+      value,
+      ...(Result.isSuccess(decoded) ? texts(decoded.success, cache) : []),
+      ...Array.from(value.matchAll(/https?:\/\/[^\s"<>\\]+/gu), ([url]) =>
+        Result.getOrElse(
+          Result.try(() => decodeURIComponent(decodeURIComponent(url))),
+          () => url,
+        ),
+      ),
+    ];
+    cache.set(value, result);
+    return result;
+  }
+
+  return Array.isArray(value)
+    ? value.flatMap((part) => texts(part, cache))
+    : value !== null && typeof value === "object"
+      ? Object.values(value).flatMap((part) => texts(part, cache))
+      : [];
+};
 
 const hex = (bytes: number) =>
   fc.uint8Array({ minLength: bytes, maxLength: bytes }).map((a) => `1${Buffer.from(a).toString("hex").slice(1)}`);
@@ -103,10 +138,22 @@ const key = (seed: Uint8Array, salt: number) => {
 
 const fixture = Effect.fnUntraced(function* (a: Sample) {
   const databases: Array<DatabaseSync> = [];
+  const writes: Array<string> = [];
+  const archived: Array<string> = [];
   const open = () => {
     const db = new DatabaseSync(":memory:");
     databases.push(db);
-    return nodeSql(db);
+    const sql = nodeSql(db);
+    return {
+      ...sql,
+      exec: (query: string, ...params: Parameters<typeof sql.exec> extends [string, ...infer P] ? P : never) => {
+        if (/^\s*(INSERT|UPDATE|REPLACE|DELETE)/i.test(query)) {
+          writes.push(JSON.stringify([query, params]));
+        }
+
+        return sql.exec(query, ...params);
+      },
+    };
   };
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => {
@@ -119,7 +166,7 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
   const root = key(a.seed, 0),
     window = key(a.seed, 1),
     stranger = key(a.seed, 2);
-  const controls = { fail: "", deliveryFails: false };
+  const controls = { fail: "", deliveryFails: false, audit: "ok", selections: 0, deliveries: 0 };
   const actual = yield* Effect.service(Ledger).pipe(
     Effect.provide(
       LedgerSql.layer(sql, { reader: "project" }).pipe(
@@ -175,6 +222,15 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
 
     return part;
   }, 64 * 1024);
+  const archive = Layer.effect(
+    Archive,
+    Effect.map(Archive, (actual) => ({
+      put: (name: string, bytes: Uint8Array) => {
+        archived.push(new TextDecoder().decode(bytes));
+        return actual.put(name, bytes);
+      },
+    })),
+  ).pipe(Layer.provide(Archive.memory));
   const layer = Gateway.layer({
     sql,
     founder,
@@ -191,8 +247,34 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
     spentCap: 100,
     nextProcess: () => Effect.succeed(PROCESS),
     notify: () => Effect.void,
-    deliver: () => (controls.deliveryFails ? Effect.fail(new LedgerError({ reason: "unreachable" })) : Effect.void),
-    inputs: { schema: Input, personOnly: [], raw: [], log: Schema.toCodecJson(Input) },
+    deliver: () => {
+      controls.deliveries++;
+      return controls.deliveryFails ? Effect.fail(new LedgerError({ reason: "unreachable" })) : Effect.void;
+    },
+    audit: (_process, message) => {
+      controls.selections++;
+      return Effect.fromResult(
+        Audit.select(
+          {
+            msg: controls.audit === "decode" ? Schema.Struct({ missing: Schema.String }) : Input,
+            audit: {
+              data: Schema.Struct({ type: Schema.Literal("comment") }),
+              select: () => {
+                const m = Schema.decodeUnknownSync(Input)(message);
+
+                if (controls.audit === "selector") {
+                  throw new Error(m.text);
+                }
+
+                return { type: controls.audit === "output" ? m.text : "comment" };
+              },
+            },
+          },
+          message,
+        ),
+      );
+    },
+    inputs: { schema: Input, personOnly: [], raw: [] },
     events: { personOnly: [] },
   }).pipe(
     Layer.provideMerge(
@@ -201,7 +283,7 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
         transaction,
         Id.Generator.layer,
         records,
-        Archive.memory,
+        archive,
         SpanSink.layer(sql, { object: PROCESS }),
         RateLimiter.layer.pipe(
           Layer.provide(RateLimiterSql.layer(sql, { build: "test-build", policy: { limit: 100_000, window: 60_000 } })),
@@ -209,22 +291,157 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
       ),
     ),
   );
-  return { layer, window, stranger, root, controls };
+  return { layer, window, stranger, root, controls, writes, databases, archived };
 });
 
 const capture = (delegate: Tracer.Tracer) => {
   const spans: Array<Tracer.Span> = [];
+  const events: Array<{
+    spanId: string;
+    name: string;
+    startTime: bigint;
+    attributes: Record<string, unknown> | undefined;
+  }> = [];
   const tracer = Tracer.make({
     span(options) {
       const span = delegate.span(options);
+      const event = span.event.bind(span);
+      span.event = (name, startTime, attributes) => {
+        events.push({ spanId: span.spanId, name, startTime, attributes });
+        event(name, startTime, attributes);
+      };
       spans.push(span);
       return span;
     },
   });
-  return { spans, tracer };
+  return { spans, events, tracer };
 };
 
 const parent = (a: Sample) => Tracer.externalSpan({ traceId: a.traceId, spanId: a.spanId });
+
+it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/events hold no submitted text", async () => {
+  const reached = new Set<string>();
+  await fc.assert(
+    fc.asyncProperty(sample, fc.array(fc.noBias(fc.nat()), { minLength: 6, maxLength: 20 }), (a, tape) =>
+      Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const w = yield* fixture(a);
+            yield* Effect.gen(function* () {
+              const d = yield* Gateway;
+              const client = yield* online(d, w, a);
+              const tracer = capture(yield* Tracer.Tracer);
+              const history: Array<{ id: string; body: string }> = [];
+              const bodies: Array<string> = [];
+              const decoded = new Map<string, ReadonlyArray<string>>();
+
+              for (const [n, pick] of tape.entries()) {
+                const moves =
+                  history.length === 0
+                    ? ["send", "append_failed", "delivery_failed", "decode", "selector", "output"]
+                    : ["send", "append_failed", "delivery_failed", "decode", "selector", "output", "retry"];
+                const move = moves[pick % moves.length]!;
+                reached.add(move);
+                const input =
+                  move === "retry"
+                    ? history[Math.floor(pick / moves.length) % history.length]!
+                    : { id: `safe-${a.id}-${n}`, body: `BODY-${a.text}-${n} "/雪\n` };
+
+                if (move !== "retry") {
+                  bodies.push(input.body);
+                }
+
+                w.controls.fail = move === "append_failed" ? "gateway/inputs" : "";
+                w.controls.deliveryFails = move === "delivery_failed";
+                w.controls.audit = move === "retry" ? "selector" : move;
+                const beforeSelections = w.controls.selections;
+                const beforeDeliveries = w.controls.deliveries;
+                const beforeInputs = yield* Stream.runCollect((yield* Ledger).read("gateway/inputs", 0));
+                const exit = yield* Effect.exit(
+                  d
+                    .route(client, "process.send", {
+                      pid: PROCESS,
+                      letter: input.id,
+                      m: Input.cases.comment.make({ text: input.body }),
+                      sentAt: SENT,
+                      seen: 0,
+                    })
+                    .pipe(Effect.withTracer(tracer.tracer)),
+                );
+
+                const failedAudit = move === "decode" || move === "selector" || move === "output";
+                const errors: Array<string> = [];
+
+                if (failedAudit) {
+                  expect(Exit.isFailure(exit)).toBe(true);
+
+                  if (Exit.isFailure(exit)) {
+                    expect(Cause.hasDies(exit.cause)).toBe(false);
+                    const error = Cause.squash(exit.cause);
+                    expect(error).toBeInstanceOf(Audit.AuditError);
+                    errors.push(String(error), JSON.stringify(error), Cause.pretty(exit.cause));
+                  }
+
+                  expect(w.controls.deliveries).toBe(beforeDeliveries);
+                  expect(yield* Stream.runCollect((yield* Ledger).read("gateway/inputs", 0))).toEqual(beforeInputs);
+                }
+
+                if (move === "retry") {
+                  expect(Exit.isSuccess(exit)).toBe(true);
+                  expect(w.controls.selections).toBe(beforeSelections);
+                }
+
+                if (move === "send") {
+                  history.push(input);
+                }
+
+                // The route's last span is unsent until this flush. Keep its SQL writes too.
+                yield* (yield* SpanSink).flush;
+                yield* TestClock.adjust("32 days");
+                yield* Effect.void.pipe(Effect.withSpan("archive-control"));
+                yield* (yield* SpanSink).flush;
+                expect(w.archived.length).toBeGreaterThan(0);
+                const cells = w.databases.flatMap((db) =>
+                  db
+                    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+                    .all()
+                    .flatMap(({ name }) => db.prepare(`SELECT * FROM "${String(name)}"`).all()),
+                );
+                const shown = JSON.stringify(
+                  {
+                    spans: tracer.spans.map((s) => ({ name: s.name, tags: [...s.attributes] })),
+                    events: tracer.events,
+                  },
+                  (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v),
+                );
+                const outputs = [...w.writes, ...w.archived, JSON.stringify(cells), shown, ...errors].flatMap(
+                  (output) => texts(output, decoded),
+                );
+
+                for (const body of bodies) {
+                  for (const form of [body, JSON.stringify(body).slice(1, -1), encodeURIComponent(body)]) {
+                    expect(outputs.filter((output) => output.includes(form))).toEqual([]);
+                  }
+                }
+
+                // A successful control still records the required safe metadata.
+                if (move === "send") {
+                  const rows = cells.filter((r) => r.stream === "gateway/inputs" && r._tag === "received");
+                  expect(rows.length).toBeGreaterThan(0);
+                  expect(JSON.parse(String(rows.at(-1)!.body))).toMatchObject({ input: { type: "comment" } });
+                }
+              }
+            }).pipe(Effect.provide(w.layer));
+          }),
+        ).pipe(Effect.provide(TestClock.layer())),
+      ),
+    ),
+    CHECK,
+  );
+  expect([...reached]).toEqual(
+    expect.arrayContaining(["send", "append_failed", "delivery_failed", "decode", "selector", "output", "retry"]),
+  );
+});
 
 const checkSpan = (span: Tracer.Span, a: Sample, ok: boolean, attributes: Record<string, unknown> = {}) => {
   expect(span.traceId).toBe(a.traceId);

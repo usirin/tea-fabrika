@@ -10,6 +10,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { Machine } from "@demlik/tea/effect";
 import { afterAll, beforeEach, describe, expect, it } from "@effect/vitest";
 import { Id, Sent } from "@kampus/libfabrika";
 import { Adds, Add, Grant, MemberEvent, Saw, Revoke } from "@kampus/libfabrika/access/Access";
@@ -27,6 +28,7 @@ import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { ProcessEvent, Recipient, Owner, Down, Start } from "@kampus/libfabrika/processes/Process";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
+import { nodeExecution } from "@kampus/libfabrika/runtime/Execution";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
@@ -398,11 +400,18 @@ const world = Effect.fnUntraced(function* (
         notices.push({ client, news });
         yield* controls.notify(client, news);
       }),
+    audit: (_process: string, message: unknown) =>
+      Effect.sync(() => {
+        const checked = Schema.decodeUnknownSync(Schema.toType(Input))(message);
+        // The approval's answer is deliberately public metadata; the text of a comment is content.
+        return checked._tag === "approve"
+          ? Schema.encodeSync(Schema.toCodecJson(Input))(checked)
+          : { type: checked._tag };
+      }),
     inputs: {
       schema: Input,
       personOnly: ["approve"],
       raw: ["keys"],
-      log: Schema.toCodecJson(Input),
       name: (m: typeof Input.Type) => m._tag,
     },
     events: { personOnly: ["answered"] },
@@ -492,6 +501,165 @@ const world = Effect.fnUntraced(function* (
 });
 
 type World = Effect.Success<ReturnType<typeof world>>;
+
+const AuditMessage = Schema.Struct({ type: Schema.Literal("comment"), ticket: Schema.String, body: Schema.String });
+const AuditMetadata = Schema.Struct({ type: Schema.Literal("comment"), ticket: Schema.String });
+
+const failedSelection = (body: string): never => {
+  throw new Error(body);
+};
+
+const auditProgram = (select: (m: typeof AuditMessage.Type) => unknown) => ({
+  name: "audit-fixture",
+  machine: Machine.make({
+    model: Schema.Null,
+    msg: AuditMessage,
+    cmds: [],
+    init: () => [null, []],
+    update: { comment: (s) => [s, []] },
+  }),
+  state: { v: 1, schema: Schema.Null, upgrades: [] },
+  msg: AuditMessage,
+  view: { data: Schema.Null, select: () => null },
+  refuse: () => null,
+  inputs: {},
+  outputs: {},
+  writes: {},
+  wake: () => null,
+  audit: { data: AuditMetadata, select },
+});
+
+describe("P13 selected input recording", () => {
+  it("A5, A6, A10, A12 [secrets]: failed selection leaves no received record or delivery; committed retries reuse their metadata", async () => {
+    const reached = new Set<string>();
+    await fc.assert(
+      fc.asyncProperty(fc.array(fc.noBias(fc.nat()), { minLength: 8, maxLength: 24 }), (tape) =>
+        Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const w = yield* world();
+              let mode = "ok";
+              let selections = 0;
+              const program = auditProgram((m) => {
+                selections++;
+
+                if (mode === "selector") {
+                  return failedSelection(m.body);
+                }
+
+                if (mode === "output") {
+                  return { type: "comment", ticket: 1n };
+                }
+
+                return { type: "comment", ticket: m.ticket };
+              });
+              const execution = nodeExecution(program);
+              const audit = (_target: string, input: unknown) => {
+                const checked = Schema.decodeUnknownSync(Input.cases.comment)(input);
+                return execution.audit({
+                  type: "comment",
+                  ticket: mode === "decode" ? 1 : checked.ticket.id,
+                  body: checked.text,
+                });
+              };
+              const settings = { ...w.settings, audit };
+              const layer = () => Gateway.layer(settings).pipe(Layer.provideMerge(w.env));
+              let d = yield* Gateway.pipe(Effect.provide(layer()));
+              let { client } = yield* online(d, w).pipe(Effect.provide(w.env));
+              const history: Array<{ id: string; body: string; before: number }> = [];
+              const bodies: Array<string> = [];
+              const printable: Array<string> = [];
+
+              for (const [n, entropy] of tape.entries()) {
+                const moves =
+                  history.length === 0
+                    ? ["ok", "decode", "selector", "output"]
+                    : ["ok", "decode", "selector", "output", "retry", "reopen"];
+                const move = moves[entropy % moves.length]!;
+                reached.add(move);
+
+                if (move === "reopen") {
+                  d = yield* Gateway.pipe(Effect.provide(layer()));
+                  ({ client } = yield* online(d, w).pipe(Effect.provide(w.env)));
+                  continue;
+                }
+
+                if (move === "retry") {
+                  const prior = history[Math.floor(entropy / moves.length) % history.length]!;
+                  mode = "selector";
+                  const before = selections;
+                  const answer = yield* d.route(client, "process.send", request(prior.id, comment(prior.body)));
+                  expect(answer._tag).toBe("ok");
+                  expect(selections, "a recorded binding never reruns today's selector").toBe(before);
+                  expect(rawRows(w.db, "gateway/inputs").filter((row) => row._tag === "received")).toHaveLength(
+                    history.length,
+                  );
+                  continue;
+                }
+
+                mode = move;
+                const body = `BODY-${entropy}-${n} "/雪\n`;
+                bodies.push(body);
+                const id = `audit-${n}`;
+                const before = rawRows(w.db, "gateway/inputs");
+                const delivered = w.deliveries.length;
+                const result = yield* Effect.result(d.route(client, "process.send", request(id, comment(body))));
+
+                if (move === "ok") {
+                  expect(result).toMatchObject({ _tag: "Success", success: { _tag: "ok" } });
+                  history.push({ id, body, before: delivered });
+                } else {
+                  expect(result).toMatchObject({
+                    _tag: "Failure",
+                    failure: { _tag: "AuditError", reason: { _tag: expect.any(String) } },
+                  });
+
+                  if (result._tag === "Failure") {
+                    printable.push(String(result.failure), JSON.stringify(result.failure));
+                  }
+
+                  expect(rawRows(w.db, "gateway/inputs")).toEqual(before);
+                  expect(w.deliveries).toHaveLength(delivered);
+                  // Retry from the allocated binding, after repairing the selector.
+                  mode = "ok";
+                  expect(yield* d.route(client, "process.send", request(id, comment(body)))).toMatchObject({
+                    _tag: "ok",
+                  });
+                  history.push({ id, body, before: delivered });
+                }
+
+                const rows = rawRows(w.db, "gateway/inputs").filter((r) => r._tag === "received");
+                expect(rows).toHaveLength(history.length);
+
+                for (const row of rows) {
+                  expect(JSON.parse(String(row.body))).toMatchObject({
+                    input: { type: "comment", ticket: "ticket-7" },
+                  });
+                }
+
+                const outputs = [
+                  JSON.stringify(rows),
+                  JSON.stringify(w.sql.exec("SELECT * FROM gateway_bindings")),
+                  ...printable,
+                ];
+
+                for (const value of bodies) {
+                  for (const form of [value, JSON.stringify(value).slice(1, -1), encodeURIComponent(value)]) {
+                    for (const output of outputs) {
+                      expect(output).not.toContain(form);
+                    }
+                  }
+                }
+              }
+            }),
+          ),
+        ),
+      ),
+      { seed: SEED, numRuns: 100 },
+    );
+    expect([...reached]).toEqual(expect.arrayContaining(["ok", "decode", "selector", "output", "retry", "reopen"]));
+  });
+});
 
 // The real connection and Project gateway, joined through the platform's RPC contract.
 const wire = Effect.fnUntraced(function* (

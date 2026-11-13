@@ -12,6 +12,7 @@ import { revokeText } from "@kampus/libfabrika/access/Text";
 import { programBox } from "@kampus/libfabrika/box";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { copied, type ExitReason, fcBadReason, fcExitReason } from "@kampus/libfabrika/processes/Process.test-support";
+import * as Audit from "@kampus/libfabrika/runtime/Audit";
 import { Program } from "@kampus/libfabrika/runtime/Program";
 import { send } from "@kampus/libfabrika/runtime/Send";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
@@ -672,7 +673,8 @@ const world = (
             return {
               describe: () => box.describe(),
               init: (saved: unknown) => box.init(saved),
-              step: async (model: unknown, msg: unknown) => {
+              step: (model: unknown, msg: unknown) => box.step(model, msg),
+              fresh: async (model: unknown, msg: unknown) => {
                 // Transport faults before the program: they decide nothing about the input.
                 if (stepFault === "rpc") {
                   throw new Error("transport failed before the program");
@@ -682,8 +684,10 @@ const world = (
                   return { unrecognized: true };
                 }
 
-                return box.step(model, msg);
+                return box.fresh(model, msg);
               },
+              update: (model: unknown, msg: unknown) => box.update(model, msg),
+              audit: (msg: unknown) => box.audit(msg),
               fold: (model: unknown, msg: unknown) => box.fold(model, msg),
               upgrade: (saved: unknown) => box.upgrade(saved),
               reply: (cmd: unknown, outcome: unknown) => box.reply(cmd, outcome),
@@ -714,6 +718,17 @@ const world = (
             }),
             init: (saved: unknown) => Effect.runPromise(execution.init(saved)),
             step: (model: unknown, msg: unknown) => Effect.runPromise(execution.step(model, msg)),
+            fresh: (model: unknown, msg: unknown) => Effect.runPromise(execution.fresh(model, msg)),
+            update: (model: unknown, msg: unknown) => Effect.runPromise(execution.update(model, msg)),
+            audit: (msg: unknown) =>
+              Effect.runPromise(
+                execution.audit(msg).pipe(
+                  Effect.match({
+                    onSuccess: (value) => Audit.Answer.cases.ok.make({ value }),
+                    onFailure: Audit.failure,
+                  }),
+                ),
+              ),
             fold: (model: unknown, msg: unknown) => Effect.runPromise(execution.fold(model, msg)),
             upgrade: (saved: unknown) => Effect.runPromise(execution.upgrade(saved)),
             reply: (cmd: unknown, outcome: unknown) => Effect.runPromise(execution.reply(cmd, outcome)),

@@ -2,7 +2,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit, Layer, Option, Schema } from "effect";
+import { Effect, Exit, Layer, Option, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { Mailbox, ProcessManager, ProcessStore, Writer } from "../coordination/index.ts";
 import { processId } from "../Id.test-support.ts";
@@ -62,6 +62,15 @@ describe("P12 saved mail recovery", () => {
                 let down = false;
                 const execution = workerExecution({
                   init: async (saved) => pure.init(saved),
+                  fresh: async (model, msg) => {
+                    if (down && point === "step") {
+                      return Promise.reject(new Error("temporary RPC loss"));
+                    }
+
+                    return Result.getOrThrow(pure.fresh(model, msg));
+                  },
+                  update: async (model, msg) => Result.getOrThrow(pure.update(model, msg)),
+                  audit: async () => ({ _tag: "ok", value: { type: "inc" } }),
                   admit: async () => {
                     if (down && point === "admit") {
                       return Promise.reject(new Error("temporary RPC loss"));
@@ -281,6 +290,12 @@ describe("P34 id reuse at the runner", () => {
                   const execution = workerExecution({
                     init: async (saved) => pure.init(saved),
                     admit: async () => true,
+                    fresh: async (model, msg) => Result.getOrThrow(pure.fresh(model, msg)),
+                    update: async (model, msg) => {
+                      steps++;
+                      return Result.getOrThrow(pure.update(model, msg));
+                    },
+                    audit: async () => ({ _tag: "ok", value: { type: "put" } }),
                     step: async (model, msg) => {
                       steps++;
                       return pure.step(model, msg);

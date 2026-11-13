@@ -126,7 +126,7 @@ const world = Effect.fnUntraced(function* () {
         delivered.push(input);
       }),
     notify: () => Effect.void,
-    inputs: { schema: Input, personOnly: [], raw: [], log: Schema.toCodecJson(Input) },
+    inputs: { schema: Input, personOnly: [], raw: [] },
     events: { personOnly: [] },
   }).pipe(Layer.provide(env));
   const door = yield* Gateway.pipe(Effect.provide(layer));

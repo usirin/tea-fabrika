@@ -87,6 +87,9 @@ const world = (thrown: unknown, adapter: "node" | "worker" = "node", maxDeliveri
       const execution = workerExecution({
         init: (s) => box.init(s),
         step: (s, m) => box.step(s, m),
+        fresh: (s, m) => box.fresh(s, m),
+        update: (s, m) => box.update(s, m),
+        audit: (m) => box.audit(m),
         fold: (s, m) => box.fold(s, m),
         upgrade: (s) => box.upgrade(s),
         reply: (c, o) => box.reply(c, o),

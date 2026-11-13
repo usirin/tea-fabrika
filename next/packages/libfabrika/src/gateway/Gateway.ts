@@ -1,7 +1,9 @@
 import { applyCell } from "@demlik/tea";
 import { Context, Duration, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream, Tracer } from "effect";
+import * as Cause from "effect/Cause";
 import { Base64, Base64Url } from "effect/encoding";
 import { RateLimiter } from "effect/persistence/RateLimiter";
+import * as Redacted from "effect/Redacted";
 import { admitted, MemberEvent, Saw } from "../access/Access.ts";
 import { foldAccess } from "../access/AccessFold.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
@@ -25,6 +27,7 @@ import { type From } from "../processes/Mailbox.ts";
 import { type ProcessError, brainOnly } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { ProcessId } from "../ProcessId.ts";
+import * as Audit from "../runtime/Audit.ts";
 import { Incoming } from "../runtime/Entry.ts";
 import { type ProgramDown } from "../runtime/Program.ts";
 import { type RepliesError } from "../runtime/Replies.ts";
@@ -51,8 +54,6 @@ const quiet = Tracer.make({ span: (options) => new Tracer.NativeSpan(options) })
 const silent = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E, R>) {
   return yield* effect.pipe(Effect.withTracer(quiet));
 });
-
-const json = Schema.decodeUnknownResult(Schema.Json);
 
 const rawObject = (a: unknown): Record<string, unknown> | null =>
   typeof a === "object" && a !== null && !Array.isArray(a) ? (a as Record<string, unknown>) : null;
@@ -107,7 +108,13 @@ const Binding = Schema.Struct({
   span: Link,
   sentAt: Schema.String,
   state: EnvelopeState,
-});
+}).check(
+  Schema.makeFilter((binding) =>
+    !Schema.is(InputId)(binding.id) || (binding.door !== undefined && binding.n !== undefined)
+      ? true
+      : "a current input binding keeps its door and sequence",
+  ),
+);
 type Binding = typeof Binding.Type;
 const encodeBinding = Schema.encodeSync(Schema.fromJsonString(Binding));
 const decodeBinding = Schema.decodeUnknownResult(Schema.fromJsonString(Binding));
@@ -275,11 +282,11 @@ type Options<A, RNext, RDeliver, RNotify> = {
     RDeliver
   >;
   readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError, RNotify>;
+  readonly audit?: (process: string, message: unknown) => Effect.Effect<Schema.Json, Audit.AuditError, RDeliver>;
   readonly inputs: {
     readonly schema: Schema.Codec<A, unknown>;
     readonly personOnly: ReadonlyArray<string>;
     readonly raw: ReadonlyArray<string>;
-    readonly log: Schema.Encoder<unknown>;
     readonly name?: (input: A) => string | undefined;
   };
   readonly events: { readonly personOnly: ReadonlyArray<string> };
@@ -1234,18 +1241,67 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         return null;
       }
 
+      // Once its input row exists, a binding keeps that metadata across selector changes.
+      // A binding this call allocated carries a new ID, so no row can hold it and nothing is read.
+      const priorRecord =
+        binding.id === inputId
+          ? Option.none()
+          : yield* Stream.runHead(
+              ledger.read("gateway/inputs", 0).pipe(Stream.filter((entry) => entry.id === binding.id)),
+            );
+
+      if (Option.isSome(priorRecord)) {
+        yield* Schema.decodeUnknownEffect(Schema.is(InputId)(binding.id) ? InputEvent : LegacyInputEvent)(
+          valueFor(priorRecord.value),
+        ).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
+      }
+
+      const recorded = Option.isSome(priorRecord);
+
+      if (!recorded && binding.state._tag !== "allocated") {
+        return yield* new LedgerError({ reason: "bad_row" });
+      }
+
+      if (recorded) {
+        const kept =
+          binding.state._tag === "allocated" ? { ...binding, state: EnvelopeState.cases.recorded.make({}) } : binding;
+
+        if (letter !== null && kept !== binding) {
+          yield* store.atomic(() => saveBinding(kept));
+        }
+
+        return { binding: kept, held };
+      }
+
       let safe: typeof Schema.Json.Type | undefined;
 
       if (refusal === null && message !== null && typeof name === "string" && !options.inputs.raw.includes(name)) {
-        const encoded = Schema.encodeUnknownResult(options.inputs.log)(message);
-
-        if (Result.isSuccess(encoded)) {
-          const value = json(encoded.success);
-
-          if (Result.isSuccess(value)) {
-            safe = value.success;
-          }
-        }
+        const audit = options.audit;
+        // Audit decodes the same trusted parent that the runner stamps before checking the message.
+        const stamped = typeof message === "object" ? { ...message, parent: binding.id } : message;
+        const selected =
+          audit === undefined
+            ? Effect.succeed<Schema.Json>({ type: name })
+            : Effect.suspend(() => audit(binding.process, stamped)).pipe(
+                Effect.provideContext(context),
+                Effect.catchCause((cause) => {
+                  const error = Cause.findError(cause);
+                  return Effect.fail(
+                    Result.isSuccess(error) && Schema.is(Audit.AuditError)(error.success)
+                      ? error.success
+                      : new Audit.AuditError({ reason: new Audit.Selection({ cause: Redacted.make(cause) }) }),
+                  );
+                }),
+              );
+        safe = yield* selected.pipe(
+          Effect.flatMap((value) =>
+            Schema.decodeUnknownEffect(Schema.Json)(value).pipe(
+              Effect.mapError(
+                (cause) => new Audit.AuditError({ reason: new Audit.Output({ cause: Redacted.make(cause) }) }),
+              ),
+            ),
+          ),
+        );
       }
 
       const fields = {
@@ -1320,6 +1376,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         }
 
         if (method === "process.send" && message !== null && request !== null && Result.isSuccess(request)) {
+          yield* membership(binding.client);
+
           if (binding.state._tag === "settled") {
             return deliveryAnswer(binding.state.result);
           }

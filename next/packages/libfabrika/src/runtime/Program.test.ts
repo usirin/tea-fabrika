@@ -55,6 +55,115 @@ const spec = () => Program.make(authoring());
 const SEED = 119120;
 const parameters = { seed: SEED, numRuns: 100 };
 
+describe("P13 A7 split checking and update", () => {
+  it("A7: fresh checks once, update never checks, composed step updates once, and fold ignores a changed refusal", () => {
+    const coverage = new Set<string>();
+    fc.assert(
+      fc.property(fc.array(fc.noBias(fc.nat()), { minLength: 8, maxLength: 40 }), (tape) => {
+        let checks = 0;
+        let updates = 0;
+        let views = 0;
+        let wakes = 0;
+        let refuseAll = false;
+        const p = Program.make({
+          ...authoring(),
+          machine: Machine.make({
+            ...machine,
+            cmds: [save],
+            update: {
+              ...machine.update,
+              add: (s, m) => {
+                updates++;
+                return [{ ...s, count: s.count + m.n }, [save({ n: m.n })]];
+              },
+            },
+          }),
+          refuse: (s, m) => {
+            checks++;
+            return refuseAll || (m.type === "add" && s.count + m.n > 10)
+              ? { reason: "limit", now: s.count, most: 10 }
+              : null;
+          },
+          view: (s) => {
+            views++;
+            return { count: s.count };
+          },
+          wake: () => {
+            wakes++;
+            return null;
+          },
+        });
+        const pure = Result.getOrThrow(stepper(p));
+        let current: Model = { count: 0, replies: 0 };
+        const accepted: Array<typeof Msg.Type> = [];
+
+        for (const entropy of tape) {
+          const moves = accepted.length === 0 ? ["admit", "refuse", "invalid"] : ["admit", "refuse", "invalid", "fold"];
+          const move = moves[entropy % moves.length]!;
+          const before = { checks, updates, views, wakes };
+          coverage.add(move);
+
+          if (move === "fold") {
+            refuseAll = true;
+            const msg = accepted[Math.floor(entropy / moves.length) % accepted.length]!;
+            const folded = pure.fold(current, msg);
+            expect(checks).toBe(before.checks);
+            expect(updates).toBe(before.updates + 1);
+            expect(folded).toMatchObject({
+              _tag: "stepped",
+              model: { count: current.count + (msg.type === "add" ? msg.n : 0) },
+            });
+            refuseAll = false;
+            continue;
+          }
+
+          const addition = { type: "add", n: move === "refuse" ? 11 - current.count : -1 - (entropy % 5) } as const;
+          const msg = move === "invalid" ? { type: "save_ok", value: 1 } : addition;
+          const checked = pure.fresh(current, msg);
+          expect(Result.isSuccess(checked)).toBe(true);
+          expect({ updates, views, wakes }).toEqual({
+            updates: before.updates,
+            views: before.views,
+            wakes: before.wakes,
+          });
+          const admission = Result.getOrThrow(checked);
+          expect(admission).toEqual(
+            move === "invalid"
+              ? { _tag: "invalid" }
+              : move === "refuse"
+                ? { _tag: "refused", reason: "limit", now: current.count, most: 10 }
+                : { _tag: "admitted" },
+          );
+          expect(checks).toBe(before.checks + (move === "invalid" ? 0 : 1));
+          const composed = pure.step(current, msg);
+
+          if (move !== "admit") {
+            expect(composed).toEqual(move === "invalid" ? { _tag: "refused", reason: "bad_msg" } : admission);
+            expect(updates).toBe(before.updates);
+
+            if (move === "invalid") {
+              expect(Result.isFailure(pure.update(current, msg))).toBe(true);
+            }
+
+            continue;
+          }
+
+          expect(updates).toBe(before.updates + 1);
+          const updated = Result.getOrThrow(pure.update(current, msg));
+          expect(updated).toEqual(composed);
+          expect(checks).toBe(before.checks + 2);
+          expect(updates).toBe(before.updates + 2);
+          expect(updated.model).toEqual({ ...current, count: current.count + addition.n });
+          current = Schema.decodeUnknownSync(Model)(updated.model);
+          accepted.push(Schema.decodeUnknownSync(Msg)(msg));
+        }
+      }),
+      parameters,
+    );
+    expect([...coverage]).toEqual(expect.arrayContaining(["admit", "refuse", "invalid", "fold"]));
+  });
+});
+
 type Policy = typeof import("./Runner.ts").Supervision.Type.policy;
 // Bounded waits keep valid samples inside their period; corrupt commands push each numeric edge.
 

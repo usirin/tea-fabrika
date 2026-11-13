@@ -8,6 +8,7 @@ import { From } from "../../processes/Mailbox.ts";
 import { canRestart, Start } from "../../processes/Process.ts";
 import { ProcessId } from "../../ProcessId.ts";
 import { AttemptFields, Count, Deliveries, Failure, Millis, Observation, Policy, Receipt, Text } from "./recovery.ts";
+import { Reply } from "./reply.ts";
 
 /** @internal */
 export { Policy };
@@ -21,6 +22,7 @@ export const defaultPolicy: Policy = {
 };
 
 const Attempt = Schema.Struct({ ...AttemptFields, phase: Schema.Literals(["fresh", "saved"]), at: Millis });
+const FreshAttempt = Schema.Struct({ ...Attempt.fields, phase: Schema.Literal("fresh") });
 const RestartRequest = Schema.Struct({ id: Text, build: Text });
 const DownRecord = Schema.Struct({ process: ProcessId, reason: Text, crashes: Count, until: Millis });
 
@@ -35,7 +37,10 @@ const StartTiming = Schema.TaggedUnion({ immediate: {}, scheduled: { until: Mill
 
 const Journal = Schema.TaggedUnion({
   idle: { process: ProcessId },
+  checking: { attempt: FreshAttempt },
   stepping: { attempt: Attempt },
+  writing_reply: { attempt: FreshAttempt, reply: Reply },
+  clearing_attempt: { attempt: Attempt },
   writing_dead: { failure: Failure.cases.fresh, reason: ExitReason, from: From },
   writing_exit: { process: ProcessId, origin: Origin, from: From },
   writing_down: { recovery: DownRecord, origin: Origin, from: From },
@@ -64,6 +69,13 @@ export const Supervision = Schema.Struct({
 }).check(
   Schema.makeFilter((s) => {
     const j = s.journal;
+
+    if (j._tag === "stepping" && j.attempt.phase === "fresh") {
+      return (
+        s.receipts.some((r) => r.letter === j.attempt.letter && r.input !== null) ||
+        "fresh stepping keeps its admitted input"
+      );
+    }
 
     // Dead work names its exact fresh failure, so its terminal receipt must be that letter's own.
     if (j._tag === "writing_dead") {
@@ -116,6 +128,12 @@ const Msg = Schema.Union([
   msg("compacted", { letter: Text, digest: Text }),
   msg("limited", { maxDeliveries: Schema.NullOr(Deliveries) }),
   msg("begin", { process: ProcessId, letter: Text, build: Text, phase: Attempt.fields.phase, at: Millis }),
+  msg("admitted", { seq: Count, receipt: Receipt }),
+  msg("refused", { seq: Count, reply: Reply }),
+  msg("reply_written", { seq: Count }),
+  msg("abandoned", { seq: Count }),
+  msg("attempt_cleared", { seq: Count }),
+  msg("check_threw", { seq: Count, receipt: Receipt, error: Text, reason: ExitReason, from: From }),
   msg("finished", { seq: Count }),
   msg("threw", { seq: Count, error: Text, reason: ExitReason, from: From }),
   msg("interrupted", { process: ProcessId, letter: Text, build: Text, reason: ExitReason, from: From, at: Millis }),
@@ -189,6 +207,53 @@ const waitingFor = (j: Supervision["journal"]): { after: string; origin: Origin 
       ? { after: j.request.after, origin: j.origin }
       : null;
 
+/** Check and update failures share one observation and delivery charge. */
+const failed = (
+  s: Supervision,
+  attempt: typeof Attempt.Type,
+  error: string,
+  reason: ExitReason,
+  from: From,
+): ReturnType<typeof unchanged> => {
+  const { phase, at, ...fields } = attempt;
+  const failure = (phase === "fresh" ? Failure.cases.fresh : Failure.cases.saved).make({
+    ...fields,
+    error,
+  });
+  const seen = { seq: attempt.seq, process: fields.process, letter: fields.letter, phase, error, at };
+
+  if (failure._tag !== "fresh") {
+    return [observe(s, failure, seen, exiting(failure, reason, from)), []];
+  }
+
+  const old = s.receipts.find((r) => r.letter === failure.letter);
+
+  if (old === undefined) {
+    return unchanged(s);
+  }
+
+  // Observation and the fresh delivery's charge change together, in one saved step.
+  const errors = [...old.errors, error];
+  const terminal = errors.length >= (s.maxDeliveries ?? s.policy.maxDeliveries);
+  const receipt = {
+    ...old,
+    errors,
+    tries: errors.length,
+    process: failure.process,
+    result: terminal ? DEAD : null,
+  };
+  const journal = terminal
+    ? Journal.cases.writing_dead.make({ failure, reason, from })
+    : exiting(failure, reason, from);
+  return [
+    {
+      ...observe(s, failure, seen, journal),
+      receipts: s.receipts.map((r) => (r.letter === failure.letter ? receipt : r)),
+    },
+    [],
+  ];
+};
+
 /** @internal */
 export const supervisor = Machine.make({
   model: Supervision,
@@ -245,7 +310,64 @@ export const supervisor = Machine.make({
 
       const { type: _type, ...fields } = m;
       const attempt = { ...fields, seq: s.seq + 1 };
-      return [{ ...s, seq: attempt.seq, journal: Journal.cases.stepping.make({ attempt }) }, []];
+      const journal =
+        m.phase === "fresh"
+          ? Journal.cases.checking.make({ attempt: FreshAttempt.make({ ...attempt, phase: "fresh" }) })
+          : Journal.cases.stepping.make({ attempt });
+      return [{ ...s, seq: attempt.seq, journal }, []];
+    },
+    admitted: (s, m) => {
+      const j = s.journal;
+
+      if (
+        j._tag !== "checking" ||
+        j.attempt.seq !== m.seq ||
+        j.attempt.letter !== m.receipt.letter ||
+        m.receipt.input === null
+      ) {
+        return unchanged(s);
+      }
+
+      const receipts = s.receipts.some((r) => r.letter === m.receipt.letter) ? s.receipts : [...s.receipts, m.receipt];
+      return [{ ...s, receipts, journal: Journal.cases.stepping.make({ attempt: j.attempt }) }, []];
+    },
+    refused: (s, m) => {
+      const j = s.journal;
+      return j._tag === "checking" &&
+        j.attempt.seq === m.seq &&
+        m.reply.id === j.attempt.letter &&
+        m.reply.name === s.name
+        ? [{ ...s, journal: Journal.cases.writing_reply.make({ attempt: j.attempt, reply: m.reply }) }, []]
+        : unchanged(s);
+    },
+    reply_written: (s, m) =>
+      s.journal._tag === "writing_reply" && s.journal.attempt.seq === m.seq
+        ? [{ ...s, journal: Journal.cases.idle.make({ process: s.journal.attempt.process }) }, []]
+        : unchanged(s),
+    abandoned: (s, m) => {
+      const j = s.journal;
+      return (j._tag === "checking" || j._tag === "stepping") && j.attempt.seq === m.seq
+        ? [{ ...s, journal: Journal.cases.clearing_attempt.make({ attempt: j.attempt }) }, []]
+        : unchanged(s);
+    },
+    attempt_cleared: (s, m) =>
+      s.journal._tag === "clearing_attempt" && s.journal.attempt.seq === m.seq
+        ? [{ ...s, journal: Journal.cases.idle.make({ process: s.journal.attempt.process }) }, []]
+        : unchanged(s),
+    check_threw: (s, m) => {
+      const j = s.journal;
+
+      if (
+        j._tag !== "checking" ||
+        j.attempt.seq !== m.seq ||
+        m.receipt.letter !== j.attempt.letter ||
+        m.receipt.input === null
+      ) {
+        return unchanged(s);
+      }
+
+      const receipts = s.receipts.some((r) => r.letter === m.receipt.letter) ? s.receipts : [...s.receipts, m.receipt];
+      return failed({ ...s, receipts }, j.attempt, m.error, m.reason, m.from);
     },
     finished: (s, m) =>
       s.journal._tag === "stepping" && s.journal.attempt.seq === m.seq
@@ -256,49 +378,13 @@ export const supervisor = Machine.make({
         return unchanged(s);
       }
 
-      const { phase, at, ...fields } = s.journal.attempt;
-      const failure = (phase === "fresh" ? Failure.cases.fresh : Failure.cases.saved).make({
-        ...fields,
-        error: m.error,
-      });
-      const seen = { seq: m.seq, process: fields.process, letter: fields.letter, phase, error: m.error, at };
-
-      if (failure._tag !== "fresh") {
-        return [observe(s, failure, seen, exiting(failure, m.reason, m.from)), []];
-      }
-
-      const old = s.receipts.find((r) => r.letter === failure.letter);
-
-      if (old === undefined) {
-        return unchanged(s);
-      }
-
-      // Observation and the fresh delivery's charge change together, in one saved step.
-      const errors = [...old.errors, m.error];
-      const terminal = errors.length >= (s.maxDeliveries ?? s.policy.maxDeliveries);
-      const receipt = {
-        ...old,
-        errors,
-        tries: errors.length,
-        process: failure.process,
-        result: terminal ? DEAD : null,
-      };
-      const journal = terminal
-        ? Journal.cases.writing_dead.make({ failure, reason: m.reason, from: m.from })
-        : exiting(failure, m.reason, m.from);
-      return [
-        {
-          ...observe(s, failure, seen, journal),
-          receipts: s.receipts.map((r) => (r.letter === failure.letter ? receipt : r)),
-        },
-        [],
-      ];
+      return failed(s, s.journal.attempt, m.error, m.reason, m.from);
     },
     interrupted: (s, m) => {
       const j = s.journal;
       // The saved attempt's identity wins; an activity marker alone gets the next sequence.
       const attempt =
-        j._tag === "stepping" && j.attempt.process === m.process
+        (j._tag === "stepping" || j._tag === "checking") && j.attempt.process === m.process
           ? j.attempt
           : j._tag === "idle" && j.process === m.process
             ? { process: m.process, letter: m.letter, build: m.build, seq: s.seq + 1, at: m.at }

@@ -348,7 +348,7 @@ const world = () => {
     spentCap: 100,
     nextProcess: () => processIds.next(A.Id.Process).pipe(Effect.orDie),
     notify: () => Effect.void,
-    inputs: { schema: Input, personOnly: [], raw: [], log: Schema.toCodecJson(Input) },
+    inputs: { schema: Input, personOnly: [], raw: [] },
     events: { personOnly: [] },
     deliver: (
       pid: string,

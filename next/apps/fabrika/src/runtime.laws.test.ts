@@ -11,6 +11,7 @@ import { revokeText } from "@kampus/libfabrika/access/Text";
 import { BrainEvent } from "@kampus/libfabrika/brain-event";
 import { type From } from "@kampus/libfabrika/processes/Mailbox";
 import { Start } from "@kampus/libfabrika/processes/Process";
+import * as Audit from "@kampus/libfabrika/runtime/Audit";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { Attached } from "@kampus/libfabrika/transport/Wire";
@@ -234,6 +235,10 @@ const world = async (trace = TRACE, build = "counter-b", options: { readonly cal
     LOADER: {
       get: (id: string) => ({
         getEntrypoint: () => ({
+          audit: async (message: unknown) =>
+            Audit.Answer.cases.ok.make({
+              value: Schema.decodeUnknownSync(Schema.Struct({ type: Schema.String }))(message),
+            }),
           describe: async () =>
             id.startsWith("approvals-")
               ? {

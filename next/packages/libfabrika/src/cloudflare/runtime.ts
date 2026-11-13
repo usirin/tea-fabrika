@@ -15,6 +15,7 @@ import {
   Tracer,
 } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
+import * as Redacted from "effect/Redacted";
 import { admitted } from "../access/Access.ts";
 import { ClientManager } from "../access/ClientManager.ts";
 import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
@@ -38,13 +39,14 @@ import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 import { ProcessManager, remoteProcessManager, type ProcessCalls } from "../processes/ProcessManager.ts";
 import { ProgramMail, type ProgramMailError, type Delivery, type Grants } from "../processes/ProgramMail.ts";
 import * as ProgramMailLedger from "../processes/ProgramMailLedger.ts";
+import * as Audit from "../runtime/Audit.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import { Alarm, CheckedWriter, Recording, type Incoming } from "../runtime/Entry.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
 import { ProgramDown } from "../runtime/Program.ts";
-import type { Descriptor, Sent } from "../runtime/Runner.ts";
-import { defaultPolicy, ProgramRunner } from "../runtime/Runner.ts";
+import type { Descriptor } from "../runtime/Runner.ts";
+import { defaultPolicy, ProgramRunner, Sent } from "../runtime/Runner.ts";
 import { type Sql } from "../Sql.ts";
 import { Archive, type BucketCalls } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
@@ -115,6 +117,7 @@ export interface ProjectDoorOptions {
   readonly write: <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
   readonly policy: (process: string) => Effect.Effect<{ inputs: Array<string>; events: Array<string> }, LedgerError>;
   readonly isLive: (process: string) => Effect.Effect<boolean, LedgerError>;
+  readonly audit: (process: string, message: unknown) => Effect.Effect<Schema.Json, Audit.AuditError>;
   readonly nextProcess: () => Effect.Effect<string>;
   readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError>;
   readonly deliver: (process: string, input: Incoming) => Effect.Effect<Sent, LedgerError>;
@@ -597,6 +600,19 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
       write,
       policy,
       isLive: processes.isLive,
+      audit: Effect.fn("project.audit")(function* (pid: string, message: unknown) {
+        // Like processLogic, load this target's available build; its start record may name an older build.
+        const program = yield* Effect.gen(function* () {
+          const life = yield* resolved(pid);
+          const tail = yield* bindTail(ctx, { project: name, name: life.name, process: life.state.process });
+          return yield* loader.load(life.state.code.program, life.state.process, tail);
+        }).pipe(
+          Effect.mapError(
+            (cause) => new Audit.AuditError({ reason: new Audit.Transport({ cause: Redacted.make(cause) }) }),
+          ),
+        );
+        return yield* program.execution.audit(message);
+      }),
       nextProcess: () => ids.next,
       notify,
       deliver: (pid, incoming) =>
@@ -836,7 +852,16 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     initialize: (client: ConnectionId, input: unknown, trusted: { url: string; tab: string; name: string }) =>
       wrapped(door.initialize(client, input, trusted)),
     route: (client: ConnectionId, method: string, params: unknown, reader?: string) =>
-      wrapped(door.route(client, method, params, reader)),
+      wrapped(
+        door.route(client, method, params, reader).pipe(
+          // Invalid target messages answer as checked refusals so the connection stays open.
+          Effect.catch((error) =>
+            Schema.is(Audit.AuditError)(error) && error.reason._tag === "Input"
+              ? Effect.succeed(Answer.cases.ok.make({ result: Sent.cases.refused.make({ reason: "bad_msg" }) }))
+              : Effect.fail(error),
+          ),
+        ),
+      ),
     knock: (client: ConnectionId, input: { label: string }) => wrapped(door.knock(client, input)),
     grant: (input: unknown) => wrapped(door.grant(input)),
     disconnect: (client: ConnectionId) => wrapped(door.disconnect(client)),
