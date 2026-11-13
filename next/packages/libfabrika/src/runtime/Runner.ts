@@ -814,11 +814,14 @@ export class ProgramRunner extends Context.Service<
               return yield* Effect.failCause(result.cause);
             }
 
-            if (Result.isFailure(failed) || !Schema.is(ProgramDown)(failed.success)) {
+            // A throw is the step's own crash and keeps its class. Any other typed failure is the host's.
+            const wrapped = Result.isSuccess(failed)
+              ? failed.success
+              : new ProgramDown({ reason, cause: Cause.squash(result.cause) });
+
+            if (!Schema.is(ProgramDown)(wrapped)) {
               return yield* Effect.failCause(result.cause);
             }
-
-            const wrapped = failed.success;
 
             if (wrapped.source !== undefined) {
               yield* complete({ type: "abandoned", seq: attempt.seq });
