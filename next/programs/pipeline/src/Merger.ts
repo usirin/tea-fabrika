@@ -1,6 +1,6 @@
 import type { Settled } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Ci, CodeHost, Program, Send } from "@kampus/libfabrika";
+import { Ci, CodeHost, Program, Send, StartChild } from "@kampus/libfabrika";
 import { Array as Arr, Schema } from "effect";
 import * as Change from "./Change.ts";
 import { Abandon, Land, Reply } from "./Mail.ts";
@@ -61,7 +61,7 @@ const counts = { attempt: Count, late: Count };
 const working = { ...counts, job: Job, step: Step };
 const prepared = { ...working, kind: Change.Kind, checks: Schema.NonEmptyArray(Change.Check) };
 
-const Model = Schema.TaggedUnion({
+const Previous = Schema.TaggedUnion({
   idle: counts,
   reading: { ...working, step: Schema.Union([Step, First]) },
   updating: prepared,
@@ -69,9 +69,34 @@ const Model = Schema.TaggedUnion({
   merging: { ...working, head: CodeHost.Commit, tree: CodeHost.Tree },
 });
 
+const Model = Schema.TaggedUnion({
+  idle: counts,
+  reading: { ...working, step: Schema.Union([Step, First]) },
+  updating: { ...prepared, head: CodeHost.Commit, round: Count, checked: Schema.NullOr(CodeHost.Tree) },
+  checking: { ...prepared, head: CodeHost.Commit, tree: CodeHost.Tree, until: Schema.Number, round: Count },
+  merging: { ...working, head: CodeHost.Commit, tree: CodeHost.Tree },
+});
+
+const rounds = {
+  name: "rounds",
+  from: 1,
+  run: (raw: unknown) => {
+    const s = Schema.decodeUnknownSync(Previous)(raw);
+    return s._tag === "updating"
+      ? { ...s, head: s.job.head, round: 0, checked: null }
+      : s._tag === "checking"
+        ? { ...s, round: 0 }
+        : s;
+  },
+};
+
 type Model = typeof Model.Type;
 type Working = Exclude<Model, typeof Model.cases.idle.Type>;
-type Command = ReturnType<typeof change | typeof update | typeof checks | typeof merge | typeof Send.send>;
+
+type Command = ReturnType<
+  typeof change | typeof update | typeof checks | typeof merge | typeof Send.send | typeof StartChild.exit
+>;
+
 type Cell = readonly [Model, ReadonlyArray<Command>];
 
 // The runner accepts settled letters itself; declaring them here also lets pure clients decode them.
@@ -115,7 +140,7 @@ const identity = (s: Working) => ({ ref: s.job.ref, change: s.job.change });
 
 const finish = (s: Working, reply: typeof Reply.Type): Cell => [
   Model.cases.idle.make({ attempt: s.attempt, late: s.late }),
-  [Send.send({ to: s.job.reply, m: reply })],
+  [Send.send({ to: s.job.reply, m: reply }), StartChild.exit({})],
 ];
 
 export const merger = (settings: Values) => {
@@ -134,7 +159,7 @@ export const merger = (settings: Values) => {
       s._tag === "reading"
         ? change({ attempt, change: s.job.change })
         : s._tag === "updating"
-          ? update({ attempt, change: s.job.change, head: s.job.head })
+          ? update({ attempt, change: s.job.change, head: s.head })
           : s._tag === "checking"
             ? checks({ attempt, head: s.head, start })
             : merge({ attempt, change: s.job.change, head: s.head });
@@ -219,7 +244,15 @@ export const merger = (settings: Values) => {
       }
 
       return ask(
-        Model.cases.updating.make({ ...progress(s), kind, checks: wanted, step: asking(m.at) }),
+        Model.cases.updating.make({
+          ...progress(s),
+          kind,
+          checks: wanted,
+          head: s.job.head,
+          round: 0,
+          checked: null,
+          step: asking(m.at),
+        }),
         m.at,
         0,
         false,
@@ -230,6 +263,19 @@ export const merger = (settings: Values) => {
       const v = m.value;
 
       if (v._tag === "current" || v._tag === "updated") {
+        if (v._tag === "current" && s.checked !== null) {
+          return ask(
+            Model.cases.merging.make({ ...progress(s), head: s.head, tree: s.checked, step: asking(m.at) }),
+            m.at,
+            0,
+            false,
+          );
+        }
+
+        if (v._tag === "updated" && s.round === settings.rounds) {
+          return finish(s, Reply.cases.behind.make({ ...identity(s), head: v.head, main: v.main, rounds: s.round }));
+        }
+
         return ask(
           Model.cases.checking.make({
             ...progress(s),
@@ -237,6 +283,7 @@ export const merger = (settings: Values) => {
             checks: s.checks,
             head: v.head,
             tree: v.tree,
+            round: s.round + (v._tag === "updated" ? 1 : 0),
             until: clamp(m.at + wait),
             step: asking(m.at),
           }),
@@ -266,7 +313,15 @@ export const merger = (settings: Values) => {
 
       if (verdict._tag === "green") {
         return ask(
-          Model.cases.merging.make({ ...progress(s), head: s.head, tree: s.tree, step: asking(m.at) }),
+          Model.cases.updating.make({
+            ...progress(s),
+            kind: s.kind,
+            checks: s.checks,
+            head: s.head,
+            round: s.round,
+            checked: s.tree,
+            step: asking(m.at),
+          }),
           m.at,
           0,
           false,
@@ -316,7 +371,7 @@ export const merger = (settings: Values) => {
   const machine = Machine.make({
     model: Model,
     msg: Msg,
-    cmds: [change, update, checks, merge, Send.send],
+    cmds: [change, update, checks, merge, Send.send, StartChild.exit],
     init: (loaded) => [loaded ?? Model.cases.idle.make({ attempt: 0, late: 0 }), []],
     update: {
       land: reduce,
@@ -332,17 +387,20 @@ export const merger = (settings: Values) => {
       merge_err: reduce,
       send_ok: reduce,
       send_err: reduce,
+      exit_ok: (s) => [s, []],
+      exit_err: (s) => [s, []],
     },
   });
   return Program.make({
-    name: "merger",
+    name: "pipeline/merger",
     machine,
-    state: { v: 1, upgrades: [] },
+    state: { v: 2, upgrades: [rounds] },
     view: (s) => ({
       state: s._tag,
       ref: s._tag === "idle" ? null : s.job.ref,
       change: s._tag === "idle" ? null : s.job.change,
-      head: s._tag === "idle" ? null : s._tag === "checking" || s._tag === "merging" ? s.head : s.job.head,
+      head: s._tag === "idle" ? null : s._tag === "reading" ? s.job.head : s.head,
+      round: s._tag === "updating" || s._tag === "checking" ? s.round : null,
       attempt: s.attempt,
       tries: s._tag === "idle" ? null : s.step.tries,
       late: s.late,

@@ -1,7 +1,7 @@
 ---
 id: 0146
 title: A pull request lands only when its checks ran on a head that holds current main
-status: accepted
+status: amended-in-part by [0156](0156-a-batch-lands-on-one-check-run.md)
 date: 2026-11-12
 tags: [merge, lead, catchup, behind, ci]
 ---
