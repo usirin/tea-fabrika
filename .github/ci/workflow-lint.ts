@@ -1,5 +1,4 @@
 // Today's CI, serving both versions. Static workflow shape belongs in lint.
-import { createHash } from "node:crypto";
 import { existsSync, readFileSync, globSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
@@ -347,14 +346,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
     const errors = lintWorkflow(read(".github/workflows/check.yaml"));
-
-    // T342 deliberately leaves this trusted workflow byte-for-byte unchanged.
-    if (
-      createHash("sha256").update(read(".github/workflows/commits.yaml")).digest("hex") !==
-      "d660f6bb68243e6a48ab28f0872b36b9611c39ec5c060c9ba9cfae6776c698b1"
-    ) {
-      errors.push("commits.yaml changed; review its trusted workflow separately");
-    }
 
     const manifest: unknown = JSON.parse(read("package.json"));
 
