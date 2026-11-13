@@ -9,9 +9,9 @@
 //   (`"a.b" = 1` is `["a.b"]`, `a.b = 1` is `["a", "b"]`) and `line` counts from 1.
 // - Broken TOML fails with `TomlError`, carrying the parser's `line` and its `cause`.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit } from "effect";
+import { Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
-import { Toml } from "./Toml.ts";
+import { Toml, TomlError } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -34,6 +34,53 @@ const table = fc.record({
   values: fc.array(fc.integer({ min: 0, max: 99999 }), { minLength: 3, maxLength: 3 }),
   spelling: fc.constantFrom("table", "dotted", "quoted-table", "quoted-key", "inline"),
 });
+
+it.effect.prop(
+  "T877 L8 parse and both edits preserve the syntax line and the parser failure in a tagged reason",
+  {
+    padding: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 30 })),
+    crlf: Schema.Boolean,
+    variant: Schema.Int,
+  },
+  ({ padding, crlf, variant }) =>
+    Effect.gen(function* () {
+      const toml = yield* Toml;
+      const eol = crlf ? "\r\n" : "\n";
+      const broken = ['bad = "never closed', "bad = ]", "bad = 1 2"][Math.abs(variant) % 3]!;
+      const text = Array.from({ length: padding }, (_, i) => `# prefix-${i}`).join(eol) + eol + broken + eol;
+
+      const operations: ReadonlyArray<Effect.Effect<unknown, TomlError>> = [
+        toml.parse(text),
+        toml.set(text, ["missing"], 1),
+        toml.remove(text, ["missing"]),
+      ];
+
+      for (const operation of operations) {
+        const exit = yield* Effect.exit(operation);
+        expect(Exit.isFailure(exit)).toBe(true);
+
+        if (Exit.isSuccess(exit)) {
+          return yield* Effect.die(new Error("Invalid TOML succeeded"));
+        }
+
+        const failure = exit.cause.reasons.find((r) => r._tag === "Fail");
+        expect(failure?._tag).toBe("Fail");
+
+        if (failure?._tag !== "Fail") {
+          return yield* Effect.die(new Error("The syntax failure was a defect"));
+        }
+
+        const error = failure.error;
+        expect(error).toBeInstanceOf(TomlError);
+        expect(error.line).toBe(padding + 1);
+        expect(error.reason._tag).toBe("Syntax");
+        expect(error.reason.cause).toBe(error.cause);
+        expect(error.cause).toBeInstanceOf(Error);
+        expect(error.cause).toMatchObject({ lineNumber: padding + 1 });
+      }
+    }).pipe(Effect.provide(TomlParser.layer)),
+  { arbitrary: { seed: 119120, runs: 100 } },
+);
 
 const doc = fc.record({
   tables: fc.uniqueArray(table, { minLength: 1, maxLength: 3, selector: (t) => t.name }),

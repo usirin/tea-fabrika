@@ -19,6 +19,7 @@
     "next/packages/libfabrika": "next-library",
     "next/packages/tuval": "next-tuval",
     "next/programs/checklist": "next-program",
+    "next/programs/inbox": "next-program",
     "next/programs/chaos": "next-program",
     "next/programs/counter": "next-program",
     "next/programs/pipeline": "next-program"

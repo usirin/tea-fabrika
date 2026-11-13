@@ -95,4 +95,9 @@ export * as Send from "./runtime/Send.ts";
 /**
  * @stability unstable
  */
+export * as StartChild from "./runtime/StartChild.ts";
+export { Started } from "./processes/Children.ts";
+/**
+ * @stability unstable
+ */
 export * as Setting from "./settings/Setting.ts";

@@ -664,6 +664,9 @@ importers:
       '@kampus/counter':
         specifier: workspace:*
         version: link:../../programs/counter
+      '@kampus/inbox':
+        specifier: workspace:*
+        version: link:../../programs/inbox
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
@@ -700,6 +703,9 @@ importers:
       '@alchemy.run/cloudflare-runtime':
         specifier: 2.0.0-beta.85
         version: 2.0.0-beta.85(patch_hash=14384a567c64fa21b5aa3aff50ba52e0f3e5c8ac403e5ad4e5b572fee1c62dc1)(@distilled.cloud/cloudflare@1.0.0-rc.18(effect@4.1.2(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)))(@effect/platform-node@4.1.2(effect@4.1.2(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.2(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+      '@decimalturn/toml-patch':
+        specifier: 3.3.2
+        version: 3.3.2
       '@demlik/tea':
         specifier: 'catalog:'
         version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
@@ -909,6 +915,34 @@ importers:
       '@types/react':
         specifier: 'catalog:'
         version: 19.3.0
+      fast-check:
+        specifier: 'catalog:'
+        version: 4.10.2
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+
+  next/programs/inbox:
+    dependencies:
+      '@demlik/tea':
+        specifier: 'catalog:'
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+      '@kampus/libfabrika':
+        specifier: workspace:*
+        version: link:../../packages/libfabrika
+      effect:
+        specifier: 'catalog:'
+        version: 4.1.2(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.1.2(effect@4.1.2(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.6
       fast-check:
         specifier: 'catalog:'
         version: 4.10.2
@@ -2102,6 +2136,10 @@ packages:
     engines: {node: '>=20.19.0'}
     peerDependencies:
       postcss-selector-parser: ^7.1.1
+
+  '@decimalturn/toml-patch@3.3.2':
+    resolution: {integrity: sha512-UUsjKkIJWC4JwhAK7IUMZeN4TjjtCWapAkdIuvllT3/fYcNooDQ0HtwgGDV77ew+arh/15hazN9M9/oSNV+PDg==}
+    engines: {node: '>=16'}
 
   '@demlik/code-graph@0.13.0':
     resolution: {integrity: sha512-c5CbR/xBG7cMSi0q+0XKlRCNoNUbyFssXmphryPSEOSNlzfk+n92aSrEV5vUbJ0L+1YGZ0/Oe+kUOOWnff2WsQ==}
@@ -6658,6 +6696,8 @@ snapshots:
   '@csstools/selector-specificity@6.0.1(postcss-selector-parser@7.1.7)':
     dependencies:
       postcss-selector-parser: 7.1.7
+
+  '@decimalturn/toml-patch@3.3.2': {}
 
   '@demlik/code-graph@0.13.0':
     dependencies:

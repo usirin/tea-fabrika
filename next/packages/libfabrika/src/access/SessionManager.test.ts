@@ -525,6 +525,41 @@ describe("P10 saved signing authority", () => {
 // P33 review round 3, rule 2: an id in the signal id space is the brain's alone, so the signer
 // refuses it, signs nothing, saves no receipt and leaves the parent free for a real write.
 describe("P33, the signer refuses every id in the signal id space", () => {
+  it.effect.prop(
+    "B2: the signer refuses notice ids as signal without spending the parent or saving a receipt",
+    [Schema.Literals(["person", "agent", "recovered"]), Schema.String, Schema.Literals(["", " ", "\n", "\t"])],
+    ([sender, key, space]) =>
+      Effect.gen(function* () {
+        const { sql, db } = database();
+        const { saved, signer, authority, parent } = setup(sample);
+        yield* Effect.gen(function* () {
+          const s = yield* SessionManager;
+          const input = saved(sender === "agent" ? "agent" : "person", false);
+          yield* s.record({
+            ...input,
+            by:
+              sender === "recovered"
+                ? Writer.cases.person.make({ for: input.by.for, key: "SHA256:recovered" })
+                : input.by,
+          });
+          yield* s.delivered(parent, PROCESS);
+          const before = snapshot(db);
+
+          for (const id of [
+            JSON.stringify(["notice", key]),
+            `${space}[${space}"notice",${JSON.stringify(key)}]${space}`,
+            '["notice"',
+          ]) {
+            expect(yield* Effect.flip(signer(id, "saved"))).toMatchObject({ _tag: "SigningRefused", reason: "signal" });
+            expect(snapshot(db)).toBe(before);
+          }
+
+          expect((yield* signer("write-after", "saved")).parent).toBe(parent);
+        }).pipe(Effect.provide(authority(sql)));
+      }),
+    { arbitrary: { seed: 119120 } },
+  );
+
   const toW = Recipient.cases.process.make({ process: OTHER_PROCESS });
   const ids = [
     signalId(toW, "watch:1", 1),
