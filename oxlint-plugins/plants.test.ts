@@ -715,3 +715,31 @@ it("pinned: L6 a second machine is planted and lint.ts exits 1", async () => {
   expect(out.stdout).toContain("fabrika(one-machine-per-file)");
   expect(out.status).toBe(1);
 });
+
+// scenario: L12 checks the real config at the new module's paths, including both filename rules.
+it("scenario: T878 L12 repositories keeps private imports, names and one-machine rules", async () => {
+  const src = "next/packages/libfabrika/src/";
+  const files = {
+    [`${src}repositories/Repositories.ts`]: "export const snapshot = 1;\n",
+    [`${src}repositories/repositories.ts`]: "export const snapshot = 1;\n",
+    [`${src}repositories/internal/read.ts`]: "/** @internal */\nexport const read = 1;\n",
+    [`${src}repositories/internal/Read.ts`]: "/** @internal */\nexport const read = 1;\n",
+    [`${src}repositories/Private.ts`]: 'import {open} from "../packs/internal/open.ts";\nexport {open};\n',
+    [`${src}packs/Private.ts`]: 'import {read} from "../repositories/internal/read.ts";\nexport {read};\n',
+    [`${src}repositories/Names.ts`]: "export const snapshotOf = 1;\n",
+    [`${src}repositories/Machines.ts`]:
+      'import {Machine} from "@demlik/tea/effect";\nexport const first = Machine.make({});\nexport const second = Machine.make({});\n',
+    [`${src}repositories/Platform.ts`]: 'import {spawn} from "node:child_process";\nexport {spawn};\n',
+  };
+  const result = await lintCopies(files);
+  expect(result("fabrika(modules)", `${src}repositories/Repositories.ts`)).toEqual([]);
+  expect(result("unicorn(filename-case)", `${src}repositories/Repositories.ts`)).toEqual([]);
+  expect(result("unicorn(filename-case)", `${src}repositories/repositories.ts`)).toEqual([1]);
+  expect(result("unicorn(filename-case)", `${src}repositories/internal/read.ts`)).toEqual([]);
+  expect(result("unicorn(filename-case)", `${src}repositories/internal/Read.ts`)).toEqual([1]);
+  expect([...new Set(result("eslint(no-restricted-imports)", `${src}repositories/Private.ts`))]).toEqual([1]);
+  expect([...new Set(result("eslint(no-restricted-imports)", `${src}packs/Private.ts`))]).toEqual([1]);
+  expect(result("fabrika(no-of)", `${src}repositories/Names.ts`)).toEqual([1]);
+  expect(result("fabrika(one-machine-per-file)", `${src}repositories/Machines.ts`)).toEqual([3]);
+  expect(result("fabrika(no-node-imports)", `${src}repositories/Platform.ts`)).toEqual([1]);
+});
