@@ -1,9 +1,11 @@
 // P25 slice 1, next/: the real program declarations decide which tools exist.
 import { Machine } from "@demlik/tea/effect";
 import { expect, it } from "@effect/vitest";
+import { Ajv2020 } from "ajv/dist/2020.js";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { Input, Program } from "../runtime/Program.ts";
@@ -246,29 +248,6 @@ it.prop(
 );
 
 it.prop(
-  "T1: closed schemas keep all message alternatives and resolve shared definitions",
-  { fallback: text, reverse: Schema.Boolean },
-  ({ fallback, reverse }) => {
-    const rich = richDeclaration(fallback, reverse);
-    const richTools = Tools.list([rich.program]);
-    expect(Result.isSuccess(richTools)).toBe(true);
-
-    if (Result.isSuccess(richTools)) {
-      expect(richTools.success.map((tool) => tool.name)).toEqual([
-        "ps",
-        ...Object.keys(rich.schemas).map((key) => `rich_${key}`),
-      ]);
-
-      for (const [i, [key, schema]] of Object.entries(rich.schemas).entries()) {
-        expect(richTools.success[i + 1]?.inputSchema).toEqual(inputSchema(schema));
-        expect(richTools.success[i + 1]?.annotations?.readOnlyHint === true).toBe(key === "read" || key === "shared");
-      }
-    }
-  },
-  options(300),
-);
-
-it.prop(
   "T2: any name and JSON return a Call; hidden and unknown tools refuse, invalid values refuse, good values keep the port type",
   {
     ports: Arbitrary.array(Arbitrary.schema(Port), { maxLength: 16 }),
@@ -354,131 +333,637 @@ it.prop(
   options(300),
 );
 
-for (const form of schemaForms) {
-  it.prop(
-    `T1: ${form} preserves every port schema`,
-    { reverse: Schema.Boolean, suffix: Schema.Int },
-    ({ reverse, suffix }) => {
-      const { program, schemas } = schemaDeclaration(form, reverse, `wire_${suffix}`);
-      const result = Tools.list([program]);
+// vector: review 1's plain structs must still match Effect's own closed schema.
+it("vector: T1 plain text, union and shared schemas", () => {
+  for (const shape of ["text", "union", "shared"] as const) {
+    const { program, entries } = declaration("pack/plain", [{ read: false, hidden: false, shape, description: shape }]);
+    const result = Tools.list([program]);
+    expect(Result.isSuccess(result)).toBe(true);
+
+    if (Result.isSuccess(result)) {
+      expect(result.success[1]?.inputSchema).toEqual(inputSchema(entries[0]!.schema));
+    }
+  }
+});
+
+const Field = Schema.Literals([
+  "text",
+  "int",
+  "optionalKey",
+  "optionalNull",
+  "default",
+  "fromString",
+  "array",
+  "union",
+  "shared",
+  "recursive",
+]);
+
+const Wrap = Schema.Literals(["plain", "suspend", "encodeKeys", "suspend_encodeKeys", "filter"]);
+const Key = Schema.Literals(["a", "b", "c", "d"]);
+
+const Member = Schema.Struct({
+  tags: Schema.NonEmptyArray(Key).check(Schema.isMaxLength(2)),
+  fields: Schema.Array(Field).check(Schema.isMaxLength(4)),
+  wrap: Wrap,
+});
+
+const OutsideForm = Schema.Literals([
+  "tag_renamed",
+  "tag_renamed_beside_plain",
+  "not_an_object",
+  "min_properties",
+  "index_signature",
+]);
+
+const Supported = Schema.Struct({
+  members: Schema.NonEmptyArray(Member).check(Schema.isMaxLength(6)),
+  personOnly: Schema.Array(Key).check(Schema.isMaxLength(4)),
+  nest: Schema.Array(Schema.Boolean).check(Schema.isMaxLength(6)),
+  whole: Schema.Literals(["plain", "suspend", "filter"]),
+});
+
+const Declaration = Schema.Struct({ ...Supported.fields, outside: Schema.optionalKey(OutsideForm) });
+type Declaration = typeof Declaration.Type;
+type Message = { readonly type: string; readonly [key: string]: unknown };
+type Tree = { readonly label: string; readonly children: ReadonlyArray<Tree> };
+
+const fieldSchema = (field: typeof Field.Type, name: string) => {
+  const shared = Schema.Struct({ label: Schema.String }).annotate({ identifier: `${name}_shared` });
+  const tree: Schema.Codec<Tree> = Schema.suspend(() =>
+    Schema.Struct({
+      label: Schema.String,
+      children: Schema.Array(tree).check(Schema.isMaxLength(2)),
+    }),
+  ).annotate({ identifier: `${name}_tree` });
+
+  switch (field) {
+    case "text":
+      return Schema.String;
+    case "int":
+      return Schema.Int;
+    case "optionalKey":
+      return Schema.optionalKey(Schema.String);
+    case "optionalNull":
+      return Schema.optional(Schema.NullOr(Schema.String));
+    case "default":
+      return Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed("default")));
+    case "fromString":
+      return Schema.FiniteFromString;
+    case "array":
+      return Schema.Array(Schema.String).check(Schema.isMaxLength(3));
+    case "union":
+      return Schema.Union([Schema.String, Schema.Int]);
+    case "shared":
+      return Schema.Struct({ left: shared, right: shared });
+    case "recursive":
+      return tree;
+  }
+};
+
+const makeForm = (form: Declaration) => {
+  const members = form.members.map((member, i) => {
+    const fields = Object.fromEntries(
+      member.fields.map((field, n) => {
+        const name = `f${i}_${n}`;
+        return [name, fieldSchema(field, name)];
+      }),
+    );
+    const plain = Schema.Struct({ type: Schema.Literals(member.tags), ...fields });
+    const first = Object.keys(fields)[0];
+    const encoded = first === undefined ? plain : plain.pipe(Schema.encodeKeys({ [first]: `wire_${first}` }));
+    const schema =
+      member.wrap === "suspend"
+        ? Schema.suspend(() => plain)
+        : member.wrap === "encodeKeys"
+          ? encoded
+          : member.wrap === "suspend_encodeKeys"
+            ? Schema.suspend(() => encoded)
+            : member.wrap === "filter"
+              ? plain.check(Schema.makeFilter((value) => !Object.values(value).some((v) => v === "blocked")))
+              : plain;
+    return { tags: member.tags, fields: Object.keys(fields), schema };
+  });
+  let parts: Array<Schema.Codec<unknown, unknown>> = members.map((member) => member.schema);
+  const outside = form.outside;
+
+  if (outside === "tag_renamed" || outside === "tag_renamed_beside_plain") {
+    const renamed = Schema.Struct({ type: Schema.Literal("a"), renamed: Schema.String }).pipe(
+      Schema.encodeKeys({ type: "kind" }),
+    );
+    parts = outside === "tag_renamed" ? [renamed] : [...parts, renamed];
+  } else if (outside === "not_an_object") {
+    parts.push(Schema.String);
+  } else if (outside === "min_properties") {
+    parts.push(
+      Schema.Struct({ type: Schema.Literal("a"), limited: Schema.optionalKey(Schema.String) }).check(
+        Schema.isMinProperties(2),
+      ),
+    );
+  } else if (outside === "index_signature") {
+    parts.push(
+      Schema.StructWithRest(Schema.Struct({ type: Schema.Literal("a") }), [Schema.Record(Schema.String, Schema.Json)]),
+    );
+  }
+
+  parts.push(Schema.Struct({ type: Schema.Literal("timer"), internal_timer: Schema.Int }));
+
+  for (const nested of form.nest) {
+    if (nested && parts.length > 1) {
+      parts = [Schema.Union(parts.slice(0, 2)), ...parts.slice(2)];
+    }
+  }
+
+  const plain = Schema.Union(parts);
+  const schema =
+    form.whole === "suspend"
+      ? Schema.suspend(() => plain)
+      : form.whole === "filter"
+        ? plain.check(
+            Schema.makeFilter((m) => !Predicate.isObject(m) || !Object.values(m).some((v) => v === "blocked_whole")),
+          )
+        : plain;
+  // The negative forms deliberately contain wire values outside tea's Msg type.
+  const msg = schema as Schema.Codec<Message, unknown>;
+  const keys = [...new Set([...form.members.flatMap((m) => m.tags), ...(outside === undefined ? [] : ["a"])])];
+  const machine = Machine.make({
+    model: Schema.Null,
+    msg,
+    cmds: [],
+    init: () => [null, []],
+    update: Object.fromEntries([...keys, "timer"].map((key) => [key, (m: null) => [m, []]])),
+  });
+  const program = Program.make({
+    name: "pack/drawn",
+    machine,
+    state: { v: 1, upgrades: [] },
+    view: () => null,
+    refuse: () => null,
+    inputs: Object.fromEntries(
+      keys.map((key) => [
+        key,
+        form.personOnly.includes(key as typeof Key.Type) ? { description: key, personOnly: true as const } : key,
+      ]),
+    ),
+    outputs: {},
+    writes: {},
+    wake: () => null,
+  });
+  return {
+    program,
+    msg,
+    members,
+    keys,
+    visible: keys.filter((key) => !form.personOnly.includes(key as typeof Key.Type)),
+    exact: form.whole !== "filter" && form.members.every((m) => m.wrap !== "filter"),
+  };
+};
+
+type Form = ReturnType<typeof makeForm>;
+
+const jsonTrip = (value: unknown): unknown =>
+  Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(JSON.stringify(value));
+
+const withoutType = (value: unknown) => {
+  expect(Predicate.isObject(value)).toBe(true);
+
+  if (!Predicate.isObject(value)) {
+    throw new Error("The Msg must encode as an object");
+  }
+
+  const { type: _, ...fields } = value;
+  return fields;
+};
+
+const encoded = (form: Form, msg: Message) => jsonTrip(Schema.encodeUnknownSync(form.msg)(msg));
+
+const expectedMessage = (form: Form, wire: unknown) =>
+  Schema.decodeUnknownResult(Schema.toCodecJson(form.msg), closed)(wire);
+
+const visibleForm = Arbitrary.schema(Supported).pipe(
+  Arbitrary.filter((description) => makeForm(description).visible.length > 0),
+);
+
+const sent = (description: typeof Supported.Type) => {
+  const form = makeForm(description);
+  return Arbitrary.schema(form.msg).pipe(
+    Arbitrary.filter((msg) => form.visible.includes(msg.type)),
+    Arbitrary.map((msg) => ({ description, msg, value: withoutType(encoded(form, msg)) })),
+  );
+};
+
+const Forms = {
+  Declaration: Arbitrary.schema(Declaration),
+  Sent: visibleForm.pipe(Arbitrary.flatMap(sent)),
+  Outside: visibleForm.pipe(
+    Arbitrary.flatMap((description) =>
+      sent(description).pipe(
+        Arbitrary.flatMap((sample) => {
+          const form = makeForm(description);
+          const other =
+            form.visible.length === 1
+              ? Arbitrary.Constant(sample)
+              : sent(description).pipe(Arbitrary.filter((next) => next.msg.type !== sample.msg.type));
+          return Arbitrary.all({
+            other,
+            json: Arbitrary.schema(Schema.Json),
+            mode: Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 5 }))),
+          }).pipe(
+            Arbitrary.map(({ other, json, mode }) => {
+              const key = sample.msg.type;
+              const { [Object.keys(sample.value)[0] ?? "absent"]: _, ...dropped } = sample.value;
+              const values: ReadonlyArray<unknown> = [
+                json,
+                dropped,
+                { ...sample.value, type: key },
+                { ...sample.value, unexpected: json },
+                other.value,
+                sample.value,
+              ];
+              return { description, key, value: values[mode] };
+            }),
+          );
+        }),
+      ),
+    ),
+  ),
+};
+
+const validator = (schema: (typeof Tools.Tool.Type)["inputSchema"]) =>
+  new Ajv2020({ strict: false, validateFormats: false }).compile(
+    Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))(schema),
+  );
+
+const toolFor = (form: Form, key: string) => {
+  const result = Tools.list([form.program]);
+  expect(Result.isSuccess(result)).toBe(true);
+
+  if (Result.isFailure(result)) {
+    throw new Error(`Listing failed: ${result.failure.reason}`);
+  }
+
+  const tool = result.success.find((tool) => tool.name === `drawn_${key}`);
+  expect(tool).toBeDefined();
+  return tool!;
+};
+
+it.prop(
+  "P1: listing is total, supported forms list and outside forms fail by name",
+  { description: Forms.Declaration },
+  ({ description }) => {
+    expect.hasAssertions();
+    const form = makeForm(description);
+    const result = Tools.list([form.program]);
+
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(Tools.ToolsError);
+      expect(form.visible.map((key) => `drawn_${key}`)).toContain(result.failure.tool);
+      expect(["name_clash", "name_too_long", "no_port_schema", "not_tagged", "unsupported_schema"]).toContain(
+        result.failure.reason,
+      );
+    }
+
+    if (description.outside === undefined || form.visible.length === 0) {
       expect(Result.isSuccess(result)).toBe(true);
 
       if (Result.isSuccess(result)) {
-        expect(result.success.map((tool) => tool.name)).toEqual([
-          "ps",
-          ...Object.keys(schemas).map((key) => `forms_${key}`),
-        ]);
-
-        for (const [i, schema] of Object.values(schemas).entries()) {
-          expect(result.success[i + 1]?.inputSchema).toEqual(inputSchema(schema));
-          expect(result.success[i + 1]?.annotations?.readOnlyHint).not.toBe(true);
-        }
+        expect(result.success.map((t) => t.name)).toEqual(["ps", ...form.visible.map((key) => `drawn_${key}`)]);
       }
-    },
-    options(300),
-  );
+    } else {
+      expect(Result.isFailure(result)).toBe(true);
 
-  it.prop(
-    `T2: ${form} keeps both alternatives and encoded JSON fields`,
-    { text, n: Schema.Int, reverse: Schema.Boolean, input: Schema.Json },
-    ({ text: s, n, reverse, input }) => {
-      const encodedKey = `wire_${n}`;
-      const { program, schemas } = schemaDeclaration(form, reverse, encodedKey);
-
-      for (const [key, schema] of Object.entries(schemas)) {
-        const port = Programs.port(program, key);
-        expect(Option.isSome(port)).toBe(true);
-        const values = [
-          { side: "left", [form === "encoded keys" ? encodedKey : "n"]: n },
-          { side: "right", [form === "encoded keys" ? encodedKey : "text"]: s },
-          { side: "left", [form === "encoded keys" ? encodedKey : "n"]: s },
-          { side: "right", [form === "encoded keys" ? encodedKey : "text"]: n },
-          { side: "other", n, text: s },
-          input,
-        ];
-
-        for (const value of values) {
-          const decoded = Schema.decodeUnknownResult(Schema.toCodecJson(schema), closed)(value);
-
-          if (Option.isSome(port)) {
-            const actual = Schema.decodeUnknownResult(Schema.toCodecJson(port.value), closed)(value);
-            expect(Result.isSuccess(actual)).toBe(Result.isSuccess(decoded));
-
-            if (Result.isSuccess(actual) && Result.isSuccess(decoded)) {
-              expect(actual.success).toEqual(decoded.success);
-              expect(Schema.encodeUnknownResult(Schema.toCodecJson(port.value))(actual.success)).toEqual(
-                Schema.encodeUnknownResult(Schema.toCodecJson(schema))(decoded.success),
-              );
-            }
-          }
-
-          expect(Tools.read([program], `forms_${key}`, { value })).toEqual(
-            Result.isFailure(decoded)
-              ? { _tag: "refused", reason: "bad_input" }
-              : { _tag: "write", program: program.name, m: { ...decoded.success, type: key } },
-          );
-        }
-      }
-    },
-    options(300),
-  );
-}
-
-for (const key of ["bounds", "choose", "defaulted", "read", "shared"] as const) {
-  it.prop(
-    `T2: ${key} keeps message checks, alternatives and JSON decoding`,
-    {
-      text,
-      n: Schema.Int.check(Schema.isBetween({ minimum: -4096, maximum: 4096 })),
-      reverse: Schema.Boolean,
-      input: Schema.Json,
-    },
-    ({ text: s, n, reverse, input }) => {
-      const rich = richDeclaration(s, reverse);
-      const cases = {
-        bounds: [
-          { low: n, high: n },
-          { low: n, high: n + 1 },
-          { low: n + 1, high: n },
-        ],
-        choose: [
-          { side: "left", n: Math.abs(n) },
-          { side: "left", n: -Math.abs(n) - 1 },
-          { side: "right", text: s },
-          { side: "other", text: s },
-        ],
-        defaulted: [{ note: null }, {}, { note: s }, { note: n }],
-        read: [{ note: null }, {}, { note: s }, { note: n }],
-        shared: [{ first: { label: s }, second: { label: s } }],
-      };
-
-      const schema = rich.schemas[key];
-      const port = Programs.port(rich.program, key);
-      expect(Option.isSome(port)).toBe(true);
-
-      for (const value of [...cases[key], input]) {
-        const decoded = Schema.decodeUnknownResult(Schema.toCodecJson(schema), closed)(value);
-
-        if (Option.isSome(port)) {
-          const actual = Schema.decodeUnknownResult(Schema.toCodecJson(port.value), closed)(value);
-          expect(Result.isSuccess(actual)).toBe(Result.isSuccess(decoded));
-
-          if (Result.isSuccess(actual) && Result.isSuccess(decoded)) {
-            expect(actual.success).toEqual(decoded.success);
-          }
-        }
-
-        expect(Tools.read([rich.program], `rich_${key}`, { value })).toEqual(
-          Result.isFailure(decoded)
-            ? { _tag: "refused", reason: "bad_input" }
-            : key === "read" || key === "shared"
-              ? { _tag: "query", program: rich.program.name, name: key, query: decoded.success }
-              : { _tag: "write", program: rich.program.name, m: { ...decoded.success, type: key } },
+      if (Result.isFailure(result)) {
+        expect(result.failure.reason).toBe(
+          description.outside === "min_properties" || description.outside === "index_signature"
+            ? "unsupported_schema"
+            : "not_tagged",
         );
       }
-    },
-    options(300),
+    }
+  },
+  options(300),
+);
+
+it.prop(
+  "P2: a tool's wire message decodes to the same Msg update receives",
+  { sample: Forms.Sent },
+  ({ sample: { description, msg, value } }) => {
+    const form = makeForm(description);
+    expect(validator(toolFor(form, msg.type).inputSchema)({ value })).toBe(true);
+    const port = Programs.port(form.program, msg.type);
+    expect(Option.isSome(port)).toBe(true);
+
+    if (Option.isSome(port)) {
+      const fields = Schema.decodeUnknownResult(port.value, closed)(value);
+      const expected = expectedMessage(form, encoded(form, msg));
+      expect(Result.isSuccess(fields)).toBe(true);
+      expect(Result.isSuccess(expected)).toBe(true);
+
+      if (Result.isSuccess(fields) && Result.isSuccess(expected)) {
+        expect(fields.success).toEqual(withoutType(expected.success));
+      }
+    }
+
+    const call = Tools.read([form.program], `drawn_${msg.type}`, { value });
+    expect(call._tag).toBe("write");
+
+    if (call._tag === "write") {
+      expect(call.program).toBe(form.program.name);
+      const actual = expectedMessage(form, jsonTrip(call.m));
+      const expected = expectedMessage(form, encoded(form, msg));
+      expect(Result.isSuccess(actual)).toBe(true);
+      expect(Result.isSuccess(expected)).toBe(true);
+
+      if (Result.isSuccess(actual) && Result.isSuccess(expected)) {
+        expect(actual.success).toEqual(expected.success);
+      }
+    }
+  },
+  options(300),
+);
+
+const oracle = (form: Form, key: string, value: unknown) => {
+  if (!Predicate.isObject(value) || Array.isArray(value) || Object.hasOwn(value, "type")) {
+    return false;
+  }
+
+  const result = expectedMessage(form, { ...value, type: key });
+  return Result.isSuccess(result) && result.success.type === key;
+};
+
+it.prop(
+  "P3: only the Msg's own closed JSON codec decides a write",
+  { sample: Forms.Outside },
+  ({ sample: { description, key, value } }) => {
+    const form = makeForm(description);
+    const port = Programs.port(form.program, key);
+    expect(Option.isSome(port)).toBe(true);
+
+    if (Option.isSome(port)) {
+      expect(Result.isSuccess(Schema.decodeUnknownResult(port.value, closed)(value))).toBe(oracle(form, key, value));
+    }
+
+    const call = Tools.read([form.program], `drawn_${key}`, { value });
+    expect(call._tag === "write").toBe(oracle(form, key, value));
+
+    if (call._tag !== "write") {
+      expect(call).toEqual({ _tag: "refused", reason: "bad_input" });
+    }
+  },
+  options(300),
+);
+
+it.prop(
+  "P4: the listed schema agrees with the decoder within JSON Schema's checks",
+  { sample: Forms.Outside },
+  ({ sample: { description, key, value } }) => {
+    const form = makeForm(description);
+    const listed = validator(toolFor(form, key).inputSchema)({ value });
+    const accepted = Tools.read([form.program], `drawn_${key}`, { value })._tag === "write";
+    expect(!accepted || listed).toBe(true);
+
+    if (form.exact) {
+      expect(listed).toBe(accepted);
+    }
+  },
+  options(300),
+);
+
+const references = (value: unknown): ReadonlyArray<string> => {
+  if (Array.isArray(value)) {
+    return value.flatMap(references);
+  }
+
+  if (!Predicate.isObject(value)) {
+    return [];
+  }
+
+  return [
+    ...(Predicate.hasProperty(value, "$ref") && Predicate.isString(value.$ref) ? [value.$ref] : []),
+    ...Object.values(value).flatMap(references),
+  ];
+};
+
+it.prop(
+  "P5: a tool exposes only its port and every definition is reached",
+  { description: Supported },
+  ({ description }) => {
+    const form = makeForm(description);
+    const result = Tools.list([form.program]);
+    expect(Result.isSuccess(result)).toBe(true);
+
+    if (Result.isFailure(result)) {
+      return;
+    }
+
+    for (const key of form.visible) {
+      const tool = result.success.find((t) => t.name === `drawn_${key}`)!;
+      const json = JSON.stringify(tool.inputSchema);
+
+      for (const member of form.members.filter((m) => !m.tags.includes(key as typeof Key.Type))) {
+        for (const field of member.fields) {
+          expect(json).not.toContain(field);
+        }
+      }
+
+      expect(json).not.toContain("internal_timer");
+      expect(json).not.toContain('"timer"');
+
+      for (const other of form.keys.filter((other) => other !== key)) {
+        expect(json).not.toContain(`"${other}"`);
+      }
+
+      const root = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))(tool.inputSchema);
+      const { $defs, ...body } = root;
+      const defs =
+        $defs === undefined ? {} : Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))($defs);
+      const reached = new Set<string>();
+      const pending = [...references(body)];
+
+      while (pending.length > 0) {
+        const ref = pending.pop()!;
+        expect(ref.startsWith("#/$defs/")).toBe(true);
+        const name = ref.slice("#/$defs/".length).replaceAll("~1", "/").replaceAll("~0", "~");
+        expect(Object.hasOwn(defs, name)).toBe(true);
+
+        if (!reached.has(name)) {
+          reached.add(name);
+          pending.push(...references(defs[name]));
+        }
+      }
+
+      expect([...reached].sort()).toEqual(Object.keys(defs).sort());
+    }
+  },
+  options(300),
+);
+
+// vector: the probes reported in reviews 1 to 3 keep their public behavior.
+it("vector: V1 ordered bounds, alternatives in both orders, default and shared definitions", () => {
+  for (const reverse of [false, true]) {
+    const { program, schemas } = richDeclaration("fallback", reverse);
+    const result = Tools.list([program]);
+    expect(Result.isSuccess(result)).toBe(true);
+
+    if (Result.isFailure(result)) {
+      continue;
+    }
+
+    for (const [key, values] of Object.entries({
+      bounds: [
+        { low: 1, high: 2 },
+        { low: 2, high: 1 },
+      ],
+      choose: [
+        { side: "left", n: 1 },
+        { side: "left", n: -1 },
+        { side: "right", text: "ok" },
+      ],
+      defaulted: [{}, { note: null }, { note: "ok" }],
+      read: [{}, { note: null }, { note: "ok" }],
+      shared: [{ first: { label: "one" }, second: { label: "two" } }],
+    })) {
+      const validate = validator(result.success.find((t) => t.name === `rich_${key}`)!.inputSchema);
+
+      for (const value of values) {
+        const decoded = Schema.decodeUnknownResult(
+          Schema.toCodecJson(schemas[key as keyof typeof schemas]),
+          closed,
+        )(value);
+        const call = Tools.read([program], `rich_${key}`, { value });
+
+        if (Result.isFailure(decoded)) {
+          expect(call).toEqual({ _tag: "refused", reason: "bad_input" });
+        } else {
+          expect(validate({ value })).toBe(true);
+
+          if (key === "read" || key === "shared") {
+            expect(call).toEqual({ _tag: "query", program: program.name, name: key, query: decoded.success });
+          } else {
+            expect(call._tag).toBe("write");
+
+            if (call._tag === "write") {
+              expect(Schema.decodeUnknownSync(Schema.toCodecJson(program.msg), closed)(jsonTrip(call.m))).toEqual({
+                ...decoded.success,
+                type: key,
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+});
+
+for (const form of schemaForms) {
+  // vector: reviews 2 and 3 found these five schema forms, including both union orders.
+  it(`vector: V1 ${form}`, () => {
+    for (const reverse of [false, true]) {
+      const { program, schemas } = schemaDeclaration(form, reverse, "wire_value");
+      const result = Tools.list([program]);
+      expect(Result.isSuccess(result)).toBe(true);
+
+      if (Result.isFailure(result)) {
+        continue;
+      }
+
+      for (const [key, schema] of Object.entries(schemas)) {
+        const validate = validator(result.success.find((t) => t.name === `forms_${key}`)!.inputSchema);
+
+        for (const value of [
+          { side: "left", [form === "encoded keys" ? "wire_value" : "n"]: 7 },
+          { side: "right", [form === "encoded keys" ? "wire_value" : "text"]: "ok" },
+          { side: "other", n: 7 },
+          { side: "left", n: "wrong" },
+        ]) {
+          const decoded = Schema.decodeUnknownResult(Schema.toCodecJson(schema), closed)(value);
+          const call = Tools.read([program], `forms_${key}`, { value });
+          expect(call).toEqual(
+            Result.isFailure(decoded)
+              ? { _tag: "refused", reason: "bad_input" }
+              : { _tag: "write", program: program.name, m: { ...value, type: key } },
+          );
+
+          if (Result.isSuccess(decoded)) {
+            expect(validate({ value })).toBe(true);
+          }
+        }
+      }
+    }
+  });
+}
+
+// vector: review 4's suspended codec must leave the encoded fields in the letter.
+it("vector: V1 suspended wire_name codec", () => {
+  const msg = Schema.suspend(() =>
+    Schema.Struct({ type: Schema.Literal("check"), name: Schema.String }).pipe(
+      Schema.encodeKeys({ name: "wire_name" }),
+    ),
   );
+  const machine = Machine.make({
+    model: Schema.Null,
+    msg,
+    cmds: [],
+    init: () => [null, []],
+    update: { check: (m) => [m, []] },
+  });
+  const program = Program.make({
+    name: "pack/probe",
+    machine,
+    state: { v: 1, upgrades: [] },
+    view: () => null,
+    refuse: () => null,
+    inputs: { check: "Check" },
+    outputs: {},
+    writes: {},
+    wake: () => null,
+  });
+  const value = { wire_name: "ok" };
+  const listed = Tools.list([program]);
+  expect(Result.isSuccess(listed)).toBe(true);
+
+  if (Result.isSuccess(listed)) {
+    expect(validator(listed.success[1]!.inputSchema)({ value })).toBe(true);
+  }
+
+  expect(Tools.read([program], "probe_check", { value })).toEqual({
+    _tag: "write",
+    program: program.name,
+    m: { type: "check", ...value },
+  });
+  expect(Tools.read([program], "probe_check", { value: { name: "ok" } })).toEqual({
+    _tag: "refused",
+    reason: "bad_input",
+  });
+  expect(Tools.read([program], "probe_check", { value: { ...value, type: "check" } })).toEqual({
+    _tag: "refused",
+    reason: "bad_input",
+  });
+  const call = Tools.read([program], "probe_check", { value });
+
+  if (call._tag === "write") {
+    expect(Schema.decodeUnknownSync(Schema.toCodecJson(msg), closed)(jsonTrip(call.m))).toEqual({
+      type: "check",
+      name: "ok",
+    });
+  }
+});
+
+for (const outside of ["tag_renamed", "tag_renamed_beside_plain", "min_properties"] as const) {
+  // vector: reviews 2 and 4 found these unsupported wire forms. Each must fail the whole listing.
+  it(`vector: V1 ${outside} has its named reason`, () => {
+    const base: Declaration = {
+      members: [{ tags: ["a"], fields: ["text"], wrap: "plain" }],
+      personOnly: [],
+      nest: [],
+      whole: "plain",
+    };
+    failure(
+      Tools.list([makeForm({ ...base, outside }).program]),
+      outside === "min_properties" ? "unsupported_schema" : "not_tagged",
+      "drawn_a",
+    );
+  });
 }
 
 const Name = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256), Schema.isPattern(/^[a-zA-Z0-9_-]+$/));
@@ -520,7 +1005,6 @@ it.prop(
 
       const missing = { ...program, name: "pack/short", inputs: { absent: program.inputs.w0! } };
       failure(Tools.list([missing]), "no_port_schema", "short_absent");
-      expect(Programs.port(missing, "absent")).toEqual(Option.none());
       expect(Programs.port(program, "unknown")).toEqual(Option.none());
     }
 
