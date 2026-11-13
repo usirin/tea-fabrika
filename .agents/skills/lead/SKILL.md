@@ -164,8 +164,7 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `land.ts ready <lane> --tree <dir> [--body <f> --loosening <f>] [--lead <sha>]... [--plan <f>]` | a lane agent's last act: records "ready to land" in `state/<lane>.land.json` and a line in `state/<lane>.md`; the tree must be clean. Without the two PR files it is a mid-lane handover to `-wip` |
 | `land.ts run <lane> <ticket>` | the lead session only, in the background: refuses unless the tree is clean and at the ready head, leak-greps the PR body, merges `origin/main` in as the bot (never a rebase), leak-greps the change and each commit, signs each named lead commit and then the merge as lead through main's own signer, pushes with `botpush.mjs`, opens or updates the PR and runs `catchup.sh`. A conflict stops it with each file and the step that owns it in the plan's files table; every refusal before the push puts HEAD and the notes back. It never resolves a conflict and never reads a key |
 | `governance.sh [base]` | list the `.decisions/` files the diff from `base` (default `origin/main`) touches; advice only, always exits 0 |
-| `catchup.sh <pr> <ticket>` | a head that lacks `main` but is green on every check, commits trusted, lands as it is: no merge, no push, only the lint on its true merge ([0097](../../../.decisions/0097-a-green-pull-request-lands-without-catching-up.md)); any other head: merge `main` in as the bot, sign `lead`, push, check that exact head; then look at main once more with `freshmain.ts`, and squash-land pinned to that head; a PR in a gh stack lands with `gh stack merge`; a green PR behind main whose freshmain lint passed lands with the same pinned `gh pr merge`, since GitHub no longer requires an up-to-date branch ([0049](../../../.decisions/0049-merge-behind-main-once-lint-passes-on-the-true-merge.md)) |
-| `freshmain.ts <pr> <tip>` | run by `catchup.sh` just before the squash, in its checkout: fetch main, and when it moved after the checks, run `pnpm lint` on the head merged with it; a red lint, a conflict or a failed fetch refuses the merge, and the lane merges main and pushes. No flag skips it, and the tests are not run again (ticket 552) |
+| `catchup.sh <pr> <ticket>` | lands a pull request only when every check is green on a head that holds the main it just fetched ([0146](../../../.decisions/0146-a-pull-request-lands-only-on-ci-that-saw-main.md)): a head that lacks `main`, green or not, has `main` merged in as the bot, the merge signed `lead` and pushed, and every check waited for on that exact head, asked once a minute; then it fetches main once more, and when main moved it goes around again, one line a round (`pr <n>: main moved to <sha>; merging main in (round <k>)`), 5 rounds at most, then exit 1; a conflict is refused and the lane merges main; it squash-lands pinned to that head with a plain `gh pr merge`, no override flag ([0049](../../../.decisions/0049-merge-behind-main-once-lint-passes-on-the-true-merge.md)); a PR in a gh stack lands with `gh stack merge`, after the same look at main |
 | `sizecap.ts diff <base> <head>` / `sizecap.ts plan <plan.md>` | size as advice only, since no number caps a pull request ([0099](../../../.decisions/0099-no-number-caps-a-pull-request.md)): `diff` prints one line with the product lines from the merge base to `<head>` (tests, docs, lock, `linguist-generated` and paths outside `next/`, `apps/`, `programs/` and `packages/` counted apart), and past `ADVICE_LINES` (600, 0087's starting number until a count from our merged pull requests replaces it) asks whether it should have been sliced; `catchup.sh` prints it before it waits on checks. `plan` prints the plan's size and names each `## Size` slice with no estimate; `plancheck.sh --draft` prints it. Neither ever refuses |
 | `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs/` row from a Codex run's events, printed for `fieldfile.ts` |
 | `clauderow.ts --run R [--billing B] [--role R] [--parent R] [--corrects R] <transcript> [reason]` | one `field/runs/` row from a Claude subagent's transcript, printed for `fieldfile.ts`, tokens and list dollars; `billing` only when given, since a transcript does not say; `--turns <transcript>` prints each call's context and dollars |
@@ -507,8 +506,10 @@ visible, and never weaken the rules to hide this message.
    Run `sh .agents/skills/lead/scripts/loosening.sh <base> <head> <mapping.md>` on the PR's exam
    diff. The PR writes a mapping table with `Removed` and `Replacement` columns for every renamed
    or replaced law, using exact test titles. Save that table as `mapping.md` for the command.
-   A pure addition needs no replacement row. `loosening.sh` fails closed: any exam-file change
-   other than purely new tests or a rename listed in the mapping table is a hit. A pattern parser
+   A pure addition needs no replacement row. A file the PR adds gives no hit: a new file has no
+   older law to loosen. A renamed or copied file is not an added file, and is read as before.
+   For every other file `loosening.sh` fails closed: any exam-file change other than a rename
+   listed in the mapping table is a hit. A pattern parser
    cannot cover every TypeScript form, so it names forms it knows but never clears a change it
    does not understand.
    Missing replacements, muted tests, removed assertions, fewer runs and tighter generated ranges
@@ -521,11 +522,11 @@ visible, and never weaken the rules to hide this message.
    2026-11-08). A change that loosens or removes a law still stays `ask owner exam_read`.
    Then the lead session runs `land.ts run <lane> <ticket>` in the background. It merges main in,
    signs, pushes and opens or updates the PR as the Scripts table says, then runs `catchup.sh`: a
-   head already green on every check lands without catching up, after the lint on its true merge
-   with main ([0097](../../../.decisions/0097-a-green-pull-request-lands-without-catching-up.md));
-   any other head it brings up to
-   date, signs only the new merge as `lead`, and waits for every check on that exact head (e2e and
-   commits included). It squash-lands pinned to that head; a PR in a gh stack lands with
+   head that lacks main never lands as it is, whatever its checks say
+   ([0146](../../../.decisions/0146-a-pull-request-lands-only-on-ci-that-saw-main.md)). It brings
+   the head up to date, signs only the new merge as `lead`, and waits for every check on that exact
+   head (e2e and commits included). When main moved again while it waited, it goes around once
+   more, up to 5 rounds, each said in one line. It squash-lands pinned to that head; a PR in a gh stack lands with
    `gh stack merge <pr> --squash --yes` once its head reads unchanged. Every PR squash-merges, a stacked
    parent too ([0004](../../../.decisions/0004-squash-merges-and-native-stacks.md)). A stack is a
    GitHub stack ([its commands](https://docs.github.com/en/pull-requests/reference/stacked-prs-cli-commands)):

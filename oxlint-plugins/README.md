@@ -15,6 +15,17 @@ They began as GritQL rules in the `biome-plugins/` folder of [kamp-us/phoenix](h
 
 Six rules only advise: `law-shape`, `no-effect-promise`, `no-raw-try-catch`, `prefer-schema-arbitrary`, and since ticket 737 oxlint's own `no-restricted-properties` (a bare `JSON.parse` in `next/`) and `service-id`. Their messages start with "Advice, does not block". Oxlint has no level below `warn`, so `lint.ts` runs oxlint once and decides: it prints every fire, and fails on any fire but these six. Experiment 125 found the first two wrong far too often to block: 8 of 8 and 21 of 21 fires kept their code. Under Biome the same two gave their diagnostics at `"info"`, which `pnpm lint` (`biome check --error-on-warnings`) printed and did not fail on.
 
+## Isolate boundary
+
+| Rule | Checks | Cannot see |
+|---|---|---|
+| `isolate-boundary` | U11: `TraceItem`, `Fetcher` and `ctx.exports` stay in libfabrika's `cloudflare/`; the app's `tail` and `usage` return one call | Aliased platform names, dynamic property keys, or logic hidden inside the call |
+
+Enabled for all of `next/`, including tests. Comments and strings pass. Optional reads and
+literal computed `exports` reads are checked. The rule uses oxlint's syntax visitors; a type
+checker cannot keep these names in one module. Main at `4359ea84` has zero hits. A temporary
+`TraceItem` use in the app entrypoint produced one blocking hit and was restored.
+
 ## Decode and service-ID advice
 
 Ticket 737 builds decision 0023 in `next/`: input is decoded with Effect Schema, and a service ID carries the package and its file's path, as Effect's own guide asks. Two guards keep it so, both advice until their false alarms are counted.

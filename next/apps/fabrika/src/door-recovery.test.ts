@@ -12,6 +12,7 @@ import { Grant } from "@kampus/libfabrika/access/Access";
 import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
 import { type Envelope, SignRequest, Writer } from "@kampus/libfabrika/access/SessionManager";
 import { grantText } from "@kampus/libfabrika/access/Text";
+import * as RateLimiterSql from "@kampus/libfabrika/gateway/RateLimiterSql";
 import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
@@ -25,6 +26,7 @@ import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Effect, Layer, Schema, Stream } from "effect";
+import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Gateway } from "./door.ts";
@@ -340,6 +342,7 @@ const world = () => {
     location: "node",
     build: "build-a",
     waiting: { most: 3, ttl: 600000 },
+    rateLimit: { limit: 100_000, window: 60_000 },
     ping: { min: 10000, max: 60000 },
     inputCap: 100,
     spentCap: 100,
@@ -370,7 +373,17 @@ const world = () => {
       ).pipe(Effect.provide(runner(pid)));
     },
   });
-  const layer = () => Gateway.layer(settings()).pipe(Layer.provideMerge(env()));
+  const layer = () =>
+    Gateway.layer(settings()).pipe(
+      Layer.provideMerge(
+        Layer.merge(
+          env(),
+          RateLimiter.layer.pipe(
+            Layer.provide(RateLimiterSql.layer(doorSql, { build: "build-a", policy: settings().rateLimit })),
+          ),
+        ),
+      ),
+    );
   const online = Effect.fnUntraced(function* (signer = window) {
     const d = yield* Gateway;
     const client = yield* d.connect();
