@@ -22,6 +22,7 @@ import { counter } from "@kampus/counter";
 import type { Descriptor } from "@kampus/libfabrika";
 import { programBox } from "@kampus/libfabrika/box";
 import { fcExitReason } from "@kampus/libfabrika/processes/Process.test-support";
+import * as SettingsStart from "@kampus/libfabrika/settings/Start";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import {
   configureProcess,
@@ -37,6 +38,7 @@ import { Cause, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { programs as built } from "virtual:fabrika-built";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
@@ -217,6 +219,17 @@ const world = (options: { readonly lacks?: string } = {}) =>
           published.push({ client: String(args[0]), news: structuredClone(args[1]) });
         }
 
+        // The instance's recorded settings live in the Project object, beside its services.
+        if (method === "settingsStart") {
+          return Effect.runPromise(
+            project.runtime.settingsStart(Schema.decodeUnknownSync(SettingsStart.Input)(args[0])),
+          );
+        }
+
+        if (method === "settingsRead") {
+          return Effect.runPromise(project.runtime.settingsRead(String(args[0])));
+        }
+
         return project.run((p) => {
           const work = Reflect.apply(Reflect.get(p, method), p, args) as Effect.Effect<unknown, unknown>;
           return method === "sign"
@@ -228,15 +241,16 @@ const world = (options: { readonly lacks?: string } = {}) =>
       };
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but lack workerd's nominal brands
       const env = {
-        INSTANCE: JSON.stringify({
-          name: "project-test",
-          person: PERSON,
-          founder: key.line,
-          window: key.raw,
-          port: 18787,
-          rateLimit: { limit: 100_000, window: 60_000 },
-          build: "brain-test",
-        }),
+        INSTANCE: JSON.stringify(
+          RecordWireTest.settingsFixture({
+            name: "project-test",
+            person: PERSON,
+            founder: key.line,
+            window: key.raw,
+            port: 18787,
+            build: "brain-test",
+          }),
+        ),
         PROJECT: {
           getByName: () =>
             new Proxy(
