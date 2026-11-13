@@ -19,10 +19,10 @@ const Execution = Id.make("execution");
 
 /** An accepted call as its entry keeps it: the event's case, and the facts it brought. */
 const Stored = Schema.TaggedUnion({
-  requested: { request: Request, recorded: Schema.optional(Recorded) },
-  taken: { executor: Executor, execution: Schema.NonEmptyString, recorded: Schema.optional(Recorded) },
-  started: { execution: Schema.NonEmptyString, recorded: Schema.optional(Recorded) },
-  finished: { execution: Schema.NonEmptyString, result: Result, recorded: Schema.optional(Recorded) },
+  requested: { request: Request, recorded: Schema.optionalKey(Recorded) },
+  taken: { executor: Executor, execution: Schema.NonEmptyString, recorded: Schema.optionalKey(Recorded) },
+  started: { execution: Schema.NonEmptyString, recorded: Schema.optionalKey(Recorded) },
+  finished: { execution: Schema.NonEmptyString, result: Result, recorded: Schema.optionalKey(Recorded) },
 });
 type Stored = typeof Stored.Type;
 

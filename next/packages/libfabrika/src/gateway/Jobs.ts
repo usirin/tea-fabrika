@@ -1,7 +1,7 @@
 /**
  * Job methods over an authenticated connection, called inside the shared write turn.
  *
- * @stability experimental
+ * @stability unstable
  */
 import { Effect, Result, Schema, Stream } from "effect";
 import { Job, Result as JobResult, type Recorded } from "../jobs/Job.ts";
@@ -30,7 +30,7 @@ const ok = (result: Schema.Json) => Answer.cases.ok.make({ result });
 /**
  * Routes one job call after fresh authentication inside the Project's shared write turn.
  *
- * @stability experimental
+ * @stability unstable
  * @category routing
  */
 export const route = Effect.fn("gateway.jobs")(
@@ -47,7 +47,8 @@ export const route = Effect.fn("gateway.jobs")(
 
     const subject = { key: identity.key };
     const record = Effect.fnUntraced(function* (job: Job, meta: typeof Take.Type): Effect.fn.Return<Recorded> {
-      const span = yield* Effect.currentSpan;
+      // `route` is a named `Effect.fn`, so a span is always here: its absence is a defect.
+      const span = yield* Effect.currentSpan.pipe(Effect.orDie);
       return {
         by: identity.key,
         for: identity.person,
@@ -120,7 +121,8 @@ export const route = Effect.fn("gateway.jobs")(
         return no("bad_input");
       }
 
-      const params = decoded.success;
+      // Only a finish carries a result: `Started` refuses one as an excess property.
+      const params: typeof Started.Type & { readonly result?: JobResult } = decoded.success;
       const job = yield* jobs.read(params.job);
 
       if (
@@ -136,9 +138,9 @@ export const route = Effect.fn("gateway.jobs")(
 
       const recorded = yield* record(job, params);
       const receipt =
-        "result" in params
-          ? yield* jobs.finish(params.job, params.execution, params.result, recorded)
-          : yield* jobs.started(params.job, params.execution, recorded);
+        params.result === undefined
+          ? yield* jobs.started(params.job, params.execution, recorded)
+          : yield* jobs.finish(params.job, params.execution, params.result, recorded);
       return ok(receipt);
     }
 

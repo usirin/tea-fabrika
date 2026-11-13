@@ -1,7 +1,7 @@
 /**
  * Selection and ownership rules for authenticated job access.
  *
- * @stability experimental
+ * @stability unstable
  */
 import { Result } from "effect";
 import type { Job } from "../jobs/Job.ts";
@@ -11,7 +11,7 @@ type Subject = { readonly process: string; readonly key: string; readonly execut
 /**
  * Checks the saved request and, once assigned, its executor and execution.
  *
- * @stability experimental
+ * @stability unstable
  * @category guards
  */
 export const owns = (job: Job, subject: Subject): boolean => {
@@ -34,7 +34,7 @@ export const owns = (job: Job, subject: Subject): boolean => {
 /**
  * Selects unfinished work for one process and key, refusing competing candidates.
  *
- * @stability experimental
+ * @stability unstable
  * @category getters
  */
 export const select = (jobs: ReadonlyArray<Job>, subject: Subject): Result.Result<Job | null, "ambiguous"> => {
