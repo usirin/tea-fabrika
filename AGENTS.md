@@ -192,6 +192,9 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   once every step passed, CI is green, the leak grep is clean and `loosening.sh` shows no real
   loosening after the hand check. Only real loosening of a law, or a new design call, waits on the
   owner ([0014](./.decisions/0014-the-lead-merges-when-every-step-passed.md)).
+  A pull request that only carries out what an accepted decision already owes, such as taking out a
+  check the decision dropped, does not wait either, exam paths included: the lead merges it and
+  shows it to the owner after ([0166](./.decisions/0166-owed-work-needs-no-owner-read.md)).
 - **One fresh agent per step** (owner, 2026-11-09), and the lead drives with flows, never a lane agent ([0064](./.decisions/0064-the-lead-drives-with-flows.md)). Each step's agent reads the lane's state
   file, does its one step and writes the state file back for the next; no long driver carries a
   ticket. `chain.ts` chains the mechanical steps and starts an agent only for judgment
