@@ -994,7 +994,7 @@ describe("ticket 884, next/ brain mail", () => {
               { type: "unknown" },
               { type: "add", n: "bad" },
               { type: "timer", at: 42 },
-              { type: "work_ok", cmd: work({ n: 1 }), value: 1, at: 42 },
+              { type: "work_ok", cmd: { type: "work", n: 1 }, value: 1, at: 42 },
               null,
               { type: "add", n: 7, parent: "forged" },
               { type: "throw" },

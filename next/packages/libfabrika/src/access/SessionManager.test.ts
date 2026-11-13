@@ -531,7 +531,7 @@ describe("P33, the signer refuses every id in the signal id space", () => {
     ([sender, key, space]) =>
       Effect.gen(function* () {
         const { sql, db } = database();
-        const { saved, signer, authority, parent, writer } = setup(sample);
+        const { saved, signer, authority, parent } = setup(sample);
         yield* Effect.gen(function* () {
           const s = yield* SessionManager;
           const input = saved(sender === "agent" ? "agent" : "person", false);
@@ -539,7 +539,7 @@ describe("P33, the signer refuses every id in the signal id space", () => {
             ...input,
             by:
               sender === "recovered"
-                ? Writer.cases.person.make({ ...writer("person"), key: "SHA256:recovered" })
+                ? Writer.cases.person.make({ for: input.by.for, key: "SHA256:recovered" })
                 : input.by,
           });
           yield* s.delivered(parent, PROCESS);
