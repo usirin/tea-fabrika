@@ -56,3 +56,10 @@ with drawing.**
 - The cost named at the time: a content policy also guards against bugs, not only against agents,
   and it would have been about 20 lines in the browser page. That guard is absent until Tier 2.
 - Not decided here: how notes and drawing are built in Tier 2.
+
+## Amendments
+
+- 2026-11-12: the count is 39, not 35. The list in this file is unchanged and is what was approved:
+  9 + 4 + 9 + 7 + 9 + 1 blocks, which sums to 39. The "35" in the title and text was a wrong sum
+  in the plan for ticket 839. The review of the pull request for ticket 885 counted 39 removed,
+  26 kept and 16 re-pointed, and the lead's hand check found every kept law on the branch.

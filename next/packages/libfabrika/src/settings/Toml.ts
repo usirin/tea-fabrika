@@ -13,7 +13,21 @@ export interface TomlDocument {
   readonly spans: ReadonlyArray<{ readonly path: ReadonlyArray<string>; readonly line: number }>;
 }
 
+export class Syntax extends Schema.TaggedError<Syntax>()("Syntax", {
+  cause: Schema.Defect(),
+}) {}
+
+export class Value extends Schema.TaggedError<Value>()("Value", {
+  cause: Schema.Defect(),
+}) {}
+
+export class Conflict extends Schema.TaggedError<Conflict>()("Conflict", {
+  path: Schema.Array(Schema.String),
+  cause: Schema.Defect(),
+}) {}
+
 export class TomlError extends Schema.TaggedError<TomlError>()("TomlError", {
+  reason: Schema.Union([Syntax, Value, Conflict]),
   message: Schema.String,
   line: Schema.Int,
   cause: Schema.Defect(),
@@ -23,5 +37,7 @@ export class Toml extends Context.Service<
   Toml,
   {
     readonly parse: (text: string) => Effect.Effect<TomlDocument, TomlError>;
+    readonly set: (text: string, path: ReadonlyArray<string>, value: unknown) => Effect.Effect<string, TomlError>;
+    readonly remove: (text: string, path: ReadonlyArray<string>) => Effect.Effect<string, TomlError>;
   }
 >()("@kampus/libfabrika/settings/Toml") {}

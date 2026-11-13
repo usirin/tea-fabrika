@@ -1,7 +1,7 @@
 ---
 id: 0147
 title: The brain keeps reserved room for its own recovery writes, counted apart from program writes
-status: accepted
+status: amended-in-part by [0152](0152-the-recovery-byte-allowance-is-a-rate.md)
 date: 2026-11-12
 tags: [quotas, recovery, runtime, brain, p34]
 ---

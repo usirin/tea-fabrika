@@ -1,7 +1,7 @@
 ---
 id: 0151
 title: A thin inbox is a Tier 1 row, and the email recovery notice is its first row, never a toast
-status: accepted
+status: amended-in-part by [0154](0154-the-brain-mails-the-inbox-one-letter-per-notice.md)
 date: 2026-11-12
 tags: [tiers, plan, inbox, recovery, notice, next]
 ---
