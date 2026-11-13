@@ -366,6 +366,7 @@ const publish = Effect.fn("build.emit")(function* (
 export const buildPrograms = Effect.fn("build.programs")(function* (
   options: Pick<Options, "root" | "entry" | "programs" | "ledger">,
   reached?: Map<string, string>,
+  inputs?: Map<string, string>,
 ) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
@@ -379,6 +380,8 @@ export const buildPrograms = Effect.fn("build.programs")(function* (
       return false;
     },
     transform(code, id) {
+      inputs?.set(id, code);
+
       if (!id.endsWith(".tsx")) {
         return;
       }

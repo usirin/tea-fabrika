@@ -3,6 +3,7 @@ import type { Scope } from "effect";
 import { Clock, Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
 import { watch, type RolldownWatcherEvent } from "rolldown";
 import * as Id from "../../Id.ts";
+import { hash } from "../../runtime/Built.ts";
 import { CodeEvent, Installed, type Install } from "../../runtime/Code.ts";
 import { buildPrograms, type Selection } from "../build/build.ts";
 import { compile } from "../build/compiler.ts";
@@ -159,38 +160,50 @@ export const watchPrograms = (options: {
       });
       return Stream.fromQueue(events).pipe(
         Stream.split((event) => event.code === "END"),
-        Stream.map((events) => events.find((event) => event.code === "ERROR") ?? { code: "END" as const }),
         Stream.mapEffect(
-          Effect.fn("watch.rebuild")(function* (
-            event: Extract<RolldownWatcherEvent, { code: "ERROR" }> | { readonly code: "END" },
-          ): Effect.fn.Return<Reloaded, never, FileSystem.FileSystem | Path.Path> {
+          Effect.fn("watch.rebuild")(function* (): Effect.fn.Return<
+            Option.Option<Reloaded>,
+            never,
+            FileSystem.FileSystem | Path.Path
+          > {
             const started = yield* Clock.currentTimeMillis;
-            const finish = Effect.fnUntraced(function* (result: Reloaded, bytes = 0) {
+            const finish = Effect.fnUntraced(function* (result: Option.Option<Reloaded>, bytes = 0) {
               yield* Effect.annotateCurrentSpan({
                 program: selected.name,
                 bytes,
                 ms: (yield* Clock.currentTimeMillis) - started,
-                outcome: result._tag,
+                outcome: Option.isSome(result) ? result.value._tag : "same",
               });
               return result;
             });
 
-            if (event.code === "ERROR") {
-              return yield* finish(yield* failure("bundle", event.error));
+            // An ERROR may describe bytes from before a later save. Always build the current inputs.
+            const inputs = new Map<string, string>();
+            const built = yield* Effect.result(
+              buildPrograms({ root, entry: options.entry, programs: [selected] }, undefined, inputs),
+            );
+            const digest = yield* hash(JSON.stringify([...inputs].sort(([a], [b]) => a.localeCompare(b))));
+
+            if (built._tag === "Failure" && phase.getState().failedInputs === digest) {
+              return yield* finish(Option.none());
             }
 
-            const built = yield* Effect.result(buildPrograms({ root, entry: options.entry, programs: [selected] }));
+            yield* phase
+              .dispatch({ type: "rebuilt", failedInputs: built._tag === "Failure" ? digest : null })
+              .pipe(Effect.orDie);
 
             if (built._tag === "Failure") {
               return yield* finish(
-                yield* failure(built.failure.reason === "compiler" ? "compiler" : "bundle", built.failure.cause),
+                Option.some(
+                  yield* failure(built.failure.reason === "compiler" ? "compiler" : "bundle", built.failure.cause),
+                ),
               );
             }
 
             const code = built.success[selected.name];
 
             if (code === undefined) {
-              return yield* finish(yield* failure("bundle", null));
+              return yield* finish(Option.some(yield* failure("bundle", null)));
             }
 
             const answer = yield* options
@@ -203,11 +216,13 @@ export const watchPrograms = (options: {
               .pipe(Effect.catch(() => Effect.succeed(Installed.cases.failed.make({ reason: "load" }))));
             yield* phase.dispatch({ type: "attempted" }).pipe(Effect.orDie);
             return yield* finish(
-              { ...answer, program: selected.name, hash: code.hash },
+              Option.some({ ...answer, program: selected.name, hash: code.hash }),
               new TextEncoder().encode(code.source).byteLength,
             );
           }),
         ),
+        Stream.filter(Option.isSome),
+        Stream.map((result) => result.value),
       );
     });
   return Stream.unwrap(

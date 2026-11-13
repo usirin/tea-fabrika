@@ -1,10 +1,15 @@
 import { Machine } from "@demlik/tea/effect";
 import { Schema } from "effect";
 
-const Model = Schema.TaggedUnion({ booting: {}, watching: {} });
-const Msg = Schema.Struct({ type: Schema.Literal("attempted") });
+const Inputs = { failedInputs: Schema.optionalKey(Schema.NullOr(Schema.String)) };
+const Model = Schema.TaggedUnion({ booting: Inputs, watching: Inputs });
 
-/** Tracks whether this watcher has completed its first install attempt. @internal */
+const Msg = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("attempted") }),
+  Schema.Struct({ type: Schema.Literal("rebuilt"), failedInputs: Schema.NullOr(Schema.String) }),
+]);
+
+/** Tracks the first install attempt and the inputs of the last failed build. @internal */
 export const watcher = Machine.make({
   model: Model,
   msg: Msg,
@@ -14,10 +19,11 @@ export const watcher = Machine.make({
   update: {
     attempted: (model) => {
       if (model._tag === "booting") {
-        return [Model.cases.watching.make({}), []];
+        return [Model.cases.watching.make({ failedInputs: model.failedInputs ?? null }), []];
       }
 
       return [model, []];
     },
+    rebuilt: (model, msg) => [{ ...model, failedInputs: msg.failedInputs }, []],
   },
 });
