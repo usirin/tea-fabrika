@@ -146,9 +146,9 @@ export const failed = (word: (name: string) => string) =>
  *
  * **Gotchas**
  *
- * `send` checks no sender. It refuses only what the brain alone may write: a letter to a stream
- * under `processes`, or an id in the signal, notice or runner id space. `RunnerMail` lifts the last
- * one for a runner that writes its own answers to its own name.
+ * `send` checks no sender. Beside a message that is not JSON, it refuses only what the brain alone
+ * may write: a letter to a stream under `processes`, or an id in the signal, notice or runner id
+ * space. `RunnerMail` lifts the last one for a runner that writes its own letters to its own name.
  *
  * @stability unstable
  * @category services
