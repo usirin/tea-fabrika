@@ -17,7 +17,7 @@ import { Digest } from "effect/crypto";
 import type { ChildProcess } from "effect/process";
 import { ChildProcessSpawner } from "effect/process";
 import { BrainControl } from "../../desktop/BrainControl.ts";
-import type * as BrainFilesTest from "../../desktop/BrainFilesTest.ts";
+import * as BrainFilesTest from "../../desktop/BrainFilesTest.ts";
 import * as ServiceTest from "../../desktop/BrainServiceTest.ts";
 import { BrainSpec } from "../../desktop/BrainSpec.ts";
 import * as Launchd from "./BrainControlLaunchd.ts";
@@ -62,7 +62,8 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
   const plist = path.join(home, "brain.plist");
   const competing = yield* replacement === undefined
     ? Effect.succeed(null)
-    : fs.makeTempFileScoped({ directory: home, prefix: ".competing-" });
+    : fs.makeTempDirectoryScoped({ directory: home, prefix: ".competing-" });
+  let swapped: BrainFilesTest.Dirent | null = null;
   let failing = true;
   let directoryFault = fault === "directory-sync";
   const events: Array<string> = [],
@@ -193,15 +194,66 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
       }),
     ),
   );
+  // Reads an entry as it is on disk: lstat and readLink, so a symlink is never followed.
+  const dirent = Effect.fnUntraced(function* (file: string) {
+    const stat = yield* fs
+      .lstat(file)
+      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(null)));
+
+    if (stat === null) {
+      return null;
+    }
+
+    if (stat.type === "SymbolicLink") {
+      return BrainFilesTest.Dirent.cases.symlink.make({ target: yield* fs.readLink(file) });
+    }
+
+    if (stat.type === "Directory") {
+      const files: Record<string, string> = {};
+
+      for (const name of yield* fs.readDirectory(file)) {
+        files[name] = yield* fs.readFileString(path.join(file, name));
+      }
+
+      return BrainFilesTest.Dirent.cases.directory.make({ files });
+    }
+
+    const mode = stat.mode & 0o777;
+    // A generated mode may refuse its owner's read. Open it for the read, then put the mode back.
+    yield* fs.chmod(file, 0o600);
+    const bytes = yield* fs.readFileString(file);
+    yield* fs.chmod(file, mode);
+    return BrainFilesTest.Dirent.cases.file.make({ bytes, mode });
+  });
   const replace = Effect.fnUntraced(function* (checkpoint: BrainFilesTest.Replacement["checkpoint"]) {
     if (replacement?.checkpoint !== checkpoint || competing === null) {
       return;
     }
 
-    // Rename a distinct inode, so a captured copy still holds the old job's bytes.
-    yield* fs.writeFileString(competing, replacement.bytes, { mode: 0o600 });
-    yield* fs.chmod(competing, 0o600);
-    yield* fs.rename(competing, plist);
+    const entry = replacement.competing;
+    const staged = path.join(competing, "dirent");
+
+    if (entry._tag === "file") {
+      yield* fs.writeFileString(staged, entry.bytes);
+      yield* fs.chmod(staged, entry.mode);
+    } else if (entry._tag === "symlink") {
+      const target = path.join(home, "other.plist");
+
+      if (!entry.dangling) {
+        yield* fs.writeFileString(target, "foreign-target");
+      }
+
+      yield* fs.symlink(entry.path === "relative" ? "other.plist" : target, staged);
+    } else {
+      yield* fs.makeDirectory(staged);
+      yield* fs.writeFileString(path.join(staged, "kept"), entry.bytes);
+      // A rename cannot put a directory over a file, so the competing writer removes the file first.
+      yield* fs.remove(plist, { force: true });
+    }
+
+    // Rename a distinct inode into place, so the old job's bytes are not what sits at the path.
+    yield* fs.rename(staged, plist);
+    swapped = yield* dirent(plist);
     events.push(`replace:${checkpoint}`);
   });
   const disk = Layer.succeed(FileSystem.FileSystem, {
@@ -275,6 +327,8 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
     ),
     seed: (text: string) => fs.writeFileString(path.join(home, "brain.plist"), text).pipe(Effect.orDie),
     entries: fs.readDirectory(home).pipe(Effect.orDie),
+    dirent: dirent(plist).pipe(Effect.orDie),
+    swapped: Effect.sync(() => swapped),
   };
 });
 
