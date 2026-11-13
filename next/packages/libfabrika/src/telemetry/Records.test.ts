@@ -23,9 +23,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterAll, describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
 import { RpcCallError } from "alchemy/Rpc";
-import type { Layer } from "effect";
+import type { Layer, Scope } from "effect";
 import { Effect, Option, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { processId } from "../Id.test-support.ts";
@@ -38,54 +38,59 @@ import { type Chain, SpanRow } from "./Trace.ts";
 type ChainValue = typeof Chain.Type;
 type Row = typeof SpanRow.Type;
 
-const folder = mkdtempSync(join(tmpdir(), "p37-records-"));
-const opened: Array<DatabaseSync> = [];
-let homes = 0;
+/** A folder of its own, and every part file opened in it. `RecordManager.sql` asks for a part's
+ *  file with a plain call, so a file cannot be acquired one by one: the folder holds them, and the
+ *  scope that asked for the folder closes each one, then removes it (0061). */
+const folder = Effect.acquireRelease(
+  Effect.sync(() => ({
+    dir: mkdtempSync(join(tmpdir(), "p37-records-")),
+    dbs: new Map<string, DatabaseSync>(),
+  })),
+  ({ dir, dbs }) =>
+    Effect.sync(() => {
+      for (const db of dbs.values()) {
+        if (db.isOpen) {
+          db.close();
+        }
+      }
 
-afterAll(() => {
-  for (const db of opened.splice(0)) {
-    if (db.isOpen) {
-      db.close();
-    }
-  }
-
-  rmSync(folder, { recursive: true, force: true });
-});
+      rmSync(dir, { recursive: true, force: true });
+    }),
+);
 
 /** One home of part files: `open(name)` gives the same node:sqlite file each time it is asked. */
-const home = () => {
-  const prefix = `home-${++homes}`;
-  const dbs = new Map<string, DatabaseSync>();
-  const asked: Array<string> = [];
-  const db = (name: string): DatabaseSync => {
-    const known = dbs.get(name);
+const home = folder.pipe(
+  Effect.map(({ dir, dbs }) => {
+    const asked: Array<string> = [];
+    const db = (name: string): DatabaseSync => {
+      const known = dbs.get(name);
 
-    if (known !== undefined) {
-      return known;
-    }
+      if (known !== undefined) {
+        return known;
+      }
 
-    const made = new DatabaseSync(join(folder, `${prefix}-${name.replaceAll("/", "_")}.db`));
-    opened.push(made);
-    dbs.set(name, made);
-    return made;
-  };
-  const sqls = new Map<string, Sql>();
-  const open = (name: string): Sql => {
-    asked.push(name);
-    const known = sqls.get(name);
+      const made = new DatabaseSync(join(dir, `${name.replaceAll("/", "_")}.db`));
+      dbs.set(name, made);
+      return made;
+    };
+    const sqls = new Map<string, Sql>();
+    const open = (name: string): Sql => {
+      asked.push(name);
+      const known = sqls.get(name);
 
-    if (known !== undefined) {
-      return known;
-    }
+      if (known !== undefined) {
+        return known;
+      }
 
-    const made = nodeSql(db(name));
-    sqls.set(name, made);
-    return made;
-  };
-  const rows = (name: string, table: string): Array<Record<string, unknown>> =>
-    dbs.has(name) ? (db(name).prepare(`SELECT * FROM ${table}`).all() as Array<Record<string, unknown>>) : [];
-  return { open, asked, rows, names: () => [...dbs.keys()] };
-};
+      const made = nodeSql(db(name));
+      sqls.set(name, made);
+      return made;
+    };
+    const rows = (name: string, table: string): Array<Record<string, unknown>> =>
+      dbs.has(name) ? (db(name).prepare(`SELECT * FROM ${table}`).all() as Array<Record<string, unknown>>) : [];
+    return { open, asked, rows, names: () => [...dbs.keys()] };
+  }),
+);
 
 const PROCESS = Effect.runSync(processId);
 const job: ChainValue = { _tag: "job", process: PROCESS };
@@ -146,164 +151,174 @@ const kept = (span: Row, content: string | null = null) => ({ span, content });
 
 type Backend = {
   readonly name: string;
-  readonly make: (cap: number) => {
-    layer: Layer.Layer<RecordManager>;
-    parts?: ReturnType<typeof home>;
-  };
+  readonly make: (cap: number) => Effect.Effect<
+    {
+      layer: Layer.Layer<RecordManager>;
+      parts?: Effect.Success<typeof home>;
+    },
+    never,
+    Scope.Scope
+  >;
 };
 
 const backends: ReadonlyArray<Backend> = [
-  { name: "memory", make: (cap) => ({ layer: RecordManager.memory(cap) }) },
+  { name: "memory", make: (cap) => Effect.succeed({ layer: RecordManager.memory(cap) }) },
   {
     name: "sql",
-    make: (cap) => {
-      const parts = home();
-      return { layer: RecordManager.sql(parts.open, cap), parts };
-    },
+    make: (cap) => home.pipe(Effect.map((parts) => ({ layer: RecordManager.sql(parts.open, cap), parts }))),
   },
 ];
 
 describe.each(backends)("p102, a record rolls and never fills, on RecordManager.$name", (backend) => {
-  it.effect("rows past the cap go to the next part; read walks every part, each span once, in write order", () => {
-    const { layer, parts } = backend.make(CAP);
-    return Effect.gen(function* () {
-      let at = 0;
-      const used = new Set<number>();
+  it.effect("rows past the cap go to the next part; read walks every part, each span once, in write order", () =>
+    Effect.gen(function* () {
+      const { layer, parts } = yield* backend.make(CAP);
+      yield* Effect.gen(function* () {
+        let at = 0;
+        const used = new Set<number>();
 
-      for (let n = 0; n < 80; n++) {
-        at = yield* send(job, at, [kept(row(id(n), FILL))]);
-        used.add(at);
-      }
-
-      expect(used.size, "80 rows of about 2 KB under a 64 KB cap need more than one part").toBeGreaterThan(1);
-      const all = yield* read(job);
-      expect(all.map((r) => r.spanId)).toEqual(Array.from({ length: 80 }, (_, n) => id(n)));
-
-      if (parts !== undefined) {
-        for (const p of [...used].sort((x, y) => x - y).slice(0, -1)) {
-          const rolled = parts.rows(part(p), "rolled");
-          expect(rolled, `${part(p)} keeps one rolled row`).toHaveLength(1);
-          const values = Object.values(rolled[0] ?? {});
-          expect(values, "rolled names the next part").toContain(part(p + 1));
-          expect(
-            values.some((v) => typeof v === "number" && v >= CAP),
-            "rolled keeps the part's size then, at or past the cap",
-          ).toBe(true);
+        for (let n = 0; n < 80; n++) {
+          at = yield* send(job, at, [kept(row(id(n), FILL))]);
+          used.add(at);
         }
-      }
-    }).pipe(Effect.provide(layer));
-  });
 
-  it.effect("a rolled part accepts no new span, and keeps one rolled row however often it is asked", () => {
-    const { layer, parts } = backend.make(CAP);
-    return Effect.gen(function* () {
-      const records = yield* RecordManager;
-      let n = 0;
-      let answer = yield* records.write(job, 0, [kept(row(id(n++), FILL))]);
+        expect(used.size, "80 rows of about 2 KB under a 64 KB cap need more than one part").toBeGreaterThan(1);
+        const all = yield* read(job);
+        expect(all.map((r) => r.spanId)).toEqual(Array.from({ length: 80 }, (_, n) => id(n)));
 
-      while (answer._tag === "written" && n < 200) {
-        answer = yield* records.write(job, 0, [kept(row(id(n++), FILL))]);
-      }
+        if (parts !== undefined) {
+          for (const p of [...used].sort((x, y) => x - y).slice(0, -1)) {
+            const rolled = parts.rows(part(p), "rolled");
+            expect(rolled, `${part(p)} keeps one rolled row`).toHaveLength(1);
+            const values = Object.values(rolled[0] ?? {});
+            expect(values, "rolled names the next part").toContain(part(p + 1));
+            expect(
+              values.some((v) => typeof v === "number" && v >= CAP),
+              "rolled keeps the part's size then, at or past the cap",
+            ).toBe(true);
+          }
+        }
+      }).pipe(Effect.provide(layer));
+    }),
+  );
 
-      expect(answer).toEqual({ _tag: "rolled", next: part(1), had: [] });
-      const held = n - 1;
+  it.effect("a rolled part accepts no new span, and keeps one rolled row however often it is asked", () =>
+    Effect.gen(function* () {
+      const { layer, parts } = yield* backend.make(CAP);
+      yield* Effect.gen(function* () {
+        const records = yield* RecordManager;
+        let n = 0;
+        let answer = yield* records.write(job, 0, [kept(row(id(n++), FILL))]);
 
-      for (let again = 0; again < 3; again++) {
-        expect(yield* records.write(job, 0, [kept(row(id(1000 + again)))])).toEqual({
-          _tag: "rolled",
-          next: part(1),
-          had: [],
-        });
-      }
+        while (answer._tag === "written" && n < 200) {
+          answer = yield* records.write(job, 0, [kept(row(id(n++), FILL))]);
+        }
 
-      if (parts !== undefined) {
-        expect(parts.rows(part(0), "spans")).toHaveLength(held);
-        expect(parts.rows(part(0), "rolled")).toHaveLength(1);
-      }
+        expect(answer).toEqual({ _tag: "rolled", next: part(1), had: [] });
+        const held = n - 1;
 
-      yield* send(job, 1, [kept(row(id(n - 1))), kept(row(id(1000))), kept(row(id(1001))), kept(row(id(1002)))]);
-      const all = (yield* read(job)).map((r) => r.spanId);
-      expect(all).toHaveLength(held + 4);
-      expect(new Set(all).size).toBe(all.length);
-    }).pipe(Effect.provide(layer));
-  });
+        for (let again = 0; again < 3; again++) {
+          expect(yield* records.write(job, 0, [kept(row(id(1000 + again)))])).toEqual({
+            _tag: "rolled",
+            next: part(1),
+            had: [],
+          });
+        }
+
+        if (parts !== undefined) {
+          expect(parts.rows(part(0), "spans")).toHaveLength(held);
+          expect(parts.rows(part(0), "rolled")).toHaveLength(1);
+        }
+
+        yield* send(job, 1, [kept(row(id(n - 1))), kept(row(id(1000))), kept(row(id(1001))), kept(row(id(1002)))]);
+        const all = (yield* read(job)).map((r) => r.spanId);
+        expect(all).toHaveLength(held + 4);
+        expect(new Set(all).size).toBe(all.length);
+      }).pipe(Effect.provide(layer));
+    }),
+  );
 
   it.effect(
     "a resend after the roll lands nowhere twice: held rows answer written, a mixed batch names them in had",
-    () => {
-      const { layer } = backend.make(CAP);
-      return Effect.gen(function* () {
-        const records = yield* RecordManager;
-        const first = Array.from({ length: 40 }, (_, n) => kept(row(id(n), FILL)));
-        // One batch may take a part past its cap: the check is before the write, so it lands whole.
-        expect(yield* records.write(job, 0, first)).toEqual({ _tag: "written" });
-        // A full resend: every row is held, so nothing is left and nothing is written.
-        expect(yield* records.write(job, 0, first)).toEqual({ _tag: "written" });
-        // A lost answer: the batch comes again with one new row. Part 0 is past its cap.
-        const again = [...first.slice(30), kept(row(id(40)))];
-        const answer = yield* records.write(job, 0, again);
-        expect(answer._tag).toBe("rolled");
+    () =>
+      Effect.gen(function* () {
+        const { layer } = yield* backend.make(CAP);
+        yield* Effect.gen(function* () {
+          const records = yield* RecordManager;
+          const first = Array.from({ length: 40 }, (_, n) => kept(row(id(n), FILL)));
+          // One batch may take a part past its cap: the check is before the write, so it lands whole.
+          expect(yield* records.write(job, 0, first)).toEqual({ _tag: "written" });
+          // A full resend: every row is held, so nothing is left and nothing is written.
+          expect(yield* records.write(job, 0, first)).toEqual({ _tag: "written" });
+          // A lost answer: the batch comes again with one new row. Part 0 is past its cap.
+          const again = [...first.slice(30), kept(row(id(40)))];
+          const answer = yield* records.write(job, 0, again);
+          expect(answer._tag).toBe("rolled");
 
-        if (answer._tag === "rolled") {
-          expect([...answer.had].sort()).toEqual(
-            first
-              .slice(30)
-              .map((r) => r.span.spanId)
-              .sort(),
-          );
-        }
+          if (answer._tag === "rolled") {
+            expect([...answer.had].sort()).toEqual(
+              first
+                .slice(30)
+                .map((r) => r.span.spanId)
+                .sort(),
+            );
+          }
 
-        yield* send(job, 0, again);
-        const all = (yield* read(job)).map((r) => r.spanId);
-        expect(all).toEqual(Array.from({ length: 41 }, (_, n) => id(n)));
-      }).pipe(Effect.provide(layer));
-    },
+          yield* send(job, 0, again);
+          const all = (yield* read(job)).map((r) => r.spanId);
+          expect(all).toEqual(Array.from({ length: 41 }, (_, n) => id(n)));
+        }).pipe(Effect.provide(layer));
+      }),
   );
 
-  it.effect("read pages past 500 spans in one part, each span once, in write order", () => {
-    const { layer } = backend.make(1024 * 1024 * 1024);
-    return Effect.gen(function* () {
-      const records = yield* RecordManager;
-      const made = 1201;
+  it.effect("read pages past 500 spans in one part, each span once, in write order", () =>
+    Effect.gen(function* () {
+      const { layer } = yield* backend.make(1024 * 1024 * 1024);
+      yield* Effect.gen(function* () {
+        const records = yield* RecordManager;
+        const made = 1201;
 
-      for (let from = 0; from < made; from += 100) {
-        const batch = Array.from({ length: Math.min(100, made - from) }, (_, n) => kept(row(id(from + n))));
-        expect(yield* records.write(job, 0, batch)).toEqual({ _tag: "written" });
-      }
+        for (let from = 0; from < made; from += 100) {
+          const batch = Array.from({ length: Math.min(100, made - from) }, (_, n) => kept(row(id(from + n))));
+          expect(yield* records.write(job, 0, batch)).toEqual({ _tag: "written" });
+        }
 
-      expect((yield* read(job)).map((r) => r.spanId)).toEqual(Array.from({ length: made }, (_, n) => id(n)));
-    }).pipe(Effect.provide(layer));
-  });
+        expect((yield* read(job)).map((r) => r.spanId)).toEqual(Array.from({ length: made }, (_, n) => id(n)));
+      }).pipe(Effect.provide(layer));
+    }),
+  );
 
-  it.effect("spans/<part> rolls by the same code, and a chain with no write reads empty", () => {
-    const { layer, parts } = backend.make(CAP);
-    return Effect.gen(function* () {
-      expect(yield* read(spans)).toEqual([]);
-      let at = 0;
+  it.effect("spans/<part> rolls by the same code, and a chain with no write reads empty", () =>
+    Effect.gen(function* () {
+      const { layer, parts } = yield* backend.make(CAP);
+      yield* Effect.gen(function* () {
+        expect(yield* read(spans)).toEqual([]);
+        let at = 0;
 
-      for (let n = 0; n < 60; n++) {
-        at = yield* send(spans, at, [kept(row(id(n), FILL))]);
-      }
+        for (let n = 0; n < 60; n++) {
+          at = yield* send(spans, at, [kept(row(id(n), FILL))]);
+        }
 
-      expect(at).toBeGreaterThan(0);
-      expect((yield* read(spans)).map((r) => r.spanId)).toEqual(Array.from({ length: 60 }, (_, n) => id(n)));
-      expect(yield* read(job)).toEqual([]);
+        expect(at).toBeGreaterThan(0);
+        expect((yield* read(spans)).map((r) => r.spanId)).toEqual(Array.from({ length: 60 }, (_, n) => id(n)));
+        expect(yield* read(job)).toEqual([]);
 
-      if (parts !== undefined) {
-        expect(parts.asked.filter((name) => name.startsWith("spans/")).every((name) => /^spans\/\d+$/.test(name))).toBe(
-          true,
-        );
-        expect(parts.names()).toContain("spans/0");
-        expect(parts.names()).toContain("spans/1");
-      }
-    }).pipe(Effect.provide(layer));
-  });
+        if (parts !== undefined) {
+          expect(
+            parts.asked.filter((name) => name.startsWith("spans/")).every((name) => /^spans\/\d+$/.test(name)),
+          ).toBe(true);
+          expect(parts.names()).toContain("spans/0");
+          expect(parts.names()).toContain("spans/1");
+        }
+      }).pipe(Effect.provide(layer));
+    }),
+  );
 });
 
 describe("p102, the cap is checked before the write (RecordManager.sql)", () => {
-  it.effect("a part already at its cap writes rolled and none of the batch", () => {
-    const parts = home();
-    return Effect.gen(function* () {
+  it.effect("a part already at its cap writes rolled and none of the batch", () =>
+    Effect.gen(function* () {
+      const parts = yield* home;
       yield* RecordManager.use((records) =>
         records.write(
           job,
@@ -318,8 +333,8 @@ describe("p102, the cap is checked before the write (RecordManager.sql)", () => 
       expect(answer).toEqual({ _tag: "rolled", next: part(1), had: [] });
       expect(parts.rows(part(0), "spans")).toHaveLength(5);
       expect(parts.rows(part(0), "rolled")).toHaveLength(1);
-    });
-  });
+    }),
+  );
 
   it.effect.prop(
     "a part's Sql that throws answers storage, and writes nothing",
@@ -359,51 +374,52 @@ describe.each(backends)("p100, content is the one deletable part, on RecordManag
     ({ generated }) =>
       Effect.forEach(
         ["a note's text was in the message", generated],
-        (value) => {
-          const { layer, parts } = backend.make(CAP);
-          return Effect.gen(function* () {
-            const records = yield* RecordManager;
-            const failed = {
-              ...row(id(0)),
-              ok: false,
-              attributes: { ...row(id(0)).attributes, "error.type": "TypeError" },
-            };
-            yield* records.write(job, 0, [kept(failed, MESSAGE), kept(row(id(1)))]);
-            expect(yield* records.content(job, id(0))).toEqual(
-              Option.some({ _tag: "kept", spanId: id(0), message: MESSAGE }),
-            );
-            expect(yield* records.content(job, id(1))).toEqual(Option.none());
-            const before = yield* read(job);
-            const rawBefore = parts?.rows(part(0), "spans");
+        (value) =>
+          Effect.gen(function* () {
+            const { layer, parts } = yield* backend.make(CAP);
+            yield* Effect.gen(function* () {
+              const records = yield* RecordManager;
+              const failed = {
+                ...row(id(0)),
+                ok: false,
+                attributes: { ...row(id(0)).attributes, "error.type": "TypeError" },
+              };
+              yield* records.write(job, 0, [kept(failed, MESSAGE), kept(row(id(1)))]);
+              expect(yield* records.content(job, id(0))).toEqual(
+                Option.some({ _tag: "kept", spanId: id(0), message: MESSAGE }),
+              );
+              expect(yield* records.content(job, id(1))).toEqual(Option.none());
+              const before = yield* read(job);
+              const rawBefore = parts?.rows(part(0), "spans");
 
-            yield* TestClock.setTime(T);
-            yield* records.deleteContent(job, id(0), {
-              by: "owner",
-              reason: value,
-            });
-            const deleted = {
-              _tag: "deleted",
-              spanId: id(0),
-              by: "owner",
-              at: T,
-              reason: value,
-            };
-            expect(yield* records.content(job, id(0))).toEqual(Option.some(deleted));
+              yield* TestClock.setTime(T);
+              yield* records.deleteContent(job, id(0), {
+                by: "owner",
+                reason: value,
+              });
+              const deleted = {
+                _tag: "deleted",
+                spanId: id(0),
+                by: "owner",
+                at: T,
+                reason: value,
+              };
+              expect(yield* records.content(job, id(0))).toEqual(Option.some(deleted));
 
-            yield* TestClock.setTime(T + 60_000);
-            yield* records.deleteContent(job, id(0), { by: "someone-else", reason: "again" });
-            expect(yield* records.content(job, id(0))).toEqual(Option.some(deleted));
+              yield* TestClock.setTime(T + 60_000);
+              yield* records.deleteContent(job, id(0), { by: "someone-else", reason: "again" });
+              expect(yield* records.content(job, id(0))).toEqual(Option.some(deleted));
 
-            expect(yield* read(job)).toEqual(before);
+              expect(yield* read(job)).toEqual(before);
 
-            if (parts !== undefined) {
-              expect(parts.rows(part(0), "spans")).toEqual(rawBefore);
-              const content = JSON.stringify(parts.rows(part(0), "content"));
-              expect(content).not.toContain("note-body-p100");
-              expect(content).toContain("owner");
-            }
-          }).pipe(Effect.provide(layer));
-        },
+              if (parts !== undefined) {
+                expect(parts.rows(part(0), "spans")).toEqual(rawBefore);
+                const content = JSON.stringify(parts.rows(part(0), "content"));
+                expect(content).not.toContain("note-body-p100");
+                expect(content).toContain("owner");
+              }
+            }).pipe(Effect.provide(layer));
+          }),
         { concurrency: 1, discard: true },
       ),
     { arbitrary: { seed: 119120, runs: 12 } },
@@ -415,27 +431,28 @@ describe.each(backends)("p100, content is the one deletable part, on RecordManag
     ({ generated }) =>
       Effect.forEach(
         ["private", generated],
-        (value) => {
-          const { layer } = backend.make(CAP);
-          return Effect.gen(function* () {
-            const records = yield* RecordManager;
-            const first = { ...row(id(0)), ok: false };
-            yield* records.write(job, 0, [kept(first, MESSAGE)]);
-            const other = { ...row(id(0)), name: "overwritten", attributes: { "fab.other": 1 } };
-            expect(yield* records.write(job, 0, [kept(other, "another message")])).toEqual({
-              _tag: "written",
-            });
-            expect(yield* read(job)).toEqual([first]);
-            expect(yield* records.content(job, id(0))).toEqual(
-              Option.some({ _tag: "kept", spanId: id(0), message: MESSAGE }),
-            );
-            yield* records.deleteContent(job, id(0), { by: "owner", reason: value });
-            yield* records.write(job, 0, [kept(first, MESSAGE)]);
-            const after = yield* records.content(job, id(0));
-            expect(Option.map(after, (c) => c._tag)).toEqual(Option.some("deleted"));
-            expect(yield* read(job)).toEqual([first]);
-          }).pipe(Effect.provide(layer));
-        },
+        (value) =>
+          Effect.gen(function* () {
+            const { layer } = yield* backend.make(CAP);
+            yield* Effect.gen(function* () {
+              const records = yield* RecordManager;
+              const first = { ...row(id(0)), ok: false };
+              yield* records.write(job, 0, [kept(first, MESSAGE)]);
+              const other = { ...row(id(0)), name: "overwritten", attributes: { "fab.other": 1 } };
+              expect(yield* records.write(job, 0, [kept(other, "another message")])).toEqual({
+                _tag: "written",
+              });
+              expect(yield* read(job)).toEqual([first]);
+              expect(yield* records.content(job, id(0))).toEqual(
+                Option.some({ _tag: "kept", spanId: id(0), message: MESSAGE }),
+              );
+              yield* records.deleteContent(job, id(0), { by: "owner", reason: value });
+              yield* records.write(job, 0, [kept(first, MESSAGE)]);
+              const after = yield* records.content(job, id(0));
+              expect(Option.map(after, (c) => c._tag)).toEqual(Option.some("deleted"));
+              expect(yield* read(job)).toEqual([first]);
+            }).pipe(Effect.provide(layer));
+          }),
         { concurrency: 1, discard: true },
       ),
     { arbitrary: { seed: 119120, runs: 12 } },
@@ -447,26 +464,27 @@ describe.each(backends)("p100, content is the one deletable part, on RecordManag
     ({ generated }) =>
       Effect.forEach(
         ["private", generated],
-        (value) => {
-          const { layer } = backend.make(CAP);
-          return Effect.gen(function* () {
-            const records = yield* RecordManager;
-            yield* records.write(job, 0, [kept({ ...row(id(0)), ok: false }, MESSAGE)]);
-            let at = 0;
+        (value) =>
+          Effect.gen(function* () {
+            const { layer } = yield* backend.make(CAP);
+            yield* Effect.gen(function* () {
+              const records = yield* RecordManager;
+              yield* records.write(job, 0, [kept({ ...row(id(0)), ok: false }, MESSAGE)]);
+              let at = 0;
 
-            for (let n = 1; n < 60; n++) {
-              at = yield* send(job, at, [kept(row(id(n), FILL))]);
-            }
+              for (let n = 1; n < 60; n++) {
+                at = yield* send(job, at, [kept(row(id(n), FILL))]);
+              }
 
-            expect(at, "the chain rolled past part 0").toBeGreaterThan(0);
-            yield* TestClock.setTime(T);
-            yield* records.deleteContent(job, id(0), { by: "owner", reason: value });
-            expect(yield* records.content(job, id(0))).toEqual(
-              Option.some({ _tag: "deleted", spanId: id(0), by: "owner", at: T, reason: value }),
-            );
-            expect((yield* read(job)).map((r) => r.spanId)).toEqual(Array.from({ length: 60 }, (_, n) => id(n)));
-          }).pipe(Effect.provide(layer));
-        },
+              expect(at, "the chain rolled past part 0").toBeGreaterThan(0);
+              yield* TestClock.setTime(T);
+              yield* records.deleteContent(job, id(0), { by: "owner", reason: value });
+              expect(yield* records.content(job, id(0))).toEqual(
+                Option.some({ _tag: "deleted", spanId: id(0), by: "owner", at: T, reason: value }),
+              );
+              expect((yield* read(job)).map((r) => r.spanId)).toEqual(Array.from({ length: 60 }, (_, n) => id(n)));
+            }).pipe(Effect.provide(layer));
+          }),
         { concurrency: 1, discard: true },
       ),
     { arbitrary: { seed: 119120, runs: 12 } },
