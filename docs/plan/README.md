@@ -58,16 +58,28 @@ request goes by hand, by its own agent, and is logged.
 *2026-11-13:* the order of work changed ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)). The next thing built in `next/` is `fabsh`,
 pipes, `summon` and `join`, working for real, with whatever they need (the window, a second tile and its
 keys, the link to the agent harnesses, rooms), so fabrika is built inside
-fabrika. Tier 1's rows that this needs come first and the others wait. The changed Tier 1 is
-proposed in [the four primitives first](./tier-1.md#the-four-primitives-first), for the owner's
-read; until the owner says yes, 0159 wins over [the tiers](./tiers.md) and [Tier 1](./tier-1.md)
-where they differ. No row's count changes. *It said: the changed Tier 1 is not written yet.*
+fabrika. Tier 1's rows that this needs come first and the others wait. The changed Tier 1 is in
+[the four primitives first](./tier-1.md#the-four-primitives-first), approved by the owner on
+2026-11-13; that section and 0159 win over the older parts of [the tiers](./tiers.md) and
+[Tier 1](./tier-1.md) where they differ. No row's count changes. *It said: the changed Tier 1 is
+not written yet.*
 
-*2026-11-13, proposed:* in that section, 27 of Tier 1's 44 rows are marked needed, 2 help and 15
-wait. The build order is the window, a person starting a program and the desk, `fabsh` in a tile,
-pipes for its built-ins, hands far enough to run a turn, `summon` with the agent link, `@name` with
-the inbox past its thin row, then rooms and `join`. Nothing in `next/` names `fabsh`, `summon` or a
-room yet. Open pull requests on Tier 1 rows: [1028](https://github.com/usirin/tea-fabrika/pull/1028)
+*2026-11-13, approved by the owner:* in that section, 30 of Tier 1's 44 rows are marked needed, 2
+help and 12 wait. The build order is the merge line, the window, a person starting a program and
+the desk, `fabsh` in a tile, pipes for its built-ins, hands far enough to run a turn, `summon` with
+the agent link, `@name` with the inbox past its thin row, then rooms and `join`. Three things the
+owner added that day ([0159's amendments](../../.decisions/0159-fabsh-pipes-summon-join-first.md#amendments)):
+done is seen in the Electron app and in a browser tab, built side by side (P19), with the thin
+menu bar right behind the app (P21 in part); the cloud instance (P24) is built alongside once the
+window works, and each piece is deployed there as it lands; recovery and the rest of the cloud
+rows (P26, P27, P28, P29, P36) are the first work after done, and until then daily work lives only
+on the laptop, which the owner accepts. The merge line is decided
+([0161](../../.decisions/0161-no-step-signing-by-hand.md),
+[0162](../../.decisions/0162-no-friction-before-a-merge.md),
+[0164](../../.decisions/0164-the-bot-stays-without-signing.md)): what is left is the queue's
+trigger in CI ([PR 1120](https://github.com/kamp-us/tea-fabrika/pull/1120)), the queue turned on,
+and the bot's plain tooling. Nothing in `next/` names `fabsh`, `summon` or a room yet. Open pull
+requests on Tier 1 rows: [1028](https://github.com/usirin/tea-fabrika/pull/1028)
 (P14), [1044](https://github.com/usirin/tea-fabrika/pull/1044) (P13),
 [1054](https://github.com/usirin/tea-fabrika/pull/1054) (P38),
 [1074](https://github.com/usirin/tea-fabrika/pull/1074) (P39),
@@ -76,11 +88,13 @@ room yet. Open pull requests on Tier 1 rows: [1028](https://github.com/usirin/te
 [1032](https://github.com/usirin/tea-fabrika/pull/1032) (P36), and drafts
 [1079](https://github.com/usirin/tea-fabrika/pull/1079) (P19),
 [1092](https://github.com/usirin/tea-fabrika/pull/1092) (P34c) and
-[1099](https://github.com/usirin/tea-fabrika/pull/1099) (P25). → the owner: read the section; pick
-on PR 1028 and PR 1044, past their budget stop with red laws
-([0076](../../.decisions/0076-a-lane-stops-at-its-budget.md)); walk S1 of the
+[1099](https://github.com/usirin/tea-fabrika/pull/1099) (P25). → the lead: pick and restart PR 1028
+and PR 1044, past their budget stop with red laws (0162;
+[0076](../../.decisions/0076-a-lane-stops-at-its-budget.md)). → the owner: walk the focus clash
+between 0279 and 0274 before the desk is built, then S1 of the
 [summon guidelines](../direction/summon-guidelines.md#s1-one-grammar-typed-tokens-every-view-reads-it)
-before `fabsh` is built, and S2 to S7 before `summon`. The other open calls are listed in
+before `fabsh` is built, and S2 to S7 before `summon`; say yes after reading `alchemy plan` before
+the first cloud deploy. The other open calls are listed in
 [the section](./tier-1.md#the-owners-walks-and-decisions-by-step), each tied to its step.
 
 *2026-11-12:* ticket 893 slice 1 in `next/` saves process view watchers across object sleep
@@ -321,7 +335,7 @@ raises a new design call goes to the owner. When the lead fills agent slots, the
 much as `next/` work and run beside Tier 1, never held back for it (owner, 2026-11-10,
 [0063](../../.decisions/0063-todays-app-lanes-share-the-slots.md)).
 
-- **The four primitives first, in `next/` ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)).** The changed Tier 1 is proposed, 2026-11-13, in [the four primitives first](./tier-1.md#the-four-primitives-first): what done means at the laptop, what is built, what is missing piece by piece, the build order, and the 15 rows that wait. → the owner reads it, picks on PR 1028 and PR 1044, then walks S1 before `fabsh` is built
+- **The four primitives first, in `next/` ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)).** The changed Tier 1 was approved by the owner on 2026-11-13, in [the four primitives first](./tier-1.md#the-four-primitives-first): what done means in the Electron app and a browser tab, what is built, what is missing piece by piece, the build order with the thin menu bar and the cloud instance beside it, and the 12 rows that wait. → the lead picks on PR 1028 and PR 1044 and finishes the merge line; the owner walks the focus clash (0279 against 0274) before the desk is built, then S1 before `fabsh`
 
 - **Configurable keys on today's app, ticket 174.** Two pull requests. Keys PR 1, change your keys without leaving the app, merged 2026-11-08 ([PR 505](https://github.com/usirin/tea-fabrika/pull/505)). Keys PR 2 brings program and mode keys into the same table. → the lead agent plans PR 2
 - **Design foundations on today's app, approved by the owner 2026-11-07.** [The build plan](./design-foundations.md): ticket 245, three pull requests, all merged 2026-11-08 ([499](https://github.com/usirin/tea-fabrika/pull/499), [506](https://github.com/usirin/tea-fabrika/pull/506), [519](https://github.com/usirin/tea-fabrika/pull/519)). → nothing

@@ -24,7 +24,9 @@ return [armed, [{type: "fire", fault: Fault.cases.abort.make({target: "gateway",
 
 ## The four primitives first
 
-**Proposed 2026-11-13, for the owner's read.**
+**Approved by the owner on 2026-11-13, with that day's changes:** the Electron app beside the
+browser tab, the thin menu bar, the cloud instance alongside, and recovery first after done
+([0159's amendments](../../.decisions/0159-fabsh-pipes-summon-join-first.md#amendments)).
 
 [0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md) changed what is built next in
 `next/`: the four primitives, `fabsh`, pipes, `summon` and `join`, working for real with whatever
@@ -36,6 +38,7 @@ version". A line marked "the lead's reading" is the lead's, not a decision.
 ```text
 A sketch, next/: the build order, then the lines that work at the end. Built-in names are not decided.
 window  ->  fabsh in a tile (the desk beside it)  ->  pipes  ->  summon and @name  ->  join and rooms
+the window is a browser tab and the Electron app, built side by side: one window code, two clients
 prefix, then split right                       the desk sends {type: "did", does: "split_right"} (0278)
 fabsh$ a | b                                   what a puts out is mailed to b, saved like any letter (0109)
 fabsh$ summon claude haiku as scout            the one way to start an agent (0157)
@@ -49,8 +52,25 @@ fabsh$ #bug-17 @scout here is the failing run  scout answers in the room, which 
 
 Done is the four primitives working for real, never a thin slice and never a stub. Each piece is
 built the way its decision or note designs it, and today's version shows what working means for it
-([0159's amendments](../../.decisions/0159-fabsh-pipes-summon-join-first.md#amendments)). At the
-laptop, a person can:
+([0159's amendments](../../.decisions/0159-fabsh-pipes-summon-join-first.md#amendments)).
+
+Done is seen in the Electron app and in a browser tab (owner, 2026-11-13, 0159's third amendment).
+The two are built side by side from the first piece that draws, and a piece that draws is not done
+until it works in both. The app is one more client of the same window code
+([0274](../../.decisions/0274-the-desktop-is-a-platform-free-core.md)), so nothing is built for
+the browser alone and found broken in the app later.
+
+Two more pieces come with it (owner, 2026-11-13, the same amendment):
+
+- **The menu bar extra, in its simplest version (P21 in part):** just enough to approve and deny a
+  new window from the app's menu bar. It grows into the full one with nothing to undo, the rule
+  [0151](../../.decisions/0151-a-thin-inbox-is-a-tier-1-row.md) set for the thin inbox.
+- **The cloud instance (P24), built alongside once the window works.** Each piece is deployed
+  there as it lands, as a quick check, the same way each is checked in the app. The brain is
+  workerd everywhere, so the gap is small, but only the real cloud shows its real limits, a public
+  door, and hands that dial in over the internet, and those touch `summon` and `@name`.
+
+At the laptop, in the app or a tab, a person can:
 
 - open a tile that runs `fabsh`, type a line and see each letter at once, while the process confirms
   it ([0275](../../.decisions/0275-the-shell-is-a-regular-program.md)); each word shows its role in
@@ -72,10 +92,11 @@ laptop, a person can:
 - `join` a room, talk in it with a `#room` line, `leave` it, and know everyone on the project can
   read it (R1, R2, R5, [0158](../../.decisions/0158-no-dms-only-rooms.md)).
 
-Then the next work is built inside fabrika, by talking to a summoned agent there. A program with
-its own view that the four do not need, such as the tracker and the ticket page, is the first work
-after done, not part of it. A piece the four need is in scope even when it has a view of its own:
-`fabsh`'s view, the desk, and wherever a room's talk is shown.
+Then the next work is built inside fabrika, by talking to a summoned agent there. The first work
+after done is recovery and the rest of the cloud rows (P26, P27, P28, P29, P36; owner,
+2026-11-13). A program with its own view that the four do not need, such as the tracker and the
+ticket page, comes after those, and is not part of done. A piece the four need is in scope even
+when it has a view of its own: `fabsh`'s view, the desk, and wherever a room's talk is shown.
 
 ### What is already built that the four stand on
 
@@ -107,25 +128,69 @@ In build order. "Decide first" lists only what no decision answers yet.
 
 **0. The merge line.**
 - Designed by: [0161](../../.decisions/0161-no-step-signing-by-hand.md),
-  [0146](../../.decisions/0146-a-pull-request-lands-only-on-ci-that-saw-main.md),
+  [0162](../../.decisions/0162-no-friction-before-a-merge.md),
+  [0163](../../.decisions/0163-the-lead-acts-on-the-owners-word.md),
+  [0164](../../.decisions/0164-the-bot-stays-without-signing.md),
   [0116](../../.decisions/0116-github-requires-ci-required-on-main.md).
-- In code now: the lead scripts still sign each step's commit and push as the bot, and
-  `catchup.sh` lands a pull request only on checks that saw current main (0146). On 2026-11-13,
-  18 pull requests were open, and 5 of the 7 marked ready conflicted with main.
-- Not built: the plain-commit tooling 0161 lists as owed.
-- Decide first: whether this repo gets a merge queue (0161 leaves it open).
+- Decided and done, 2026-11-13:
+  - Nothing is signed (0161). Main requires `ci-required` alone, so a plain commit merges (0162).
+  - Nothing stands between a finished pull request and main but green CI and a clean leak check.
+    It lands by `gh pr merge --squash`, pinned to the checked head, with no re-run on newest main
+    (0162, which supersedes 0146).
+  - The repo moved to an organization, where GitHub offers its merge queue. GitHub's queue is the
+    stopgap, and fabrika's own queue stays the design (0162).
+  - The bot stays for pushes and pull requests, with the owner as co-author, and a step's agent
+    stays in its box (0164).
+- In code now: the lead scripts still hold the signing and `catchup.sh` paths, and
+  `botpush.mjs` still refuses a tree with no step notes
+  (`.agents/skills/lead/scripts/botpush.mjs:62`). On the morning of 2026-11-13, 18 pull requests
+  were open, and 5 of the 7 marked ready conflicted with main.
+- Not built: the merge queue's trigger in CI
+  ([PR 1120](https://github.com/kamp-us/tea-fabrika/pull/1120), open), with the queue turned on
+  once it merges; the bot's plain push, its pull requests and its commit path (0164's owed list);
+  the plain tooling 0161 lists as owed.
+- Decide first: nothing. The merge queue is decided (0162).
 
-**1. The window.**
-- Designed by: P14's row, [Elm first](../direction/elm-first.md),
-  [keybindings are configurable](../direction/keybindings-are-configurable.md).
-- In code now: the pieces above. No `next/packages/tuval` package is on main.
+**1. The window, in a browser tab and in the Electron app.**
+- Designed by: P14's and P19's rows, [Elm first](../direction/elm-first.md),
+  [keybindings are configurable](../direction/keybindings-are-configurable.md),
+  [0274](../../.decisions/0274-the-desktop-is-a-platform-free-core.md) (one core, with `electron`,
+  `browser` and `headless` backends),
+  [0280](../../.decisions/0280-the-app-starts-a-launchd-brain.md) (the app starts the brain).
+- In code now: the pieces above, in a browser page. No `next/packages/tuval` package is on main,
+  and no Electron app is on main in `next/`.
 - Not built: P14 past slice 1, with the checklist drawn in it
   ([0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md); 0159 says the checklist's
   window finishes first, since `fabsh`'s view needs the same parts); P13's safe input recording, so
-  a typed line is saved before `update` runs; P18's client cores, where a tile follows its `keep`.
-- Decide first: the owner's pick on [PR 1028](https://github.com/usirin/tea-fabrika/pull/1028)
-  and [PR 1044](https://github.com/usirin/tea-fabrika/pull/1044), both past their budget stop with
-  red laws ([0076](../../.decisions/0076-a-lane-stops-at-its-budget.md)).
+  a typed line is saved before `update` runs; P18's client cores, where a tile follows its `keep`;
+  P19, the Electron app, beside the browser page from this piece on: the founding screen, the
+  sealed keys and the brain as a launchd service (slice 1 is draft
+  [PR 1079](https://github.com/kamp-us/tea-fabrika/pull/1079)); right behind it, P21's thin
+  version, approve and deny from the menu bar (slice 1 is
+  [PR 1097](https://github.com/kamp-us/tea-fabrika/pull/1097)). Remove and the rest of P21 wait.
+- From this piece on, every piece that draws (2, 3, 7's inbox and 8's room) is shown working in
+  both before it counts as done.
+- The lead's reading: 0280 holds in the thin menu bar, so Approve asks for a finger and Deny does
+  not. The ruling names only approve and deny.
+
+**Beside every piece, once the window works: the cloud instance.**
+- Designed by: P24's row, [the cloud is one more host](../direction/the-cloud-is-one-more-host.md),
+  [the ledger goes to Cloudflare](../direction/the-ledger-goes-to-cloudflare.md),
+  [0295](../../.decisions/0295-where-hot-reload-is-off.md).
+- In code now: one built file and its stack (P16, `next/apps/fabrika/alchemy.run.ts`). P24's
+  tests sit on a branch, with no pull request, and its row calls it the first cloud deploy after
+  P17.
+- Not built: P24, the cloud instance, with the menu bar's second link to it. Then each piece is
+  deployed there as it lands, as a quick check.
+- P24 needs P16, P17 and P21: P16 is built, P17 is done, and P21 comes in its thin version above.
+  It pulls in no other waiting row. Its row lists a ticket clash (331 against 329), not fixed here.
+- Decide first: the owner's yes after reading `alchemy plan`, before the first deploy (0295,
+  [0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md)). Whether one yes may
+  cover the quick deploys that follow is open.
+- Decide first: nothing for the owner. The lead picks and restarts
+  [PR 1028](https://github.com/kamp-us/tea-fabrika/pull/1028) and
+  [PR 1044](https://github.com/kamp-us/tea-fabrika/pull/1044), both past their budget stop with red
+  laws (0162; [0076](../../.decisions/0076-a-lane-stops-at-its-budget.md)).
 
 **2. A person starts a program, and the desk.**
 - Designed by: [0274](../../.decisions/0274-the-desktop-is-a-platform-free-core.md),
@@ -135,8 +200,9 @@ In build order. "Decide first" lists only what no decision answers yet.
   focus code.
 - Not built: P42 past slice 1; `fabrika/tezgah` with split, close and the prefix key, its layout
   and focus as a process in the brain (0274); each window running the prefix itself (0278).
-- Decide first: how `fabsh` may start any program when a start right names one exact pair (open; no
-  decision found). Whether the desk's commands need the palette now: 0278 says every command also
+- Decide first: whether focus is the window's own or the desk process's, where 0279 and 0274 read
+  two ways (below; the first walk due). How `fabsh` may start any program when a start right names
+  one exact pair (open; no decision found). Whether the desk's commands need the palette now: 0278 says every command also
   has a shell word and a palette entry (`.decisions/0278-each-window-runs-its-own-prefix.md:33`), and the palette is in Tier 6 (open).
 
 **3. `fabsh`, a program in a tile.**
@@ -191,7 +257,8 @@ In build order. "Decide first" lists only what no decision answers yet.
   bridge with its own key is the row that builds one, 70%; the doubt is whether those sends go
   through the harness link instead).
 - Decide first: S2 to S7; how a warm session sits beside the hard stop (0326 leaves it open); the
-  clash between 0517 and 0157 on how an agent connects (below); the summon record's shape.
+  clash between 0517 and 0157 on how an agent connects (below); the clash between S3 and A5 on
+  names (below), since the one list of names is built here; the summon record's shape.
 
 **7. `@name`, job control and the inbox.**
 - Designed by: A1 to A5, S6's decided part, [0480](../../.decisions/0480-the-inbox-is-one-program-two-views.md),
@@ -207,7 +274,7 @@ In build order. "Decide first" lists only what no decision answers yet.
   is that one person on one laptop could get by with replies printed in `fabsh`, which A5 decides
   against. The email recovery notice row waits with email recovery.
 - Decide first: whether a person's inbox is one program per person, as A5 says, while the built one
-  is the single `fabrika/inbox` (`program.ts:45`); the clash between S3 and A5 on names (below).
+  is the single `fabrika/inbox` (`program.ts:45`).
 
 **8. Rooms and `join`.**
 - Designed by: R1, R2, R5 and R8 of the summon guidelines,
@@ -222,11 +289,18 @@ In build order. "Decide first" lists only what no decision answers yet.
 
 ### The build order
 
-0. The merge line, before any piece: a step's work is a plain commit, with no step signature and
-   no bot ([0161](../../.decisions/0161-no-step-signing-by-hand.md)). Whether this repo gets a
-   merge queue is open, the owner's.
+0. The merge line, before any piece: nothing is signed, the bot pushes and opens pull requests,
+   and a finished pull request lands on green CI and a clean leak check alone
+   ([0161](../../.decisions/0161-no-step-signing-by-hand.md),
+   [0162](../../.decisions/0162-no-friction-before-a-merge.md),
+   [0164](../../.decisions/0164-the-bot-stays-without-signing.md)). What is left is the queue's
+   trigger in CI, the queue turned on, and the bot's plain tooling.
 1. The window: P14 and P13's open slices, then P14's later slices with P18's `keep`. P14 and P13 run
-   side by side.
+   side by side. The Electron app (P19) is built beside the browser page from here on, and the thin
+   menu bar (P21 in part) right behind the app.
+   - Once the window works, the cloud instance (P24) is built alongside, and each later step is
+     deployed there as it lands, after the owner's yes on `alchemy plan`.
+   - Each later step that draws is shown working in the app and in a tab before it counts as done.
 2. A person starts a program (P42), then the desk program. Side by side with step 3 once the window
    is in.
 3. `fabsh` in a tile, after the owner's walk of S1.
@@ -237,22 +311,27 @@ In build order. "Decide first" lists only what no decision answers yet.
 8. Rooms and `join`. R8's shape is settled before any talk line is saved. Room records can be built
    side by side with steps 5 and 6.
 
+After step 8, the first work is recovery and the rest of the cloud rows (P26, P27, P28, P29, P36),
+ahead of the programs with their own view (owner, 2026-11-13).
+
 The order of steps 2 and 3, and of step 8's records, is the lead's lean. 0159 fixes only window,
-`fabsh`, pipes, `summon`, `join`.
+`fabsh`, pipes, `summon`, `join`, with the app, the thin menu bar and the cloud instance beside
+them.
 
 ### The owner's walks and decisions, by step
 
 | Before step | What the owner walks or decides |
 |---|---|
-| 0 | Whether this repo gets a merge queue (0161 leaves it open) |
-| 1 | The pick on PR 1028 and PR 1044, past their budget stop with red laws (0076) |
-| 2 | How `fabsh` may start any program; whether the palette comes now (0278, 0157) |
+| 0 | Nothing: the merge queue is decided (0162) |
+| 1 | Nothing: the lead picks on PR 1028 and PR 1044, past their budget stop with red laws (0162) |
+| the first cloud deploy | A yes after reading `alchemy plan` (0295); whether one yes covers the quick deploys after it |
+| 2 | 0279 against 0274 on focus: the window's own, or a desk process in the brain (the first walk due); how `fabsh` may start any program; whether the palette comes now (0278, 0157) |
 | 3 | S1, with what a line may hold and which built-in words `fabsh` has |
 | 4 | How a pipe carries one output to the next input |
-| 6 | S2 to S7 (proposed; S6 carries a decided part); where a summoned agent runs; 0517 against 0157 |
-| 7 | S3 against A5 on names; one inbox program per person or one in all |
+| 6 | S2 to S7 (proposed; S6 carries a decided part); where a summoned agent runs; 0517 against 0157; S3 against A5 on names, since the one list of names is built here |
+| 7 | One inbox program per person or one in all |
 | 8 | R8's record shape; the verb `join`; two agents with one name; what a room of two is called |
-| any | Whether done includes reaching `@scout` from a phone while the Mac sleeps (below) |
+| any | Whether done includes reaching `@scout` from a phone while the Mac sleeps (below); P24 itself is decided |
 
 The summon guidelines say they are walked when Tier 5 starts (`docs/direction/summon-guidelines.md:3`); under 0159
 those walks come inside this work, as listed. A walk is not a decision until the owner says so.
@@ -266,22 +345,28 @@ rooms, so they wait. Nothing leaves the plan, and no row here blocks the four (0
 - P32, the commit check (done): from [0161](../../.decisions/0161-no-step-signing-by-hand.md),
   today's hand-run tooling makes plain commits, so the check stops gating a merge until `next/`'s
   own pipeline signs.
-- P19, the Electron app; P21, the menu bar extra; P23, the app's demo.
-- P24, the cloud instance; P26, the checklist on Cloudflare; P27, live faults; P29, the drill.
+- P23, the app's demo. The owner ruled on 2026-11-13 that the Electron app (P19), the thin menu
+  bar (P21 in part) and the cloud instance (P24) are needed, and that P23 still waits.
+- P26, the checklist on Cloudflare; P27, live faults; P29, the drill.
 - P28, the sheet; P36, email recovery.
 - P40, programs written outside fabrika; P43, the merge queue's first stage.
-- Parts of needed rows: P41's slice 3, the example from a pack; P44's MCP demo on Cloudflare; P45's
-  recovery notice row.
+- Parts of needed rows: P21 past its thin version (Remove and the rest); P41's slice 3, the
+  example from a pack; P44's MCP demo on Cloudflare; P45's recovery notice row.
 
-**The one risk of waiting, open, the owner's:** until the cloud and recovery rows are built (P24,
-P26, P28, P36), daily work in `next/` lives only in the laptop's ledger. There is no cloud copy,
-and no way back after a lost Mac. No row loses a recorded fact by waiting; this risk is about the
-work itself.
+**First after done (owner, 2026-11-13):** P26, P27, P28, P29 and P36, recovery and the rest of the
+cloud rows, ahead of the programs with their own view.
 
-**A doubt on P24, open:** [talk where you work](../direction/talk-where-you-work.md#in-next-summon-is-an-alias-with-a-session)
-says the brain keeps an agent's name and session so any client can reach `@scout`, a phone
-included, while the Mac sleeps (`docs/direction/talk-where-you-work.md:187`). With only the local brain, that
-holds on the laptop and not from a phone. If done includes the phone, P24 is needed.
+**The one risk of waiting, accepted by the owner on 2026-11-13:** until the recovery rows are built
+(P26, P28, P36), daily work in `next/` lives only in the laptop's ledger. The cloud instance is a
+quick check of each piece, not a copy of that work, and there is no way back after a lost Mac. No
+row loses a recorded fact by waiting; this risk is about the work itself. Recovery is the first
+work after done.
+
+**The doubt on P24, resolved (owner, 2026-11-13):** P24 is needed and built alongside. The doubt
+came from [talk where you work](../direction/talk-where-you-work.md#in-next-summon-is-an-alias-with-a-session),
+which says the brain keeps an agent's name and session so any client can reach `@scout`, a phone
+included, while the Mac sleeps (`docs/direction/talk-where-you-work.md:187`). With P24 the cloud
+brain that reach needs is there. Whether the phone itself is part of done is still not ruled.
 
 ### Notes that disagree with each other
 
@@ -302,7 +387,8 @@ Listed, not resolved.
   still reads two ways.
 - **The glossary's `room` row against R3.** The row's example is `fork #bug-17 at 12 as bar`
   (`.glossary/TERMS.md:421`); R3 decided no message numbers and the order `as bar at "footer"`
-  (`docs/direction/summon-guidelines.md:537`).
+  (`docs/direction/summon-guidelines.md:537`). R3 wins. The row is not fixed here: it gets its own
+  change.
 - **Checked and dropped:** R5's example still says "your DM with scout"
   (`docs/direction/summon-guidelines.md:596`), but the note's own amendment says such lines now mean the room of
   two (`docs/direction/summon-guidelines.md:481`), so it is not a live clash. R8's `direct` mark stays open, as
@@ -313,8 +399,6 @@ Listed, not resolved.
 - Sizes. No piece above is sized, and nothing here gives a basis for one.
 - What the open pull requests hold beyond their titles. PR 1028's slices for keys and a second
   tile were not read.
-- Whether "the window" in done must be the Electron app. A browser tab is assumed; if the app is
-  meant, P19 is needed.
 - Whether a turn needs hands on the laptop, or a harness started by the brain's host is enough:
   0159 leaves the place open.
 - Whether the row marks below are right in every case. Each was read against the decided rules of
@@ -323,9 +407,14 @@ Listed, not resolved.
 
 **Marks on the rows below:** each row of [the split](#the-pull-requests-one-at-a-time) starts with
 needed, helps or waits, as this section reads it. Needed: P1, P2, P3, P6, P7, P9, P10, P11, P12,
-P13, P14, P16, P18, P25, P30, P31, P33, P34, P34c, P35, P37, P38, P39, P41, P42, P44, P45.
-Helps: P8 and P15. Waits: the 15 rows above. A needed row may be needed only in part:
+P13, P14, P16, P18, P19, P21, P24, P25, P30, P31, P33, P34, P34c, P35, P37, P38, P39, P41, P42,
+P44, P45. Helps: P8 and P15. Waits: the 12 rows above. That is 30 needed, 2 that help and 12 that
+wait. A needed row may be needed only in part:
 
+- P21: the thin version, approve and deny from the menu bar, in a shape the full one grows from.
+  Remove and the rest of its row wait.
+- P24: the cloud instance, with each piece deployed there as it lands. Its ticket clash is not
+  fixed here.
 - P25: the bridge as a client with its own key, for an agent's own sends (piece 6). Its checklist
   demo waits.
 - P34c: a crashed run is restarted by an OTP supervisor
@@ -481,7 +570,7 @@ node next/apps/fabrika/chaos-drill.ts      # a run on a throwaway ledger, to a v
 
 ## What is out
 
-*Changed 2026-11-13, proposed ([the four primitives first](#the-four-primitives-first), 0159): `fabsh`, pipes for its built-ins, the desk with split, close and prefix keys, hands far enough to run a turn, the agent link, `summon`, `@name`, the inbox past its thin row and rooms are now in. The tracker and the rest of this list stay out.*
+*Changed 2026-11-13, approved by the owner that day ([the four primitives first](#the-four-primitives-first), 0159): `fabsh`, pipes for its built-ins, the desk with split, close and prefix keys, hands far enough to run a turn, the agent link, `summon`, `@name`, the inbox past its thin row and rooms are now in. The tracker and the rest of this list stay out.*
 
 - **Later tiers:** `fabsh`, pipes, the tracker, the desk, split and close, prefix keys (2). A second person, invites, the full Windows list, typed codes (3). Hands, leases, `kill -9` through real hands (4). Agents in a box, spend, the `claude` and `codex` programs (5). Drag, workspaces, palette, reconnect tested hard, typing in place, tabs and search for notes (6). Apple signing, auto-update, Windows and Linux as an app, others' programs (7).
 - **Coordination past Tier 1's slice** (owner, 2026-11-06): supervision trees, sibling strategies (one_for_all, rest_for_one), links and trap exit, a parent's `EXIT` reason and dropping a temporary child's spec wait for Tier 4, since Tier 1 has no process that starts another. Leases wait too, since Tier 1 has no claims: the object id is the one writer. Tier 1 builds dead letters, one crashed program restarted with a brake and backoff, exit, info and monitors, each start a new process with its own id, who is online and a brain restart (P12, P19, P33, P34), as [the five layers](../direction/a-local-first-sync-engine.md)' header says. *Amended 2026-11-09 (owner, [0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)): P34c turns P34 into OTP's top-level supervisor, so one root per brain, child specs with restart types, and dropping a temporary child's spec come into Tier 1; restarts are at once, with no backoff, and past the brake a name is `failed` until a person restarts it. Nested trees, sibling strategies, links and trap exit still wait for Tier 4.*
@@ -635,10 +724,10 @@ These were checked. The first one was [open question 9](#open-questions), decide
 | P15 | A | 0159: **helps** ([the four primitives first](#the-four-primitives-first)). *Open 2026-11-13: slice 1 as [PR 1012](https://github.com/usirin/tea-fabrika/pull/1012).* **Tests on `fabrikalfa/p15-wip`, tracker ticket 291, draft [PR 991](https://github.com/usirin/tea-fabrika/pull/991).** *It said: no pull request yet.* Hot reload under `dev.ts`, as the note decided it: a program's new code swaps in at its next step, the model kept when the new schema decodes it, else migrated through S3's chain or that one process refused; the `code.loaded`, `code.refused` and `code.failed` facts; H4's `step.crashed` and `code.rolled_back`; the tile's mark and `[Restart]` through P34; the window swapping a program's view by hash, served by the brain. A view swapped this way goes through the Compiler too, and experiment 195 did not try hot reload with it. Laws p70 to p78, from the note's nine. *Open, 2026-11-09:* H4 rolls a throw after a swap back to the old code, while P34 made a throw a crash that restarts on the same build; which comes first? | [hot reload](../direction/hot-reload.md), [saved state, S3](../direction/saved-state.md) | P14, P34 | about 7 | 1.2 to 1.8 |
 | P17 | E | 0159: **waits** ([the four primitives first](#the-four-primitives-first)). **Split in two. P17a, the door in libfabrika and a revoke that stops writes, built 2026-11-08, tracker ticket 287, [PR 537](https://github.com/usirin/tea-fabrika/pull/537). P17b, the rest, lands in three slices on the same ticket. Slice 1, the history checker and the off contract, merged 2026-11-12 as [PR 1037](https://github.com/usirin/tea-fabrika/pull/1037): the `Fault`, `Start`, `Fire`, `Fired` and `Report` schemas and the pure count and recovery folds in `runtime/Chaos.ts`, the `Nemesis` contract with its own nested errors, `NemesisNone.layer`, which refuses fire and check with `Off`, `NemesisLedger.layer`, which checks real history and takes its fire operation from the caller, and `ProcessHistory` in `processes/`, the bounded read of one name's inbox and restart facts. Slice 2, the bounded chaos program, merged 2026-11-12 as [PR 1046](https://github.com/usirin/tea-fabrika/pull/1046): the `@kampus/chaos` package (`next/programs/chaos`) with its boundary row, one tea machine in `runtime/ChaosMachine.ts` with its `now`, `fire` and `inspect` Cmds, the saved `pure-rand` schedule in `runtime/ChaosSchedule.ts`, which draws one fault per timer and keeps its four words in the Model, the loader's `fire` owner as the exact name `fabrika/chaos`, and the runner's refusal of a start whose target is the chaos process itself. Its laws run the real runner on real SQLite with a controlled fire handler; the app still selects no chaos program and no live fault fires. Slice 3, the checklist faults and the real local p90 revoke, merged 2026-11-12 as [PR 1058](https://github.com/usirin/tea-fabrika/pull/1058): a step hook that does nothing unless a test arms it, laws that a failed checklist step and a lost reply recover, and the real local revoke scenario, where no input from the old key lands after a signed revoke while another client keeps working. All three slices are on main and p90 passes there, so P17 is done as of 2026-11-12. p90 was red on main for 47 minutes that day: its worker fixture lacked the `IsolateTail` export that [PR 1031](https://github.com/usirin/tea-fabrika/pull/1031) made every process load need, and [PR 1073](https://github.com/usirin/tea-fabrika/pull/1073) added it. *It said, earlier on 2026-11-12: slice 3 is not built; P17b is done only when all three land and p90 passes.* *It said: P17b has its tests on `fabrikalfa/p17b-wip`, no pull request yet; those old tests were read for their laws and not kept.*** The chaos program: its package, with its boundary row and bare `package.json` in the test writer's commit, `Fault` cases, the nemesis's check, the checklist as its target (*changed 2026-11-11, [0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md): it said notes and the counter*) (detail T12, p34, p36, p90; c11 moves to P27, since live faults come there). Its tile's "when it recovered" folds from P34's `restarted`. *New 2026-11-07 (owner):* one more case, a key revoked mid-run while its client is writing: the door refuses every write from that key once the `revoked` fact lands, even from a client on old code, so a stop works at the door, not by message (p90) | the detail's [Chaos monkey](./tier-1-detail.md#chaos-monkey) | P11, P44, P34 | about 6 | 0.5 to 0.7 |
 | P18 | B | 0159: **needed** ([the four primitives first](#the-four-primitives-first)). **Tests on `fabrikalfa/p18-wip`, tracker ticket 290, no pull request yet.** *2026-11-11: a layout plan was drafted and is kept for Tier 2, per [0279](../../.decisions/0279-tuval-is-a-package-desk-in-tier-2.md).* The client cores: `tuval` dom, browser and headless, the Effect socket, tiles that read their part with a selector and no `memo` ; a tile follows its `keep` on its process's `DOWN` and shows the reason (detail T7, p30, p50, c8). *From P33 (2026-11-08):* a window's monitor names its exact client session as its recipient, and its `DOWN` lands in `client:<id>/inbox`. *Open, 2026-11-09:* each restart is a new process id and a monitor never follows the name (P33, P34), so after a restart does a tile watch the name, or monitor the successor again? The desktop note's W3 is updated to the built `DOWN` shape. **The browser client in CI** ([a browser is always a client](../direction/a-browser-is-always-a-client.md), walked when Tier 1 started, 2026-11-08): the CI job starts its own Miniflare and a headless browser, which connects, signs a hello, pings, sends one message and reads the answer; every transport runs the same suite | [the desktop layer](../direction/the-desktop-layer.md), [React Compiler, C6](../direction/react-compiler.md) | P14, P33 | about 10 | 0.8 to 1.2 |
-| P19 | B | 0159: **waits** ([the four primitives first](#the-four-primitives-first)). *Open 2026-11-13: slice 1 as draft [PR 1079](https://github.com/usirin/tea-fabrika/pull/1079).* **Tests on `fabrikalfa/p19`, tracker ticket 294, no pull request yet.** The Electron app: founding screen, the person key and window key sealed, the brain as a plain launchd service (detail T8, p44, p46). From P4: no `childBrain`; Quit waits until `launchctl print` no longer finds the label, since `bootout` returns early; tests seal through a stand-in service, since Playwright's mock keychain does not reach the async API and a seal makes a real login Keychain item; the one law that seals for real uses its own `productName` and deletes its item after. The plist restarts the brain on a crash only (launchd `KeepAlive` with `SuccessfulExit: false`, and a throttle). First step: kill -9 the brain under launchd on an unsigned build, which experiment 214 did not try. Law: both windows come back (p81). The owner still opens the built app twice. The success bar's Electron half | [the desktop layer](../direction/the-desktop-layer.md) | P18, P4 | about 9 | 1.1 to 1.6 |
-| P21 | B | 0159: **waits** ([the four primitives first](#the-four-primitives-first)). *Open 2026-11-13: slice 1 as [PR 1097](https://github.com/usirin/tea-fabrika/pull/1097).* The menu bar extra: Approve, Deny and Remove, `PersonCheck`, `menuView` as a pure Elm view (detail T15, p45, p49, p51). The let-in list's "tabs online" comes from P33's gateway list. P4 found `canPromptTouchID()` true on an unsigned build; whether `promptTouchID` shows and answers from it needs a person, at the demo. *From P33 (2026-11-08):* the count comes from `GatewayManager.online(key)`, computed on each ask and never written; a failed probe answers `unknown` | [the desktop layer](../direction/the-desktop-layer.md), [the frame, item 9](../direction/the-frame.md#9-menu-bar-in-next) | P19, P33 | about 10 | 1 to 1.5 |
+| P19 | B | 0159: **needed** ([the four primitives first](#the-four-primitives-first)); built beside the browser page (owner, 2026-11-13). *Open 2026-11-13: slice 1 as draft [PR 1079](https://github.com/usirin/tea-fabrika/pull/1079).* **Tests on `fabrikalfa/p19`, tracker ticket 294, no pull request yet.** The Electron app: founding screen, the person key and window key sealed, the brain as a plain launchd service (detail T8, p44, p46). From P4: no `childBrain`; Quit waits until `launchctl print` no longer finds the label, since `bootout` returns early; tests seal through a stand-in service, since Playwright's mock keychain does not reach the async API and a seal makes a real login Keychain item; the one law that seals for real uses its own `productName` and deletes its item after. The plist restarts the brain on a crash only (launchd `KeepAlive` with `SuccessfulExit: false`, and a throttle). First step: kill -9 the brain under launchd on an unsigned build, which experiment 214 did not try. Law: both windows come back (p81). The owner still opens the built app twice. The success bar's Electron half | [the desktop layer](../direction/the-desktop-layer.md) | P18, P4 | about 9 | 1.1 to 1.6 |
+| P21 | B | 0159: **needed** ([the four primitives first](#the-four-primitives-first)), in part: the thin version, approve and deny, right behind P19 (owner, 2026-11-13); the rest waits. *Open 2026-11-13: slice 1 as [PR 1097](https://github.com/usirin/tea-fabrika/pull/1097).* The menu bar extra: Approve, Deny and Remove, `PersonCheck`, `menuView` as a pure Elm view (detail T15, p45, p49, p51). The let-in list's "tabs online" comes from P33's gateway list. P4 found `canPromptTouchID()` true on an unsigned build; whether `promptTouchID` shows and answers from it needs a person, at the demo. *From P33 (2026-11-08):* the count comes from `GatewayManager.online(key)`, computed on each ask and never written; a failed probe answers `unknown` | [the desktop layer](../direction/the-desktop-layer.md), [the frame, item 9](../direction/the-frame.md#9-menu-bar-in-next) | P19, P33 | about 10 | 1 to 1.5 |
 | P23 | B | 0159: **waits** ([the four primitives first](#the-four-primitives-first)). **Tests on `fabrikalfa/p23`, tracker ticket 327, no pull request yet.** The app's demo: routes, "Open in browser" and its one-time link, shots in five layouts. Check 3 (detail T9, p31, p47, p48) | [the desktop layer](../direction/the-desktop-layer.md) | P21 | about 4 | 0.4 to 0.6 |
-| P24 | C | 0159: **waits** ([the four primitives first](#the-four-primitives-first)). **Tests on `fabrikalfa/p24`, no pull request yet.** *A ticket clash to fix:* the tracker gives ticket 331 to P28, but P24's branch commits and its field rows from PR 553 say ticket 331 too; field note 2026-11-09-02 and the 2026-11-08 note on lanes 331 and 329 say P24's tracker ticket is 329. The cloud instance and the menu bar extra's second link. The owner reads `alchemy plan` and says yes. Check 4 (detail T11, p41). It carries chaos's off build for the real ledger, with p38 and p60's build half, since it is the first cloud deploy after P17. *Changed 2026-11-11 ([0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md), with [0125](../../.decisions/0125-the-example-program-is-a-checklist.md)'s amendment): check 4 proves the checklist there, not the counter* | [the ledger goes to Cloudflare](../direction/the-ledger-goes-to-cloudflare.md), [local is the cloud](../direction/local-is-the-cloud.md) | P16, P17, P21 | about 6 | 0.6 to 1 |
+| P24 | C | 0159: **needed** ([the four primitives first](#the-four-primitives-first)); built alongside once the window works (owner, 2026-11-13). **Tests on `fabrikalfa/p24`, no pull request yet.** *A ticket clash to fix:* the tracker gives ticket 331 to P28, but P24's branch commits and its field rows from PR 553 say ticket 331 too; field note 2026-11-09-02 and the 2026-11-08 note on lanes 331 and 329 say P24's tracker ticket is 329. The cloud instance and the menu bar extra's second link. The owner reads `alchemy plan` and says yes. Check 4 (detail T11, p41). It carries chaos's off build for the real ledger, with p38 and p60's build half, since it is the first cloud deploy after P17. *Changed 2026-11-11 ([0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md), with [0125](../../.decisions/0125-the-example-program-is-a-checklist.md)'s amendment): check 4 proves the checklist there, not the counter* | [the ledger goes to Cloudflare](../direction/the-ledger-goes-to-cloudflare.md), [local is the cloud](../direction/local-is-the-cloud.md) | P16, P17, P21 | about 6 | 0.6 to 1 |
 | P25 | D | 0159: **needed** ([the four primitives first](#the-four-primitives-first)). *Open 2026-11-13: slice 1 as draft [PR 1099](https://github.com/usirin/tea-fabrika/pull/1099).* **Tests on `fabrikalfa/p25`, tracker ticket 328, no pull request yet.** Agents through MCP: the copied tools, `fabrika mcp --as`, the bridge as a client with a key, Approve once per agent name; `ps` reads P33's process list, the industry's word, which today's tsh uses too, *Changed 2026-11-07 (owner): it said `runs`.*; the agent's key file read as `Redacted`; spike first on Claude Code listing tools while it waits (detail T21, p63, p64, c17). *Changed 2026-11-11 ([0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): the bridge is handed `[checklist]`, not `[notes]`, and the demo is an agent's `checklist_check` with a note* | the detail's [Agents through MCP](./tier-1-detail.md#agents-through-mcp) | P13, P44, P21, P8, P33 | about 12 | 1.1 to 1.6 |
 | P26 | D | 0159: **waits** ([the four primitives first](#the-four-primitives-first)). The checklist goes real on Cloudflare: the phone spike, the owner's yes on `alchemy plan`, the deploy. Check 5 (detail T19, p58, p59, c15). *Changed 2026-11-11 ([0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): it said notes go real* | [the ledger goes to Cloudflare](../direction/the-ledger-goes-to-cloudflare.md) | P44, P25, P24 | about 6 | 0.3 to 0.5 |
 | P27 | E | 0159: **waits** ([the four primitives first](#the-four-primitives-first)). **P27a's tests on `fabrikalfa/p27a`, tracker ticket 330, no pull request yet.** Live faults on each instance, with p37 and c11: each fault shown can really fire there. "When it recovered" folds from P34's `restarted`. Nothing is lost: for every fault fired, the ledger and the JobRecord alone say what broke, when, why and how it recovered (owner, 2026-11-07) (detail T13, p37, p91) | the detail's Chaos monkey | P17, P24 | about 6 | 0.4 to 0.6 |

@@ -6,12 +6,12 @@ Tier 2 starts (owner, 2026-11-08): the first proposed tier's plan.
 **Changed 2026-11-13 ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)): the next thing built is `fabsh`, pipes, `summon` and `join`, working
 for real, with whatever they need, so fabrika is built inside fabrika.** The tiers below still show
 the order from before that day: `fabsh` and pipes in Tier 2, agents in Tier 5, rooms in no tier,
-and thin slices in Tier 1. The changed Tier 1 follows in its own pull request. Until it lands,
-0159 wins wherever this page differs.
+and thin slices in Tier 1. The changed Tier 1 is written, and 0159 and that section win wherever
+this page differs.
 
-**Proposed 2026-11-13, for the owner's read: what Tier 1 is now.** Tier 1 is the four primitives,
+**Approved by the owner on 2026-11-13: what Tier 1 is now.** Tier 1 is the four primitives,
 `fabsh`, pipes, `summon` and `join`, working for real in `next/`, on the base its built rows
-already give. The pieces, in build order, and the mark on every row are in
+already give. Done is seen in the Electron app and in a browser tab, built side by side. The pieces, in build order, and the mark on every row are in
 [the four primitives first](./tier-1.md#the-four-primitives-first). These pieces came in from
 other tiers:
 
@@ -29,9 +29,20 @@ other tiers:
 - From no tier: rooms and `join` ([0158](../../.decisions/0158-no-dms-only-rooms.md), the
   [summon guidelines](../direction/summon-guidelines.md#rooms-mentions-and-turns-in-order)).
 
-The 15 rows the four do not need wait, and none leaves the plan. Until the cloud and recovery rows
-are built, daily work lives only in the laptop's ledger; that risk is open, the owner's. The tables
-below still show the order from before 2026-11-13.
+Three of Tier 1's own rows come with them (owner, 2026-11-13,
+[0159's amendments](../../.decisions/0159-fabsh-pipes-summon-join-first.md#amendments)):
+
+- The Electron app (P19), built beside the browser tab from the first piece that draws. This is
+  the rule [below](#the-rules): a tier's demo works in a browser tab and an Electron window.
+- The menu bar extra (P21), in its simplest version: approve and deny, in a shape the full one
+  grows from.
+- The cloud instance (P24), built alongside once the window works, with each piece deployed there
+  as it lands.
+
+The 12 rows the four do not need wait, and none leaves the plan. Recovery and the rest of the
+cloud rows (P26, P27, P28, P29, P36) are the first work after done. Until then daily work lives
+only in the laptop's ledger; the owner accepted that risk on 2026-11-13. The tables below still
+show the order from before 2026-11-13.
 
 All the work on `next/` is one plan of seven tiers. Each tier is one pass across all five layers
 and across fabrika's six core ideas, and each ends with something a person can use. No layer and no
@@ -424,6 +435,7 @@ Git history keeps the old wording.
 - 2026-11-13, [0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md): the next thing built is `fabsh`, pipes, `summon` and
   `join`, working for real, with whatever they need. Tier 1 changes to put them first, in its own
   pull request; no tier table above is changed yet.
-- 2026-11-13, proposed: the changed Tier 1, in
+- 2026-11-13, approved by the owner: the changed Tier 1, in
   [the four primitives first](./tier-1.md#the-four-primitives-first). Pieces come in from Tiers 2,
-  4 and 5 and from no tier; 15 rows wait.
+  4 and 5 and from no tier. The Electron app, the thin menu bar and the cloud instance are built
+  beside them; 12 rows wait, and recovery is the first work after done.
