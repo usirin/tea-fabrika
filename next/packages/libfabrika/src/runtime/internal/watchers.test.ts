@@ -117,9 +117,6 @@ describe("saved view membership, next/", () => {
 
       expect(state).toEqual(Model.cases.empty.make({}));
     },
-    // Measured 16,432 ms on Node 26.13.0. Round up measurement × 2.8 × 2 to 120 s:
-    // CI ran instance-wire in 189 s versus 68.6 s that night (2.8×); allow another
-    // 2× headroom for load. Keep the full per-run drain rather than narrow the law.
-    { timeout: 120_000, arbitrary: { seed: 119120, runs: 100 } },
+    { arbitrary: { seed: 119120, runs: 100 } },
   );
 });
