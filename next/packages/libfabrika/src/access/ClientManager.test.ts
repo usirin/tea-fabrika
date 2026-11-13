@@ -21,8 +21,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterAll, describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, References, Schema, Stream, Tracer } from "effect";
+import { describe, expect, it } from "@effect/vitest";
+import { Effect, Layer, References, Schema, type Scope, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -61,29 +61,39 @@ const FOUNDER = {
 
 const FOUNDED: MemberEvent = { _tag: "founded", id: P, name: NAME, keys: ["pA"], window: "wA" };
 
-// Every ledger is a fresh node:sqlite file in one temp folder, removed after.
-const folder = mkdtempSync(join(tmpdir(), "p9-clients-"));
-const opened: Array<DatabaseSync> = [];
-let files = 0;
+// Every ledger is a fresh node:sqlite file in its own temp folder. The scope that opens it closes
+// the connection, then removes the folder (0061).
+const folder = Effect.acquireRelease(
+  Effect.sync(() => mkdtempSync(join(tmpdir(), "p9-clients-"))),
+  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+);
 
-const fresh = (): Sql => {
-  const db = new DatabaseSync(join(folder, `ledger-${++files}.db`));
-  opened.push(db);
-  return nodeSql(db);
-};
+// A store is a scoped Effect, so the layer built on it holds the open file in its own scope.
+type Store = Effect.Effect<Sql, never, Scope.Scope>;
 
-afterAll(() => {
-  for (const db of opened.splice(0)) {
-    if (db.isOpen) {
-      db.close();
-    }
-  }
+const fresh = (): Store =>
+  folder.pipe(
+    Effect.flatMap((path) =>
+      Effect.acquireRelease(
+        Effect.sync(() => new DatabaseSync(join(path, "ledger.db"))),
+        (db) =>
+          Effect.sync(() => {
+            if (db.isOpen) {
+              db.close();
+            }
+          }),
+      ),
+    ),
+    Effect.map(nodeSql),
+  );
 
-  rmSync(folder, { recursive: true, force: true });
-});
+/** One fresh store, opened in the test's scope, for the layers of a test that share one ledger. */
+const shared = (): Effect.Effect<Store, never, Scope.Scope> => fresh().pipe(Effect.map((sql) => Effect.succeed(sql)));
 
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
-const onSql = (sql: Sql) => LedgerSql.layer(sql, { reader: READER }).pipe(Layer.provide(quiet));
+
+const onSql = (sql: Store) =>
+  Layer.unwrap(sql.pipe(Effect.map((sql) => LedgerSql.layer(sql, { reader: READER }).pipe(Layer.provide(quiet)))));
 
 /** A ClientManager and the Ledger beneath it, so a test can read what was written. */
 const clientsOn = (ledger: Layer.Layer<Ledger>, founder: Parameters<typeof ClientManagerLedger.layer>[0] = FOUNDER) =>
@@ -308,7 +318,7 @@ describe("p96 and p97, replay and write answers", () => {
  * A Ledger that, on the append of `id`, first runs `before`: another Mac's whole write, landing
  * between this write's first check and its append. The race, made certain.
  */
-const racing = (sql: Sql, hook: { readonly id: string; before: Effect.Effect<void, LedgerError> | null }) =>
+const racing = (sql: Store, hook: { readonly id: string; before: Effect.Effect<void, LedgerError> | null }) =>
   Layer.effect(
     Ledger,
     Effect.gen(function* () {
@@ -378,7 +388,7 @@ describe("p96, founded is written once, by the first call", () => {
   it.live("two first calls at once, and two ClientManagers on one ledger, leave one founded", () =>
     check(leaf, ["t1"], (key) =>
       Effect.gen(function* () {
-        const sql = fresh();
+        const sql = yield* shared();
         const one = clientsOn(onSql(sql));
         const two = ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)));
         yield* Effect.all(
@@ -433,7 +443,7 @@ describe("p96, founded carries true facts and is never refused quietly", () => {
 
   /** A Ledger whose append of `founded` is refused with `reason`, after `before` runs. */
   const refusing = (
-    sql: Sql,
+    sql: Store,
     reason: "bad_line" | "bad_parent" | "bad_trace" | "seen_ahead" | "id_reused" | "too_big",
     before: Effect.Effect<void, LedgerError> = Effect.void,
   ) =>
@@ -453,7 +463,7 @@ describe("p96, founded carries true facts and is never refused quietly", () => {
       ["bad_line", "bad_parent", "bad_trace", "seen_ahead", "too_big"],
       (reason) =>
         Effect.gen(function* () {
-          const sql = fresh();
+          const sql = yield* shared();
           const layer = ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(refusing(sql, reason)));
           const failed = yield* Effect.flip(members.pipe(Effect.provide(layer)));
           expect(failed, reason).toBeInstanceOf(LedgerError);
@@ -467,20 +477,21 @@ describe("p96, founded carries true facts and is never refused quietly", () => {
   );
 
   it.effect("a founding refused id_reused, a second load that lost the race, goes on", () =>
-    check(leaf, ["t1"], (key) => {
-      const sql = fresh();
-      // Another load's whole first call lands first, so this one's append hears id_reused.
-      const other = members.pipe(
-        Effect.asVoid,
-        Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
-      );
-      const raced = refusing(sql, "id_reused", other);
-      return Effect.gen(function* () {
-        expect(view(yield* members)).toEqual(view(foldAccess([FOUNDED])));
-        expect(yield* write(granted("pA", key))).toEqual({ _tag: "applied", rev: 2 });
-        expect((yield* entries).map((e) => e.id)[0]).toBe("founded");
-      }).pipe(Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provideMerge(raced))));
-    }),
+    check(leaf, ["t1"], (key) =>
+      Effect.flatMap(shared(), (sql) => {
+        // Another load's whole first call lands first, so this one's append hears id_reused.
+        const other = members.pipe(
+          Effect.asVoid,
+          Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
+        );
+        const raced = refusing(sql, "id_reused", other);
+        return Effect.gen(function* () {
+          expect(view(yield* members)).toEqual(view(foldAccess([FOUNDED])));
+          expect(yield* write(granted("pA", key))).toEqual({ _tag: "applied", rev: 2 });
+          expect((yield* entries).map((e) => e.id)[0]).toBe("founded");
+        }).pipe(Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provideMerge(raced))));
+      }),
+    ),
   );
 });
 
@@ -626,39 +637,40 @@ describe("p96, why a write is refused", () => {
 
 describe("p96, the stolen sheet race", () => {
   it.effect("plant, write that skips the second fold: the Mac that lost the race hears ignored used", () =>
-    check(fc.constantFrom("lost", "kept"), ["lost"], (old) => {
-      const sql = fresh();
-      const sheet = addedSheet("pA", "r1");
-      const macC = addedDevice("r1", "pC", "wC", { drops: ["pA"], old });
-      const macX = addedDevice("r1", "pX", "wX", { old });
-      let xAnswer: unknown = null;
-      const hook: { readonly id: string; before: Effect.Effect<void, LedgerError> | null } = {
-        id: eventId(macC),
-        before: write(macX).pipe(
-          Effect.tap((answer) =>
-            Effect.sync(() => {
-              xAnswer = answer;
-            }),
+    check(fc.constantFrom("lost", "kept"), ["lost"], (old) =>
+      Effect.flatMap(shared(), (sql) => {
+        const sheet = addedSheet("pA", "r1");
+        const macC = addedDevice("r1", "pC", "wC", { drops: ["pA"], old });
+        const macX = addedDevice("r1", "pX", "wX", { old });
+        let xAnswer: unknown = null;
+        const hook: { readonly id: string; before: Effect.Effect<void, LedgerError> | null } = {
+          id: eventId(macC),
+          before: write(macX).pipe(
+            Effect.tap((answer) =>
+              Effect.sync(() => {
+                xAnswer = answer;
+              }),
+            ),
+            Effect.asVoid,
+            Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
           ),
-          Effect.asVoid,
-          Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
-        ),
-      };
-      return Effect.gen(function* () {
-        expect(yield* write(sheet)).toEqual({ _tag: "applied", rev: 2 });
-        const answer = yield* write(macC);
-        expect(hook.before).toBeNull(); // the other Mac did run in between
-        expect(xAnswer).toEqual({ _tag: "applied", rev: 3 });
-        expect(answer).toEqual({ _tag: "ignored", rev: 4, reason: "used" });
-        expect(yield* write(macC)).toEqual({ _tag: "ignored", rev: 4, reason: "used" });
-        const m = yield* members;
-        expect(m.keys.get("pX")?.live).toBe(true);
-        expect(m.keys.get("pC")?.live ?? false).toBe(false);
-        expect(m.keys.get("pA")?.live).toBe(true);
-        // Both events are in the log; the fold took only the first.
-        expect((yield* entries).map((e) => e.id)).toEqual(["founded", eventId(sheet), eventId(macX), eventId(macC)]);
-      }).pipe(Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provideMerge(racing(sql, hook)))));
-    }),
+        };
+        return Effect.gen(function* () {
+          expect(yield* write(sheet)).toEqual({ _tag: "applied", rev: 2 });
+          const answer = yield* write(macC);
+          expect(hook.before).toBeNull(); // the other Mac did run in between
+          expect(xAnswer).toEqual({ _tag: "applied", rev: 3 });
+          expect(answer).toEqual({ _tag: "ignored", rev: 4, reason: "used" });
+          expect(yield* write(macC)).toEqual({ _tag: "ignored", rev: 4, reason: "used" });
+          const m = yield* members;
+          expect(m.keys.get("pX")?.live).toBe(true);
+          expect(m.keys.get("pC")?.live ?? false).toBe(false);
+          expect(m.keys.get("pA")?.live).toBe(true);
+          // Both events are in the log; the fold took only the first.
+          expect((yield* entries).map((e) => e.id)).toEqual(["founded", eventId(sheet), eventId(macX), eventId(macC)]);
+        }).pipe(Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provideMerge(racing(sql, hook)))));
+      }),
+    ),
   );
 
   it.live("two writes of one sheet at once, as fibers: one applied, never two", () =>
@@ -668,7 +680,7 @@ describe("p96, the stolen sheet race", () => {
       (device) =>
         Effect.gen(function* () {
           for (let round = 0; round < 12; round++) {
-            const sql = fresh();
+            const sql = yield* shared();
             const one = clientsOn(onSql(sql));
             const two = ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)));
             yield* write(addedSheet("pA", "r1")).pipe(Effect.provide(one));

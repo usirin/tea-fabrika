@@ -1,7 +1,7 @@
 // T246, next/: fromHere reads the writer's current span. Its entry joins P37's ledger.call
 // record by traceId, including an own write. With no span, the helper fails instead of making one.
 import { DatabaseSync } from "node:sqlite";
-import { afterAll, describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Cause, Effect, Exit, Layer, Schema, Stream, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import { inputParents } from "../Id.test-support.ts";
@@ -29,15 +29,16 @@ const from = {
   build: "b-7c1d073",
 } as const;
 
-const opened: Array<DatabaseSync> = [];
-
-afterAll(() => {
-  for (const db of opened.splice(0)) {
-    if (db.isOpen) {
-      db.close();
-    }
-  }
-});
+// A fresh in-memory node:sqlite, closed by the scope it is opened in (0061).
+const memory = Effect.acquireRelease(
+  Effect.sync(() => new DatabaseSync(":memory:")),
+  (db) =>
+    Effect.sync(() => {
+      if (db.isOpen) {
+        db.close();
+      }
+    }),
+);
 
 describe("T518, TraceId generation", () => {
   // Plant: a lookahead in the schema's pattern prevents Effect Arbitrary generation.
@@ -70,14 +71,19 @@ describe("T246, fromHere", () => {
     { input: inputParents, own: Schema.Boolean, traceId: traceIds },
     ({ input, own, traceId }) => {
       const parent = own ? null : input;
-      const db = new DatabaseSync(":memory:");
-      opened.push(db);
-      const sql = nodeSql(db);
-      const world = Layer.mergeAll(
-        RefereeSql.layer(sql).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
-        SpanSink.layer(sql, { object: "connection:t1" }),
-        RecordManager.memory(1024 * 1024 * 1024),
-        Archive.memory,
+      // The layer's own scope holds the open database.
+      const world = Layer.unwrap(
+        memory.pipe(
+          Effect.map(nodeSql),
+          Effect.map((sql) =>
+            Layer.mergeAll(
+              RefereeSql.layer(sql).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
+              SpanSink.layer(sql, { object: "connection:t1" }),
+              RecordManager.memory(1024 * 1024 * 1024),
+              Archive.memory,
+            ),
+          ),
+        ),
       );
       return Effect.gen(function* () {
         expect(fromHere, "fromHere reads the span already in scope").toBeTypeOf("function");
