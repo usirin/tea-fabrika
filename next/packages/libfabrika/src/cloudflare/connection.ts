@@ -1,16 +1,30 @@
-import { Cause, Clock, Context, Effect, Layer, ManagedRuntime, Result, Schema } from "effect";
+import { Cause, Clock, Context, Effect, Layer, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
+import { RecordedStart } from "../settings/RecordedStart.ts";
 import { errorClass, REFUSED, SinkError } from "../telemetry/Trace.ts";
 import { connection } from "../transport/Connection.ts";
 import { Answer, Attached, Hello, RateCountFailure } from "../transport/Wire.ts";
 import type { ConnectionId } from "./bindings.ts";
 import { cloudflareSql } from "./CloudflareSql.ts";
 import { ProjectClient, rejected } from "./platform.ts";
-import { complete, projectStub, recordingLayer, rpc, type BrainOptions, type Env } from "./runtime.ts";
+import {
+  complete,
+  projectStub,
+  recordedLayer,
+  recordingLayer,
+  rpc,
+  SettingsRuntime,
+  type BrainOptions,
+  type Env,
+  type ProjectOptions,
+} from "./runtime.ts";
 
-const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: Env, config: BrainOptions) {
+const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: Env) {
+  const checked = yield* RecordedStart;
+  const port = checked.values.port;
+  const config = checked.input;
   const p = ProjectClient.make(projectStub(env, config.name)),
     ids = yield* ProcessIdGenerator;
   const gateway = yield* Schema.decodeUnknownEffect(Schema.String)(ctx.id.name).pipe(
@@ -18,7 +32,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
   );
   const recording = yield* Layer.build(
     recordingLayer(cloudflareSql(ctx.storage), env, config.name, `connection:${gateway}`),
-  );
+  ).pipe(Effect.provideService(RecordedStart, checked));
   const recorded = <A, E>(work: Effect.Effect<A, E>, counted?: (value: A) => boolean) =>
     complete(work, counted).pipe(Effect.provideContext(recording));
   const routed = Effect.fnUntraced(function* (work: Effect.Effect<typeof Answer.Type, LedgerError>) {
@@ -85,7 +99,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
             const hello = Schema.decodeUnknownResult(Hello)(params);
             const result = yield* rpc(
               p.initialize(client, params, {
-                url: `http://127.0.0.1:${config.port}`,
+                url: `http://127.0.0.1:${port}`,
                 tab,
                 name: key,
               }),
@@ -280,8 +294,20 @@ export class ConnectionService extends Context.Service<
   Effect.Success<ReturnType<typeof gatewayLogic>>
 >()("@kampus/libfabrika/cloudflare/connection.ConnectionService") {}
 
-export const connectionLayer = (ctx: DurableObjectState, env: Env, config: BrainOptions) =>
-  Layer.effect(ConnectionService, gatewayLogic(ctx, env, config)).pipe(Layer.provide(ProcessIdGenerator.layer));
+export const connectionLayer = (
+  ctx: DurableObjectState,
+  env: Env,
+  _config?: BrainOptions,
+  input?: ProjectOptions["input"],
+) =>
+  Layer.effect(ConnectionService, gatewayLogic(ctx, env)).pipe(
+    Layer.provide(ProcessIdGenerator.layer),
+    Layer.provide(input === undefined ? recordedLayer(env) : recordedLayer(env, input)),
+  );
 
-export const connectionRuntime = (ctx: DurableObjectState, env: Env, config: BrainOptions) =>
-  ManagedRuntime.make(connectionLayer(ctx, env, config));
+export const connectionRuntime = (
+  ctx: DurableObjectState,
+  env: Env,
+  config?: BrainOptions,
+  input?: ProjectOptions["input"],
+) => SettingsRuntime.runtime(connectionLayer(ctx, env, config, input));

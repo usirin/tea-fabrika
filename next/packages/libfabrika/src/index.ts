@@ -66,6 +66,9 @@ export {
   workerExecution,
 } from "./runtime/Execution.ts";
 export { Gateway, type ConnectionId } from "./gateway/Gateway.ts";
+export * as SettingsStart from "./settings/Start.ts";
+export { RecordedStart } from "./settings/RecordedStart.ts";
+export * as SettingsStarts from "./settings/Starts.ts";
 // A program window's typed contract, and the rows a client records (P14).
 export {
   ClientRecord,

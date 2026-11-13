@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import * as fc from "fast-check";
+import * as StartsTest from "../settings/StartsTest.ts";
 import { workerLoader } from "./index.ts";
 import type { BrainOptions, Env } from "./runtime.ts";
 
@@ -107,22 +108,25 @@ it("fetch serves the embedded table on GET and HEAD only after its host and orig
       async ({ id, body, type }, port, missing) => {
         const route = `/window${id}.js`;
         const table = { [route]: { hash: sha(body), type, body } };
-        const config: BrainOptions = {
+        const config = instanceFixture({
           name: "project-test",
           port,
           person: "person-test",
           founder: "public-test",
           window: null,
           build: "build-test",
-          rateLimit: { limit: 100_000, window: 60_000 },
-        };
+        });
         // An asset request calls no binding: each double fails the law if one is called.
         const refuse = () => {
           throw new Error("an asset request reached a binding");
         };
-        const stub = new Proxy({}, { get: () => refuse });
+        const stub = new Proxy(
+          {},
+          { get: (_target, key) => (key === "settingsStart" ? async () => StartsTest.reply(config) : refuse) },
+        );
         // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles stand in for the two namespaces fetch can name
         const env = {
+          INSTANCE: JSON.stringify(config),
           CONNECTION: { getByName: () => stub },
           PROJECT: { getByName: () => stub },
         } as unknown as Env;
@@ -154,3 +158,9 @@ it("fetch serves the embedded table on GET and HEAD only after its host and orig
     { seed: 119120, numRuns: 30 },
   );
 });
+
+function instanceFixture(config: StartsTest.Fixture) {
+  return StartsTest.fixture(config, (algorithm, data) =>
+    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  );
+}

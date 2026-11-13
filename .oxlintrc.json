@@ -1452,6 +1452,86 @@
       }
     },
     {
+      // T753 L15: this shared holder has no platform or app dependency.
+      "files": ["next/packages/libfabrika/src/cloudflare/SettingsRuntime.ts"],
+      "rules": {
+        "typescript/no-restricted-types": [
+          "error",
+          {
+            "types": {
+              "DurableObjectState": "The shared holder has no platform types.",
+              "DurableObjectStorage": "The shared holder has no platform types.",
+              "DurableObjectNamespace": "The shared holder has no platform types.",
+              "R2Bucket": "The shared holder has no platform types.",
+              "WorkerLoader": "The shared holder has no platform types."
+            }
+          }
+        ],
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [{ "group": ["**", "!effect"], "message": "SettingsRuntime imports only Effect." }]
+          }
+        ]
+      }
+    },
+    {
+      // T753 L15: service contracts hold no Layer and no mutable readiness field.
+      "files": [
+        "next/packages/libfabrika/src/settings/Starts.ts",
+        "next/packages/libfabrika/src/settings/RecordedStart.ts"
+      ],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "effect",
+                "importNames": ["Layer", "ManagedRuntime", "ScopedCache"],
+                "message": "A service file holds only its contract (0095)."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["**", "!effect", "!./Start.ts", "!./Starts.ts", "!./Snapshot.ts", "!./Declarations.ts"],
+                "message": "Settings contracts use Effect and settings-owned types only."
+              }
+            ]
+          }
+        ],
+        "eslint/id-denylist": [
+          "error",
+          "where",
+          "why",
+          "what",
+          "who",
+          "how",
+          "room",
+          "rooms",
+          "Room",
+          "Rooms",
+          "ROOM",
+          "ROOMS",
+          "floor",
+          "floors",
+          "Floor",
+          "Floors",
+          "FLOOR",
+          "FLOORS",
+          "otherRoom",
+          "floorsByName",
+          "floorRank",
+          "floored",
+          "unfloored",
+          "layer",
+          "ready",
+          "recorded",
+          "ensure"
+        ]
+      }
+    },
+    {
       // Ticket 649, L6: trace's speed laws count work through the built-ins
       // (programs/trace/src/work.test-support.ts), which cannot see a hand index loop. This catches
       // the plain one that only reads `a[i]`. A `while` loop, or an index loop that does arithmetic

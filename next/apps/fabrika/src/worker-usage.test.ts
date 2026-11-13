@@ -13,6 +13,7 @@ import { expect } from "vitest";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
+import * as RecordWireTest from "./record-wire.test-support.ts";
 
 const PROJECT = "isolate-usage-test";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -197,15 +198,17 @@ const world = Effect.gen(function* () {
   });
   const key = identity();
   const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
-  const instance = yield* localInstance(built, {
-    home,
-    name: PROJECT,
-    person: PERSON,
-    founder: key.line,
-    window: key.raw,
-    port: port.port,
-    rateLimit: { limit: 100_000, window: 60_000 },
-  });
+  const instance = yield* localInstance(
+    built,
+    RecordWireTest.settingsFixture({
+      home,
+      name: PROJECT,
+      person: PERSON,
+      founder: key.line,
+      window: key.raw,
+      port: port.port,
+    }),
+  );
   const send = yield* wire(instance.url, key);
   return { instance, built, home, send, from: { ...FROM, by: key.fingerprint, build: built.build } };
 });

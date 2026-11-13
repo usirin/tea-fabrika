@@ -14,6 +14,8 @@ import { Start } from "@kampus/libfabrika/processes/Process";
 import { copied, type ExitReason, fcBadReason, fcExitReason } from "@kampus/libfabrika/processes/Process.test-support";
 import { Program } from "@kampus/libfabrika/runtime/Program";
 import { send } from "@kampus/libfabrika/runtime/Send";
+import * as SettingsStart from "@kampus/libfabrika/settings/Start";
+import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import {
   commitReply,
@@ -25,10 +27,11 @@ import {
   savedAlarm,
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
-import { Effect, Schema } from "effect";
+import { Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { programs } from "virtual:fabrika-built";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
@@ -48,6 +51,10 @@ const projectObject = (ctx: DurableObjectState, env: Env) => {
   const run = <A, E>(use: (p: ProjectCalls) => Effect.Effect<A, E>) => runtime.runPromise(ProjectService.use(use));
   return {
     runtime,
+    settingsStart: (...args: Parameters<typeof runtime.settingsStart>) =>
+      Effect.runPromise(runtime.settingsStart(...args)),
+    settingsRead: (...args: Parameters<typeof runtime.settingsRead>) =>
+      Effect.runPromise(runtime.settingsRead(...args)),
     info: () => run((p) => p.info),
     clientConnect: () => run((p) => p.connect()),
     challenge: (client: Parameters<ProjectCalls["challenge"]>[0]) => run((p) => p.challenge(client)),
@@ -441,6 +448,7 @@ type Lost = { readonly at: number; readonly side: "before" | "after" } | null;
 const world = (
   fault: "failed" | "interrupted" | "healthy" = "healthy",
   flow: { readonly limit: number | null; readonly lost: Lost } = { limit: null, lost: null },
+  settingsCounts = { calls: 0, reads: 0, appends: 0 },
 ) => {
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
   table.programs["fabrika/counter"] = { hash: "counter-a", source: "counter" };
@@ -450,11 +458,35 @@ const world = (
   table.programs[mailResponder.name] = { hash: "responder-a", source: "responder" };
   const key = identity(),
     db = new DatabaseSync(":memory:");
+  const handles = storage(db);
   const loopbacks = { IsolateTail: () => ({ fetch: async () => new Response() }) };
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the platform handles used by the real Project service
   const ctx = {
     id: { name: "project-test" },
-    storage: storage(db),
+    storage: {
+      ...handles,
+      sql: {
+        get databaseSize() {
+          return handles.sql.databaseSize;
+        },
+        exec: (
+          query: string,
+          ...args: Parameters<typeof handles.sql.exec> extends [string, ...infer A] ? A : never
+        ) => {
+          if (args.some((arg) => typeof arg === "string" && arg.startsWith("settings/instance/"))) {
+            if (/SELECT \* FROM entries WHERE stream = \? AND rev > \?/i.test(query)) {
+              settingsCounts.reads++;
+            }
+
+            if (/INSERT INTO entries/i.test(query)) {
+              settingsCounts.appends++;
+            }
+          }
+
+          return handles.sql.exec(query, ...args);
+        },
+      },
+    },
     exports: loopbacks,
   } as unknown as DurableObjectState;
   // Keyed by the storage name the runtime asks for, so the runtime alone decides which IDs share one.
@@ -464,6 +496,7 @@ const world = (
     entered = gate(),
     interrupted = gate();
   let project: ProjectObject;
+  let settingsRefused = false;
   let beforeCommit = async () => {};
   let afterMail = async () => {};
   let signs = 0,
@@ -498,7 +531,16 @@ const world = (
   const call = (method: string) => async (args: ReadonlyArray<unknown>) => {
     const work = () => Reflect.apply(Reflect.get(project, method), project, args);
 
-    if (OLD_PROJECT_CALLS.has(method)) {
+    if (method === "settingsStart" || method === "settingsRead") {
+      settingsCounts.calls++;
+
+      if (settingsRefused) {
+        return SettingsStart.Reply.cases.Refused.make({});
+      }
+    }
+
+    // Settings setup is outside the recovery RPC failure cuts.
+    if (OLD_PROJECT_CALLS.has(method) || method === "settingsStart" || method === "settingsRead") {
       return work();
     }
 
@@ -520,16 +562,17 @@ const world = (
   };
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but do not have workerd's nominal brands
   const env = {
-    INSTANCE: JSON.stringify({
-      name: "project-test",
-      person: PERSON,
-      founder: key.line,
-      window: key.raw,
-      port: 18787,
-      rateLimit: { limit: 100_000, window: 60_000 },
-      build: "brain-test",
-      mail: { grants: { "requester:1": ["responder:1"], "responder:1": ["requester:1"] } },
-    }),
+    INSTANCE: JSON.stringify(
+      RecordWireTest.settingsFixture({
+        name: "project-test",
+        person: PERSON,
+        founder: key.line,
+        window: key.raw,
+        port: 18787,
+        build: "brain-test",
+        mail: { grants: { "requester:1": ["responder:1"], "responder:1": ["requester:1"] } },
+      }),
+    ),
     // Every Project RPC the real class hands off, so new Project calls reach the real service too.
     PROJECT: {
       getByName: () =>
@@ -725,7 +768,7 @@ const world = (
     },
   } as unknown as Env;
   project = projectObject(ctx, env);
-  closers.push(async () => {
+  const close = async () => {
     closed = true;
     interrupted.resolve();
 
@@ -737,7 +780,8 @@ const world = (
 
     await project.runtime.dispose();
     db.close();
-  });
+  };
+  closers.push(close);
   /** The registered name the Project saved for a process ID, if any. */
   const nameFor = (pid: string): string | undefined => {
     const row = db.prepare("SELECT value FROM dev_descriptors WHERE process=?").get(pid);
@@ -765,6 +809,17 @@ const world = (
     return found[1];
   };
   return {
+    close: async () => {
+      const index = closers.indexOf(close);
+
+      if (index !== -1) {
+        closers.splice(index, 1);
+        await close();
+      }
+    },
+    refuseSettings: (refused: boolean) => {
+      settingsRefused = refused;
+    },
     get project() {
       return project;
     },
@@ -925,6 +980,94 @@ const world = (
     calls: () => ({ signs, commits }),
   };
 };
+
+StartsTest.law(
+  "T753 L16 real first/later process steps, recovery and successors keep the shared instance gate",
+  fc.tuple(fc.array(fc.nat(), { minLength: 12, maxLength: 20 })),
+  ([choices]) =>
+    Effect.gen(function* () {
+      const costs = { calls: 0, reads: 0, appends: 0 };
+      const w = yield* Effect.acquireRelease(
+        Effect.sync(() => world("healthy", { limit: null, lost: null }, costs)),
+        (owned) => Effect.promise(() => owned.close()),
+      );
+      const [first] = yield* Effect.promise(() => w.project.info());
+      expect(costs).toEqual({ calls: 0, reads: 2, appends: 1 });
+      let pid = first!.process;
+      const client = yield* Effect.promise(() => w.admit());
+      let built = false;
+      let restarts = 0;
+      let count = 0;
+
+      for (const [index, choice] of choices.entries()) {
+        const moves = built
+          ? restarts < 2
+            ? ["step", "step", "open", "alarm", "successor", "reopen"]
+            : ["step", "step", "open", "alarm", "reopen"]
+          : ["refuse", "step", "open"];
+        const move = moves[choice % moves.length];
+        const owner = w.process(pid);
+
+        if (move === "reopen") {
+          yield* Effect.promise(() => w.reopenProcess(pid));
+          built = false;
+          continue;
+        }
+
+        const before = { ...costs };
+
+        if (move === "refuse") {
+          w.refuseSettings(true);
+          expect(Exit.isFailure(yield* Effect.exit(Effect.promise(() => owner.object.open("settings-audit"))))).toBe(
+            true,
+          );
+          expect(costs).toEqual({ calls: before.calls + 1, reads: before.reads, appends: before.appends });
+          w.refuseSettings(false);
+        }
+
+        // An open really loads the program and restores its checkpoint. An alarm with no wake does neither.
+        const opened = yield* Effect.promise(() => owner.object.open("settings-audit"));
+        expect(opened).toMatchObject({ view: { count } });
+        expect(costs).toEqual({
+          calls: before.calls + (move === "refuse" ? 1 : 0) + (built ? 0 : 1),
+          reads: before.reads + (built ? 0 : 1),
+          appends: before.appends,
+        });
+        built = true;
+        const warm = { ...costs };
+
+        if (move === "step") {
+          const answer = yield* Effect.promise(() =>
+            w.project.route(client, "process.send", {
+              pid,
+              letter: `settings-step-${index}`,
+              m: { type: "inc" },
+              sentAt: SENT,
+              seen: 0,
+            }),
+          );
+          expect(answer).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+          count++;
+          expect(yield* Effect.promise(() => owner.object.open("settings-audit"))).toMatchObject({ view: { count } });
+        } else if (move === "successor") {
+          yield* Effect.promise(() => owner.object.restart({ id: `settings-restart-${index}`, build: "counter-a" }));
+          const rows = yield* Effect.promise(() => w.project.info());
+          const successor = rows.find((row) => row.name === first!.name)!;
+          expect(successor.process).not.toBe(pid);
+          expect(w.process(successor.process)).toBe(owner);
+          pid = successor.process;
+          restarts++;
+          const view = yield* Effect.promise(() => owner.object.open("settings-audit"));
+          count = Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Int }))(view.view).count;
+        } else if (move === "alarm") {
+          yield* Effect.promise(() => owner.object.due(0));
+          yield* Effect.promise(() => owner.object.alarm());
+        }
+
+        expect(costs).toEqual(warm);
+      }
+    }),
+);
 
 describe("P12 Project configure recovery", () => {
   for (const fault of ["failed", "interrupted", "healthy"] as const) {

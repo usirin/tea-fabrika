@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Effect, Layer, Schema } from "effect";
 import * as fc from "fast-check";
 // T695, next/. The Cloudflare adapters keep the failure they translate (decision 0043 rule 12).
@@ -11,6 +12,7 @@ import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { ProgramDown } from "../runtime/Program.ts";
+import * as StartsTest from "../settings/StartsTest.ts";
 import { Chain, SinkError } from "../telemetry/Trace.ts";
 import { programBox } from "./box.ts";
 import { connectionLayer } from "./connection.ts";
@@ -167,7 +169,16 @@ const objectState = (name: unknown, saved: unknown = undefined): DurableObjectSt
   });
 
 const env: Env = fake({
-  PROJECT: { getByName: () => rejecting(new Error("no project in this law")) },
+  INSTANCE: JSON.stringify(instanceFixture({ name: "p", port: 8787 })),
+  PROJECT: {
+    getByName: () =>
+      new Proxy(rejecting<object>(new Error("no project in this law")), {
+        get: (target, key) =>
+          key === "settingsStart"
+            ? async () => StartsTest.reply(instanceFixture({ name: "p", port: 8787 }))
+            : Reflect.get(target, key),
+      }),
+  },
   RECORD: { getByName: () => rejecting(new Error("no record in this law")) },
   CONNECTION: { getByName: () => rejecting(new Error("no connection in this law")) },
   PROCESS: { getByName: () => rejecting(new Error("no process in this law")) },
@@ -175,7 +186,7 @@ const env: Env = fake({
   LOADER: loader(() => Promise.resolve(null)),
 });
 
-const config: BrainOptions = fake({ name: "p", port: 8787 });
+const config: BrainOptions = fake(instanceFixture({ name: "p", port: 8787 }));
 
 describe("T695, the object adapters keep what failed", () => {
   // C3, record.ts:22. Plant: `Effect.mapError(() => new SinkError({ reason: "bad_row", held: 0 }))`.
@@ -294,8 +305,8 @@ describe("T695, the public route keeps what failed", () => {
     fc.record({ head: fc.stringMatching(/^[a-z0-9]{0,8}$/), broken: fc.constantFrom("%E0%A4%A", "%", "%zz", "%C3") }),
     ({ head, broken }) =>
       Effect.gen(function* () {
-        const request = new Request(`http://127.0.0.1:${config.port}/grant/client/${head}${broken}`, {
-          headers: { host: `127.0.0.1:${config.port}` },
+        const request = new Request(`http://127.0.0.1:${8787}/grant/client/${head}${broken}`, {
+          headers: { host: `127.0.0.1:${8787}` },
         });
         const error = yield* Effect.flip(fetch(request, env, config));
         expect(error).toBeInstanceOf(LedgerError);
@@ -304,3 +315,9 @@ describe("T695, the public route keeps what failed", () => {
       }),
   );
 });
+
+function instanceFixture(config: StartsTest.Fixture) {
+  return StartsTest.fixture(config, (algorithm, data) =>
+    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  );
+}

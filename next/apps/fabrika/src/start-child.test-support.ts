@@ -19,6 +19,7 @@ import { SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
+import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -135,16 +136,18 @@ export const childInstance = Effect.fnUntraced(
     // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
     const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
     const key = identity();
-    const instance = yield* localInstance(built, {
-      home,
-      name: PROJECT,
-      person: PERSON,
-      founder: key.line,
-      window: key.raw,
-      port: port.port,
-      rateLimit: { limit: 100_000, window: 60_000 },
-      starts,
-    } as Parameters<typeof localInstance>[1]);
+    const instance = yield* localInstance(
+      built,
+      RecordWireTest.startupFixture({
+        home,
+        name: PROJECT,
+        person: PERSON,
+        founder: key.line,
+        window: key.raw,
+        port: port.port,
+        starts,
+      }),
+    );
     const from: From = {
       by: key.fingerprint,
       for: PERSON,
@@ -282,16 +285,17 @@ export const childProject = Effect.fnUntraced(function* () {
   } as unknown as DurableObjectState;
   // oxlint-disable-next-line fabrika/no-type-assertions -- only platform transports are supplied; authority, ledger and start logic are real
   const env = {
-    INSTANCE: JSON.stringify({
-      name: PROJECT,
-      person: PERSON,
-      founder: key.line,
-      window: key.raw,
-      port: 18787,
-      rateLimit: { limit: 100_000, window: 60_000 },
-      build: "p42-project",
-      starts: [{ source: "fabrika/counter", to: "p42/child" }],
-    }),
+    INSTANCE: JSON.stringify(
+      RecordWireTest.settingsFixture({
+        name: PROJECT,
+        person: PERSON,
+        founder: key.line,
+        window: key.raw,
+        port: 18787,
+        build: "p42-project",
+        starts: [{ source: "fabrika/counter", to: "p42/child" }],
+      }),
+    ),
     PROCESS: {
       getByName: (name: string) => {
         const [, registered] = JSON.parse(name) as [string, string];

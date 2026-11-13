@@ -9,16 +9,19 @@ import type { Descriptor, Incoming, Sent } from "@kampus/libfabrika";
 import { SigningRefused } from "@kampus/libfabrika/access/SessionManager";
 import { revokeText } from "@kampus/libfabrika/access/Text";
 import { BrainEvent } from "@kampus/libfabrika/brain-event";
+import { Child, type StartGrant } from "@kampus/libfabrika/processes/Children";
 import { type From } from "@kampus/libfabrika/processes/Mailbox";
-import { Start } from "@kampus/libfabrika/processes/Process";
+import { Recipient, Start } from "@kampus/libfabrika/processes/Process";
+import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
-import { Cause, Deferred, Effect, Exit, Layer, ManagedRuntime, Option, Schedule, Schema, Tracer } from "effect";
+import { Cause, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Tracer } from "effect";
 import * as fc from "fast-check";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, settings, type Env } from "./runtime.ts";
 import { Settings } from "./settings.ts";
 
@@ -30,7 +33,7 @@ vi.mock("virtual:fabrika-built", () => ({ ...table, assets: {} }));
 
 vi.mock("effect", async (importOriginal) => {
   const actual = await importOriginal<typeof import("effect")>();
-  return { ...actual, ManagedRuntime: { ...actual.ManagedRuntime } };
+  return { ...actual, Layer: { ...actual.Layer } };
 });
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -155,7 +158,11 @@ const settled = (db: DatabaseSync) =>
  *  `status` (amendment A2). It gives up after this, so a build that waits on it still ends. */
 const CALLBACK_GIVES_UP = "6 seconds";
 
-const world = async (trace = TRACE, build = "counter-b", options: { readonly callback?: boolean } = {}) => {
+const world = async (
+  trace = TRACE,
+  build = "counter-b",
+  options: { readonly callback?: boolean; readonly starts?: ReadonlyArray<typeof StartGrant.Type> } = {},
+) => {
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
   table.programs["fabrika/counter"] = { hash: "counter-a", source: "counter" };
   table.programs.approvals = { hash: "approvals-a", source: "approvals" };
@@ -180,15 +187,17 @@ const world = async (trace = TRACE, build = "counter-b", options: { readonly cal
   let onRing: () => Promise<void> = async () => {};
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
-    INSTANCE: JSON.stringify({
-      name: "project-test",
-      person: PERSON,
-      founder: key.line,
-      window: key.raw,
-      port: 18787,
-      rateLimit: { limit: 100_000, window: 60_000 },
-      build: "brain-test",
-    }),
+    INSTANCE: JSON.stringify(
+      RecordWireTest.settingsFixture({
+        name: "project-test",
+        person: PERSON,
+        founder: key.line,
+        window: key.raw,
+        port: 18787,
+        build: "brain-test",
+        ...(options.starts === undefined ? {} : { starts: options.starts }),
+      }),
+    ),
     PROCESS: {
       // Ticket 402 keys a Process object by its registered name, so the stub key may be a
       // name: descriptors are keyed by their own process ID, and delivery names that ID.
@@ -258,27 +267,26 @@ const world = async (trace = TRACE, build = "counter-b", options: { readonly cal
     },
   } as unknown as Env;
   const span = Tracer.externalSpan({ traceId: trace, spanId: "00f067aa0ba902b7" });
-  const make = ManagedRuntime.make;
-  // ManagedRuntime builds its layer before the requested Effect runs, in a separate fiber.
-  // Put the caller's span on that real layer so it is current during bootstrap.
+  const buildLayer = Layer.buildWithMemoMap;
+  // The shared holder builds consumers on first entry, after the outer runtime starts.
   const startup = vi
-    .spyOn(ManagedRuntime, "make")
-    .mockImplementationOnce((layer, options) => make(layer.pipe(Layer.withParentSpan(span)), options));
-  let runtime: ReturnType<typeof projectRuntime>;
-
-  try {
-    runtime = projectRuntime(ctx, env);
-  } finally {
-    startup.mockRestore();
-  }
-
+    .spyOn(Layer, "buildWithMemoMap")
+    .mockImplementation((layer, memo, scope) => buildLayer(layer.pipe(Layer.withParentSpan(span)), memo, scope));
+  let runtime = projectRuntime(ctx, env);
   const run = <A, E>(work: Effect.Effect<A, E, ProjectService>) => runtime.runPromise(work);
   closers.push(async () => {
     await runtime.dispose();
     db.close();
     rmSync(home, { recursive: true, force: true });
   });
-  const p = await run(ProjectService);
+  let p: ProjectService["Service"];
+
+  try {
+    p = await run(ProjectService);
+  } finally {
+    startup.mockRestore();
+  }
+
   await settled(db);
   const from: From = {
     by: key.fingerprint,
@@ -314,6 +322,7 @@ const world = async (trace = TRACE, build = "counter-b", options: { readonly cal
   return {
     p,
     run,
+    settingsRead: (start: string) => runtime.settingsRead(start),
     span,
     key,
     env,
@@ -374,12 +383,81 @@ const world = async (trace = TRACE, build = "counter-b", options: { readonly cal
 };
 
 // The L4/L8 world is a scoped resource: its release closes what `world()` opened (0061).
-const opened = Effect.acquireRelease(
-  Effect.promise(() => world()),
-  () =>
-    Effect.promise(async () => {
-      for (const close of closers.splice(0).reverse()) {
-        await close();
+const openWorld = (starts?: ReadonlyArray<typeof StartGrant.Type>) =>
+  Effect.acquireRelease(
+    Effect.promise(() => world(TRACE, "counter-b", starts === undefined ? {} : { starts })),
+    () =>
+      Effect.promise(async () => {
+        for (const close of closers.splice(0).reverse()) {
+          await close();
+        }
+      }),
+  );
+
+const opened = openWorld();
+
+StartsTest.law(
+  "L4 child grants pass through the recorded start to ChildrenLedger without entering ledger entries or receipts",
+  fc.tuple(fc.uuid(), fc.array(fc.nat(), { minLength: 8, maxLength: 25 })),
+  ([word, choices]) =>
+    Effect.gen(function* () {
+      const grants = [
+        { source: "fabrika/counter", to: "approvals" },
+        { source: `unused-${word}`, to: `unused-target-${word}` },
+      ];
+      const w = yield* openWorld(grants);
+      let project = w.p;
+      const [boot] = yield* Effect.promise(() => w.run(project.info));
+      expect(boot).toBeDefined();
+      const requester = Recipient.cases.process.make({ process: boot!.process });
+      const saved: Array<Child> = [];
+      const start = (child: Child) => Effect.promise(() => w.run(project.processChild(child, w.from)));
+      const checkSaved = Effect.fnUntraced(function* () {
+        const rows = w.db.prepare("SELECT * FROM entries").all();
+        expect(rows.some((row) => row._tag === "instance_started")).toBe(true);
+
+        for (const row of rows) {
+          const body = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(row.body);
+          expect(body).not.toHaveProperty("starts");
+          expect(JSON.stringify(row)).not.toContain(`unused-${word}`);
+          expect(JSON.stringify(row)).not.toContain(`unused-target-${word}`);
+        }
+
+        const input = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Settings))(w.env.INSTANCE);
+        const receipt = yield* w.settingsRead(input.start);
+        expect(receipt).toMatchObject({ _tag: "ok" });
+        expect(receipt).not.toHaveProperty("value.starts");
+        expect(JSON.stringify(receipt)).not.toContain(`unused-${word}`);
+      });
+
+      for (const [index, choice] of choices.entries()) {
+        const moves = saved.length === 0 ? ["start"] : ["start", "repeat", "refuse", "reopen"];
+        const move = moves[choice % moves.length];
+
+        if (move === "reopen") {
+          project = yield* Effect.promise(() => w.reopen());
+        } else if (move === "repeat") {
+          expect(yield* start(saved[choice % saved.length]!)).toMatchObject({ _tag: "ok", value: { _tag: "started" } });
+        } else {
+          const child = Child.make({
+            id: `child-${word}-${index}`,
+            name: `child:${index}`,
+            code: { program: move === "refuse" ? `ungranted-${word}` : "approvals", hash: "approvals-a" },
+            requester,
+          });
+          const before = w.db.prepare("SELECT count(*) AS total FROM entries").get();
+          const reply = yield* start(child);
+
+          if (move === "refuse") {
+            expect(reply).toMatchObject({ _tag: "ChildrenError", reason: "forbidden" });
+            expect(w.db.prepare("SELECT count(*) AS total FROM entries").get()).toEqual(before);
+          } else {
+            expect(reply).toMatchObject({ _tag: "ok", value: { _tag: "started", name: child.name } });
+            saved.push(child);
+          }
+        }
+
+        yield* checkSaved();
       }
     }),
 );
@@ -809,7 +887,11 @@ describe("P12 Connection recording", () => {
       } as unknown as DurableObjectState;
       // oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand
       const project = {
-        getByName: () => ({ leave: async () => {}, disconnect: async () => {} }),
+        getByName: () => ({
+          settingsStart: async () => StartsTest.reply(await Effect.runPromise(settings(w.env))),
+          leave: async () => {},
+          disconnect: async () => {},
+        }),
       } as unknown as Env["PROJECT"];
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node socket double implements attachment, send and close without workerd's socket brand
       const socket = ws as unknown as WebSocket;
@@ -884,6 +966,7 @@ describe("P12 Connection recording", () => {
     // oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand
     const project = {
       getByName: () => ({
+        settingsStart: async () => StartsTest.reply(await Effect.runPromise(settings(w.env))),
         route: async () => {
           throw fault;
         },

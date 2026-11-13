@@ -14,7 +14,7 @@ import { Digest, SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import { build } from "./src/build.ts";
 import { localInstance } from "./src/local-instance.ts";
-import { Settings } from "./src/settings.ts";
+import { Founding } from "./src/settings.ts";
 
 class InstanceError extends Schema.TaggedError<InstanceError>()("InstanceError", {
   reason: Schema.String,
@@ -35,10 +35,7 @@ const settings = Object.fromEntries(
 
 // The saved state of a home: its founding facts. A port saved there by an older start is read
 // only to say that it is no longer used.
-const Saved = Settings.mapFields(({ port, rateLimit: _rateLimit, ...fields }) => ({
-  ...fields,
-  port: Schema.optionalKey(port),
-}));
+const Saved = Schema.Struct({ ...Founding.fields, port: Schema.optionalKey(Declarations.port.schema) });
 
 /** The entries that hold a value, as one record. */
 const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) =>
@@ -112,12 +109,15 @@ const command = Command.make("dev", flags, (options) => {
                 Effect.provide(RepositoriesGit.layer({ person: home })),
                 Effect.provide([TomlParser.layer, Digest.layerWebCrypto]),
               );
+        // Settings are read once, before anything starts: with the selected repo's file at one
+        // commit, or with no repo file when the start selects none.
         const loaded =
-          prepared ??
-          (yield* Load.load(loadOptions).pipe(
-            Effect.provide([TomlParser.layer, Digest.layerWebCrypto]),
-            Effect.mapError((cause) => new InstanceError({ reason: "settings", cause })),
-          ));
+          prepared === undefined
+            ? yield* Load.load(loadOptions).pipe(
+                Effect.provide([TomlParser.layer, Digest.layerWebCrypto]),
+                Effect.mapError((cause) => new InstanceError({ reason: "settings", cause })),
+              )
+            : { snapshot: prepared.settings, values: prepared.values };
         const { file, state } = yield* Effect.gen(function* () {
           yield* fs.makeDirectory(home, { recursive: true });
           const file = path.join(home, "instance.json");
@@ -148,10 +148,14 @@ const command = Command.make("dev", flags, (options) => {
           .pipe(Effect.mapError((cause) => new InstanceError({ reason: "settings", cause })));
         const built = yield* build({ out: path.join(home, "build") });
         const instance = yield* localInstance(built, {
-          ...state,
-          port: loaded.values.port,
-          rateLimit: { limit: loaded.values.gatewayLimit, window: loaded.values.gatewayWindow },
+          name: state.name,
+          founding: { person: state.person, founder: state.founder, window: state.window },
+          settings: loaded.snapshot,
+          // The start's record names the commit the repo's settings were read at.
+          repo: prepared === undefined ? null : { revision: prepared.snapshot.commit },
           home,
+          ...(state.limits === undefined ? {} : { limits: state.limits }),
+          ...(state.mail === undefined ? {} : { mail: state.mail }),
         });
 
         if (prepared !== undefined) {
