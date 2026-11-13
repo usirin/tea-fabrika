@@ -241,6 +241,7 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
     ping: { min: 10_000, max: 60_000 },
     inputCap: 1_000_000,
     spentCap: 100_000,
+    rateLimit: { limit: 100_000, window: 60_000 },
     turn,
     write: (work) =>
       Effect.gen(function* () {

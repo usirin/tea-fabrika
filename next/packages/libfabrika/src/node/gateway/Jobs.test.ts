@@ -5,9 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Effect, Layer } from "effect";
+import * as RateLimiter from "effect/persistence/RateLimiter";
 import * as ClientManagerLedger from "../../access/ClientManagerLedger.ts";
 import { Gateway } from "../../gateway/Gateway.ts";
 import * as TestSuite from "../../gateway/JobsTest.ts";
+import * as RateLimiterSql from "../../gateway/RateLimiterSql.ts";
 import * as Id from "../../Id.ts";
 import * as JobsLedger from "../../jobs/JobsLedger.ts";
 import { Doorbell } from "../../ledger/Ledger.ts";
@@ -63,6 +65,9 @@ const open = Effect.gen(function* () {
       RecordManager.memory(4 * 1024 * 1024),
       Archive.memory,
       Id.Generator.layer,
+      RateLimiter.layer.pipe(
+        Layer.provide(RateLimiterSql.layer(sql, { build: options.build, policy: options.rateLimit })),
+      ),
     );
     // The suite's contract names no ledger error: a store that cannot open is a broken test, a defect.
     return Gateway.layer(options).pipe(Layer.provideMerge(services), Layer.orDie);

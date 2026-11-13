@@ -212,6 +212,7 @@ it.live(
         founder: root.line,
         window: root.raw,
         port: port.port,
+        rateLimit: { limit: 100_000, window: 60_000 },
       });
       const url = `http://127.0.0.1:${port.port}`;
       expect(running).toBeDefined();
