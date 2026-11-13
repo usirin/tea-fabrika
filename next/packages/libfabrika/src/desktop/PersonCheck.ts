@@ -17,13 +17,21 @@ export const Answer = Schema.TaggedUnion({
 });
 
 /**
- * Failure to run a person check, retaining the underlying cause.
+ * A person check could not run, retaining the underlying cause.
+ * @stability unstable
+ * @category errors
+ */
+export class Unavailable extends Schema.TaggedError<Unavailable>()("Unavailable", {
+  cause: Schema.Defect(),
+}) {}
+
+/**
+ * Failure to run a person check.
  * @stability unstable
  * @category errors
  */
 export class PersonCheckError extends Schema.TaggedError<PersonCheckError>()("PersonCheckError", {
-  reason: Schema.Literal("unavailable"),
-  cause: Schema.Defect(),
+  reason: Schema.Union([Unavailable]),
 }) {}
 
 /**
