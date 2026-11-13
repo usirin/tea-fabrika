@@ -298,7 +298,9 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
   day, and keep building. The bump that takes the release deletes the patch
   ([patch upstream locally](./docs/direction/patch-upstream-locally.md)). First read the
   package's decisions, patterns and source and build on its answer; patch only a gap or bug that
-  read proved ([0054](./.decisions/0054-read-upstream-before-patching-it.md)).
+  read proved ([0054](./.decisions/0054-read-upstream-before-patching-it.md)). An upstream issue
+  reports one bug we proved, with its repro; a list of missing features found by reading is
+  patched locally and not reported in bulk (owner, 2026-11-09).
 - **Read the installed version.** Agents know older libraries. Before you write or judge
   code against one, read the lockfile's version and that version's docs. A lint rule that
   fires a lot means ask why before you call it a false alarm.
@@ -317,6 +319,9 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
 - **Solve a problem we have.** A big vision gets saved as a note and tied back to a real
   problem. An experiment picks the tech. Aim at two people working together first:
   packages for others and publishing are recorded as later.
+- **Judge an idea against the plan, never against today's code.** A "not yet", "later" or "too
+  small today" claim is checked against what the plan says we are building, never against what
+  exists today. A plan file that is behind a decision is fixed the same turn (owner, 2026-11-11).
 - **Moving a job from an agent to code?** Say what the agent was absorbing that code will
   not (the case nobody listed), what the "I don't know" exit is, and whether the rule
   makes honesty expensive. Check a rule against real moves you made this session: would
@@ -460,7 +465,8 @@ every row.
 A report says which of these ran, and which could not run and why.
 
 A flaky test is fixed the day it is seen, by removing its cause; nobody reruns it until green and moves on
-([0036](./.decisions/0036-a-flaky-test-is-fixed.md)).
+([0036](./.decisions/0036-a-flaky-test-is-fixed.md)). A refusal, failure or problem seen a second time gets its root
+cause found and a ticket filed, never another workaround or another ask (owner, 2026-11-10).
 
 `pnpm lint` fails on an export nobody uses that `unreachable-ledger.json` does
 not name yet (`pnpm lint:dead` runs that part alone). With code-graph 0.12.0,
@@ -515,7 +521,7 @@ brief carries these caps. Each one came from a laptop that became unusable.
   Never the full suite locally (owner, 2026-11-08). A change to a file that reruns every test (the
   `forceRerunTriggers` in `vitest.config.ts`: a `package.json`, the lockfile, `pnpm-workspace.yaml`,
   a tsconfig and others) makes `--changed` the full suite, so the config refuses it locally: run
-  the narrow paths of the tests you touched and of the tests that read that file, and CI runs the rest. On a pull request, CI decides what to run from
+  the narrow paths of the tests you touched and of the tests that read that file, and CI runs the ones its changed paths call for. On a pull request, CI decides what to run from
   the changed paths (`.github/ci/changes.mjs`). `pnpm typecheck` is its own job, `typecheck`, beside
   `check`'s lint and build, and runs or skips with `check` (0133). A draft pull request runs only `changes`, `field`, `typecheck` and `check`'s lint (named `lint` there), and marking it ready runs the full set on the same head ([0134](./.decisions/0134-no-code-stays-only-on-a-local-branch.md)). Only Markdown or field rows (`field/*.jsonl`, or files in `field/notes/`, `field/runs/` and `field/findings/`): it skips
   `check`, `test`, `next` and `e2e`. Only `next/` files (but not the exam helper): it runs `check` and `next`,
@@ -525,7 +531,13 @@ brief carries these caps. Each one came from a laptop that became unusable.
   picks only the tests that reach them. What a test's scripts read is derived from the scripts, never
   written in the test (`oxlint-plugins/script-reads.mjs`; `pnpm lint` fails on a script no test reaches).
   Other Markdown that a program or skill reads counts as code.
-  Anything else, and every push to main, runs all jobs, so the full suite runs after the merge. A run that
+  Anything else runs `check`, `typecheck`, `test` and `next`. Today's own checks (today's tests, `e2e`, and `check`'s
+  promises gate and build) start only when a file of today's version changed (`apps/`, `programs/`, `packages/`,
+  `fixtures/`); without one, `test` runs only the tooling tests (CI's own, the lint plugins, the root and skill
+  scripts) that reach the change. A merge queue's run and a push to main pick their jobs from their changed paths, as
+  a ready pull request does ([0174](./.decisions/0174-a-queue-run-follows-its-paths.md),
+  [0175](./.decisions/0175-every-run-follows-its-paths.md)), so nothing runs the full suite after a merge. A run that
+  cannot read its paths runs every job. A run that
   needs what CI lacks (Electron shots, a stage with workerd) still runs here. With two or more code agents running:
   `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at the very end. `tsgo` takes
   about 8 cores, so small jobs add up.
@@ -644,6 +656,10 @@ Write-ups are read by busy people, some of them not native English speakers.
   ([tiers](./docs/plan/tiers.md)). Each person answers for their own agents, so a first slice
   does not defend against them; strangers on a public address are a different case.
   Tier size never pushes work out: split the tier, and say what a new idea changes now.
+  Any piece of work follows the same order: make it work, then better, then secure, and a stuck
+  thing gets the smallest change that makes it run while the better or safer version becomes a
+  ticket (owner, 2026-11-11,
+  [0171](./.decisions/0171-make-it-work-then-better-then-secure.md)).
 - **Secure and simple.** For any security step, say when a person meets it and how
   often. No prompt on opening the app, nothing hourly. The protection goes in code, not in a
   chore.

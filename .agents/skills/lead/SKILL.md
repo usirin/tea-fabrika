@@ -100,7 +100,7 @@ Approved plan: <path, including amendments>. Lane brief: <path>.
 Run each step through drive.ts or chain.ts, read its answer, and send fixes to the step that owns the file.
 Commit a lead file (field rows, a plan row, a lockfile) unsigned, with
 `stepcommit.sh --commit-only lead <ticket> <subject> <files>`, and keep its sha.
-When the review says merge-ready: write the PR body file (its first line the title, and a
+When the review says merge-ready: write the PR body file with the pr skill (its first line the title, and a
 `fabrika close ticket <id>` line when the PR finishes the ticket), save loosening.sh's output as a
 file, and end with
 `node .agents/skills/lead/scripts/land.ts ready <lane> --tree <path> --body <file> --loosening <file> --plan <path> [--lead <sha>]...`.
@@ -330,7 +330,8 @@ scripts, stop the lane and start it again with `--start <step>`; it prints the c
   `## tests`, `## build` and `## review`, written as a step brief is written today
   (the review one keeps the template above, minus the two head lines), and `## pr`: the pull
   request's description, its first line the title, with the `fabrika close ticket <N>` line when
-  the PR finishes the ticket. Every section is required. A lane has no `## mutation` section
+  the PR finishes the ticket, written as
+  [the pr skill](../pr/SKILL.md#a-lanes-description-is-written-twice) says. Every section is required. A lane has no `## mutation` section
   (0066); an older brief that has one is accepted and that section is not run, except by
   `--start mutation`, which needs it. Each step's brief is the shared head, its
   section, and the lane's facts the chain fills in: the round, where the step starts, each step's
@@ -492,7 +493,8 @@ visible, and never weaken the rules to hide this message.
    catch-up: the permission check refuses a subagent the lead key, and the lane stops
    ([0056](../../../.decisions/0056-lead-runs-a-refused-step-itself.md), ticket 652). Its last act
    is `land.ts ready` ([the template](#lane-brief-template)). The PR body file says which parts were
-   this repo's steps, what ran each one, and the dollars.
+   this repo's steps, what ran each one, and the dollars, in the order
+   [the pr skill](../pr/SKILL.md) gives.
 9. **Land it** by [the plan's rule](../../../docs/plan/README.md#how-a-change-lands): the review says
    `merge-ready`, CI is green (e2e included), and you read the diff and run the leak grep.
    Every new or changed law is a property, or an example labeled vector, format, pinned or

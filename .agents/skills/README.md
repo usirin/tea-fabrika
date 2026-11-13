@@ -17,6 +17,7 @@ both tools.
 | [guidelines](./guidelines/SKILL.md) | study one design area, show the choices and plan the build |
 | [adr](./adr/SKILL.md) | write one owner decision to `.decisions/`, the turn it is made |
 | [write-pattern](./write-pattern/SKILL.md) | write or re-ground one `.patterns/` doc on how the code is shaped now |
+| [pr](./pr/SKILL.md) | write a pull request's title and description, what it does first and the steps last |
 
 ## How a brief uses them
 
