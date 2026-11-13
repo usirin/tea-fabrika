@@ -500,9 +500,13 @@
     },
     {
       // Test files only: an `expect` that sits only inside an `if` may never run.
-      // `!` is allowed here: a test that hits a missing value fails on its own. The record-part
-      // suite (0062) holds the laws its runner registers, so it is a test file here too.
-      "files": ["**/*.test.ts", "next/packages/libfabrika/src/telemetry/RecordPartTest.ts"],
+      // `!` is allowed here: a test that hits a missing value fails on its own. Shared law suites
+      // (0062) hold the laws their runner registers, so they are test files here too.
+      "files": [
+        "**/*.test.ts",
+        "next/packages/libfabrika/src/telemetry/RecordPartTest.ts",
+        "next/programs/inbox/src/RunnerTest.ts"
+      ],
       "rules": {
         "fabrika/no-expect-in-if": "error",
         "typescript/no-non-null-assertion": "off",
@@ -866,10 +870,10 @@
       }
     },
     {
-      // The record-part suite (0062) is the laws its runner registers. It is a test, as above, except
+      // Shared law suites (0062) hold the laws their runner registers. They are tests, as above, except
       // that it keeps the edge rules on and marks its Promise edges: only `next/`'s `.test.ts` files
       // may turn one off (`edge-comment.test.ts`).
-      "files": ["next/packages/libfabrika/src/telemetry/RecordPartTest.ts"],
+      "files": ["next/packages/libfabrika/src/telemetry/RecordPartTest.ts", "next/programs/inbox/src/RunnerTest.ts"],
       "rules": {
         "fabrika/prefer-schema-arbitrary": "warn",
         "fabrika/effect-functions": "off",
@@ -1380,6 +1384,71 @@
           }
         ],
         "fabrika/service-id": ["warn", { "package": "@kampus/libfabrika", "src": "next/packages/libfabrika/src" }]
+      }
+    },
+    {
+      // S1: after next/**, since an override replaces options. Keep its import bans too.
+      "files": ["next/programs/inbox/src/**/program.ts", "next/programs/inbox/src/**/tile.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@kampus/tuval",
+                "message": "The inbox program imports only libfabrika; Tuval holds the tile store."
+              },
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@kampus/tuval/*", "**/tuval/**"],
+                "message": "The inbox program imports only libfabrika."
+              },
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
+              }
+            ]
+          }
+        ]
       }
     },
     {

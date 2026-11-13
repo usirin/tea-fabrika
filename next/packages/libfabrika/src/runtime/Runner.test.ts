@@ -9,7 +9,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { Outcome } from "@demlik/tea";
+import { applyCell, Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { afterAll, afterEach, describe, expect, it } from "@effect/vitest";
 import {
@@ -34,7 +34,7 @@ import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { Appended, type Entry, InputId, lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
-import { Mailbox, type From } from "../processes/Mailbox.ts";
+import { letterLine, Mailbox, type From } from "../processes/Mailbox.ts";
 import { Activity, Down, Owner, Recipient, recoverActivity, signalId, Start } from "../processes/Process.ts";
 import type { Sql } from "../Sql.ts";
 import { Archive } from "../telemetry/Archive.ts";
@@ -42,8 +42,9 @@ import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { type SpanRow } from "../telemetry/Trace.ts";
 import { type Update as WatcherUpdate } from "./Entry.ts";
+import type { Execution } from "./Execution.ts";
 import { ProcessStore } from "./ProcessStore.ts";
-import { Input, Program } from "./Program.ts";
+import { Input, Program, ProgramDown } from "./Program.ts";
 
 const SEED = 119120;
 const PROCESS = Effect.runSync(processId);
@@ -407,6 +408,9 @@ const world = async (
     readonly owner?: Writer;
     readonly storage?: ActivityStorage;
     readonly onStep?: () => void;
+    readonly noPorts?: boolean;
+    readonly addPort?: Schema.Codec<(typeof Msg.members)[0]["Type"]>;
+    readonly execution?: (actual: Execution) => Execution;
   } = {},
 ) => {
   const { ProgramRunner } = await import("./Runner.ts");
@@ -424,6 +428,7 @@ const world = async (
   const ghost = Cmd.make("ghost", { input: Schema.Struct({}), ok: Schema.Null, err: [] });
   const p = Program.make({
     ...normal,
+    inputs: options.noPorts ? {} : normal.inputs,
     machine:
       options.onStep === undefined
         ? machine
@@ -448,7 +453,15 @@ const world = async (
             update: { ...machine.update, fire: (s: Model) => [s, [ghost({})]] as const },
           },
         }
-      : p;
+      : options.addPort === undefined
+        ? p
+        : {
+            ...p,
+            inputs: {
+              ...p.inputs,
+              add: Input.cases.write.make({ schema: options.addPort, description: "Add", personOnly: false }),
+            },
+          };
   const published = new Map<string, Update[]>();
   const alarms: Array<number | null> = [];
   const calls: Array<{ kind: string; id: string; parent: string | null }> = [];
@@ -651,6 +664,19 @@ const world = async (
               return Outcome.ok(null);
             }),
         },
+      ).pipe(
+        Layer.flatMap((context) => {
+          const actual = Context.get(context, ProgramLoader);
+          return Layer.succeed(ProgramLoader, {
+            load: (...args) =>
+              actual.load(...args).pipe(
+                Effect.map((loaded) => ({
+                  ...loaded,
+                  execution: options.execution?.(loaded.execution) ?? loaded.execution,
+                })),
+              ),
+          });
+        }),
       ),
       Layer.succeed(WatcherManager, {
         publish: (client: string, update: WatcherUpdate) =>
@@ -875,6 +901,224 @@ const world = async (
     },
   };
 };
+
+describe("ticket 884, next/ brain mail", () => {
+  // Independent of the new helper: this is the reserved wire format in A-BrainMail.
+  const notice = (key: string) => JSON.stringify(["notice", key]);
+  const appendNotice = (id: string, m: Schema.Json) =>
+    Ledger.use((l) => l.append(`${NAME}/inbox`, id, letterLine(from({ by: "SHA256:brain" }), m)));
+
+  it.live.prop(
+    "B1: brain letters step a machine without ports once each and survive a storage reopen",
+    [Arbitrary.array(Arbitrary.schema(Msg.members[0]), { minLength: 1, maxLength: 30 })],
+    ([msgs]) =>
+      Effect.promise(async () => {
+        const w = await world({ noPorts: true });
+        let model = machine.init(null, {})[0];
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const r = yield* w.ProgramRunner;
+
+            for (const [index, msg] of msgs.entries()) {
+              // Keep every move within the real program's refusal limit.
+              const next = { ...msg, n: Math.abs(msg.n % 10) };
+              expect(yield* appendNotice(notice(String(index)), next)).toMatchObject({ _tag: "placed" });
+              [model] = applyCell(machine, model, next);
+              expect((yield* r.open(`notice-${index}`)).view).toEqual(model);
+            }
+
+            expect((yield* steps).map((row) => body(row).input)).toEqual(msgs.map((_, i) => notice(String(i))));
+          }).pipe(Effect.provide(w.layer())),
+        );
+        w.reopen();
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const r = yield* w.ProgramRunner;
+            expect((yield* r.open("reopened")).view).toEqual(model);
+            expect(yield* steps).toHaveLength(msgs.length);
+          }).pipe(Effect.provide(w.layer())),
+        );
+      }),
+    { arbitrary: { seed: SEED, runs: 100 } },
+  );
+
+  it.live.prop(
+    "B2: a person, agent or recovered device cannot send brain mail by either door",
+    [Schema.Literals(["person", "agent", "recovered"])],
+    ([sender]) =>
+      Effect.promise(async () => {
+        const w = await world({ noPorts: true });
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const r = yield* w.ProgramRunner;
+            const before = (yield* r.open("before")).view;
+            const by =
+              sender === "recovered"
+                ? Writer.cases.person.make({ key: "SHA256:recovered", for: PERSON })
+                : writer(sender);
+
+            for (const id of ["client-letter", notice("client-letter")]) {
+              const input = w.input(1, { type: "add", n: 7 });
+              expect(yield* r.msg({ ...input, id, envelope: { ...input.envelope, by } })).toEqual({
+                _tag: "refused",
+                reason: "bad_msg",
+              });
+              expect(yield* inbox).toEqual([]);
+            }
+
+            const mailbox = yield* Mailbox;
+            expect(yield* mailbox.send(NAME, notice("mail"), { type: "add", n: 7 }, from({ by: by.key }))).toEqual({
+              _tag: "refused",
+              reason: "forbidden",
+            });
+            expect(yield* inbox).toEqual([]);
+            expect(yield* mailbox.send(NAME, "plain-mail", { type: "add", n: 7 }, from({ by: by.key }))).toMatchObject({
+              _tag: "placed",
+            });
+            expect((yield* r.open("after")).view).toEqual(before);
+            expect((yield* inbox).map((row) => row.id)).toEqual(["plain-mail"]);
+            expect(yield* steps).toEqual([]);
+          }).pipe(Effect.provide(w.layer())),
+        );
+      }),
+    { arbitrary: { seed: SEED } },
+  );
+
+  it.live.prop(
+    "B3: a refused or throwing brain letter is skipped without down and the next good letter steps",
+    [
+      Arbitrary.schema(Schema.Literals([0, 1, 2, 3, 4, 5, 6, 7])).pipe(
+        Arbitrary.map(
+          (index): Schema.Json =>
+            [
+              { type: "unknown" },
+              { type: "add", n: "bad" },
+              { type: "timer", at: 42 },
+              { type: "work_ok", cmd: { type: "work", n: 1 }, value: 1, at: 42 },
+              null,
+              { type: "add", n: 7, parent: "forged" },
+              { type: "throw" },
+              { type: "add", n: 1001 },
+            ][index]!,
+        ),
+      ),
+    ],
+    ([bad]) =>
+      Effect.promise(async () => {
+        const w = await world({ noPorts: true });
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const r = yield* w.ProgramRunner;
+            const before = (yield* r.open("before")).view;
+            yield* appendNotice(notice("bad"), bad);
+            expect((yield* r.open("bad")).view).toEqual(before);
+            expect((yield* read(PROCESS)).filter((row) => row._tag === "down")).toEqual([]);
+            expect(yield* steps).toEqual([]);
+            yield* appendNotice(notice("good"), { type: "add", n: 2 });
+            expect((yield* r.open("good")).view).toEqual({ ...before, count: 2 });
+            expect((yield* steps).map((row) => body(row).input)).toEqual([notice("good")]);
+          }).pipe(Effect.provide(w.layer())),
+        );
+      }),
+    { arbitrary: { seed: SEED } },
+  );
+
+  it.live.prop(
+    "mail admission: a throwing port schema is skipped, later opens and valid mail work, and notices bypass the port",
+    [Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 30 }))],
+    ([n]) =>
+      Effect.promise(async () => {
+        const checked: Array<number> = [];
+        const w = await world({
+          addPort: Msg.members[0].check(
+            Schema.makeFilter((m) => {
+              checked.push(m.n);
+
+              if (m.n < 0) {
+                throw new Error("port schema failed");
+              }
+
+              return true;
+            }),
+          ),
+        });
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const r = yield* w.ProgramRunner;
+            const before = (yield* r.open("before")).view;
+            const mailbox = yield* Mailbox;
+            yield* mailbox.send(NAME, "throwing-port", { type: "add", n: -n }, from());
+            expect((yield* r.open("bad-port")).view).toEqual(before);
+            expect((yield* r.open("after-bad-port")).view).toEqual(before);
+            expect(checked).toEqual([-n]);
+            expect(yield* ProcessStore.use((s) => s.placed("throwing-port"))).toBeNull();
+            expect(yield* steps).toEqual([]);
+
+            // The same Msg is valid brain mail even though this client's port would throw.
+            yield* appendNotice(notice("bypass-port"), { type: "add", n: -n });
+            expect((yield* r.open("brain-mail")).view).toEqual({ ...before, count: -n });
+            expect(checked).toEqual([-n]);
+            yield* mailbox.send(NAME, "good-port", { type: "add", n: n + 1 }, from());
+            expect((yield* r.open("good-port")).view).toEqual({ ...before, count: 1 });
+            expect(checked).toEqual([-n, n + 1]);
+            expect((yield* r.open("after-good-port")).view).toEqual({ ...before, count: 1 });
+            expect((yield* steps).map((row) => body(row).input)).toEqual([notice("bypass-port"), "good-port"]);
+            expect((yield* read(PROCESS)).filter((row) => row._tag === "down")).toEqual([]);
+          }).pipe(Effect.provide(w.layer())),
+        );
+        w.reopen();
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const r = yield* w.ProgramRunner;
+            expect((yield* r.open("reopened")).view).toEqual({ ...initial, count: 1 });
+            expect(yield* steps).toHaveLength(2);
+            expect(checked).toEqual([-n, n + 1]);
+          }).pipe(Effect.provide(w.layer())),
+        );
+      }),
+    { arbitrary: { seed: SEED } },
+  );
+
+  it.live.prop(
+    "mail admission: RPC and decode failures propagate and the next open retries the same letter",
+    [
+      Schema.Literals(["rpc", "decode"]),
+      Schema.Literals(["admit", "step"]),
+      Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 30 })),
+    ],
+    ([source, point, n]) =>
+      Effect.promise(async () => {
+        let failing = true;
+        const error = new ProgramDown({ reason: "step", source });
+        const w = await world({
+          execution: (actual) => ({
+            ...actual,
+            admit: (m) => (failing && point === "admit" ? Effect.fail(error) : actual.admit(m)),
+            step: (model, m) => (failing && point === "step" ? Effect.fail(error) : actual.step(model, m)),
+          }),
+        });
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const r = yield* w.ProgramRunner;
+            const before = (yield* r.open("before")).view;
+            const mailbox = yield* Mailbox;
+            yield* mailbox.send(NAME, "retry-mail", { type: "add", n }, from());
+            expect(yield* failure(r.open("failed"))).toMatchObject({ _tag: "ProgramDown", reason: "step", source });
+            expect(yield* steps).toEqual([]);
+            expect(yield* ProcessStore.use((s) => s.placed("retry-mail"))).toBeNull();
+            failing = false;
+            expect((yield* r.open("retry")).view).toEqual({ ...before, count: n });
+            expect((yield* steps).map((row) => body(row).input)).toEqual(["retry-mail"]);
+            yield* mailbox.send(NAME, "later-mail", { type: "add", n: 1 }, from());
+            expect((yield* r.open("later")).view).toEqual({ ...before, count: n + 1 });
+            expect((yield* steps).map((row) => body(row).input)).toEqual(["retry-mail", "later-mail"]);
+            expect((yield* read(PROCESS)).filter((row) => row._tag === "down")).toEqual([]);
+          }).pipe(Effect.provide(w.layer())),
+        );
+      }),
+    { arbitrary: { seed: SEED } },
+  );
+});
 
 describe("P11 activity durability, experiment 231", () => {
   it("plant, skip sync: the runner puts stepping, completes sync, then starts the step", async () => {

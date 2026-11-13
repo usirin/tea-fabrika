@@ -27,6 +27,7 @@ import {
   brainOnly,
   type From,
   type History,
+  inNoticeSpace,
   inRunnerSpace,
   inSignalSpace,
   LedgerError,
@@ -1011,6 +1012,7 @@ export class ProgramRunner extends Context.Service<
           const drain: Array<Dispatched> = [];
           let alive: boolean | undefined;
           let stop = letters.length;
+          let skippedNotices = 0;
 
           for (const [index, letter] of letters.entries()) {
             const signal = inSignalSpace(letter.id);
@@ -1060,9 +1062,13 @@ export class ProgramRunner extends Context.Service<
                   yield* step("saved_letter", letter.id, () => state.loaded.execution.fold(model, m)),
                   "saved_letter",
                 )
-              : yield* receive(state, model, letter.m);
+              : yield* receive(state, model, letter.id, letter.m);
 
             if (folded._tag === "refused") {
+              if (inNoticeSpace(letter.id)) {
+                skippedNotices++;
+              }
+
               continue;
             }
 
@@ -1109,6 +1115,10 @@ export class ProgramRunner extends Context.Service<
             }
           }
 
+          if (skippedNotices > 0) {
+            yield* Effect.annotateCurrentSpan(tag("notices.skipped"), skippedNotices);
+          }
+
           const last = letters.slice(0, stop).at(-1);
           const next: Live = {
             ...state,
@@ -1126,15 +1136,22 @@ export class ProgramRunner extends Context.Service<
           return { state: next, fresh: fresh as ReadonlyArray<Dispatched>, mine };
         });
 
-        const receive = Effect.fnUntraced(function* (state: Live, model: unknown, m: unknown) {
-          const port = inputPort(state, m);
+        const receive = Effect.fnUntraced(function* (state: Live, model: unknown, id: string, m: unknown) {
+          const refused = Step.cases.refused.make({ reason: "bad_msg" });
 
-          if (port === undefined || !port.write || port.personOnly || hasParent(m)) {
-            return Step.cases.refused.make({ reason: "bad_msg" });
+          if (hasParent(m)) {
+            return refused;
           }
 
-          const refused = Step.cases.refused.make({ reason: "bad_msg" });
-          return yield* state.loaded.execution.admit(m).pipe(
+          if (!inNoticeSpace(id)) {
+            const port = inputPort(state, m);
+
+            if (port === undefined || !port.write || port.personOnly) {
+              return refused;
+            }
+          }
+
+          return yield* (inNoticeSpace(id) ? Effect.succeed(true) : state.loaded.execution.admit(m)).pipe(
             Effect.flatMap((admitted) => (admitted ? state.loaded.execution.step(model, m) : Effect.succeed(refused))),
             Effect.catchIf(
               (error) => error.reason === "step" && error.source === undefined,
