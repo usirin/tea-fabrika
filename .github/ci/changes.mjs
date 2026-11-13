@@ -61,35 +61,31 @@ const quiet = (path) => safe(path) || prose(path);
 const todays = (path) => (trees.some((tree) => path.startsWith(tree)) || path.startsWith("fixtures/")) && !quiet(path);
 
 /**
- * An event whose jobs follow its changed paths: a pull request, and a merge queue's group, which
- * is one pull request's change on top of the queue (0174). Every other event, a push to main
- * first, runs lint, typecheck, every next shard and the tooling tests, so a break in next/ shows
- * right after the merge. Today's own checks follow the paths on every event (0175).
+ * An event whose jobs follow its changed paths, because it can read them: a pull request, a merge
+ * queue's group (0174) and a push to main, whose paths are what that push brought (0175). Any
+ * other event runs every job.
  * @param {string} event
  */
-const scoped = (event) => event === "pull_request" || event === "merge_group";
+const scoped = (event) => event === "pull_request" || event === "merge_group" || event === "push";
 
 /**
  * A scoped event skips a job only when every path is explicitly safe for that job.
  * Amendment 3: field's runner starts on every event; this flag gates its install
  * and row check, so Markdown in field/ alone does not install Effect.
- * `today` and `e2e` are true only when a path is one of today's version's files, on every event.
+ * `today` and `e2e` are true only when a path is one of today's version's files.
  * `test` starts the test job, which runs today's tests when `today` is true and only the tooling
- * tests when it is false. History that cannot be read, or no path at all, runs everything.
+ * tests when it is false. History that cannot be read, no path at all, or an event that is not
+ * scoped runs everything.
  * @param {readonly string[] | null} paths
  * @param {string} event
  * @returns {Flags}
  */
 export const classify = (paths, event) => {
-  if (paths === null || paths.length === 0) {
+  if (!scoped(event) || paths === null || paths.length === 0) {
     return { ...all };
   }
 
   const touched = paths.some(todays);
-
-  if (!scoped(event)) {
-    return { ...all, today: touched, e2e: touched };
-  }
 
   if (paths.some(reads)) {
     return { ...all, today: touched, e2e: touched, field: paths.some(rows) };
@@ -116,7 +112,7 @@ export const classify = (paths, event) => {
  * and `pnpm build`), which belongs to today's version and so follows `today`. A draft pull request runs only the fast jobs: changes, field, typecheck and
  * check's lint (owner, 2026-11-11, 0134's amendment). Marking it ready starts a run with
  * `draft` false, so the full set runs on that head before it can merge. Only a pull request can
- * be a draft; on any other event, a merge queue's group included, the flag is ignored.
+ * be a draft; on any other event, a merge queue's group and a push included, the flag is ignored.
  * @param {readonly string[] | null} paths
  * @param {string} event
  * @param {boolean} draft

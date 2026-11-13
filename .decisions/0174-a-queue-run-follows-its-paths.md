@@ -1,7 +1,7 @@
 ---
 id: 0174
 title: A merge queue's run starts only the checks its changed files need, never every check for a small change
-status: amended-in-part by [0175](0175-old-checks-follow-old-files.md)
+status: amended-in-part by [0175](0175-every-run-follows-its-paths.md)
 date: 2026-11-13
 tags: [ci, merge-queue, merge-group, changes, checks, main]
 ---

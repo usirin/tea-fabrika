@@ -65,6 +65,9 @@ const BUILD = "needs.changes.outputs.build!='false'";
 // (0175). An unreadable flag is not 'false', so it runs today's tests.
 const TODAY = "needs.changes.outputs.today!='false'";
 const TOOLING = "!cancelled()&&needs.changes.outputs.today=='false'";
+// The commit a run's change starts from, for vitest's `--changed`: a pull request's base, a merge
+// queue group's base, or what main held before a push. All zeros (a first push) is no base.
+const TEST_BASE = `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`;
 const TOOLING_EXCLUDES = ["next/**", "apps/**", "packages/**", "programs/**"];
 
 // Chromium's OS packages come from apt, so the step first finds a mirror that answers (apt.sh).
@@ -252,6 +255,9 @@ export const lintWorkflow = (text: string): string[] => {
     compact(tooling["if"]) === TOOLING &&
     rest !== undefined &&
     testSteps.indexOf(rest) < testSteps.indexOf(tooling), "T2: the tooling tests run when today's do not");
+  require([lane, rest, tooling].every(
+    (step) => compact(map(step?.["env"])["BASE"]) === compact(TEST_BASE),
+  ), "T4: each test step takes its base from the pull request, the merge queue's group or the push");
   require(toolingRuns.length === 2 &&
     toolingRuns.every(
       (line) =>

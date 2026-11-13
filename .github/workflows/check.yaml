@@ -13,8 +13,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   # GitHub's merge queue tests each group on a temporary branch and takes a required check only from
   # this event. It picks its jobs from the group's changed paths, as a ready pull request does
-  # (0174); a push to main runs lint, typecheck, every next shard and the tooling tests, and today's
-  # own checks only when a file of today's version changed (0175). The group's own base and head give those paths
+  # (0174), and so does a push to main, from what that push brought (0175). The group's own base and head give those paths
   # (see BASE below).
   merge_group:
     types: [checks_requested]
@@ -34,7 +33,8 @@ concurrency:
 # workflow-lint.ts fails a job without one.
 jobs:
   # Today's CI, both versions. One no-install classifier holds every path rule.
-  # Safe Markdown and direct field JSONL skip the heavy jobs; unknown paths and main run the rest.
+  # Safe Markdown and direct field JSONL skip the heavy jobs, on a pull request, in the merge queue
+  # and on a push to main; unknown paths run the rest. History that cannot be read runs everything.
   # Today's own checks (its tests, e2e, the promises gate and the build) start only when a file of
   # today's version changed, on every event: the `today`, `e2e` and `build` outputs (0175).
   # These small checks still run when pnpm setup and the heavy jobs skip.
@@ -321,16 +321,18 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # Today's tests run only when a file of today's version changed (changes' `today` flag, 0175);
       # otherwise the last test step runs the tooling tests alone.
-      # Main runs every test. A pull request runs the tests that import what it
+      # BASE is the commit the run's change starts from: a pull request's base, a merge queue group's
+      # base, or what main held before a push. It is empty when there is none (a first push, whose
+      # `before` is all zeros, or a run started by hand), and then every test runs.
+      # With a BASE, a run runs the tests that import what it
       # changed (vitest's `--changed`, its config's `forceRerunTriggers` for files
       # tests read without importing), then, on the first machine, the tests that
       # read the whole repo themselves, which an import walk never picks: the
-      # app's bundles, and the law that every machine has laws. Main's run catches
-      # what a pull request's run could not see, one merge late.
+      # app's bundles, and the law that every machine has laws.
       - name: lane tests, one file at a time
         if: ${{ needs.changes.outputs.today != 'false' }}
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}
           SHARD: ${{ matrix.shard }}/6
         run: |
           if [ -n "$BASE" ]; then
@@ -341,7 +343,7 @@ jobs:
       - name: test
         if: ${{ !cancelled() && needs.changes.outputs.today != 'false' }}
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}
           SHARD: ${{ matrix.shard }}/6
         run: |
           if [ -n "$BASE" ]; then
@@ -355,11 +357,11 @@ jobs:
       # The tests that belong to neither version's product code: CI's own (.github/ci), the lint
       # plugins, the root scripts and the skill scripts. With no file of today's version changed
       # they run alone: every test vitest.config.ts includes, less the three trees of today's tests
-      # and next/. A pull request runs the ones that reach what it changed; any other event runs all.
+      # and next/. With a BASE the ones that reach the change run; with none, all of them.
       - name: tooling tests
         if: ${{ !cancelled() && needs.changes.outputs.today == 'false' }}
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}
           SHARD: ${{ matrix.shard }}/6
         run: |
           if [ -n "$BASE" ]; then

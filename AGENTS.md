@@ -518,7 +518,7 @@ brief carries these caps. Each one came from a laptop that became unusable.
   Never the full suite locally (owner, 2026-11-08). A change to a file that reruns every test (the
   `forceRerunTriggers` in `vitest.config.ts`: a `package.json`, the lockfile, `pnpm-workspace.yaml`,
   a tsconfig and others) makes `--changed` the full suite, so the config refuses it locally: run
-  the narrow paths of the tests you touched and of the tests that read that file, and CI runs the rest. On a pull request, CI decides what to run from
+  the narrow paths of the tests you touched and of the tests that read that file, and CI runs the ones its changed paths call for. On a pull request, CI decides what to run from
   the changed paths (`.github/ci/changes.mjs`). `pnpm typecheck` is its own job, `typecheck`, beside
   `check`'s lint and build, and runs or skips with `check` (0133). A draft pull request runs only `changes`, `field`, `typecheck` and `check`'s lint (named `lint` there), and marking it ready runs the full set on the same head ([0134](./.decisions/0134-no-code-stays-only-on-a-local-branch.md)). Only Markdown or field rows (`field/*.jsonl`, or files in `field/notes/`, `field/runs/` and `field/findings/`): it skips
   `check`, `test`, `next` and `e2e`. Only `next/` files (but not the exam helper): it runs `check` and `next`,
@@ -530,10 +530,11 @@ brief carries these caps. Each one came from a laptop that became unusable.
   Other Markdown that a program or skill reads counts as code.
   Anything else runs `check`, `typecheck`, `test` and `next`. Today's own checks (today's tests, `e2e`, and `check`'s
   promises gate and build) start only when a file of today's version changed (`apps/`, `programs/`, `packages/`,
-  `fixtures/`), on every event; without one, `test` runs only the tooling tests (CI's own, the lint plugins, the root
-  and skill scripts). Every push to main runs lint, typecheck, every `next` shard and the tooling tests, so a break in
-  `next/` shows right after the merge ([0175](./.decisions/0175-old-checks-follow-old-files.md)). A merge queue's
-  run picks its jobs from its changed paths, as a ready pull request does ([0174](./.decisions/0174-a-queue-run-follows-its-paths.md)). A run that
+  `fixtures/`); without one, `test` runs only the tooling tests (CI's own, the lint plugins, the root and skill
+  scripts) that reach the change. A merge queue's run and a push to main pick their jobs from their changed paths, as
+  a ready pull request does ([0174](./.decisions/0174-a-queue-run-follows-its-paths.md),
+  [0175](./.decisions/0175-every-run-follows-its-paths.md)), so nothing runs the full suite after a merge. A run that
+  cannot read its paths runs every job. A run that
   needs what CI lacks (Electron shots, a stage with workerd) still runs here. With two or more code agents running:
   `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at the very end. `tsgo` takes
   about 8 cores, so small jobs add up.
