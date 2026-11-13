@@ -123,7 +123,7 @@ describe("P34c quota machine", () => {
           const byteFault = cells[0]!.pick % 2 === 0;
           const growth = fail && byteFault ? limits.bytes + 1 : limits.bytes;
           const writes = fail && !byteFault ? limits.writes + 1 : 1;
-          const proposed = applyCell(machine, model, {
+          const proposed = applyCell<Quota.Model, Quota.Msg, never>(machine, model, {
             type: "propose",
             at,
             operation: `recovery:${n}`,
