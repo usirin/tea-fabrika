@@ -1,7 +1,7 @@
 ---
 id: 0156
 title: A batch of pull requests may land on one check run of their combined merge, as a measured trial
-status: accepted
+status: superseded by [0162](0162-no-friction-before-a-merge.md)
 date: 2026-11-12
 tags: [merge, lead, catchup, batch, ci]
 ---
