@@ -15,7 +15,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterAll, describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
 import { Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { checkSshsig, KeyLine, writeSshsig } from "./Sshsig.ts";
@@ -706,8 +706,11 @@ describe("a key line's parts and its type", () => {
 });
 
 // p44: one signature shape, against the real `ssh-keygen`.
-const home = mkdtempSync(join(tmpdir(), "p44-"));
-afterAll(() => rmSync(home, { recursive: true, force: true }));
+// Each scenario makes its keys in its own temp folder, and the test's scope removes it (0061).
+const folder = Effect.acquireRelease(
+  Effect.sync(() => mkdtempSync(join(tmpdir(), "p44-"))),
+  (home) => Effect.sync(() => rmSync(home, { recursive: true, force: true })),
+);
 
 const keygen = (args: ReadonlyArray<string>, input?: string) =>
   Effect.sync(() => {
@@ -720,7 +723,7 @@ const keygen = (args: ReadonlyArray<string>, input?: string) =>
     return run;
   });
 
-const file = (name: string, body: string, mode = 0o644): string => {
+const file = (home: string, name: string, body: string, mode = 0o644): string => {
   const path = join(home, name);
   writeFileSync(path, body, { mode });
   return path;
@@ -753,11 +756,12 @@ const opensshPrivate = (key: Key): string => {
 describe("p44, one signature shape, with real ssh-keygen", () => {
   it.effect("scenario: what writeSshsig makes passes ssh-keygen -Y verify and checkSshsig", () =>
     Effect.gen(function* () {
+      const home = yield* folder;
       const key = yield* freshKey("ours@fabrika.test");
       const body = "grant: a window key\nfor: a person\n";
       const armored = yield* write(key, body);
-      const allowed = file("ours.allowed", `ours@fabrika.test ${key.line}\n`);
-      const sig = file("ours.sig", armored);
+      const allowed = file(home, "ours.allowed", `ours@fabrika.test ${key.line}\n`);
+      const sig = file(home, "ours.sig", armored);
       const run = yield* keygen(
         ["-Y", "verify", "-f", allowed, "-I", "ours@fabrika.test", "-n", SPACE, "-s", sig],
         body,
@@ -774,6 +778,7 @@ describe("p44, one signature shape, with real ssh-keygen", () => {
 
   it.effect("scenario: what ssh-keygen -Y sign makes passes checkSshsig, sha512 and sha256", () =>
     Effect.gen(function* () {
+      const home = yield* folder;
       const made = join(home, "made");
       const keys = yield* keygen(["-q", "-t", "ed25519", "-N", "", "-C", "made@fabrika.test", "-f", made]);
       expect(keys.status, keys.stderr).toBe(0);
@@ -781,7 +786,7 @@ describe("p44, one signature shape, with real ssh-keygen", () => {
       const body = "made by ssh-keygen\nä ü ş\n";
 
       for (const options of [[], ["-O", "hashalg=sha256"]]) {
-        const msg = file("made.msg", body);
+        const msg = file(home, "made.msg", body);
         const run = yield* keygen(["-Y", "sign", "-f", made, "-n", SPACE, ...options, msg]);
         expect(run.status, run.stderr).toBe(0);
         const armored = readFileSync(`${msg}.sig`, "utf8");
@@ -795,11 +800,12 @@ describe("p44, one signature shape, with real ssh-keygen", () => {
   it.effect("scenario: writeSshsig and ssh-keygen -Y sign give the same file, byte for byte", () =>
     Effect.gen(function* () {
       // Ed25519 is deterministic: one key and one text give one signature, so one file.
+      const home = yield* folder;
       const key = yield* freshKey();
       const body = text;
       const ours = yield* write(key, body);
-      const keyFile = file("same", opensshPrivate(key), 0o600);
-      const msg = file("same.msg", body);
+      const keyFile = file(home, "same", opensshPrivate(key), 0o600);
+      const msg = file(home, "same.msg", body);
       const run = yield* keygen(["-Y", "sign", "-f", keyFile, "-n", SPACE, msg]);
       expect(run.status, run.stderr).toBe(0);
       expect(ours).toBe(readFileSync(`${msg}.sig`, "utf8"));
