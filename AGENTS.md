@@ -151,7 +151,8 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). After a review sends a lane back, one fix agent writes the law and the fix
   together, with no separate tests and build steps
   ([0177](./.decisions/0177-fix-round-is-one-agent.md)). A law that can only run on the real
-  machine runs before the first review, and a build is not done until it has passed there
+  machine runs before the first review, and on the owner's Mac only after the lead has read every
+  line in it that signals a process or calls launchd and the owner has said yes
   ([0178](./.decisions/0178-host-only-laws-run-first.md)). A lane stops at its second sent-back
   review: the lead lands what works and files the rest as a ticket
   ([0176](./.decisions/0176-second-send-back-stops-lane.md)). A plan that only builds a decided

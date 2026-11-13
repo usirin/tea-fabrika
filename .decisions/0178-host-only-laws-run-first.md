@@ -1,12 +1,12 @@
 ---
 id: 0178
-title: A law that can only run on the real machine runs before the first review, and a build is not done until that law has passed there
+title: A law that can only run on the real machine runs before the first review, and on the owner's Mac only after the lead's read and the owner's yes
 status: accepted
 date: 2026-11-13
-tags: [lead, lane, build, review, plan, host, electron, launchd, fixtures, vector]
+tags: [lead, lane, build, review, plan, host, electron, launchd, fixtures, vector, kill, signal, process-group, safety]
 ---
 
-# 0178: A law that can only run on the real machine runs before the first review, and a build is not done until that law has passed there
+# 0178: A law that can only run on the real machine runs before the first review, and on the owner's Mac only after the lead's read and the owner's yes
 
 **What this decides:** a test that needs the real machine (launchd, the real Electron app, a real
 OS process or socket) is run right after the build, before any review starts, and never at the end
@@ -54,6 +54,14 @@ The host run moves from the end of the lane to just after the build.
     on a real Mac.
 - The fixtures in its laws had been written without a real Mac's output.
 - So every review before that run argued over rare edges of something that had never started.
+- **The second measured case, the same day.** A later host run of that law ended every process
+  the person at the Mac owned: every app, every terminal and a live video stream.
+  - The test's cleanup kept a list of process groups to signal, taken from the process table.
+  - That run's list was `[65831, 66680, 67964, 70410, 71425, 1, 72448]`.
+  - `kill -TERM -1` signals every process the caller's user owns (POSIX `kill`, a pid of -1).
+  - The command that started the run was only "run this test file". The 1 was read from the
+    process table while the test ran, so no check of the command could see it.
+  - The lead had allowed the run without reading the cleanup.
 - **How it fits older decisions.**
   - [0052](0052-tests-never-depend-on-the-machine.md) stands. A host-only law needs a real
     machine, never one person's own home folder or data.
@@ -69,7 +77,10 @@ it has not passed there (owner, 2026-11-13).**
 - A build is not done while its host-only law has not passed on a real machine.
 - A fixture that stands in for a real tool's output is taken from a real run and labeled as a
   vector.
-- The owner's Mac may be used for the run. Nobody needs to ask first.
+- **On the owner's Mac, a host-only law runs only after two things (owner, 2026-11-13, after the
+  second case):**
+  - the lead has read every line the test can reach that signals a process or calls launchd;
+  - the owner has said yes.
 
 **Binding constraints.** These rules stay:
 
@@ -81,9 +92,15 @@ it has not passed there (owner, 2026-11-13).**
 ## Consequences
 
 - The first review reads something that has started on a real machine.
-- **The cost:** a build takes longer to be done, and it uses the person's machine while they may
-  be working on it. The rules that stay are what keep that out of their way.
+- **The cost:** a build takes longer to be done, and it waits on the lead's read and one answer
+  from the owner. A host run uses the person's machine while they may be working on it.
+- A step agent never starts a host-only law on the owner's Mac on its own. It reports each line
+  that signals a process or calls launchd, with what stops a wrong target, and the lead takes it
+  from there.
 - The plan, build and lead skills each say their part.
+- Not decided: whether one yes covers later runs of the same test.
+- Not decided: whether a machine that is not the owner's Mac (another user account on it, a
+  virtual machine) needs the owner's yes.
 - Not decided: how this runs in `next/`'s own pipeline. There a step runs in a container
   ([0045](0045-test-steps-run-in-containers.md)), and a host run needs the person's machine. It is
   open.

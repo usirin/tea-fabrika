@@ -568,7 +568,8 @@ visible, and never weaken the rules to hide this message.
    (above). No builder starts before tests that exist. Each brief names its skill.
    Never start a review while a host-only law the plan names has not passed on a real machine
    ([0178](../../../.decisions/0178-host-only-laws-run-first.md)). The build runs it, or you run it right after
-   the build (step 7). The owner's Mac may be used for it, with no asking.
+   the build (step 7). On the owner's Mac it runs only after you have read every line it can reach
+   that signals a process or calls launchd, and the owner has said yes (0178).
    box.sh run --step checks order and slots, and saves the run row.
 6. **After each step:** read drive's last line, the report and the diff, and log the run the same day:
    one row file in `field/runs/` (`fieldrow.py` for Codex, `clauderow.ts` for a Claude agent, a
@@ -583,7 +584,11 @@ visible, and never weaken the rules to hide this message.
    that would have caught it. Running the steps by hand is how `next/`'s pipeline learns.
 7. **Run what the box cannot,** yourself: Electron e2e and screenshots. One Electron app at a time,
    each run with its own short `FABRIKA_HOME`, never `FABRIKA_FOREGROUND=1`. Look at every shot.
-   A host-only law runs here before the first review, never at the end of the lane (0178). On the
+   A host-only law runs here before the first review, never at the end of the lane (0178). Before
+   it runs on the owner's Mac, read every line it can reach that signals a process or calls
+   launchd, and work out the worst target each could get: a pid or group of 0, 1 or -1 reaches
+   every process the owner has, and so does `launchctl bootout` of a whole domain. Then ask the
+   owner, and run it only on a yes. On the
    real machine a test touches only its own label, files and processes: its own temp home and its
    own test label under launchd, no focus taken, and nothing left behind.
 8. **Ready to land.** A lane agent never signs as lead, pushes, opens the pull request or runs
