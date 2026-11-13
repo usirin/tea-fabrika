@@ -22,7 +22,10 @@ Its decided rules are in: [0517](../../.decisions/0517-a-tile-holds-you-and-your
 - **Decided, how writes are signed:** [inputs carry their sender](./inputs-carry-their-sender.md).
 - **Decided 2026-11-05, `@claude` is how you summon.** There is no `summon claude` word. A plain line
   in tsh is a command; `@claude <words>` talks to claude. With no claude on the desk, the `@` starts it
-  first and says so, since that starts a paid run.
+  first and says so, since that starts a paid run. **Walked back 2026-11-06:** `summon` starts an
+  agent by name, and `@` talks only to one summoned already
+  ([talk where you work](./talk-where-you-work.md),
+  [0157](../../.decisions/0157-summon-starts-an-agent-and-at-talks-to-it.md)). Kept as it was decided.
 - **Decided 2026-11-05, no presence label on a card a step writes.** The plan step runs its own agent,
   not the summoned claude, so a "✦ claude" tag on the plan card names the wrong writer. The label goes
   only where claude itself writes: its lines in tsh, a button it presses. The intent stays: claude's
