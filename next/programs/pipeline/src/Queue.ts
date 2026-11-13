@@ -58,7 +58,9 @@ const Msg = Schema.Union([
   Resume,
   Reply,
   answers("start_child", StartChild.StartChildInput, Started, StartChild.startChild.errTags),
-  // A refused built-in start echoes only its type; the queue has exactly one start out.
+  // Runner.ts echoes only the type of a refused built-in start. Each Cmd is answered and folded
+  // once, as StartChildTest L11 and QueueRunnerTest QR5 check. One start is out while `starting`,
+  // so an unnamed refusal there answers that start.
   Schema.Struct({
     type: Schema.Literal("start_child_err"),
     cmd: Schema.Struct({ type: Schema.Literal("start_child") }),
