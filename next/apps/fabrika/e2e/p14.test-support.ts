@@ -14,7 +14,7 @@ import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { checklist } from "@kampus/checklist";
 import { revokeText } from "@kampus/libfabrika/access/Text";
-import { Entry } from "@kampus/libfabrika/ledger/Log";
+import { Entry, PAGE } from "@kampus/libfabrika/ledger/Log";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { Effect, FileSystem, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -475,7 +475,16 @@ export const tile = (page: Page, name: string) => {
   return {
     region,
     field,
-    box: (item: string) => region.getByRole("checkbox", { name: item, exact: true }),
+    /** Waits until a person can use the tile: its region is not `inert`. A lost link makes the tile
+     *  inert until its view opens again on the next dial, and a press in between is dropped on
+     *  purpose, so a press waits for this as a person waits for the tile to come back. */
+    // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's waitFor is a Promise
+    live: Effect.promise(() => region.and(page.locator(":not([inert])")).waitFor({ timeout: 30_000 })),
+    /** A row's box as a person presses it: the label around the checkbox named `item`. The checkbox
+     *  itself is a hidden one-pixel input under the drawn box, so a pointer never lands on it; a
+     *  click on its label is the browser's own way to it. */
+    box: (item: string) =>
+      region.locator("label").filter({ has: page.getByRole("checkbox", { name: item, exact: true }) }),
     remove: (item: string) => region.getByRole("button", { name: `Remove ${item}`, exact: true }),
     // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's ariaSnapshot is a Promise
     shown: Effect.promise(() => region.ariaSnapshot()).pipe(
@@ -658,21 +667,34 @@ export const reader = (h: Home, dev: Dev) =>
       return yield* Effect.die(new Error("the granted reader was not admitted"));
     }
 
+    /** The answer's `result`. A refused call (the door's rate limit, say) fails here by name, with
+     *  what the door said, before any decode can blame the frame's shape. */
+    const answered = (method: string, params: unknown) =>
+      Effect.flatMap(call(method, params), (frame) =>
+        frame.error === undefined && frame.result !== undefined
+          ? Effect.succeed(frame.result)
+          : Effect.die(new Error(`the door refused ${method}: ${JSON.stringify(frame.error ?? frame)}`)),
+      );
+
     return {
       call,
+      /** Every span the chain held when the walk's last page was read. A chain is read in the order
+       *  it was written, and each `spans.read` writes spans of its own into the `spans` chain, so no
+       *  page is ever empty there: the walk ends at the first page the door did not fill. A page
+       *  that is not full reached the chain's end as it stood at that read, so every span written
+       *  before the walk began is in `all`. */
       spans: (chain: Chain = Chain.cases.spans.make({})) =>
         Effect.gen(function* () {
           const all: Array<unknown> = [];
           let after = 0;
 
           for (;;) {
-            const page = yield* call("spans.read", { chain, after });
             const value = yield* Schema.decodeUnknownEffect(
               Schema.Struct({ spans: Schema.Array(Schema.Unknown), next: Schema.Int }),
-            )(page.result).pipe(Effect.orDie);
+            )(yield* answered("spans.read", { chain, after })).pipe(Effect.orDie);
             all.push(...value.spans);
 
-            if (value.spans.length === 0 || value.next <= after) {
+            if (value.spans.length < PAGE || value.next <= after) {
               return all;
             }
 
@@ -684,8 +706,8 @@ export const reader = (h: Home, dev: Dev) =>
           const all: Array<(typeof Entries.Type.entries)[number]> = [];
 
           for (;;) {
-            const page = yield* call("ledger.read", { stream, after: all.at(-1)?.rev ?? 0 });
-            const { entries } = yield* Schema.decodeUnknownEffect(Entries)(page.result).pipe(Effect.orDie);
+            const result = yield* answered("ledger.read", { stream, after: all.at(-1)?.rev ?? 0 });
+            const { entries } = yield* Schema.decodeUnknownEffect(Entries)(result).pipe(Effect.orDie);
 
             if (entries.length === 0) {
               return all;

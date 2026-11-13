@@ -47,6 +47,22 @@ import {
 
 const SEED = 119120;
 const NAME = "checklist:1";
+/** How a red law ends: at its first failing run, with that run's seed, path and moves, and no
+ *  shrinking. Each retry of a shrink starts a brain and a browser again and may wait 30 s for what
+ *  never shows, so a shrink outlasts CI's job. The seed and the run counts stay as they are. */
+const RED = { endOnFailure: true } as const;
+/** How long a page may wait to hear of a close it started, in ms. Measured on the real `dev.ts` and
+ *  Chromium, 2026-11-13: 4 ms when the brain answers the close frame, 10,027 ms when it does not (the
+ *  browser's own wait for a closing socket, after which it reports 1006). Two seconds is 500 times
+ *  the answered time, room for a CI machine that is slow or stalls, and a fifth of the unanswered
+ *  one, so a brain that stops answering can never pass. */
+const CLOSE_WITHIN = 2000;
+/** Each law's own limit in ms, the stop for a run that hangs. Every wait inside a law has a bound of
+ *  its own (30 s for what a tile shows, 60 s for a screen or an answer, 180 s for `dev.ts`), so a red
+ *  law ends long before this. Measured green on a 12-core laptop under load, 2026-11-13: L11 9 to
+ *  20 s, L14 11 s, L15 48 to 67 s, L17 101 s. The four limits add up to 16 minutes, inside the 17
+ *  minutes CI gives the job that runs this file; they were 60 minutes. */
+const LIMIT = { L11: 90_000, L14: 90_000, L15: 300_000, L17: 480_000 } as const;
 
 type Model = typeof checklistMachine.model.Type;
 type Msg = typeof checklistMachine.msg.Type;
@@ -87,11 +103,17 @@ const blockKeyStore = () => {
 };
 
 /** Let the brain settle each press, then lose its first answer and the socket. The next dial
- *  must resend that press before the page can see its terminal answer. */
+ *  must resend that press before the page can see its terminal answer. Each close the page starts
+ *  is kept as the page is told of it: its code, whether it was clean, and how long it took. */
 const loseFirstAnswers = () => {
   const NativeSocket = WebSocket;
   const observed: {
-    groups: Array<{ attempts: Array<{ dial: number; params: unknown }>; firstAnswer: unknown; result: unknown }>;
+    groups: Array<{
+      attempts: Array<{ dial: number; params: unknown }>;
+      firstAnswer: unknown;
+      result: unknown;
+      closed: { code: number; clean: boolean; ms: number } | null;
+    }>;
   } = {
     groups: [],
   };
@@ -119,6 +141,14 @@ const loseFirstAnswers = () => {
         if (group.firstAnswer === null) {
           group.firstAnswer = frame.result;
           event.stopImmediatePropagation();
+          const started = performance.now();
+          this.addEventListener(
+            "close",
+            (end) => {
+              group.closed = { code: end.code, clean: end.wasClean, ms: performance.now() - started };
+            },
+            { once: true },
+          );
           this.close(4001, "lost answer");
         } else {
           group.result = frame.result;
@@ -133,7 +163,7 @@ const loseFirstAnswers = () => {
 
         if (frame.method === "process.send") {
           if (active === undefined) {
-            active = { attempts: [], firstAnswer: null, result: null };
+            active = { attempts: [], firstAnswer: null, result: null, closed: null };
             observed.groups.push(active);
           }
 
@@ -165,6 +195,7 @@ const Resends = Schema.Struct({
       ),
       firstAnswer: Schema.NullOr(Sent),
       result: Schema.NullOr(Sent),
+      closed: Schema.NullOr(Schema.Struct({ code: Schema.Int, clean: Schema.Boolean, ms: Schema.Number })),
     }),
   ),
 });
@@ -190,6 +221,8 @@ const useChecklist = (
     for (const p of moves) {
       const at = p.tab % tabs.length;
       const t = tile(tabs[at]!.page, NAME);
+      // A tab whose last answer was lost has dialed again: its tile takes no press until it is live.
+      yield* t.live;
       const shown = yield* t.shown;
       const row = shown.length === 0 ? null : shown[p.row % shown.length]!;
       const pick = row === null ? 0 : p.control % 3;
@@ -240,7 +273,7 @@ const useChecklist = (
 describe("L11: boot", () => {
   it(
     "scenario: the page starts one dial; closing the tab removes its connection at the brain",
-    { timeout: fault?.kind === "timeout" ? (fault.at === "home" ? 500 : 60_000) : 300_000 },
+    { timeout: fault?.kind === "timeout" ? (fault.at === "home" ? 500 : 60_000) : LIMIT.L11 },
     (context) =>
       suite(
         Effect.gen(function* () {
@@ -281,7 +314,7 @@ describe("L11: boot", () => {
 describe("L14: the first window (p29)", () => {
   it(
     "scenario: p29's whole flow on the real dev.ts: wait, grant, reload, two tabs, a stranger's grant, removal and Ask again",
-    { timeout: 600_000 },
+    { timeout: LIMIT.L14 },
     (context) =>
       suite(
         Effect.gen(function* () {
@@ -346,7 +379,7 @@ describe("L14: the first window (p29)", () => {
 describe("L15: use in two tabs (W2)", () => {
   it(
     "after any adds, checks, unchecks and removes in either tab, both tabs show the checklist's fold of the accepted letters, each tab shows its own refusals, and no letter lands twice",
-    { timeout: 900_000 },
+    { timeout: LIMIT.L15 },
     async (context) => {
       await fc.assert(
         fc.asyncProperty(controls, (moves) =>
@@ -377,6 +410,12 @@ describe("L15: use in two tabs (W2)", () => {
                     "a lost terminal answer is recovered on the next dial",
                   );
                   const group = (yield* resends(tabs[at]!.page)).groups[index]!;
+                  // The brain answers the page's close frame, so the page hears of its own close at once.
+                  expect(group.closed, "the page's close comes back clean, with the code it sent").toMatchObject({
+                    code: 4001,
+                    clean: true,
+                  });
+                  expect(group.closed!.ms, "an answered close is reported at once").toBeLessThan(CLOSE_WITHIN);
                   expect(group.attempts.length, "the press was actually resent").toBeGreaterThanOrEqual(2);
                   const first = group.attempts[0]!;
                   expect(group.attempts.at(-1)!.dial, "the resend used a new socket").toBeGreaterThan(first.dial);
@@ -419,7 +458,7 @@ describe("L15: use in two tabs (W2)", () => {
             context,
           ),
         ),
-        { seed: SEED, numRuns: 5 },
+        { seed: SEED, numRuns: 5, ...RED },
       );
     },
   );
@@ -428,7 +467,7 @@ describe("L15: use in two tabs (W2)", () => {
 describe("L17: [secrets] no output copies a key, a signature or a credential", () => {
   it(
     "[secrets] for generated sentinel credentials in the instance's env, the page, rows, errors, URLs, console lines and sockets never copy one",
-    { timeout: 1_800_000 },
+    { timeout: LIMIT.L17 },
     async (context) => {
       await fc.assert(
         fc.asyncProperty(
@@ -607,21 +646,28 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   }
                 }
 
+                // Every output that copies a secret is named, not only the first one found.
+                const copies = new Set<string>();
+
                 for (const s of [...credentials, ...signatures]) {
                   for (const form of [s, encodeURIComponent(s), btoa(s), JSON.stringify(s).slice(1, -1)]) {
                     const checked = signatures.includes(s) ? checkedOutputs : credentialOutputs;
 
                     for (const [output, text] of checked) {
-                      expect(text.includes(form), `${output} copies a secret`).toBe(false);
+                      if (text.includes(form)) {
+                        copies.add(`${output} copies a ${signatures.includes(s) ? "signature" : "credential"}`);
+                      }
                     }
                   }
                 }
+
+                expect([...copies], "an output copies a secret").toEqual([]);
               }),
               context,
             );
           },
         ),
-        { seed: SEED, numRuns: 10 },
+        { seed: SEED, numRuns: 10, ...RED },
       );
     },
   );
@@ -674,7 +720,27 @@ const stored = (dir: string, accessBodies: ReadonlyMap<string, string>) =>
         );
 
         for (const { name } of tables) {
-          for (const row of db.prepare(`SELECT * FROM "${name.replaceAll('"', '""')}"`).all()) {
+          const table = `"${name.replaceAll('"', '""')}"`;
+          const keys = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ name: Schema.String, pk: Schema.Int })))(
+            db.prepare(`PRAGMA table_info(${table})`).all(),
+          )
+            .filter((column) => column.pk > 0)
+            .map((column) => column.name);
+          const select = db.prepare(`SELECT * FROM ${table}`);
+          // The runtime's own tables hold 64-bit integers, such as an alarm's time in nanoseconds.
+          select.setReadBigInts(true);
+
+          for (const [at, read] of select.all().entries()) {
+            // An integer a JavaScript number holds exactly is read as one, as before; a larger one stays whole.
+            const row = Object.fromEntries(
+              Object.entries(read).map(([column, value]) => [
+                column,
+                typeof value === "bigint" && value >= Number.MIN_SAFE_INTEGER && value <= Number.MAX_SAFE_INTEGER
+                  ? Number(value)
+                  : value,
+              ]),
+            );
+            const key = keys.length === 0 ? `row ${at}` : `key ${keys.map((column) => String(row[column])).join(" ")}`;
             let cells = row;
 
             if (
@@ -691,7 +757,7 @@ const stored = (dir: string, accessBodies: ReadonlyMap<string, string>) =>
 
             for (const [column, value] of Object.entries(cells)) {
               outputs.push([
-                `${label} table ${name} column ${column}`,
+                `${label} table ${name} ${key} column ${column}`,
                 value instanceof Uint8Array ? Buffer.from(value).toString("latin1") : String(value),
               ]);
             }

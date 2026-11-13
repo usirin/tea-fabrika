@@ -24,6 +24,10 @@ import * as Runtime from "./runtime.ts";
 
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
 
+/** The codes a close frame from an endpoint may carry: the WebSocket API's `close(code)` takes 1000 or
+ *  3000 to 4999 and throws for any other (WHATWG WebSockets, `close`; RFC 6455, 7.4.2). */
+const sendable = (code: number) => code === 1000 || (code >= 3000 && code <= 4999);
+
 const HOUR = 3_600_000;
 const H = 1_790_002_800_000;
 const fake = <A>(value: object): A => value as A;
@@ -45,13 +49,22 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
   });
   const frames: Array<string> = [];
   const closes: Array<number> = [];
+  const left: Array<string> = [];
+  let gone = false;
   const socket = fake<WebSocket>({
     deserializeAttachment: () => attached,
     serializeAttachment: (next: typeof Attached.Type) => {
       attached = next;
     },
     send: (frame: string) => frames.push(frame),
-    close: (code: number) => closes.push(code),
+    // As the platform's socket: it throws for a code no close frame may carry, and once it is gone.
+    close: (code: number) => {
+      if (gone || !sendable(code)) {
+        throw new Error("the socket takes no such close frame");
+      }
+
+      closes.push(code);
+    },
   });
   const state = fake<DurableObjectState>({
     id: { name: "test-connection" },
@@ -79,6 +92,16 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
           calls.push({ method, params });
           // edge: the platform RPC returns a Promise
           return Promise.resolve(answer);
+        },
+        leave: (client: string) => {
+          left.push(`leave ${client}`);
+          // edge: the platform RPC returns a Promise
+          return Promise.resolve();
+        },
+        disconnect: (client: string) => {
+          left.push(`disconnect ${client}`);
+          // edge: the platform RPC returns a Promise
+          return Promise.resolve();
         },
       }),
     },
@@ -111,6 +134,11 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
     socket,
     frames,
     closes,
+    left,
+    /** From now on the socket is already closed: it takes no frame. */
+    lose: () => {
+      gone = true;
+    },
     calls,
     saved,
     stats,
@@ -680,4 +708,39 @@ it.effect.prop(
       expect([...reached].sort()).toEqual(["new", "waiting"]);
     }),
   { arbitrary: { seed: 119120, runs: 50 } },
+);
+
+// The codes a peer's close arrives with: the ones a browser really reports (1001 on leaving a page,
+// 1005 for a frame with no code, 1006 for a socket that dropped), any code an app may send, and any
+// 16-bit number at all.
+const PeerClose = Schema.Union([
+  Schema.Literals([1000, 1001, 1005, 1006, 1011]),
+  Schema.Int.check(Schema.isBetween({ minimum: 3000, maximum: 4999 })),
+  Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 65_535 })),
+]);
+
+it.effect.prop(
+  "T828 L25: a peer's close frame is answered once, with its own code when a frame may carry it and 1000 when not, and the connection leaves even when the socket is already gone (200 runs)",
+  { code: PeerClose, gone: Schema.Boolean },
+  ({ code, gone }) =>
+    Effect.gen(function* () {
+      const db = yield* database;
+      const w = world(db);
+
+      if (gone) {
+        w.lose();
+      }
+
+      yield* ConnectionService.use((service) => service.close(w.socket, code)).pipe(Effect.provide(w.layer));
+      // Without this answer a browser keeps its socket closing for 10 s and then reports 1006.
+      expect(w.closes, "one close frame back, never a code the socket refuses").toEqual(
+        gone ? [] : [sendable(code) ? code : 1000],
+      );
+      expect(w.left, "the connection leaves and is disconnected once").toEqual([
+        "leave test-client",
+        "disconnect test-client",
+      ]);
+      expect(w.frames, "a close is answered by a close frame, never a message").toEqual([]);
+    }),
+  { arbitrary: { seed: 119120, runs: 200 } },
 );
