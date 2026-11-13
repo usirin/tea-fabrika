@@ -128,9 +128,10 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
     sql.exec("INSERT INTO quota_entries (rev,account,bytes) VALUES (?,?,?)", entry.rev, account, encodedBytes(entry));
     return Result.succeed(undefined);
   };
-  const table = (entries: ReadonlyArray<Entry>) => new ProcessTable(entries, options.brain);
-  const owner = (entry: Entry, entries: ReadonlyArray<Entry>) => {
-    const registry = table(entries);
+  // The process table folds the lifecycle streams alone, as the manager's own fold does, so one
+  // write reads the same rows however many letters the ledger holds.
+  const table = () => ProcessTable.read((stream, after) => accountingEntries(sql, { stream, after }), options.brain);
+  const owner = (entry: Entry, registry: ProcessTable) => {
     const live = registry.info.find((p) => entry.stream === `${p.name}/inbox` || entry.stream.startsWith(`${p.name}/`));
 
     if (live !== undefined) {
@@ -165,12 +166,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
         ),
       }),
     );
-  const charge = (
-    entry: Entry,
-    entries: ReadonlyArray<Entry>,
-    trusted: Authority,
-    runtime?: RuntimeWrite["Service"],
-  ) => {
+  const charge = (entry: Entry, trusted: Authority, runtime?: RuntimeWrite["Service"]) => {
     if (runtime !== undefined && runtime.process !== entry.stream) {
       return Result.fail("quota" as const);
     }
@@ -179,9 +175,9 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
       return Result.succeed(undefined);
     }
 
-    const registry = table(entries);
+    const registry = table();
     const selected = trusted === null ? undefined : Option.getOrUndefined(registry.life(trusted.process));
-    const target = owner(entry, entries);
+    const target = owner(entry, registry);
 
     if (trusted !== null && selected === undefined) {
       return Result.fail("quota" as const);
@@ -253,12 +249,21 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
 
     return result;
   };
+  // Charges what was committed before accounting saw it, and nothing else: only entries past the
+  // saved revision are read, so a ledger that is already accounted costs one empty query.
   const restore = () => {
     initialize();
-    const entries = accountingEntries(sql);
     const through = Number(sql.exec("SELECT rev FROM quota_restored WHERE id=1")[0]?.rev ?? 0);
+    const pending = accountingEntries(sql, { after: through });
+    const last = pending.at(-1);
 
-    for (const entry of entries.filter((entry) => entry.rev > through)) {
+    if (last === undefined) {
+      return;
+    }
+
+    const registry = table();
+
+    for (const entry of pending) {
       if (sql.exec("SELECT rev FROM quota_entries WHERE rev=?", entry.rev).length !== 0) {
         continue;
       }
@@ -273,7 +278,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
         continue;
       }
 
-      const target = owner(entry, entries);
+      const target = owner(entry, registry);
 
       if (target === undefined) {
         throw new QuotasError({ reason: new BadRow({ cause: null }) });
@@ -323,7 +328,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
 
     sql.exec(
       "INSERT INTO quota_restored (id,rev) VALUES (1,?) ON CONFLICT(id) DO UPDATE SET rev=excluded.rev",
-      entries.at(-1)?.rev ?? 0,
+      last.rev,
     );
   };
   const read = Effect.fnUntraced(function* (account: string) {
@@ -360,7 +365,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
     Layer.succeed(WritePolicy, {
       admit: (entry, runtime) => {
         restore();
-        const result = charge(entry, accountingEntries(sql), authority, runtime);
+        const result = charge(entry, authority, runtime);
 
         if (Result.isSuccess(result)) {
           sql.exec(

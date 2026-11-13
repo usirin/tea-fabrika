@@ -457,11 +457,21 @@ export const ledgerStore = (
   return { append, read, wait, transact };
 };
 
-/** @internal */
-export const committedEntries = (sql: Sql) => {
+/**
+ * Committed entries past `after`, oldest first: every stream's, or one `stream`'s. None before the
+ * ledger's table exists.
+ *
+ * @internal
+ */
+export const committedEntries = (sql: Sql, scope: { readonly stream?: string; readonly after?: number } = {}) => {
   if (sql.exec("SELECT name FROM sqlite_master WHERE name='entries'").length === 0) {
     return [];
   }
 
-  return sql.exec("SELECT * FROM entries ORDER BY rev").map((row) => decodeRow(row));
+  const after = scope.after ?? 0;
+  const rows =
+    scope.stream === undefined
+      ? sql.exec("SELECT * FROM entries WHERE rev > ? ORDER BY rev", after)
+      : sql.exec("SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev", scope.stream, after);
+  return rows.map((row) => decodeRow(row));
 };

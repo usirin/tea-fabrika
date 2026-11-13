@@ -7,13 +7,19 @@ import { Referee } from "./Referee.ts";
 import { WritePolicy, RuntimeWrite } from "./WritePolicy.ts";
 
 /**
- * Returns every committed entry in `sql`, oldest first, or none before the ledger's table
- * exists. Accounting reads them to find each entry's owner.
+ * Returns the committed entries in `sql`, oldest first, or none before the ledger's table exists.
+ * Accounting reads them to find each entry's owner.
+ *
+ * **Details**
+ *
+ * `scope.after` keeps only entries past that revision, and `scope.stream` only one stream's, so a
+ * reader that knows what it needs does not decode the whole ledger.
  *
  * @stability unstable
  * @category getters
  */
-export const accountingEntries = (sql: Sql) => committedEntries(sql);
+export const accountingEntries = (sql: Sql, scope?: { readonly stream?: string; readonly after?: number }) =>
+  committedEntries(sql, scope);
 
 export const layer = (sql: Sql): Layer.Layer<Referee, never, Doorbell> =>
   Layer.effect(
