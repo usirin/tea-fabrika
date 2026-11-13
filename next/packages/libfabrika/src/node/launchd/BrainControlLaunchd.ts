@@ -255,16 +255,60 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
       return yield* conflict("plist changed before removal");
     }
 
-    const captured = `${compiled.xml}.previous`;
-    const restore = fs.link(captured, plist).pipe(
-      Effect.catchReason("PlatformError", "AlreadyExists", () => Effect.void),
-      Effect.mapError(storage),
-      Effect.orDie,
+    // The captured entry gets a folder of its own. Compile's folder is deleted whole when the scope
+    // closes; this one goes only once the entry has left it, so an entry that could not be put back
+    // stays in it for a person.
+    const held = yield* Effect.acquireRelease(
+      fs.makeTempDirectory({ directory: spec.home, prefix: ".brain-" }).pipe(Effect.mapError(storage)),
+      (folder) =>
+        fs.lstat(path.join(folder, "brain.plist")).pipe(
+          Effect.catchReason("PlatformError", "NotFound", () => fs.remove(folder, { recursive: true })),
+          Effect.ignore,
+        ),
+    );
+    const captured = path.join(held, "brain.plist");
+    // Deletes the captured entry only when it is our own plist, which was on its way out anyway.
+    // Any other entry is somebody's: it keeps its place in the folder and the caller hears why.
+    const discard = Effect.gen(function* () {
+      if ((yield* readPlist(captured).pipe(Effect.catch(() => Effect.succeed(null)))) !== compiled.bytes) {
+        return yield* conflict("plist path taken before restore");
+      }
+
+      yield* fs.remove(captured).pipe(Effect.mapError(storage));
+    });
+    // Puts the captured entry back as itself. Each kind has one call that refuses a taken path with
+    // EEXIST and follows no link: symlink(2), mkdir(2), and link(2) for the rest. link(2) follows a
+    // symlink on macOS and refuses a directory, so it serves neither. Safe to run twice: once the
+    // entry has left the folder there is nothing to do.
+    const restore = Effect.gen(function* () {
+      const stat = yield* fs
+        .lstat(captured)
+        .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(null)));
+
+      if (stat === null) {
+        return;
+      }
+
+      if (stat.type === "SymbolicLink") {
+        yield* fs.symlink(yield* fs.readLink(captured), plist);
+        yield* fs.remove(captured);
+      } else if (stat.type === "Directory") {
+        yield* fs.makeDirectory(plist);
+        // rename(2) puts a directory only over an empty one: the one claimed on the line above.
+        yield* fs.rename(captured, plist);
+      } else {
+        yield* fs.link(captured, plist);
+        yield* fs.remove(captured);
+      }
+    }).pipe(
+      Effect.catchReason("PlatformError", "AlreadyExists", () => discard),
+      Effect.mapError((cause) => (cause._tag === "BrainControlError" ? cause : storage(cause))),
     );
     // Rename captures the actual directory entry; checking before unlink would race a replacement.
-    // Keep it until the lifecycle accepts the reply, including its deadline check.
+    // Keep it until the lifecycle accepts the reply, including its deadline check. A release has no
+    // error channel: a restore that fails here leaves the entry in its folder.
     yield* Effect.acquireRelease(fs.rename(plist, captured).pipe(Effect.mapError(storage)), (_, exit) =>
-      Exit.isSuccess(exit) ? Effect.void : restore,
+      (Exit.isSuccess(exit) ? discard : restore).pipe(Effect.ignore),
     );
     yield* Effect.gen(function* () {
       if ((yield* readPlist(captured)) !== compiled.bytes) {
