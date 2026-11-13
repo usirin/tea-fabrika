@@ -1,6 +1,7 @@
 import { applyCell } from "@demlik/tea";
-import { Context, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream, Tracer } from "effect";
+import { Context, Duration, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream, Tracer } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
+import { RateLimiter } from "effect/persistence/RateLimiter";
 import { admitted, MemberEvent, Saw } from "../access/Access.ts";
 import { foldAccess } from "../access/AccessFold.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
@@ -29,18 +30,20 @@ import { Incoming } from "../runtime/Entry.ts";
 import { type ProgramDown } from "../runtime/Program.ts";
 import { type RepliesError } from "../runtime/Replies.ts";
 import { type RunnerError, Sent } from "../runtime/Runner.ts";
+import { type WatchersError } from "../runtime/Watchers.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
-import { type SinkError, SpanSink } from "../telemetry/Sink.ts";
+import { SinkError, SpanSink } from "../telemetry/Sink.ts";
 import { Chain, REFUSED } from "../telemetry/Trace.ts";
 import { checkHello } from "../transport/Hello.ts";
 import { type Checked, KeyLine, verifySshsig } from "../transport/Sshsig.ts";
 import { PasskeyLine, passkeyRp } from "../transport/Webauthn.ts";
-import { Admission, Answer, Attached, Hello } from "../transport/Wire.ts";
+import { Admission, Answer, Attached, Hello, RateCountFailure, RateRefusal } from "../transport/Wire.ts";
 import { gatewayNonce } from "./GatewayNonce.ts";
 import { gatewayStore } from "./GatewayStore.ts";
 import * as Waiting from "./internal/waiting.ts";
 import * as JobRoutes from "./Jobs.ts";
+import { Policy as RatePolicy } from "./RateLimit.ts";
 
 const ConnectionId = Schema.NonEmptyString.pipe(Schema.brand("ConnectionId"));
 export type ConnectionId = typeof ConnectionId.Type;
@@ -66,6 +69,11 @@ const no = (reason: string) => Answer.cases.refused.make({ reason });
 const refuse = Effect.fn("gateway.route")(function* (reason: "reserved") {
   yield* Effect.annotateCurrentSpan(REFUSED, reason);
   return no(reason);
+});
+
+const refuseRate = Effect.fn("gateway.route")(function* (retryAfter: number) {
+  yield* Effect.annotateCurrentSpan(REFUSED, "rate_limited");
+  return RateRefusal.make({ reason: "rate_limited", retryAfter });
 });
 
 const ok = (result: typeof Schema.Json.Type) => Answer.cases.ok.make({ result });
@@ -240,6 +248,7 @@ type Options<A, RNext, RDeliver, RNotify> = {
   readonly ping: { readonly min: number; readonly max: number };
   readonly inputCap: number;
   readonly spentCap: number;
+  readonly rateLimit: RatePolicy;
   readonly turn?: Semaphore.Semaphore;
   readonly write?: <B, E, R>(work: Effect.Effect<B, E, R>) => Effect.Effect<B, E, R>;
   readonly policy?: (
@@ -256,7 +265,15 @@ type Options<A, RNext, RDeliver, RNotify> = {
     incoming: Incoming,
   ) => Effect.Effect<
     Sent | void,
-    LedgerError | SinkError | SigningRefused | NotGranted | ProgramDown | RunnerError | ProcessError | RepliesError,
+    | LedgerError
+    | SinkError
+    | SigningRefused
+    | NotGranted
+    | ProgramDown
+    | RunnerError
+    | ProcessError
+    | RepliesError
+    | WatchersError,
     RDeliver
   >;
   readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError, RNotify>;
@@ -282,6 +299,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   });
   const clients = yield* ClientManager;
   const sink = yield* SpanSink;
+  const limiter = yield* RateLimiter;
+  const ratePolicy = yield* Schema.decodeUnknownEffect(RatePolicy)(options.rateLimit).pipe(
+    Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+  );
   const records = yield* RecordManager;
   const archive = yield* Archive;
   const processes = yield* Effect.serviceOption(ProcessManager);
@@ -317,7 +338,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       ),
     );
   });
-  const membership = Effect.fnUntraced(function* (raw: string) {
+  const membership = Effect.fnUntraced(function* (raw: string, checkedKey?: string) {
     const members = yield* clients.members;
     const identity = admitted(members, raw);
 
@@ -325,7 +346,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return yield* new NotGranted({});
     }
 
-    const key = yield* fingerprint(raw, false);
+    const key = checkedKey ?? (yield* fingerprint(raw, false));
     return Writer.cases[identity.as === "agent" ? "agent" : "person"].make({ key, for: identity.person });
   });
   const sessions = yield* Effect.service(SessionManager).pipe(
@@ -391,11 +412,12 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return yield* new NotGranted({});
     }
 
-    return { attached: { ...attached, identity: { ...identity, key: yield* fingerprint(raw, false) } }, raw };
+    // initialize saved this fingerprint only after checking the signed hello against the raw key.
+    return { attached: { ...attached, identity: { ...identity, key: attached.identity.key } }, raw };
   });
   const online = Effect.fnUntraced(function* (client: ConnectionId) {
     const checked = yield* authenticated(client);
-    return { ...checked, by: yield* membership(checked.raw) };
+    return { ...checked, by: yield* membership(checked.raw, checked.attached.identity.key) };
   });
   const connect = Effect.fnUntraced(function* () {
     return yield* Effect.sync(() => ConnectionId.make(random()));
@@ -1031,7 +1053,37 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return no("not_granted");
     }
 
-    const { raw } = checked.success;
+    const { attached, raw } = checked.success;
+
+    // One budget per authenticated key, hands included, before a window or agent becomes a Writer.
+    const budget = yield* Effect.result(
+      limiter.consume({
+        key: attached.identity.key,
+        ...ratePolicy,
+        algorithm: "fixed-window",
+        onExceeded: "fail",
+      }),
+    );
+
+    if (Result.isFailure(budget)) {
+      if (budget.failure.reason._tag !== "RateLimitExceeded") {
+        return yield* new LedgerError({ reason: "storage", cause: budget.failure });
+      }
+
+      const answer = yield* refuseRate(Duration.toMillis(budget.failure.reason.retryAfter));
+      yield* sink.check.pipe(
+        Effect.mapError(
+          (cause) =>
+            new SinkError({
+              reason: cause.reason,
+              held: cause.held,
+              message: RateCountFailure.fields.message.literal,
+              cause,
+            }),
+        ),
+      );
+      return answer;
+    }
 
     if (reserved(params) || (method === "process.send" && reserved(rawObject(params)?.m))) {
       return yield* refuse("reserved");
@@ -1051,11 +1103,11 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return answer;
     }
 
-    if (checked.success.attached.identity.as === "hands") {
+    if (attached.identity.as === "hands") {
       return no("not_allowed");
     }
 
-    const by = yield* membership(raw);
+    const by = yield* membership(raw, attached.identity.key);
 
     let refusal: string | null = methods.has(method) ? null : "unknown_method";
 

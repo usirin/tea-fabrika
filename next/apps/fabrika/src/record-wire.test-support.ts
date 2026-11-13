@@ -62,6 +62,7 @@ export const recordWire = Effect.fnUntraced(
       founder: `ssh-ed25519 ${blob.toString("base64")}`,
       window: raw,
       port: port.port,
+      rateLimit: { limit: 100_000, window: 60_000 },
       limits: { recordBytes: cap },
     });
   },

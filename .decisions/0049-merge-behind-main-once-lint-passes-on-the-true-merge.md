@@ -1,7 +1,7 @@
 ---
 id: 0049
 title: The lead's merge script may land a green pull request that is behind main, once pnpm lint passes on its head merged with current main, with the head pinned and no override flag
-status: amended-in-part by [0097](0097-a-green-pull-request-lands-without-catching-up.md), [0116](0116-github-requires-ci-required-on-main.md)
+status: amended-in-part by [0097](0097-a-green-pull-request-lands-without-catching-up.md), [0116](0116-github-requires-ci-required-on-main.md), [0146](0146-a-pull-request-lands-only-on-ci-that-saw-main.md), [0162](0162-no-friction-before-a-merge.md)
 date: 2026-11-10
 tags: [merge, lead, catchup, freshmain, behind, lint, ci]
 ---

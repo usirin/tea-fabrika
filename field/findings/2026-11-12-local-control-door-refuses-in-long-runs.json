@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-12-local-control-door-refuses-in-long-runs",
+  "date": "2026-11-12",
+  "by": "p34cs4-measure",
+  "model": "claude-fable-5-2",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/node/dev/dev.ts",
+    "line": 134
+  },
+  "says": "In next/, the local instance's control door stops taking connections part way through a long loaded run: every later call through `instance.project()` or `instance.process()` fails with ECONNREFUSED, while the same workerd process stays alive and its public WebSocket door keeps answering.",
+  "proof": "Host runs of experiments/p34cs4-measure/measure.ts on a real local instance (workerd 1.20261026.1), 2026-11-12. Seven runs ended with refused trusted calls, each with the workerd pid unchanged. Six of them polled a trusted `read` or `info` call every 50 ms; the seventh made 18 trusted calls in all and was refused on the 16th, about 7 minutes and 2,400 public inputs in, so the number of trusted calls is not the cause. One run had no alarm loop running when the door refused, so that loop is not the cause either. Two short runs of the same recovery steps, under 2 minutes each, finished with no refusal. The cause was not found.",
+  "cost": "A long test or tool that drives a local instance through the trusted binding loses the instance part way, and the error reads like a dead runtime. The measurement for ticket 404 lost its two large-checkpoint restarts in all three full runs and took them from short runs.",
+  "head": "2e131f42a71db1d5e43b072cb833b9033c065feb",
+  "ticket": "usirin/tea-fabrika#404",
+  "pr": null
+}

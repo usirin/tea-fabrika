@@ -10,13 +10,14 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterAll, beforeEach, describe, expect, it, vi } from "@effect/vitest";
+import { afterAll, beforeEach, describe, expect, it } from "@effect/vitest";
 import { Id, Sent } from "@kampus/libfabrika";
 import { Adds, Add, Grant, MemberEvent, Saw, Revoke } from "@kampus/libfabrika/access/Access";
 import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
 import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
 import { SignRequest } from "@kampus/libfabrika/access/SessionManager";
 import { grantText, addText, enrollmentText, revokeText } from "@kampus/libfabrika/access/Text";
+import * as RateLimiterSql from "@kampus/libfabrika/gateway/RateLimiterSql";
 import { Jobs } from "@kampus/libfabrika/jobs/Jobs";
 import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
@@ -33,10 +34,12 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
-import { Hello } from "@kampus/libfabrika/transport/Wire";
-import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Schema, Stream } from "effect";
+import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
+import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Result, Schema, Stream } from "effect";
+import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
+import { vi } from "vitest";
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const runs = (numRuns: number) => ({ seed: SEED, endOnFailure: true, numRuns });
 const SpanPage = Schema.Struct({ spans: Schema.Array(SpanRow), next: Schema.Int });
@@ -118,7 +121,7 @@ const pack = (blob: Uint8Array, signature: Uint8Array, space: string = SPACE) =>
   );
 
 const web = <A>(call: () => Promise<A>): Effect.Effect<A, Error> =>
-  Effect.tryPromise({ try: call, catch: () => new Error("test WebCrypto failed") });
+  Effect.tryPromise({ try: call, catch: (): Error => new Error("test WebCrypto failed") });
 
 const key = Effect.fn("test.key")(function* () {
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
@@ -232,10 +235,16 @@ const passkey = Effect.fn("test.passkey")(function* () {
 // Loading inside the test hook lets each new law report the missing door on the pre-build base,
 // instead of losing every law to a collection error. This always imports the real module.
 let Gateway: typeof import("@kampus/libfabrika/gateway/Gateway").Gateway;
+let connectionLayer: typeof import("@kampus/libfabrika/workers/gateway").connectionLayer;
+let ConnectionService: typeof import("@kampus/libfabrika/workers/gateway").ConnectionService;
+vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
 
 beforeEach(async () => {
   ({ Gateway } = await vi.importActual<typeof import("@kampus/libfabrika/gateway/Gateway")>(
     "@kampus/libfabrika/gateway/Gateway",
+  ));
+  ({ connectionLayer, ConnectionService } = await vi.importActual<typeof import("@kampus/libfabrika/workers/gateway")>(
+    "@kampus/libfabrika/workers/gateway",
   ));
 });
 
@@ -292,7 +301,14 @@ type DeliveryCheck = Effect.Effect<
   Ledger | RecordManager | Effect.Services<ReturnType<typeof writeId>>
 >;
 
-const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputCap?: number; spentCap?: number } = {}) {
+const world = Effect.fnUntraced(function* (
+  options: {
+    recordCap?: number;
+    inputCap?: number;
+    spentCap?: number;
+    rateLimit?: { limit: number; window: number };
+  } = {},
+) {
   const dir = mkdtempSync(join(top, "w-"));
   const db = open(join(dir, "project.db"));
   const sql = nodeSql(db);
@@ -372,6 +388,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
     location: "test-instance",
     build: "test-build",
     waiting: { most: 3, ttl: 600_000 },
+    rateLimit: options.rateLimit ?? { limit: 100_000, window: 60_000 },
     ping: { min: 10_000, max: 60_000 },
     inputCap: options.inputCap ?? 1000,
     spentCap: options.spentCap ?? 1000,
@@ -382,7 +399,13 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
         notices.push({ client, news });
         yield* controls.notify(client, news);
       }),
-    inputs: { schema: Input, personOnly: ["approve"], raw: ["keys"], log: Schema.toCodecJson(Input) },
+    inputs: {
+      schema: Input,
+      personOnly: ["approve"],
+      raw: ["keys"],
+      log: Schema.toCodecJson(Input),
+      name: (m: typeof Input.Type) => m._tag,
+    },
     events: { personOnly: ["answered"] },
   };
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
@@ -425,6 +448,9 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
     }),
     ProcessIdGenerator.layer,
     observedIds,
+    RateLimiter.layer.pipe(
+      Layer.provide(RateLimiterSql.layer(sql, { build: "test-build", policy: settings.rateLimit })),
+    ),
   );
   const layer = Gateway.layer(settings).pipe(Layer.provideMerge(env));
   const reopen = (storage: ReturnType<typeof nodeSql>) => {
@@ -449,6 +475,9 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
           }),
           ProcessIdGenerator.layer,
           Id.Generator.layer,
+          RateLimiter.layer.pipe(
+            Layer.provide(RateLimiterSql.layer(storage, { build: "test-build", policy: settings.rateLimit })),
+          ),
         ),
       ),
     );
@@ -480,6 +509,736 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
 });
 
 type World = Effect.Success<ReturnType<typeof world>>;
+
+// The real connection and Project gateway, joined through the platform's RPC contract.
+const wire = Effect.fnUntraced(function* (
+  w: World,
+  d: typeof Gateway.Service,
+  client: Parameters<typeof Gateway.Service.route>[0],
+  archiveFailure: "unreachable" | "mismatch",
+  storageFailure: () => boolean = () => false,
+) {
+  const projectContext = yield* Effect.context<never>();
+  const db = yield* Effect.acquireRelease(
+    Effect.sync(() => new DatabaseSync(":memory:")),
+    (handle) => Effect.sync(() => handle.close()),
+  );
+  const real = nodeSql(db);
+  const sql = {
+    ...real,
+    transaction: <A>(step: () => A): A => {
+      if (storageFailure()) {
+        throw new Error("SQLITE_FULL");
+      }
+
+      return real.transaction(step);
+    },
+  };
+  let attached = Attached.cases.online.make({
+    client,
+    identity: { key: w.window.fingerprint, person: PERSON, as: "window" },
+    version: 1,
+    waits: [],
+    watching: false,
+    busy: false,
+  });
+  const frames: Array<unknown> = [];
+  const saved: Array<unknown> = [];
+  const archives: Array<unknown> = [];
+  const closes: Array<number> = [];
+  const socket = {
+    deserializeAttachment: () => attached,
+    serializeAttachment: (next: typeof attached) => {
+      attached = next;
+    },
+    send: (text: string) => {
+      frames.push(JSON.parse(text));
+    },
+    close: (code: number) => {
+      closes.push(code);
+    },
+  };
+  const state = {
+    id: { name: "t843-connection" },
+    storage: {
+      sql: {
+        exec: sql.exec,
+        get databaseSize() {
+          return sql.size();
+        },
+      },
+      transactionSync: sql.transaction,
+    },
+    getWebSockets: () => [socket],
+    getTags: () => ["test-session", "test-tab", w.window.fingerprint],
+    getWebSocketAutoResponseTimestamp: () => null,
+  };
+  const env = {
+    PROJECT: {
+      getByName: () => ({
+        route: (_client: string, method: string, params: unknown) =>
+          Effect.runPromise(d.route(client, method, params).pipe(Effect.provideContext(projectContext))),
+      }),
+    },
+    RECORD: {
+      getByName: () => ({
+        write: (_chain: unknown, _part: number, rows: ReadonlyArray<unknown>) => {
+          saved.push(...rows);
+          return Promise.resolve({ _tag: "written" });
+        },
+      }),
+    },
+    MEASUREMENTS: {
+      put: (name: string, bytes: Uint8Array) => {
+        archives.push({ name, body: new TextDecoder().decode(bytes) });
+        return archiveFailure === "unreachable" ? Promise.reject(new Error("archive unavailable")) : Promise.resolve();
+      },
+      head: () => Promise.resolve(null),
+    },
+  };
+  const layer: ReturnType<typeof connectionLayer> = Reflect.apply(connectionLayer, undefined, [
+    state,
+    env,
+    { name: "t843-project", port: 8787, rateLimit: w.settings.rateLimit },
+  ]);
+  const context = yield* Layer.build(layer);
+  const service = yield* ConnectionService.pipe(Effect.provideContext(context));
+  let id = 0;
+  const send = (method: string, params: unknown): Effect.Effect<void, unknown> => {
+    const effect: ReturnType<typeof service.message> = Reflect.apply(service.message, service, [
+      socket,
+      JSON.stringify({ jsonrpc: "2.0", id: ++id, method, params }),
+    ]);
+    return effect.pipe(Effect.provideContext(context));
+  };
+  return {
+    db,
+    frames,
+    saved,
+    archives,
+    closes,
+    send,
+    ring: (stream: string, rev: number) => service.ring(stream, rev).pipe(Effect.provideContext(context)),
+    read: () => attached,
+    recover: Effect.suspend(() => send("process.send", request("recovery-probe"))),
+  };
+});
+
+const failingTableWrites = (
+  sql: ReturnType<typeof nodeSql>,
+  table: string,
+  active: () => boolean,
+  cause: Error,
+): ReturnType<typeof nodeSql> => ({
+  ...sql,
+  exec: (query, ...params) => {
+    if (active() && query.includes(table) && /INSERT|UPDATE/u.test(query)) {
+      throw cause;
+    }
+
+    return sql.exec(query, ...params);
+  },
+});
+
+describe("T843 sender budget, next/", () => {
+  const small = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 6 }));
+  const schedule = Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 }))).check(
+    Schema.isMinLength(12),
+    Schema.isMaxLength(40),
+  );
+
+  it.effect.prop(
+    "T843 attempts: reads, malformed calls, reserved stamps and letter retries spend the checked key's budget first (50 runs)",
+    { limit: small, choices: schedule },
+    ({ limit, choices }) =>
+      Effect.gen(function* () {
+        const w = yield* world({ rateLimit: { limit, window: 60_000 } });
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          const { client } = yield* online(d, w);
+          yield* TestClock.setTime(REFUSED_HOUR + 18_000);
+          let passed = 0;
+          let delivered = false;
+
+          for (const pick of choices) {
+            // A retry exists only after its first delivery. Every other move is legal while online.
+            const moves: ReadonlyArray<string> = [
+              "read",
+              "bad",
+              "reserved",
+              "unknown",
+              "send",
+              ...(delivered ? ["retry"] : []),
+            ];
+            const move: string = moves[pick % moves.length]!;
+            const method = move === "read" ? "ledger.read" : move === "unknown" ? "missing.method" : "process.send";
+            const params =
+              move === "read"
+                ? { stream: "empty", after: 0 }
+                : move === "reserved"
+                  ? { ...request("same-letter"), by: "claimed-key" }
+                  : move === "bad"
+                    ? { m: false }
+                    : request("same-letter");
+            const before = w.usedInputs.length;
+            const sent = w.deliveries.length;
+            const answer = yield* d.route(client, method, params);
+            expect(answer._tag).toBe(
+              passed === limit || ["reserved", "bad", "unknown"].includes(move) ? "refused" : "ok",
+            );
+
+            if (passed === limit) {
+              expect(answer).toEqual({ _tag: "refused", reason: "rate_limited", retryAfter: 42_000 });
+              expect(w.usedInputs).toHaveLength(before);
+              expect(w.deliveries).toHaveLength(sent);
+            } else {
+              expect(answer).toMatchObject(
+                move === "reserved"
+                  ? { _tag: "refused", reason: "reserved" }
+                  : move === "bad"
+                    ? { _tag: "refused", reason: "bad_input" }
+                    : move === "unknown"
+                      ? { _tag: "refused", reason: "unknown_method" }
+                      : { _tag: "ok" },
+              );
+              passed++;
+              delivered ||= move === "send";
+            }
+          }
+        }).pipe(w.provide);
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
+
+  it.effect.prop(
+    "T843 identity: connections, targets and reopened layers share one key; a second key stays independent (50 runs)",
+    { limit: small, picks: schedule },
+    ({ limit, picks }) =>
+      Effect.gen(function* () {
+        const w = yield* world({ rateLimit: { limit, window: 60_000 } });
+        let one: Parameters<typeof Gateway.Service.route>[0];
+        let two: Parameters<typeof Gateway.Service.route>[0];
+        let other: Parameters<typeof Gateway.Service.route>[0];
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          one = (yield* online(d, w)).client;
+          two = (yield* online(d, w, "second-tab")).client;
+          other = (yield* grantWindow(d, w, "other-tab", "window")).client;
+          yield* TestClock.setTime(REFUSED_HOUR + 18_000);
+
+          for (let n = 0; n < limit; n++) {
+            const client = picks[n]! % 2 === 0 ? one : two;
+            expect(
+              (yield* d.route(client, "process.send", {
+                ...request(`budget-${n}`),
+                pid: n % 2 ? OTHER_PROCESS : PROCESS,
+              }))._tag,
+            ).toBe("ok");
+          }
+
+          expect(yield* d.route(two, "ledger.read", { stream: "empty", after: 0 })).toMatchObject({
+            reason: "rate_limited",
+          });
+          expect((yield* d.route(other, "ledger.read", { stream: "empty", after: 0 }))._tag).toBe("ok");
+          yield* d.disconnect(one);
+          one = (yield* online(d, w, "reconnected")).client;
+        }).pipe(w.provide);
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          expect(yield* d.route(one, "ledger.read", { stream: "empty", after: 0 })).toMatchObject({
+            reason: "rate_limited",
+            retryAfter: 42_000,
+          });
+          yield* TestClock.adjust(42_000);
+          expect((yield* d.route(one, "process.send", request("after-reset")))._tag).toBe("ok");
+        }).pipe(Effect.provide(w.reopen(w.sql)));
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
+
+  it.effect.prop(
+    "T843 race: separate layers can consume the last place only once (50 runs)",
+    { limit: small, reverse: Schema.Boolean },
+    ({ limit, reverse }) =>
+      Effect.gen(function* () {
+        const w = yield* world({ rateLimit: { limit, window: 60_000 } });
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          const { client } = yield* online(d, w);
+          yield* TestClock.setTime(REFUSED_HOUR + 18_000);
+
+          for (let n = 1; n < limit; n++) {
+            yield* d.route(client, "ledger.read", { stream: "empty", after: 0 });
+          }
+
+          const a = d.route(client, "ledger.read", { stream: "empty", after: 0 });
+          const b = Gateway.use((fresh) => fresh.route(client, "ledger.read", { stream: "empty", after: 0 })).pipe(
+            Effect.provide(w.reopen(w.sql)),
+          );
+          const replies = yield* Effect.all(reverse ? [b, a] : [a, b], { concurrency: "unbounded" });
+          expect(replies.filter((answer) => answer._tag === "ok")).toHaveLength(1);
+          expect(
+            replies.filter((answer) => answer._tag === "refused" && answer.reason === "rate_limited"),
+          ).toHaveLength(1);
+        }).pipe(w.provide);
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
+
+  it.effect.prop(
+    "T843 early gate: offline calls create no budget and rate refusals do no hashing, allocation, naming or delivery (50 runs)",
+    { count: small },
+    ({ count }) =>
+      Effect.gen(function* () {
+        const w = yield* world({ rateLimit: { limit: 1, window: 60_000 } });
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          const fresh = yield* d.connect();
+          expect(yield* d.route(fresh, "process.send", { ...request("not-online"), by: "claimed" })).toMatchObject({
+            reason: "not_granted",
+          });
+          const tables = w.sql.exec("SELECT name FROM sqlite_schema WHERE type='table' AND name='gateway_limits'");
+
+          if (tables.length) {
+            expect(w.sql.exec("SELECT * FROM gateway_limits")).toEqual([]);
+          }
+
+          const { client } = yield* online(d, w);
+          yield* d.route(client, "process.send", request("fill"));
+          const ids = [...w.usedInputs];
+          const sent = w.deliveries.length;
+          const digest = yield* Effect.acquireRelease(
+            Effect.sync(() => vi.spyOn(crypto.subtle, "digest")),
+            (spy) => Effect.sync(() => spy.mockRestore()),
+          );
+          const named = vi.fn((m: typeof Input.Type) => m._tag);
+          w.settings.inputs.name = named;
+          const next = vi.fn(() => Effect.die("a denied call allocated a process"));
+          w.controls.next = next;
+
+          for (let n = 0; n < count; n++) {
+            expect(yield* d.route(client, "process.send", request(`denied-${n}`))).toMatchObject({
+              reason: "rate_limited",
+            });
+          }
+
+          expect(digest).not.toHaveBeenCalled();
+          expect(named).not.toHaveBeenCalled();
+          expect(next).not.toHaveBeenCalled();
+          expect(w.usedInputs).toEqual(ids);
+          expect(w.deliveries).toHaveLength(sent);
+        }).pipe(w.provide);
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
+
+  it.effect.prop(
+    "T843 gateway store failure: a broken saved counter or failed write never reaches delivery (50 runs)",
+    { corrupt: Schema.Boolean },
+    ({ corrupt }) =>
+      Effect.gen(function* () {
+        const w = yield* world({ rateLimit: { limit: 3, window: 60_000 } });
+        let client: Parameters<typeof Gateway.Service.route>[0];
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          client = (yield* online(d, w)).client;
+          yield* d.route(client, "ledger.read", { stream: "empty", after: 0 });
+        }).pipe(w.provide);
+
+        if (corrupt) {
+          w.sql.exec("UPDATE gateway_limits SET value=?", "{");
+        }
+
+        const cause = new Error("t843 write failed");
+        const sql = failingTableWrites(w.sql, "gateway_limits", () => !corrupt, cause);
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          const error = yield* Effect.flip(d.route(client, "process.send", request("blocked-by-store")));
+          expect(error).toHaveProperty("cause");
+          expect(w.deliveries).toEqual([]);
+        }).pipe(Effect.provide(w.reopen(sql)));
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
+
+  it.effect.prop(
+    "T843 count failure: an uncommitted gateway refusal count fails the call before it answers (50 runs)",
+    { count: small },
+    ({ count }) =>
+      Effect.gen(function* () {
+        const w = yield* world({ rateLimit: { limit: 1, window: 60_000 } });
+        let broken = false;
+        const sql = failingTableWrites(w.sql, "sums", () => broken, new Error("SQLITE_FULL"));
+        const sink = SpanSink.layer(sql, { object: START });
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          const { client } = yield* online(d, w);
+          yield* d.route(client, "ledger.read", { stream: "empty", after: 0 });
+          broken = true;
+
+          for (let n = 0; n < count; n++) {
+            expect(yield* Effect.flip(d.route(client, "process.send", request(`not-counted-${n}`)))).toMatchObject({
+              _tag: "SinkError",
+              reason: "storage",
+            });
+          }
+
+          expect(w.deliveries).toEqual([]);
+        }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, sink)))));
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
+
+  const failedCountThrough = Effect.fnUntraced(function* (
+    count: number,
+    method: "process.send" | "ledger.wait",
+    connectionFull: boolean,
+  ) {
+    const w = yield* world({ rateLimit: { limit: 1, window: 60_000 } });
+    let broken = false;
+    const sql = failingTableWrites(w.sql, "sums", () => broken, new Error("SQLITE_FULL"));
+    const sink = SpanSink.layer(sql, { object: START });
+    yield* Effect.gen(function* () {
+      const d = yield* Gateway;
+      const projectSink = yield* SpanSink;
+      const { client } = yield* online(d, w);
+      yield* TestClock.setTime(REFUSED_HOUR + 18_000);
+      const c = yield* wire(w, d, client, "mismatch", () => broken && connectionFull);
+      yield* c.send("process.send", request("accepted"));
+      yield* c.send("process.send", request("warm-count"));
+      yield* projectSink.flush;
+      const rows = () =>
+        Object.fromEntries(
+          [...w.databases(), ["connection", c.db] as const].flatMap(([name, db]) =>
+            Object.entries(allObjectRows(db)).map(([table, values]) => [`${name}/${table}`, values.length]),
+          ),
+        );
+      const before = rows();
+      const unchanged = () => {
+        const current = rows();
+        expect(Object.keys(current)).toEqual(Object.keys(before));
+
+        for (const [table, total] of Object.entries(current)) {
+          expect(total, table).toBe(before[table]);
+        }
+      };
+      const recorded = c.saved.length;
+      const inputs = [...w.usedInputs];
+      const deliveries = w.deliveries.length;
+      broken = true;
+
+      for (let n = 0; n < count; n++) {
+        const state = c.read();
+        expect(state._tag).toBe("online");
+
+        if (state._tag !== "online") {
+          return;
+        }
+
+        // Only an idle connection may start this next generated attempt.
+        expect(state.busy).toBe(false);
+        expect(state.waits).toEqual([]);
+        const frames = c.frames.length;
+        const sent = yield* Effect.result(
+          c.send(method, method === "ledger.wait" ? { stream: "empty", after: 0 } : request(`not-counted-${n}`)),
+        );
+        const status = yield* Effect.result(projectSink.check);
+        expect(Result.isFailure(status)).toBe(true);
+
+        if (Result.isFailure(status)) {
+          expect(status.failure).toMatchObject({ _tag: "SinkError", reason: "storage" });
+          expect(status.failure.held).toBeLessThanOrEqual(1);
+        }
+
+        if (Result.isFailure(sent)) {
+          // The public completion reports how much the connection holds after a full disk.
+          expect(sent.failure).toMatchObject({ _tag: "SinkError", reason: "storage" });
+          const failed = Schema.decodeUnknownSync(Schema.Struct({ held: Schema.Int }))(sent.failure);
+          expect(failed.held).toBeLessThanOrEqual(2);
+        }
+
+        for (const reply of c.frames.slice(frames)) {
+          expect(reply).not.toMatchObject({ error: { data: { reason: "rate_limited" } } });
+        }
+
+        unchanged();
+        expect(c.saved).toHaveLength(recorded);
+        expect(w.usedInputs).toEqual(inputs);
+        expect(w.deliveries).toHaveLength(deliveries);
+        expect(c.closes).toEqual([]);
+      }
+
+      broken = false;
+      // A refused recovery probe must land held counts without saving failed-attempt spans.
+      yield* projectSink.check.pipe(Effect.ignore);
+      expect(yield* projectSink.flush).toEqual({ sent: 0 });
+      yield* c.recover.pipe(Effect.ignore);
+      yield* c.recover;
+      unchanged();
+      expect(c.saved).toHaveLength(recorded);
+      yield* TestClock.setTime(REFUSED_HOUR + HOUR);
+      expect(yield* projectSink.sums("gateway.route", REFUSED_HOUR, REFUSED_HOUR + HOUR)).toEqual([
+        { _tag: "sum", piece: "gateway.route", hour: REFUSED_HOUR, refused: "rate_limited", count: count + 3 },
+      ]);
+    }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, sink)))));
+  });
+
+  for (const connectionFull of [false, true]) {
+    for (const method of ["process.send", "ledger.wait"] as const) {
+      it.effect.prop(
+        `T843 failed count through ${method} with ${connectionFull ? "both disks full" : "only the gateway count failing"}: no per-attempt rows or held spans survive failure and recovery (50 runs)`,
+        {
+          count: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
+        },
+        ({ count }: { count: number }) => failedCountThrough(count, method, connectionFull),
+        { arbitrary: { seed: SEED, runs: 50 } },
+      );
+    }
+  }
+
+  it.effect(
+    "scenario: T843 failed count through process.send with both disks full at count 1000, the largest burst the plan names",
+    () => failedCountThrough(1000, "process.send", true),
+  );
+
+  for (const failure of ["none", "gateway", "both"] as const) {
+    it.effect.prop(
+      `T843 ring bound with ${failure} failing: parked rechecks retain delays and add only counts despite aged failed archives, including recovery (50 runs)`,
+      {
+        count: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 63 })),
+        archiveFailure: Schema.Literals(["unreachable", "mismatch"]),
+      },
+      ({ count, archiveFailure }) =>
+        Effect.gen(function* () {
+          // The connection admits at most 64 waits, including the warm-up wait.
+          const w = yield* world({ rateLimit: { limit: count + 2, window: 60_000 } });
+          let broken = false;
+          const sql = failingTableWrites(w.sql, "sums", () => broken, new Error("SQLITE_FULL"));
+          const sink = SpanSink.layer(sql, { object: START });
+          yield* Effect.gen(function* () {
+            const d = yield* Gateway;
+            const projectSink = yield* SpanSink;
+            const { client } = yield* online(d, w);
+            yield* TestClock.setTime(REFUSED_HOUR - 16 * 24 * HOUR);
+            const c = yield* wire(w, d, client, archiveFailure, () => broken && failure === "both");
+            yield* c.send("ledger.read", { stream: "old-archive", after: 0 });
+            yield* TestClock.setTime(REFUSED_HOUR + 18_000);
+            yield* c.send("ledger.wait", { stream: "warm-ring", after: 0 });
+
+            for (let n = 0; n < count; n++) {
+              const now = c.read();
+              expect(now._tag).toBe("online");
+              expect(now.waits).toHaveLength(n + 1);
+              yield* c.send("ledger.wait", { stream: "empty", after: 0 });
+            }
+
+            yield* c.send("process.send", request("accepted-before-ring"));
+            yield* c.ring("warm-ring", 0);
+            expect(c.frames.at(-1)).toMatchObject({
+              error: { data: { reason: "rate_limited", retryAfter: 42_000 } },
+            });
+            yield* c.send("process.send", request("warm-ring-frame-count"));
+            yield* projectSink.flush;
+            // An ordinary call already tried the due archive and kept it for a later retry.
+            expect(c.archives.length).toBeGreaterThan(0);
+            const archived = c.archives.length;
+            const rows = () =>
+              Object.fromEntries(
+                [...w.databases(), ["connection", c.db] as const].flatMap(([name, db]) =>
+                  Object.entries(allObjectRows(db)).map(([table, values]) => [`${name}/${table}`, values.length]),
+                ),
+              );
+            const before = rows();
+            const recorded = c.saved.length;
+            const inputs = [...w.usedInputs];
+            const deliveries = [...w.deliveries];
+            const frames = c.frames.length;
+            broken = failure !== "none";
+
+            while (c.read().waits.length > 0) {
+              const now = c.read();
+              expect(now._tag).toBe("online");
+              expect(now.busy).toBe(false);
+              const pending = now.waits;
+              const next = pending[0]!;
+              const result = yield* Effect.result(c.ring(next.stream, next.after));
+              expect(c.read().waits.length).toBeLessThan(pending.length);
+
+              if (Result.isFailure(result)) {
+                expect(result.failure).toMatchObject({ _tag: "SinkError", reason: "storage" });
+                const failed = Schema.decodeUnknownSync(Schema.Struct({ held: Schema.Int }))(result.failure);
+                expect(failed.held).toBeLessThanOrEqual(2);
+              }
+
+              if (failure === "none") {
+                expect(Result.isSuccess(result)).toBe(true);
+
+                for (const reply of c.frames.slice(frames)) {
+                  expect(reply).toMatchObject({
+                    error: { data: { reason: "rate_limited", retryAfter: 42_000 } },
+                  });
+                }
+              } else {
+                expect(c.frames).toHaveLength(frames);
+                const status = yield* Effect.flip(projectSink.check);
+                expect(status).toMatchObject({ _tag: "SinkError", reason: "storage" });
+                expect(status.held).toBeLessThanOrEqual(1);
+              }
+
+              const current = rows();
+
+              for (const [table, total] of Object.entries(current)) {
+                expect(total, table).toBe(before[table]);
+              }
+
+              expect(Object.keys(current)).toEqual(Object.keys(before));
+              expect(c.saved).toHaveLength(recorded);
+              expect(c.archives).toHaveLength(archived);
+              expect(w.usedInputs).toEqual(inputs);
+              expect(w.deliveries).toEqual(deliveries);
+              expect(c.closes).toEqual([]);
+            }
+
+            expect(c.frames).toHaveLength(frames + (failure === "none" ? count : 0));
+            broken = false;
+            yield* projectSink.check.pipe(Effect.ignore);
+            expect(yield* projectSink.flush).toEqual({ sent: 0 });
+            yield* c.recover.pipe(Effect.ignore);
+            yield* c.recover;
+            expect(rows()).toEqual(before);
+            expect(c.saved).toHaveLength(recorded);
+            expect(c.archives).toHaveLength(archived);
+            yield* TestClock.setTime(REFUSED_HOUR + HOUR);
+            expect(yield* projectSink.sums("gateway.route", REFUSED_HOUR, REFUSED_HOUR + HOUR)).toEqual([
+              { _tag: "sum", piece: "gateway.route", hour: REFUSED_HOUR, refused: "rate_limited", count: count + 4 },
+            ]);
+          }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, sink)))));
+        }),
+      { arbitrary: { seed: SEED, runs: 50 } },
+    );
+  }
+
+  it.effect.prop(
+    "T843 [secrets] bound: denied bodies leave no rows, record batches, archive bodies, logs or encoded markers (50 runs)",
+    {
+      count: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1000 })),
+      marker: Schema.NonEmptyString.check(Schema.isMaxLength(40)),
+      archiveFailure: Schema.Literals(["unreachable", "mismatch"]),
+      choices: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 }))).check(
+        Schema.isMinLength(1),
+        Schema.isMaxLength(20),
+      ),
+    },
+    ({ count, marker, archiveFailure, choices }) =>
+      Effect.gen(function* () {
+        const w = yield* world({ rateLimit: { limit: 1, window: 60_000 } });
+        const archives: Array<unknown> = [];
+        const logs: Array<unknown> = [];
+        const archive = Layer.effect(
+          Archive,
+          Archive.pipe(
+            Effect.map((real) => ({
+              put: (name: string, body: Uint8Array) => {
+                archives.push({ name, body: new TextDecoder().decode(body) });
+                return real.put(name, body);
+              },
+            })),
+          ),
+        ).pipe(Layer.provide(w.env));
+        const markerValue = new TextDecoder().decode(utf8(`t843-private-${marker}-end`));
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          const { client } = yield* online(d, w);
+          yield* TestClock.setTime(REFUSED_HOUR + 18_000);
+          const c = yield* wire(w, d, client, archiveFailure);
+          yield* TestClock.setTime(REFUSED_HOUR - 16 * 24 * HOUR);
+          yield* c.send("process.send", request("accepted"));
+          yield* TestClock.setTime(REFUSED_HOUR + 18_000);
+          yield* c.send("process.send", request("accepted"));
+          const before = w.usedInputs.length;
+          const deliveries = w.deliveries.length;
+          const recorded = c.saved.length;
+          let first: unknown;
+
+          for (let n = 0; n <= count; n++) {
+            const now = c.read();
+            expect(now._tag).toBe("online");
+            const moves = now._tag === "online" && !now.busy ? ["send", "read", "stamped", "unknown"] : ["send"];
+            const move = moves[choices[n % choices.length]! % moves.length]!;
+            const method = move === "read" ? "ledger.wait" : move === "unknown" ? "missing.method" : "process.send";
+            const params =
+              move === "read"
+                ? { stream: markerValue, after: 0 }
+                : {
+                    ...request(`denied-${n}`, comment(markerValue)),
+                    pid: n % 2 ? OTHER_PROCESS : PROCESS,
+                    ...(move === "stamped" ? { by: markerValue } : {}),
+                  };
+            yield* c.send(method, params);
+            expect(c.frames.at(-1)).toMatchObject({ error: { data: { reason: "rate_limited", retryAfter: 42_000 } } });
+            const counts = [...w.databases(), ["connection", c.db] as const].map(([name, db]) => [
+              name,
+              Object.entries(allObjectRows(db)).map(([table, rows]) => [table, rows.length]),
+            ]);
+            first ??= counts;
+            expect(counts).toEqual(first);
+            expect(w.usedInputs).toHaveLength(before);
+            expect(w.deliveries).toHaveLength(deliveries);
+            expect(c.saved).toHaveLength(recorded);
+            expect(c.closes).toEqual([]);
+          }
+
+          yield* SpanSink.use((sink) => sink.flush);
+          const batches = yield* RecordManager.use((records) => Stream.runCollect(records.read({ _tag: "spans" })));
+          yield* TestClock.adjust("16 days");
+          yield* SpanSink.use((sink) => sink.summaries(REFUSED_HOUR, REFUSED_HOUR + HOUR));
+          const outputs = JSON.stringify({
+            sql: [...w.databases(), ["connection", c.db] as const].map(([name, db]) => [name, allObjectRows(db)]),
+            batches,
+            archives: [...archives, ...c.archives],
+            connectionBatches: c.saved,
+            answers: c.frames,
+            logs,
+          });
+
+          for (const form of [
+            markerValue,
+            JSON.stringify(markerValue).slice(1, -1),
+            JSON.stringify(JSON.stringify(markerValue).slice(1, -1)).slice(1, -1),
+            encodeURIComponent(markerValue),
+            encodeURIComponent(JSON.stringify(markerValue)),
+            Buffer.from(markerValue).toString("base64"),
+            Buffer.from(markerValue).toString("base64url"),
+          ]) {
+            expect(outputs).not.toContain(form);
+          }
+
+          expect(yield* SpanSink.use((sink) => sink.sums("gateway.route", REFUSED_HOUR, REFUSED_HOUR + HOUR))).toEqual([
+            { _tag: "sum", piece: "gateway.route", hour: REFUSED_HOUR, refused: "rate_limited", count: count + 1 },
+          ]);
+          expect(
+            c.db
+              .prepare("SELECT piece,hour,refused,count FROM sums WHERE refused='rate_limited' ORDER BY piece")
+              .all()
+              .map((row) => ({ ...row })),
+          ).toEqual([
+            { piece: "connection.frame", hour: REFUSED_HOUR, refused: "rate_limited", count: count + 1 },
+            { piece: "runtime.rpc", hour: REFUSED_HOUR, refused: "rate_limited", count: count + 1 },
+          ]);
+        }).pipe(
+          Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, archive)))),
+          Effect.provide(
+            Logger.layer([
+              Logger.make((entry) => {
+                logs.push(entry);
+              }),
+            ]),
+          ),
+        );
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
+});
 
 // Compile-only law: a client cannot choose the connection whose state these calls change.
 const plainConnectionTypeLaw = (door: typeof Gateway.Service, wire: string) => {
@@ -2516,7 +3275,7 @@ describe("P10 inputs, retries and signer", () => {
   })();
 
   it.effect.prop(
-    "p67 spoof: malformed stamped process.send is reserved without a request row and counts once",
+    "p67 spoof: malformed stamped process.send spends one budget place, is reserved without a request row and counts once (100 runs)",
     { write: MalformedStampedWrite },
     ({ write }) =>
       Effect.gen(function* () {
@@ -2540,10 +3299,14 @@ describe("P10 inputs, retries and signer", () => {
           const sink = yield* SpanSink;
           yield* sink.flush;
           const snapshot = () => [...w.databases()].map(([name, db]) => [name, allObjectRows(db)] as const);
-          const nonSums = (databases: ReturnType<typeof snapshot>) =>
+          const unchangedRows = (databases: ReturnType<typeof snapshot>) =>
             databases.map(([name, tables]) => [
               name,
-              Object.fromEntries(Object.entries(tables).filter(([table]) => name !== "object" || table !== "sums")),
+              Object.fromEntries(
+                Object.entries(tables).filter(
+                  ([table]) => name !== "object" || (table !== "sums" && table !== "gateway_limits"),
+                ),
+              ),
             ]);
           const before = snapshot();
           const usedInputs = [...w.usedInputs];
@@ -2570,8 +3333,24 @@ describe("P10 inputs, retries and signer", () => {
           expect(w.usedInputs).toEqual(usedInputs);
           expect(w.deliveries).toEqual(deliveries);
           const after = snapshot();
-          expect(nonSums(after)).toEqual(nonSums(before));
-          expect(after.find(([name]) => name === "object")![1].sums).toEqual(expectedSums);
+          expect(unchangedRows(after)).toEqual(unchangedRows(before));
+          const object = after.find(([name]) => name === "object")![1];
+          const until = REFUSED_HOUR + w.settings.rateLimit.window;
+          expect(object.gateway_limits).toEqual([{ sender: w.window.fingerprint, until, value: expect.any(String) }]);
+          expect(
+            Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(object.gateway_limits![0]!.value),
+          ).toEqual({
+            v: 1,
+            build: w.settings.build,
+            model: {
+              _tag: "open",
+              policy: w.settings.rateLimit,
+              until,
+              at: REFUSED_HOUR + 1000,
+              used: 1,
+            },
+          });
+          expect(object.sums).toEqual(expectedSums);
           expect(archives).toEqual(uploaded);
           yield* TestClock.setTime(REFUSED_HOUR + HOUR);
           expect(yield* sink.sums("gateway.route", REFUSED_HOUR, REFUSED_HOUR + HOUR)).toEqual([

@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll, beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Layer, Result, Schema, Stream } from "effect";
+import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
@@ -33,6 +34,7 @@ import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Answer } from "../transport/Wire.ts";
+import * as RateLimiterSql from "./RateLimiterSql.ts";
 
 let Gateway: typeof import("./Gateway.ts").Gateway;
 let Id: typeof import("../Id.ts");
@@ -42,7 +44,7 @@ beforeEach(async () => {
   Id = await vi.importActual<typeof Id>("../Id.ts");
 });
 
-const checks = { seed: 119120, numRuns: 20 };
+const checks = { seed: 119120, numRuns: 25 };
 const folder = mkdtempSync(join(tmpdir(), "p17-revoke-"));
 const opened: DatabaseSync[] = [];
 
@@ -202,6 +204,9 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
       }),
       ProcessIdGenerator.layer,
       Id.Generator.layer,
+      RateLimiter.layer.pipe(
+        Layer.provide(RateLimiterSql.layer(saved.sql, { build: "test", policy: { limit: 100_000, window: 60_000 } })),
+      ),
     );
     const layer = Gateway.layer({
       sql: saved.sql,
@@ -213,6 +218,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
       location: "test",
       build: "test",
       waiting: { most: 20, ttl: 600_000 },
+      rateLimit: { limit: 100_000, window: 60_000 },
       ping: { min: 10_000, max: 60_000 },
       inputCap: 1000,
       spentCap: 1000,

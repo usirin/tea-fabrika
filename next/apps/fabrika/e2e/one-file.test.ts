@@ -76,7 +76,7 @@ describe("P16 real browser from a copied one-file build", () => {
             browser = await chromium.launch({ headless: true });
             mkdirSync(join(home, "node_modules/@p16"), { recursive: true });
 
-            for (const name of ["@kampus", "@demlik", "effect", "@alchemy.run"]) {
+            for (const name of ["@kampus", "@demlik", "effect", "@alchemy.run", "alchemy"]) {
               symlinkSync(join(APP, "node_modules", name), join(home, "node_modules", name));
             }
 
@@ -143,6 +143,7 @@ describe("P16 real browser from a copied one-file build", () => {
                   founder: `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(Buffer.from(raw, "base64url"))]).toString("base64")}`,
                   window: null,
                   port,
+                  rateLimit: { limit: 100_000, window: 60_000 },
                 },
               ).pipe(
                 Effect.provideService(Scope.Scope, scope),
@@ -318,7 +319,7 @@ const servedCounter = Effect.gen(function* () {
   );
   mkdirSync(join(home, "node_modules"), { recursive: true });
 
-  for (const name of ["@kampus", "@demlik", "effect", "@alchemy.run"]) {
+  for (const name of ["@kampus", "@demlik", "effect", "@alchemy.run", "alchemy"]) {
     symlinkSync(join(APP, "node_modules", name), join(home, "node_modules", name));
   }
 
@@ -366,6 +367,7 @@ const servedCounter = Effect.gen(function* () {
       founder: `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(Buffer.from(raw, "base64url"))]).toString("base64")}`,
       window: null,
       port,
+      rateLimit: { limit: 100_000, window: 60_000 },
     }).pipe(
       Effect.provide(localState()),
       Effect.provide(SecureRandom.layerWebCrypto),

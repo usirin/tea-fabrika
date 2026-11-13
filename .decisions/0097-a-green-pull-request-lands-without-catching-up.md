@@ -1,7 +1,7 @@
 ---
 id: 0097
 title: A green pull request that merges cleanly lands as it is, with only lint run on the true merge, never a catch-up and a second full CI run
-status: accepted
+status: superseded by [0146](0146-a-pull-request-lands-only-on-ci-that-saw-main.md)
 date: 2026-11-11
 tags: [merge, lead, catchup, freshmain, behind, lint, ci]
 ---

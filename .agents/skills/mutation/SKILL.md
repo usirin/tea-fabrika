@@ -135,8 +135,11 @@ range's base as arm a, and the tests beside the changed files as `--related`.
 
    ```sh
    gh run list --workflow mutation.yaml --limit 1 --json databaseId,status,conclusion,headSha
-   gh run watch <id> --exit-status
+   gh run watch <id> --exit-status --interval 60
    ```
+
+   Keep `--interval 60`: the default asks GitHub every 3 seconds, about 40 calls a minute of the
+   5,000 an hour the login gets, for as long as the run takes.
 
 3. **Read it.** The job summary has the range and the counts. The whole answer is the artifact
    `mutbox`, with `mutbox.json` at its top:

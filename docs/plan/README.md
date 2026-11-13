@@ -55,6 +55,79 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+*2026-11-13:* the order of work changed ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)). The next thing built in `next/` is `fabsh`,
+pipes, `summon` and `join`, working for real, with whatever they need (the window, a second tile and its
+keys, the link to the agent harnesses, rooms), so fabrika is built inside
+fabrika. Tier 1's rows that this needs come first and the others wait. The changed Tier 1 is in
+[the four primitives first](./tier-1.md#the-four-primitives-first), approved by the owner on
+2026-11-13; that section and 0159 win over the older parts of [the tiers](./tiers.md) and
+[Tier 1](./tier-1.md) where they differ. No row's count changes. *It said: the changed Tier 1 is
+not written yet.*
+
+*2026-11-13, approved by the owner:* in that section, 30 of Tier 1's 44 rows are marked needed, 2
+help and 12 wait. The build order is the merge line, the window, a person starting a program and
+the desk, `fabsh` in a tile, pipes for its built-ins, hands far enough to run a turn, `summon` with
+the agent link, `@name` with the inbox past its thin row, then rooms and `join`. Three things the
+owner added that day ([0159's amendments](../../.decisions/0159-fabsh-pipes-summon-join-first.md#amendments)):
+done is seen in the Electron app and in a browser tab, built side by side (P19), with the thin
+menu bar right behind the app (P21 in part); the cloud instance (P24) is built alongside once the
+window works, and each piece is deployed there as it lands; recovery and the rest of the cloud
+rows (P26, P27, P28, P29, P36) are the first work after done, and until then daily work lives only
+on the laptop, which the owner accepts. The merge line is decided
+([0161](../../.decisions/0161-no-step-signing-by-hand.md),
+[0162](../../.decisions/0162-no-friction-before-a-merge.md),
+[0164](../../.decisions/0164-the-bot-stays-without-signing.md)): what is left is the queue's
+trigger in CI ([PR 1120](https://github.com/kamp-us/tea-fabrika/pull/1120)), the queue turned on,
+and the bot's plain tooling. Nothing in `next/` names `fabsh`, `summon` or a room yet. Open pull
+requests on Tier 1 rows: [1028](https://github.com/usirin/tea-fabrika/pull/1028)
+(P14), [1044](https://github.com/usirin/tea-fabrika/pull/1044) (P13),
+[1054](https://github.com/usirin/tea-fabrika/pull/1054) (P38),
+[1074](https://github.com/usirin/tea-fabrika/pull/1074) (P39),
+[1012](https://github.com/usirin/tea-fabrika/pull/1012) (P15),
+[1097](https://github.com/usirin/tea-fabrika/pull/1097) (P21),
+[1032](https://github.com/usirin/tea-fabrika/pull/1032) (P36), and drafts
+[1079](https://github.com/usirin/tea-fabrika/pull/1079) (P19),
+[1092](https://github.com/usirin/tea-fabrika/pull/1092) (P34c) and
+[1099](https://github.com/usirin/tea-fabrika/pull/1099) (P25). → the lead: pick and restart PR 1028
+and PR 1044, past their budget stop with red laws (0162;
+[0076](../../.decisions/0076-a-lane-stops-at-its-budget.md)). → the owner: walk the focus clash
+between 0279 and 0274 before the desk is built, then S1 of the
+[summon guidelines](../direction/summon-guidelines.md#s1-one-grammar-typed-tokens-every-view-reads-it)
+before `fabsh` is built, and S2 to S7 before `summon`; say yes after reading `alchemy plan` before
+the first cloud deploy. The other open calls are listed in
+[the section](./tier-1.md#the-owners-walks-and-decisions-by-step), each tied to its step.
+
+*2026-11-12:* ticket 893 slice 1 in `next/` saves process view watchers across object sleep
+and removes a watch on publish after its Project route leaves. Unknown delivery failures retain
+membership. [The storage pattern](../../.patterns/durable-objects-sleep.md). This finishes no
+Tier 1 row; the count stays 21 of 44. P14's first-window lane next brings this fix into its branch
+and proves a real press after idle updates the window without reload. Socket absence checking is
+slice 2 and remains separate.
+
+*2026-11-12:* P45's slice 1 (ticket 884) merged as [PR 1089](https://github.com/usirin/tea-fabrika/pull/1089), in `next/`: `@kampus/inbox` keeps one row
+per fact in arrival order and declares no client or agent input. It has no window or boot entry.
+Brain letters under `noticeId(...)` reach a program without an input port. Client entry points
+refuse those ids; a refused or throwing notice is skipped and counted on its span.
+The tile and dismissal on each device are slice 2; the gateway's delivery is slice 3. Those slices
+wait on the owner. This finishes no Tier 1 row, so the merged count stays 21 of 44.
+
+*2026-11-12:* P17, Tier 1's chaos row, is done in `next/`: P17b's third slice, the checklist faults
+and the real local p90 revoke, merged as [PR 1058](https://github.com/usirin/tea-fabrika/pull/1058), and p90 passes on main. That makes
+21 of Tier 1's 43 rows (44 since P45, a thin inbox, joined the same day, [0151](../../.decisions/0151-a-thin-inbox-is-a-tier-1-row.md)). P34c's third slice, each isolate call's CPU and wall time recorded, merged
+as [PR 1031](https://github.com/usirin/tea-fabrika/pull/1031); its fourth, quotas per program, has an approved plan. Main was red for 47
+minutes between the two: each pull request passed alone and they broke together, which is why a
+pull request now lands only when its checks ran on a head that holds main
+([0146](../../.decisions/0146-a-pull-request-lands-only-on-ci-that-saw-main.md)).
+
+*2026-11-12, P40 slice 2, ticket 878, merged as [PR 1072](https://github.com/usirin/tea-fabrika/pull/1072):* `next/` has an explicit `dev --repo` route that checks one
+default-branch commit through P38 before building the shipped programs. Repository selections,
+trust answers and opening results use the local instance's ledger. First use defaults to no;
+noninteractive first use reports awaiting trust. Repository code is never loaded by this slice.
+P38 slices 1, 2 and 3a supply its foundation. The next pack build/settings slice is shared with
+P38 slice 5 and still needs the later isolation work. P40 stays open through slice 4's cold-author
+check. Slice 2's real Git and Alchemy law, L11, ran in CI on the merged head and not on the host.
+*It said: real Git and Alchemy checks remain the lead's host checks before landing this slice.*
+
 *2026-11-12:* ticket 844 ([PR 1027](https://github.com/usirin/tea-fabrika/pull/1027)) changes
 P10's law p67 in `next/`, as [0140](../../.decisions/0140-gateway-refuses-client-id-and-by.md) and
 [0143](../../.decisions/0143-a-refused-write-is-counted-never-a-row.md) decided. The gateway refuses
@@ -89,29 +162,31 @@ record and the first byte setting, `limits.record`. Slice 3c adds the remaining 
 stays open until its whole settings stack lands
 ([its row](./tier-1.md#the-pull-requests-one-at-a-time)).
 
-**Tier 1, dated 2026-11-11.** 20 of [its 43 rows](./tier-1.md#the-pull-requests-one-at-a-time)
-are on main, plus P17a, half of P17, so `next/` is on main now: the exams (P1, P2, P8, P30, P32,
+**Tier 1, dated 2026-11-12.** 21 of [its 44 rows](./tier-1.md#the-pull-requests-one-at-a-time)
+are on main, P17 the newest (*it said, dated 2026-11-11: 20 rows, plus P17a, half of P17*), so `next/` is on main now: the exams (P1, P2, P8, P30, P32,
 P35), the spikes and the sheet's design pass (P3 to P5), the design package (P31), and the layers
-from P6 to P12 and P16, with P33, P34 and P37. *It said, dated 2026-11-09: 19 rows.* *Changed 2026-11-11
+from P6 to P12, P16 and P17, with P33, P34 and P37. *It said, dated 2026-11-09: 19 rows.* *Changed 2026-11-11
 (owner, [0111](../../.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md)): P43, the merge queue's first
 stage, joined Tier 1, so it has 44 rows; it said 43.* *Changed 2026-11-11 (owner,
 [0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): P20 and P22 left for Tier 2 with
-notes and P44, the checklist, joined, so it has 43 rows; it said 44.* No Tier 1
+notes and P44, the checklist, joined, so it has 43 rows; it said 44.* *Changed 2026-11-12 (owner,
+[0151](../../.decisions/0151-a-thin-inbox-is-a-tier-1-row.md)): P45, a thin inbox that shows the brain's notices, joined, so it has 44 rows; it said 43.* No Tier 1
 row finished on 2026-11-11, so the count stays 20, but slices of seven rows merged that day (see
 below). *It said: no Tier 1 row merged on 2026-11-11.*
 
-*2026-11-12:* P41's slice 2 (ticket 764) is [PR 1029](https://github.com/usirin/tea-fabrika/pull/1029): program mail is delivered
+*2026-11-12:* P41's slice 2 (ticket 764) merged as [PR 1029](https://github.com/usirin/tea-fabrika/pull/1029): program mail is delivered
 between two real Process objects in `next/`. The sender's object asks the Project to save the
 letter, and the target's `mailed` sets its one alarm. It finishes no Tier 1 row, so the count stays
 20. P41's slice 3, the example a person sees from a pack, waits on P40's pack path, P34c's walls
 and how a pack asks for its grant. *It said, below: slice 2 is at its tests step, draft PR 993.*
 
-*2026-11-12:* P43's slice 1 (ticket 765) is [PR 1030](https://github.com/usirin/tea-fabrika/pull/1030): the merger,
+*2026-11-12:* P43's slice 1 (ticket 765) merged as [PR 1030](https://github.com/usirin/tea-fabrika/pull/1030): the merger,
 alone, in `next/`. Mailed `land`, it reads the change, brings it up to date with main, waits for
 its kind's named checks on that head, merges pinned to it and mails back one reply. The `CodeHost`
 and `Ci` contracts join libfabrika, each with an in-memory Layer; no GitHub Layer yet, so it lands
-nothing real, and today's lead scripts keep landing every pull request. P43 is planned in 5 slices:
-the queue program (slice 2) waits on P42's start piece, both in Durable Objects (slice 3) build on
+nothing real, and today's lead scripts keep landing every pull request. P43 is planned in 5 slices.
+Slice 2, the queue program and the merger's last look at main, merged as
+[PR 1096](https://github.com/usirin/tea-fabrika/pull/1096). Both in Durable Objects (slice 3) build on
 P41's slice 2, then GitHub behind the contracts and the switch. It finishes no Tier 1 row, so the count stays
 20. *It said, above: P43 joined Tier 1, not planned or sized.*
 
@@ -138,10 +213,10 @@ slice 2. The 2026-11-11 entry below says what was being built earlier that day.
 
 *2026-11-11:* the checklist is Tier 1's program, and notes is Tier 2's first real app
 ([0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)). P44's first slice, the agent's
-half (ticket 839), is built as [PR 1019](https://github.com/usirin/tea-fabrika/pull/1019): the
+half (ticket 839), merged as [PR 1019](https://github.com/usirin/tea-fabrika/pull/1019): the
 `items` read port, an optional `note` of 1 to 256 characters on `check`, where a checked item keeps
 its first note, and ticket 847's three gaps in the laws closed. P13 keeps its two platform slices,
-and P25 hands the bridge `[checklist]`. → the lead lands it once its steps pass
+and P25 hands the bridge `[checklist]`. *It said: the lead lands it once its steps pass.*
 
 *2026-11-11:* in `next/`, a running copy of fabrika is an instance in code too (ticket 681,
 [0080](../../.decisions/0080-a-running-copy-is-an-instance.md)): `local-instance.ts`,
@@ -259,6 +334,8 @@ longer holds. A plan that only builds a decided note is approved by the lead age
 raises a new design call goes to the owner. When the lead fills agent slots, these lanes count as
 much as `next/` work and run beside Tier 1, never held back for it (owner, 2026-11-10,
 [0063](../../.decisions/0063-todays-app-lanes-share-the-slots.md)).
+
+- **The four primitives first, in `next/` ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)).** The changed Tier 1 was approved by the owner on 2026-11-13, in [the four primitives first](./tier-1.md#the-four-primitives-first): what done means in the Electron app and a browser tab, what is built, what is missing piece by piece, the build order with the thin menu bar and the cloud instance beside it, and the 12 rows that wait. → the lead picks on PR 1028 and PR 1044 and finishes the merge line; the owner walks the focus clash (0279 against 0274) before the desk is built, then S1 before `fabsh`
 
 - **Configurable keys on today's app, ticket 174.** Two pull requests. Keys PR 1, change your keys without leaving the app, merged 2026-11-08 ([PR 505](https://github.com/usirin/tea-fabrika/pull/505)). Keys PR 2 brings program and mode keys into the same table. → the lead agent plans PR 2
 - **Design foundations on today's app, approved by the owner 2026-11-07.** [The build plan](./design-foundations.md): ticket 245, three pull requests, all merged 2026-11-08 ([499](https://github.com/usirin/tea-fabrika/pull/499), [506](https://github.com/usirin/tea-fabrika/pull/506), [519](https://github.com/usirin/tea-fabrika/pull/519)). → nothing

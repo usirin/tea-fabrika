@@ -1,10 +1,11 @@
 // p23/p82: answerFrame(text, attachment, admit, route). A failed route stays retryable; a parked
 // wait is data. Plants: answer a notification; route before initialize; turn a failure into err.
 import { assert, describe, expect, it, vi } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Tracer } from "effect";
 import * as fc from "fast-check";
 import { answerFrame } from "./Answer.ts";
 import { Answer, Attached, type Who } from "./Wire.ts";
+import * as Wire from "./Wire.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
@@ -23,6 +24,14 @@ const online = () =>
   });
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
+const rateReplyTypeLaw = () => {
+  // @ts-expect-error a rate refusal cannot be made without its positive delay.
+  const missing = Wire.RateRefusal.make({ reason: "rate_limited" });
+  return missing;
+};
+
+void rateReplyTypeLaw;
 
 // Method names the door and the ledger answer today, and two near misses of gateway.knock.
 const METHODS = [
@@ -79,6 +88,58 @@ const frame = (over: Record<string, unknown> = {}) =>
   });
 
 describe("P10 JSON-RPC", () => {
+  it.effect.prop(
+    "T843 answerFrame: retry delay survives with the request id and counts its enclosing span (50 runs)",
+    {
+      retryAfter: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_000_000 })),
+      id: Schema.Union([Schema.String, Schema.Int]),
+    },
+    ({ retryAfter, id }) =>
+      Effect.gen(function* () {
+        const attached = online();
+        const answer = { ...Answer.cases.refused.make({ reason: "rate_limited" }), retryAfter };
+        const spans: Array<Tracer.NativeSpan> = [];
+        const tracer = Tracer.make({
+          span: (options) => {
+            const span = new Tracer.NativeSpan(options);
+            spans.push(span);
+            return span;
+          },
+        });
+        const reply = yield* answerFrame(frame({ id }), attached, admit, () => Effect.succeed(answer)).pipe(
+          Effect.withTracer(tracer),
+        );
+        expect(JSON.parse(reply.send!)).toEqual({
+          jsonrpc: "2.0",
+          id: id === 0 ? 0 : id, // JSON encodes negative zero as zero.
+          error: { code: -32000, message: "rate_limited", data: { reason: "rate_limited", retryAfter } },
+        });
+        expect(reply.attached).toEqual(attached);
+        const span = spans.find((s) => s.name === "transport.answerFrame")!;
+        expect(span.status._tag).toBe("Ended");
+        expect(span.attributes.get("fab.gateway.refused")).toBe("rate_limited");
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
+
+  it("T843 rate reply schema: a positive safe retry delay is required (50 runs)", () => {
+    fc.assert(
+      fc.property(
+        fc.oneof(
+          fc.integer({ max: 0 }),
+          fc.double({ min: 0.01, max: 1e6, noNaN: true }).filter((n) => !Number.isInteger(n)),
+          fc.constantFrom(Number.NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1),
+        ),
+        (bad) => {
+          expect(Schema.is(Wire.RateRefusal)({ _tag: "refused", reason: "rate_limited" })).toBe(false);
+          expect(Schema.is(Wire.RateRefusal)({ _tag: "refused", reason: "rate_limited", retryAfter: bad })).toBe(false);
+          expect(Schema.is(Wire.RateRefusal)({ _tag: "refused", reason: "rate_limited", retryAfter: 1 })).toBe(true);
+          expect(Schema.is(Answer)({ _tag: "refused", reason: "ordinary" })).toBe(true);
+        },
+      ),
+      { seed: SEED, numRuns: 50 },
+    );
+  });
   it.effect("p23: numeric reply id zero is preserved, not mistaken for a notification", () =>
     Effect.gen(function* () {
       const result = yield* answerFrame(frame({ id: 0 }), online(), admit, () =>
@@ -104,7 +165,9 @@ describe("P10 JSON-RPC", () => {
               const reply = JSON.parse(result.send!);
               expect(reply).toMatchObject({ jsonrpc: "2.0", id: "r1" });
               expect(mode === "ok" ? reply.result : reply.error.data).toEqual(
-                mode === "ok" ? { rows: [1] } : { reason: value.reason },
+                mode === "ok"
+                  ? { rows: [1] }
+                  : { reason: value.reason, ...("retryAfter" in value ? { retryAfter: value.retryAfter } : {}) },
               );
               expect(route).toHaveBeenCalledOnce();
               assert(result.attached._tag === "online");

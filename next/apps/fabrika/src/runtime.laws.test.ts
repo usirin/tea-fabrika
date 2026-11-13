@@ -16,7 +16,7 @@ import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
-import { Cause, Deferred, Effect, Exit, Layer, ManagedRuntime, Option, Schema, Tracer } from "effect";
+import { Cause, Deferred, Effect, Exit, Layer, ManagedRuntime, Option, Schedule, Schema, Tracer } from "effect";
 import * as fc from "fast-check";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { projectRuntime, settings, type Env } from "./runtime.ts";
@@ -140,7 +140,22 @@ const storage = (db: DatabaseSync) => {
   };
 };
 
-const world = async (trace = TRACE, build = "counter-b") => {
+/** Ticket 762 A2: the build forks its own configure calls, so a law that counts `configured` waits
+ *  for the Project's record of them, `dev_descriptors.pending`, to clear first. */
+const settled = (db: DatabaseSync) =>
+  Effect.runPromise(
+    Effect.suspend(() =>
+      Number(db.prepare("SELECT COUNT(*) AS n FROM dev_descriptors WHERE pending=1").get()!.n) === 0
+        ? Effect.void
+        : Effect.fail("a start is not yet delivered to its object"),
+    ).pipe(Effect.retry(Schedule.spaced("5 millis")), Effect.timeout("5 seconds")),
+  );
+
+/** A fake object's configure that calls back into the Project, as a new process's init asks
+ *  `status` (amendment A2). It gives up after this, so a build that waits on it still ends. */
+const CALLBACK_GIVES_UP = "6 seconds";
+
+const world = async (trace = TRACE, build = "counter-b", options: { readonly callback?: boolean } = {}) => {
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
   table.programs["fabrika/counter"] = { hash: "counter-a", source: "counter" };
   table.programs.approvals = { hash: "approvals-a", source: "approvals" };
@@ -148,11 +163,16 @@ const world = async (trace = TRACE, build = "counter-b") => {
     key = identity();
   const db = new DatabaseSync(join(home, "project.db"));
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture implements the platform members Project reads; only workerd can construct a full DurableObjectState
-  const ctx = { id: { name: "project-test" }, storage: storage(db) } as unknown as DurableObjectState;
+  const ctx = {
+    id: { name: "project-test" },
+    storage: storage(db),
+    exports: { IsolateTail: () => ({ fetch: async () => new Response() }) },
+  } as unknown as DurableObjectState;
   const descriptors = new Map<string, Descriptor>(),
     configured: Descriptor[] = [],
     received: Incoming[] = [],
-    recorded: SpanRow[] = [];
+    recorded: SpanRow[] = [],
+    statuses: unknown[] = [];
   let onMessage: (pid: string, input: Incoming) => Promise<Sent> = async (_pid, input) => {
     received.push(input);
     return { _tag: "accepted", rev: 1, pos: 1 };
@@ -166,6 +186,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
       founder: key.line,
       window: key.raw,
       port: 18787,
+      rateLimit: { limit: 100_000, window: 60_000 },
       build: "brain-test",
     }),
     PROCESS: {
@@ -177,6 +198,19 @@ const world = async (trace = TRACE, build = "counter-b") => {
           descriptors.get(storageKey) ?? [...descriptors.values()].findLast((d) => d.name === storageKey);
         return {
           configure: async (descriptor: Descriptor) => {
+            if (options.callback === true) {
+              // The runtime's own build is awaited before its Effect runs, so the bound sits outside.
+              const status = await Effect.runPromise(
+                Effect.promise(() =>
+                  runtime.runPromise(ProjectService.pipe(Effect.flatMap((p) => p.processStatus(descriptor.name)))),
+                ).pipe(Effect.timeoutOption(CALLBACK_GIVES_UP)),
+              );
+
+              if (Option.isSome(status)) {
+                statuses.push(status.value);
+              }
+            }
+
             descriptors.set(descriptor.id, descriptor);
             configured.push(descriptor);
           },
@@ -245,6 +279,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
     rmSync(home, { recursive: true, force: true });
   });
   const p = await run(ProjectService);
+  await settled(db);
   const from: From = {
     by: key.fingerprint,
     for: PERSON,
@@ -289,6 +324,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
     configured,
     received,
     recorded,
+    statuses,
     start: async () =>
       (
         await run(
@@ -325,7 +361,9 @@ const world = async (trace = TRACE, build = "counter-b") => {
       await runtime.dispose();
       table.programs["fabrika/counter"] = { hash: build, source: "changed counter" };
       runtime = projectRuntime(ctx, env);
-      return run(ProjectService);
+      const reopened = await run(ProjectService);
+      await settled(db);
+      return reopened;
     },
     reopenExit: async () => {
       await runtime.dispose();
@@ -560,6 +598,19 @@ describe("P12 Project authority", () => {
       expect(await w.run(result.value.read("processes/counter:1", 0, "audit"))).toHaveLength(1);
     }
   });
+
+  // scenario: one fixed order, the Project's build and then a callback from its bootstrap's object,
+  // so nothing is drawn (ticket 762, L10). A build that waits on that configure waits on itself.
+  it("scenario: the Project's build never waits on its bootstrap's configure calling back into it", async () => {
+    const building = world(TRACE, "counter-b", { callback: true });
+    const built = await Effect.runPromise(Effect.promise(() => building).pipe(Effect.timeoutOption("3 seconds")));
+    const w = await building;
+    expect(Option.isSome(built), "the Project's build waited on its own bootstrap's configure").toBe(true);
+    expect(w.configured.filter((d) => d.id === w.p.boot.process)).toHaveLength(1);
+    expect(w.statuses, "the bootstrap's configure saw the Project answer its status").toMatchObject([
+      { _tag: "ok", value: { state: { process: w.p.boot.process } } },
+    ]);
+  }, 15_000);
 
   for (const field of ["writer", "trace"] as const) {
     law(`an own write retains its process ${field}`, async ({ trace, write }) => {

@@ -101,6 +101,7 @@ export class ProgramLoader extends Context.Service<
                 name: loaded.program.name,
                 v: loaded.program.state.v,
                 ...(loaded.program.maxDeliveries === undefined ? {} : { maxDeliveries: loaded.program.maxDeliveries }),
+                ...(loaded.program.policy === undefined ? {} : { policy: loaded.program.policy }),
                 writes: Object.fromEntries(
                   Object.entries(loaded.program.writes).map(([name, p]) => [name, { personOnly: p.personOnly }]),
                 ),
@@ -153,11 +154,7 @@ export class CheckedWriter extends Context.Service<
   }
 >()("@kampus/libfabrika/runtime/Entry.CheckedWriter") {}
 
-/** Sends a watcher its view. */
-export class WatcherManager extends Context.Service<
-  WatcherManager,
-  { readonly publish: (client: string, update: Update) => Effect.Effect<void> }
->()("@kampus/libfabrika/runtime/Entry.WatcherManager") {}
+export { WatcherManager } from "./WatcherManager.ts";
 
 /** The object's one alarm: the program's next wake time, or none. */
 export class Alarm extends Context.Service<Alarm, { readonly set: (at: number | null) => Effect.Effect<void> }>()(
