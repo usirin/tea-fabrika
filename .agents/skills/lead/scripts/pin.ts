@@ -2,7 +2,7 @@
 // lead tooling, run on our own laptop; it is not product.
 //
 // A lane is one long chain process. It holds the chain and drive code in memory, but each step it
-// runs the lead's other scripts from disk: the box, step-commit, catch-up and bot-push scripts and
+// runs the lead's other scripts from disk: the box, step-commit and bot-push scripts and
 // more. A pull of main while it ran mixed the old code in memory with the new scripts on disk, and
 // the lanes p41s2 and p42s1 died on ENOENT when one pull moved the boxes (2026-11-11).
 //

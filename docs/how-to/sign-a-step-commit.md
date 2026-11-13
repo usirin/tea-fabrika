@@ -89,7 +89,7 @@ pushed after the branch starts no new run: re-run the job.
 
 **Catch up by merging `main` in, never by rebasing.** A rebased commit's note no longer fits its
 trees and reads `unsigned_commit`. The merge is the lead's commit, so the lead session signs it,
-most often through `land.ts run` or `catchup.sh` (a lane agent stops at `land.ts ready`, ticket 652):
+most often through `land.ts run` (a lane agent stops at `land.ts ready`, ticket 652):
 
 ```sh
 git merge --no-edit origin/main

@@ -173,7 +173,10 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   with the hit list in the PR. Only real loosening waits on the owner.
   From 0066 the mutation comparison comes from the hourly run on main, after the merge, so at
   merge the lead reads loosening.sh alone.
-  The lead merges any pull request, product code and exam changes included, with `catchup.sh`
+  The lead lands any pull request, product code and exam changes included, through GitHub's merge
+  queue (`land.ts queue <pr>`: the leak grep on the change and on the title and description, then
+  one `gh pr merge --squash --match-head-commit <sha>`; GitHub tests it on newest main and merges
+  it, [0162](./.decisions/0162-no-friction-before-a-merge.md))
   once every step passed, CI is green, the leak grep is clean and `loosening.sh` shows no real
   loosening after the hand check. Only real loosening of a law, or a new design call, waits on the
   owner ([0014](./.decisions/0014-the-lead-merges-when-every-step-passed.md)).

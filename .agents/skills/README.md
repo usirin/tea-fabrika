@@ -47,7 +47,7 @@ owners and staged formatting; its `--commit-only` route leaves missing notes for
 
 Review sweeps every law and decided note, then answers once with all blocking classes and
 its finding rows. The lead skill holds the standing review brief.
-After a merge, catch-up retains the checked head in MAIN and removes safe boxes and linked worktrees.
+After a merge, `land.ts merged` starts the box cleanup sweep, which removes safe boxes and linked worktrees.
 An exam change needs no owner read when its labels fit and both loosening and mutation find zero hits.
 
 For a stacked child, the brief records the parent ticket, branch and signed build head. The driver

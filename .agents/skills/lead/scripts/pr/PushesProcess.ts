@@ -1,7 +1,7 @@
 // PushesProcess.layer: the Pushes service on the repo's own scripts. The leak grep is leakgrep.sh,
 // as it is; a push is botpush.mjs, the bot's one atomic push of the branch and the step notes. A
 // branch outside `fabrikalfa/` is the person's own: the bot sends the notes alone, and git pushes
-// the branch on the person's own login, never forced, as the lane's catch-up does.
+// the branch on the person's own login, never forced.
 import { Effect, Layer } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { lastLine, run } from "./command.ts";

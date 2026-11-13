@@ -1,4 +1,4 @@
-// The flow that lands a docs-only decision pull request (AGENTS.md: merged on
+// The flow that lands a docs-only decision pull request (AGENTS.md: added to the merge queue on
 // green CI with a clean leak grep, no plan, tests, review or field rows). Today's lead tooling
 // (0064). The lead writes a three-line flow file per decision and runs it:
 //
