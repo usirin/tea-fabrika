@@ -43,6 +43,7 @@ export const layer = (
   sink: SpanSink["Service"] = {
     batch: (work) => work,
     flush: Effect.succeed({ sent: 0 }),
+    check: Effect.void,
     summaries: () => Effect.succeed([]),
     sums: () => Effect.succeed([]),
   },

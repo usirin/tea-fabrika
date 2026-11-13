@@ -322,6 +322,7 @@ it.effect.prop(
             yield* Effect.sleep(`${deliveryDelay} millis`);
             return { sent: 0 };
           }),
+          check: Effect.void,
           summaries: () => Effect.succeed([]),
           sums: () => Effect.succeed([]),
         }),

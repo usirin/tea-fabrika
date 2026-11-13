@@ -130,6 +130,7 @@ it.effect.prop(
               Layer.succeed(SpanSink, {
                 batch: (work) => work,
                 flush: Effect.succeed({ sent: 0 }),
+                check: Effect.void,
                 summaries: () => Effect.succeed([]),
                 sums: () => Effect.succeed([]),
               }),

@@ -142,7 +142,7 @@ describe("P19 lifecycle", () => {
             const stale = id === undefined ? [] : earlier.filter((old) => old.cmd.id !== id);
 
             if (id !== undefined && "cmd" in msg) {
-              stale.push({ ...msg, cmd: { ...msg.cmd, id: oldId } });
+              stale.push({ ...msg, cmd: { ...msg.cmd, id: oldId } } as (typeof stale)[number]);
             }
 
             for (const old of stale) {
@@ -205,7 +205,11 @@ describe("P19 lifecycle", () => {
               expect("reason" in before && before.reason === "Timeout").toBe(false);
 
               for (const at of [prev.deadline, prev.deadline + 1]) {
-                const [after, cmds] = applyCell(machine, prev, { ...reply, at });
+                const [after, cmds] = applyCell<typeof BrainLife.Model.Type, BrainLife.Msg, BrainLife.Command>(
+                  machine,
+                  prev,
+                  { ...reply, at },
+                );
                 const expected = prev.action === "up" ? "failed_up" : "failed_stop";
 
                 if (
@@ -281,7 +285,8 @@ it.effect.prop(
   ([word, seed]) =>
     Effect.gen(function* () {
       const secret = `sentinel-${word}/+&`;
-      const encoded = encodeURIComponent(secret.toWellFormed());
+      // The compiler's ES2023 library has no type for toWellFormed; the pinned Node runs it.
+      const encoded = encodeURIComponent((secret as string & { toWellFormed(): string }).toWellFormed());
       const machine = BrainLife.machine({ spec: Outside.spec, settings: yield* ServiceTest.timing() });
       propertyInvariant(
         machine,
