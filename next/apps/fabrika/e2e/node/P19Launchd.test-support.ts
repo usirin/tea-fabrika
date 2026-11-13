@@ -617,6 +617,8 @@ export const check = Effect.fn("P19Host.check")(function* () {
       starts,
       stops,
       replacementMs,
+      // The groups the guard saved, each decoded as above 1, so a reader sees what a signal could reach.
+      groups: owned,
       normalExitObservationMs: throttle * 3,
       executable,
       versions: yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(ready),

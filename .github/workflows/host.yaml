@@ -1,0 +1,118 @@
+name: host
+
+# P19's law L13 (next/apps/fabrika/e2e/electron-launchd.test.ts) on GitHub's macOS runner: real
+# launchd and the real Electron, on a machine nobody uses. On 2026-11-13 that test's cleanup, run on
+# a laptop, signaled process group 1 and ended every process its user had open. Here a wrong signal
+# can only hit a runner that is thrown away after the job.
+#
+# It is a trial and no required check: check.yaml's `ci-required` does not know it. It starts only
+# when the launchd code, the test or this file changes, or by hand:
+#
+#   gh workflow run host.yaml --ref <branch>
+on:
+  pull_request:
+    paths:
+      - next/packages/libfabrika/src/node/launchd/**
+      - next/apps/fabrika/e2e/electron-launchd.test.ts
+      - next/apps/fabrika/e2e/node/P19Launchd.test-support.ts
+      - .github/workflows/host.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request stops the run it replaces.
+concurrency:
+  group: host-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  launchd:
+    # macOS 14, the version the test's launchctl output was read on.
+    runs-on: macos-14
+    # Unmeasured on a runner. The test alone took about 2 minutes on a laptop.
+    timeout-minutes: 20
+    steps:
+      # Look only. Is there a logged-in desktop session, the `gui/<uid>` domain a launch agent loads
+      # into? This step never fails the job, so its answer is always in the log.
+      - name: look at the runner's launchd domains
+        run: |
+          sw_vers || true
+          id -u || true
+          launchctl print "gui/$(id -u)" | head -40 || true
+          launchctl print "user/$(id -u)" | head -20 || true
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # The pnpm version comes from `packageManager` in package.json.
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26.13.0
+          cache: pnpm
+
+      # Electron fetches its binary the first time it is asked for its path, into this folder.
+      - uses: actions/cache@v6
+        with:
+          path: ~/Library/Caches/electron
+          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: electron-${{ runner.os }}-${{ runner.arch }}-
+
+      - run: pnpm install --frozen-lockfile
+      # Asking for the path downloads the binary and starts nothing, so the test's first start does
+      # not also pay for the download.
+      - name: electron binary
+        working-directory: next/apps/fabrika
+        run: node -e 'console.log(require("electron"))'
+
+      # The same command a person runs on a Mac. The test skips itself when CI is set, so that no
+      # other job starts launchd by accident; this job is the one place that means to, and clears it.
+      # While it runs, a loop reads what launchd prints for the test's own job, five times a second,
+      # and the last step counts each state it saw. The loop only reads.
+      - name: L13
+        working-directory: next/apps/fabrika
+        env:
+          CI: ""
+          FABRIKA_P19_HOST: "1"
+          FABRIKA_P19_PORT: "47619"
+        run: |
+          uid=$(id -u)
+          (
+            while :; do
+              for label in $(launchctl print "gui/$uid" 2>/dev/null | grep -o 'fabrika\.brain\.[0-9a-f]*' | sort -u); do
+                launchctl print "gui/$uid/$label" 2>/dev/null | grep -E '^[[:space:]]+(state|last exit code|last terminating signal) = ' | head -3
+              done
+              sleep 0.2
+            done
+          ) > "$RUNNER_TEMP/launchd-states.txt" 2>/dev/null &
+          sampler=$!
+          code=0
+          pnpm exec vitest run --maxWorkers=1 --root e2e --fileParallelism=false --testTimeout=120000 --hookTimeout=120000 electron-launchd.test.ts || code=$?
+          kill "$sampler" || true
+          exit "$code"
+
+      - name: what the run left
+        if: always()
+        run: |
+          echo "launchd lines seen for the test's job, with how often:"
+          sort "$RUNNER_TEMP/launchd-states.txt" 2>/dev/null | uniq -c || true
+          for file in runs/p19/*.json; do
+            if [ -e "$file" ]; then
+              echo "$file:"
+              cat "$file"
+              echo
+            fi
+          done
+          echo "jobs still loaded under fabrika.brain:"
+          launchctl print "gui/$(id -u)" 2>/dev/null | grep 'fabrika\.brain\.' || echo none
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: p19-host
+          path: runs/p19
+          if-no-files-found: ignore
