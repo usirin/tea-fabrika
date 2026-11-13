@@ -199,10 +199,12 @@ const life = Effect.fnUntraced(function* (
   );
   const context = yield* Layer.buildWithScope(shared, scope);
 
-  for (const [name, program] of [
+  const registrations: ReadonlyArray<readonly [string, string]> = [
     [NAME, "pipeline/queue"],
-    ...Array.from({ length: 6 }, (_, i) => [`lane:${i + 1}`, "lane"]),
-  ] as ReadonlyArray<readonly [string, string]>) {
+    ...Array.from({ length: 6 }, (_, i) => [`lane:${i + 1}`, "lane"] as const),
+  ];
+
+  for (const [name, program] of registrations) {
     const known = yield* ProcessManager.use((p) => p.status(name)).pipe(Effect.provide(context), Effect.result);
 
     if (Result.isFailure(known)) {
@@ -266,7 +268,9 @@ const life = Effect.fnUntraced(function* (
   return { context, runner };
 });
 
-const open = Effect.fnUntraced(function* (token?: Redacted.Redacted<string>) {
+const open = Effect.fnUntraced(function* (
+  token?: Redacted.Redacted<string>,
+): Effect.fn.Return<QueueRunnerTest.World, unknown, Scope.Scope> {
   const store = yield* stores;
   const services = yield* Layer.build(
     Layer.merge(
@@ -390,7 +394,7 @@ const open = Effect.fnUntraced(function* (token?: Redacted.Redacted<string>) {
     const model =
       checkpoint === null
         ? null
-        : Schema.decodeUnknownSync(programs["pipeline/queue"].machine.model)(checkpoint.saved.model);
+        : Schema.decodeUnknownSync(programs["pipeline/queue"].state.schema)(checkpoint.saved.model);
     return {
       model,
       view: model === null ? null : programs["pipeline/queue"].view.select(model),

@@ -795,7 +795,7 @@ const roundWalk = (p: Program, w: World) => {
       answers: {
         change: {
           draw: fc.constant(null),
-          make: (cmd) =>
+          make: (cmd: Extract<Command, { type: "change" }>) =>
             ok(
               cmd,
               Change.cases.found.make({
@@ -808,7 +808,7 @@ const roundWalk = (p: Program, w: World) => {
         },
         update: {
           draw: fc.boolean(),
-          make: (cmd, moved) =>
+          make: (cmd: Extract<Command, { type: "update" }>, moved: boolean) =>
             ok(
               cmd,
               moved
@@ -820,10 +820,14 @@ const roundWalk = (p: Program, w: World) => {
                 : Updated.cases.current.make({ head: cmd.head, tree: tree(w, "e"), main: id(w, "d") }),
             ),
         },
-        checks: { draw: fc.constant(null), make: (cmd) => ok(cmd, [runAt(w, 7)]) },
+        checks: {
+          draw: fc.constant(null),
+          make: (cmd: Extract<Command, { type: "checks" }>) => ok(cmd, [runAt(w, 7)]),
+        },
         merge: {
           draw: fc.constant(null),
-          make: (cmd) => ok(cmd, Merged.cases.merged.make({ commit: id(w, "f"), tree: tree(w, "e") })),
+          make: (cmd: Extract<Command, { type: "merge" }>) =>
+            ok(cmd, Merged.cases.merged.make({ commit: id(w, "f"), tree: tree(w, "e") })),
         },
       },
     },
@@ -952,7 +956,7 @@ it.prop(
   ({ old }) => {
     const p = merger(Effect.runSync(Settings.all.parse(ConfigProvider.fromUnknown({}))));
     const result = Saved.upgrade({ v: 1, build: "slice-1", model: old, after: 0 }, p.state, "slice-2");
-    const model = Schema.decodeUnknownSync(p.machine.model)(result.saved.model);
+    const model = Schema.decodeUnknownSync(p.state.schema)(result.saved.model);
     expect(result.saved.v).toBe(2);
     expect(model).toMatchObject(old);
 

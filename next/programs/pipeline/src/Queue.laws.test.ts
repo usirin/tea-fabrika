@@ -489,7 +489,7 @@ for (const [law, reached] of [
                 resume: fc.constant(Mail.Resume.make({ type: "resume" })),
                 drop: fc.integer({ min: 1, max: 10 }).map((change) => Mail.Drop.make({ type: "drop", change })),
               },
-              answers: { start_child: { draw, make: (cmd, cell) => startAnswer(p, cmd, cell) } },
+              answers: { start_child: { draw, make: (cmd: Start, cell: Cell) => startAnswer(p, cmd, cell) } },
             },
             { maxLength: 100, size: "max" },
           );
@@ -502,7 +502,7 @@ for (const [law, reached] of [
 
           // Keep the guided fold intact: interleaving another walk would orphan its answers.
           for (const msg of msgs) {
-            step(walk, msg);
+            step(walk, Schema.decodeUnknownSync(walk.p.msg)(msg));
           }
 
           for (const cell of cells) {
