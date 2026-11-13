@@ -1,6 +1,12 @@
-// The mailbox: a letter goes into a name's inbox once per id, and comes back out as a `Letter`, in
-// order. Delivery is at least once, made safe by the id (C2, D4): a resend is one line. Tier 1, P9
-// (law p21, p97). An inbox is the stream `<name>/inbox` on P6's ledger.
+/**
+ * The mailbox: how a letter gets into a name's inbox and comes back out.
+ *
+ * A letter goes into an inbox once per id, and comes back out as a `Letter`, in order. Delivery is
+ * at least once, made safe by the id: a resend is one line. An inbox is the stream `<name>/inbox`
+ * on the ledger.
+ *
+ * @stability unstable
+ */
 import { Context, Effect, Layer, Option, Schema, Stream } from "effect";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { Appended, type Entry, Line, lineFor } from "../ledger/Log.ts";
@@ -13,9 +19,21 @@ export class RunnerMail extends Context.Service<RunnerMail, { readonly process: 
   "@kampus/libfabrika/processes/Mailbox.RunnerMail",
 ) {}
 
-/** What a writer says about itself, shared by every write in this layer: P6's `Line` without its
- *  case and body, so a writer can leave none out (p92). */
+/**
+ * Schema for what a writer says about itself, shared by every write in this layer: the ledger's
+ * `Line` without its case and body, so a writer can leave no key out.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const From = Line.mapFields(({ _tag, body: _body, ...fields }) => fields);
+/**
+ * What a writer says about itself on a write: `by`, `for`, `sentAt`, `seen`, `parent`, `traceId`
+ * and `build`. The same value the `From` schema decodes.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type From = Omit<Line, "_tag" | "body">;
 
 /** A letter as it comes out of an inbox: what was asked, by whom, for whom, and where it sits. */
@@ -31,8 +49,13 @@ export type Letter = {
   readonly pos: Rev;
 };
 
-/** A letter with what its entry also kept: the writer's build, the rev it had seen, and the
- *  referee's clock. The runner reads these to catch a process up (P11); `Letter` stays as it is. */
+/**
+ * A letter with what its entry also kept: the writer's build, the rev it had seen, and the
+ * referee's clock. The runner reads these to catch a process up; `Letter` stays as it is.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type History = Letter & {
   readonly build: string;
   readonly seen: Rev;
@@ -61,7 +84,7 @@ export const letterLine = (from: From, m: Schema.Json) => lineFor(from, Send.mak
 /** A message as a letter's JSON, or none when it is not JSON. */
 export const letterBody = decodeJson;
 
-/** A `send` entry as its History; any other case is none, and kept in the log (T4). */
+/** A `send` entry as its History; any other case is none, and kept in the log. */
 const history = Effect.fnUntraced(function* (entry: Entry) {
   if (entry._tag !== SEND) {
     return Option.none<History>();
@@ -89,7 +112,7 @@ const history = Effect.fnUntraced(function* (entry: Entry) {
   });
 });
 
-/** A History as the Letter P9 answers: the same entry, without what only the runner reads. */
+/** A History as the Letter `receive` answers: the same entry, without what only the runner reads. */
 const letter = ({ build: _build, seen: _seen, arrivedAt: _arrivedAt, ...plain }: History): Letter => plain;
 
 /** Tags an answer on the current span: placed or refused, and why. */
@@ -112,9 +135,28 @@ export const failed = (word: (name: string) => string) =>
     yield* Effect.annotateCurrentSpan(word("reason"), error.reason);
   });
 
+/**
+ * Service that sends a letter into a name's inbox and reads an inbox back, as OTP's mailbox.
+ *
+ * **Details**
+ *
+ * Delivery is at least once: a sender that hears no answer sends again under the same `id`, and
+ * the resend is one line. A refusal is an answer, `refused` with its reason, and only a ledger
+ * fault fails a call.
+ *
+ * **Gotchas**
+ *
+ * `send` checks no sender. It refuses only what the brain alone may write: a letter to a stream
+ * under `processes`, or an id in the signal, notice or runner id space. `RunnerMail` lifts the last
+ * one for a runner that writes its own answers to its own name.
+ *
+ * @stability unstable
+ * @category services
+ */
 export class Mailbox extends Context.Service<
   Mailbox,
   {
+    /** Appends one letter to `<to>/inbox` under `id`. A message that is not JSON is refused `bad_line`. */
     readonly send: (to: string, id: string, m: unknown, from: From) => Effect.Effect<Appended, LedgerError>;
     /** The letters in `<name>/inbox` past the log rev `after`, oldest first. */
     readonly receive: (name: string, after: Rev) => Stream.Stream<Letter, LedgerError>;

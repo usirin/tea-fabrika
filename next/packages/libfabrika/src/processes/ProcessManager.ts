@@ -1,3 +1,11 @@
+/**
+ * The process manager: the one writer of process lifecycle events, after OTP's process calls.
+ *
+ * It starts and ends processes, keeps watches and writes their `DOWN` letters. Every line it
+ * writes carries the brain's own writer key, and the process table trusts no other.
+ *
+ * @stability unstable
+ */
 import { Context, Effect, Layer, Option, Result, Schema, Stream } from "effect";
 import { type Ledger, type LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
@@ -39,17 +47,45 @@ const failed = Effect.fnUntraced(function* (error: Failure) {
   yield* Effect.annotateCurrentSpan({ [tag("answer")]: "refused", [tag("reason")]: error.reason });
 });
 
+/**
+ * Service that starts, ends and watches processes, and writes every process lifecycle event.
+ *
+ * **Details**
+ *
+ * Each call reads the process table and writes what it decides in one ledger turn, so no decision
+ * rests on a read that has gone stale. A call repeated after it was saved answers the same and
+ * adds no second line. A refusal fails with `ProcessError` and writes nothing; a ledger fault
+ * fails with `LedgerError`.
+ *
+ * **Gotchas**
+ *
+ * The caller is trusted wiring, fixed when the layer is built. `exit`, `down`, `dead`, `status`,
+ * `resolve` and a restart are refused `not_parent` unless that caller's `owner` registered the
+ * name. A watch delivers to that caller's `recipient`.
+ *
+ * @stability unstable
+ * @category services
+ */
 export class ProcessManager extends Context.Service<
   ProcessManager,
   {
-    /** `first` is a child's first letter (P42): written in the start's own turn, at `["start", id]`. */
+    /**
+     * Places a new process: the first under a free name, or the next after one that ended. `first`
+     * is a child's first letter, written in the start's own turn, at `["start", id]`.
+     */
     readonly start: (
       request: Start,
       from: From,
       first?: { readonly m: Schema.Json },
     ) => Effect.Effect<StartAnswer, Failure>;
+    /**
+     * Ends a live process with `reason`, writes a `DOWN` to each of its watchers, and ends the
+     * watches the process itself held.
+     */
     readonly exit: (process: string, reason: ExitReason, from: From) => Effect.Effect<void, Failure>;
+    /** Every live process. */
     readonly info: Effect.Effect<ReadonlyArray<ProcessInfo>, LedgerError>;
+    /** A name's current state and its restart times, with `at`, the clock when the answer was made. */
     readonly status: (name: string) => Effect.Effect<
       {
         readonly name: string;
@@ -59,17 +95,37 @@ export class ProcessManager extends Context.Service<
       },
       Failure
     >;
+    /**
+     * The name a process id belongs to, with that name's current state, which may already be a
+     * newer process than the one asked about.
+     */
     readonly resolve: (
       process: string,
     ) => Effect.Effect<{ readonly name: string; readonly state: typeof State.Type }, Failure>;
+    /** Writes a letter that reached its delivery limit to `<process>/dead`, once per letter. */
     readonly dead: (process: string, dead: typeof DeadInput.Type, from: From) => Effect.Effect<void, Failure>;
     readonly isLive: (process: string) => Effect.Effect<boolean, LedgerError>;
+    /**
+     * Watches `process` under the caller's own `ref`. A target that is not live gets its `DOWN`,
+     * with `noproc`, in the same turn.
+     */
     readonly monitor: (ref: string, process: string, from: From) => Effect.Effect<void, Failure>;
+    /** Cancels the caller's own live watch under `ref`. With no such watch it writes nothing. */
     readonly demonitor: (ref: string, from: From) => Effect.Effect<void, Failure>;
+    /**
+     * A live process's letters past the log rev `after`, oldest first. A `DOWN` signal whose watch
+     * was canceled, or that is for another recipient, is left out.
+     */
     readonly receive: (process: string, after: Rev) => Stream.Stream<Letter, Failure>;
+    /**
+     * Writes that a supervisor gave up on a process that is no longer live: the reason, the crash
+     * count, and the time it waits until.
+     */
     readonly down: (process: string, policy: Policy, from: From) => Effect.Effect<void, Failure>;
-    /** The process table inside one ledger turn, trusting only the brain's lines, for a caller that
-     *  decides and writes in that turn (P42's start). */
+    /**
+     * The process table inside one ledger turn, trusting only the brain's lines, for a caller that
+     * decides and writes in that turn, as a child's start does.
+     */
     readonly table: (turn: LedgerTurn) => ProcessTable;
   }
 >()("@kampus/libfabrika/processes/ProcessManager") {
@@ -429,6 +485,17 @@ export const remoteProcessManager = (calls: ProcessCalls, by: string): Layer.Lay
       Stream.unwrap(Effect.map(calls.receive(process, after), (letters) => Stream.fromIterable(letters))),
   });
 
+/**
+ * Layer that provides `Mailbox` and `ProcessManager` together, over one ledger.
+ *
+ * **Details**
+ *
+ * `caller` is trusted wiring: who calls, and the brain's own writer key. `nextId` makes the id of
+ * each new process.
+ *
+ * @stability unstable
+ * @category layers
+ */
 export const CoordinationLayer = (
   caller: Wiring,
   nextId: Effect.Effect<string>,
