@@ -17,6 +17,9 @@ const identityRuns = { ...runs, numRuns: 300 };
 // A fixture runs six commands. A complete open runs twelve; L5 injects the URL lookup,
 // leaving eleven real commands per open. Failed opens stop at or before that twelfth command.
 const gitCommandBudget = 10;
+// Fixture (init, clone, add, commit, push, rev-parse), initial open, four moves
+// (at most checkout/add/commit/push plus ls-tree/cat-file), worktree add, alias open.
+const pinnedReadGitCommands = 6 + 12 + 4 * (4 + 2) + 1 + 12;
 // Fixture, clone, worktree, initial open, then four opens for each move.
 const identityGitCommands = 6 + 1 + 1 + 11 + 4 * 4 * 11;
 // Fixture, remove/commit/push, absent open, revert/push, four faulted opens,
@@ -71,68 +74,72 @@ const withReader = <A, E, R>(person: string, body: Effect.Effect<A, E, R>) =>
   body.pipe(Effect.provide(RepositoriesGit.layer({ person })));
 
 describe("T878 pinned repository reads", () => {
-  it("L1: every prefix keeps the pinned tree after checkout edits, branch switches and origin moves", async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.constantFrom("sha1" as const, "sha256" as const),
-        fc.stringMatching(/^[a-z][a-z0-9]{0,7}$/).map((word) => `trunk-${word}`),
-        fc.array(fc.nat(), { minLength: 1, maxLength: 4 }),
-        async (format, branch, tape) =>
-          Effect.runPromise(
-            Effect.scoped(
-              Effect.gen(function* () {
-                const f = yield* fixture(format, branch);
-                yield* withReader(
-                  f.person,
-                  Effect.gen(function* () {
-                    const service = yield* Repositories;
-                    const pinned = yield* service.open(f.repo);
-                    expect(pinned.snapshot).toMatchObject({
-                      branch,
-                      commit: f.commit,
-                      text: 'fabrika-version = "0.0.0"\n',
-                    });
-                    expect(pinned.snapshot.commit).toHaveLength(format === "sha1" ? 40 : 64);
-                    const hash = pinned.snapshot.hash;
+  it(
+    "L1: every prefix keeps the pinned tree after checkout edits, branch switches and origin moves",
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.constantFrom("sha1" as const, "sha256" as const),
+          fc.stringMatching(/^[a-z][a-z0-9]{0,7}$/).map((word) => `trunk-${word}`),
+          fc.array(fc.nat(), { minLength: 1, maxLength: 4 }),
+          async (format, branch, tape) =>
+            Effect.runPromise(
+              Effect.scoped(
+                Effect.gen(function* () {
+                  const f = yield* fixture(format, branch);
+                  yield* withReader(
+                    f.person,
+                    Effect.gen(function* () {
+                      const service = yield* Repositories;
+                      const pinned = yield* service.open(f.repo);
+                      expect(pinned.snapshot).toMatchObject({
+                        branch,
+                        commit: f.commit,
+                        text: 'fabrika-version = "0.0.0"\n',
+                      });
+                      expect(pinned.snapshot.commit).toHaveLength(format === "sha1" ? 40 : 64);
+                      const hash = pinned.snapshot.hash;
 
-                    for (const cell of tape) {
-                      const move = cell % 4;
+                      for (const cell of tape) {
+                        const move = cell % 4;
 
-                      if (move === 0) {
-                        yield* f.fs.writeFileString(f.path.join(f.repo, ".fabrika/fabrika.toml"), "dirty = true\n");
-                        yield* f.fs.writeFileString(f.path.join(f.repo, "source.txt"), `dirty ${cell}`);
-                        yield* f.fs.writeFileString(f.path.join(f.repo, "fabrika.toml"), "checkout-only legacy file");
-                      } else if (move === 1) {
-                        yield* git(f.repo, ["checkout", "--force", "--detach", f.commit]);
-                      } else if (move === 2) {
-                        yield* git(f.repo, ["checkout", "--force", "-B", branch]);
-                        yield* f.fs.writeFileString(f.path.join(f.repo, "source.txt"), `new ${cell}`);
-                        yield* git(f.repo, ["add", "-u"]);
-                        yield* git(f.repo, ["commit", "--allow-empty", "-m", "move"]);
-                        yield* git(f.repo, ["push", "--force", "origin", branch]);
-                      } else {
-                        yield* f.fs.remove(f.path.join(f.repo, ".fabrika/fabrika.toml"), { force: true });
+                        if (move === 0) {
+                          yield* f.fs.writeFileString(f.path.join(f.repo, ".fabrika/fabrika.toml"), "dirty = true\n");
+                          yield* f.fs.writeFileString(f.path.join(f.repo, "source.txt"), `dirty ${cell}`);
+                          yield* f.fs.writeFileString(f.path.join(f.repo, "fabrika.toml"), "checkout-only legacy file");
+                        } else if (move === 1) {
+                          yield* git(f.repo, ["checkout", "--force", "--detach", f.commit]);
+                        } else if (move === 2) {
+                          yield* git(f.repo, ["checkout", "--force", "-B", branch]);
+                          yield* f.fs.writeFileString(f.path.join(f.repo, "source.txt"), `new ${cell}`);
+                          yield* git(f.repo, ["add", "-u"]);
+                          yield* git(f.repo, ["commit", "--allow-empty", "-m", "move"]);
+                          yield* git(f.repo, ["push", "--force", "origin", branch]);
+                        } else {
+                          yield* f.fs.remove(f.path.join(f.repo, ".fabrika/fabrika.toml"), { force: true });
+                        }
+
+                        expect(text(yield* pinned.read("source.txt"))).toBe("committed source");
+                        expect(pinned.snapshot.hash).toBe(hash);
+                        expect(pinned.snapshot.commit).toBe(f.commit);
                       }
 
-                      expect(text(yield* pinned.read("source.txt"))).toBe("committed source");
-                      expect(pinned.snapshot.hash).toBe(hash);
-                      expect(pinned.snapshot.commit).toBe(f.commit);
-                    }
-
-                    // A linked worktree is an alias for this clone, even when detached.
-                    const linked = f.path.join(f.root, "linked");
-                    yield* git(f.repo, ["worktree", "add", "--detach", linked, f.commit]);
-                    const alias = yield* service.open(linked);
-                    expect(alias.snapshot.key).toBe(pinned.snapshot.key);
-                  }),
-                );
-              }),
-            ).pipe(Effect.provide(services)),
-          ),
-      ),
-      runs,
-    );
-  });
+                      // A linked worktree is an alias for this clone, even when detached.
+                      const linked = f.path.join(f.root, "linked");
+                      yield* git(f.repo, ["worktree", "add", "--detach", linked, f.commit]);
+                      const alias = yield* service.open(linked);
+                      expect(alias.snapshot.key).toBe(pinned.snapshot.key);
+                    }),
+                  );
+                }),
+              ).pipe(Effect.provide(services)),
+            ),
+        ),
+        runs,
+      );
+    },
+    runs.numRuns * pinnedReadGitCommands * gitCommandBudget,
+  );
 
   it(
     "L5: real clone/common-directory identity separates same basenames and destinations but keeps aliases and credential changes",
