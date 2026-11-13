@@ -89,9 +89,8 @@ It builds on:
 - [0290](0290-one-owner-admins-and-members.md): a shared fabrika has one owner, admins and members.
 
 The known way: Unix checks the user a process runs as, never the shell that called `exec`. The
-shell holds no right of its own. A program trusted because every request passes through it is the
-confused deputy problem
-([Hardy, 1988](https://dl.acm.org/doi/10.1145/54289.871709)).
+shell holds no permission of its own. A program trusted because every request passes through it is the
+confused deputy problem (Hardy, "The Confused Deputy", 1988).
 
 ## Decision
 
@@ -128,7 +127,7 @@ confused deputy problem
 
 ## Consequences
 
-- The start has to carry its cause to the brain, so the brain can read the sender. Today it carries
+- The start has to carry its cause to the brain, so the brain can read the sender. Today the check reads
   only the requester's process.
 - The cost is one lookup per start, the same one a write already pays for its signer (0262).
 - A program that drops the cause of a start gets a wrong member checked, not an error. 0263's law is
@@ -140,8 +139,8 @@ confused deputy problem
 - Who a start belongs to when no member's input is behind it: a supervisor's restart, a scheduled
   job, a start at boot. [0140](0140-gateway-refuses-client-id-and-by.md) makes a write with no cause
   `own`; whether a start follows it is open.
-- Who is checked when the input came from an agent working for a person: the agent, the person, or
-  both.
+- Whether the rule also looks at the person an agent works for. By 0261 an agent's input is the
+  agent's own, never the person's, so the agent is the sender that is checked.
 - What becomes of today's program-to-program list, the instance's `starts` setting.
 - What a person sees when a start is refused.
 - Any role finer than owner, admin and member. 0290 leaves those for later.
