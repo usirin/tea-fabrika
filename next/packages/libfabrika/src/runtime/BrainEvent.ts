@@ -1,3 +1,8 @@
+/**
+ * The events of a local brain's life, as the driver that runs the brain on a laptop records them.
+ *
+ * @stability unstable
+ */
 import { Schema } from "effect";
 
 const Life = {
@@ -15,6 +20,20 @@ const Exit = {
   backoff: Schema.optionalKey(Schema.Number),
 };
 
+/**
+ * Schema for one event in a local brain's life: `started`, `exited`, `restarting`, `braked` or
+ * `stopped`.
+ *
+ * **Details**
+ *
+ * Every case carries its own `id`, the `start` it belongs to, and `at`, the driver's clock when it
+ * happened. A `started` also names the start it came `after`, its build and its OS `pid`. The exit
+ * fields (`exitCode`, `signal`, `bytes`, `backoff`) are there when the driver knows them. The
+ * project appends each event to the `gateway/brain` stream under its `id`.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const BrainEvent = Schema.TaggedUnion({
   started: {
     ...Life,

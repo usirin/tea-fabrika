@@ -1,6 +1,11 @@
-// The tables one built brain file carries (P16): each program's compiled source with its hash, and
-// each window script, chunk, stylesheet and tab page with its route. The Node build assembles them and the
-// Worker adapters serve them; both read these shapes from here, so nothing here needs a platform.
+/**
+ * The tables one built brain file carries: each program's compiled source with its hash, and each
+ * window script, chunk, stylesheet and tab page with its route. The Node build assembles them and
+ * the Worker adapters serve them; both read these shapes from here, so nothing here needs a
+ * platform.
+ *
+ * @stability unstable
+ */
 import { Effect, Schema, SchemaGetter } from "effect";
 import { Digest } from "effect/crypto";
 import { ProgramName } from "../packs/ProgramName.ts";
@@ -36,24 +41,76 @@ const hashed = <S extends Schema.Struct<{ readonly hash: typeof Hash }>>(
     }),
   );
 
+/**
+ * Schema for one program as the build leaves it: its compiled `source` and the SHA-256 `hash` of
+ * that source. Decoding fails when the hash is not the source's own, so one program's hash never
+ * sits beside another's source.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const BuiltProgram = hashed(Schema.Struct({ hash: Hash, source: Schema.String }), (p) => p.source);
+/**
+ * One built program, as `BuiltProgram` decodes it.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type BuiltProgram = typeof BuiltProgram.Type;
 
-// A tab's page (P14) is served at `/` from `/index.html`.
+/**
+ * Schema for the content types an asset may have: JavaScript, CSS or HTML, each as UTF-8. A tab's
+ * page is the HTML one, served at `/` from `/index.html`.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const AssetType = Schema.Literals([
   "text/javascript; charset=utf-8",
   "text/css; charset=utf-8",
   "text/html; charset=utf-8",
 ]);
+/**
+ * An asset's content type, as `AssetType` decodes it.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type AssetType = typeof AssetType.Type;
 
+/**
+ * Schema for one file the brain serves to a window: its `body`, its content `type` and the SHA-256
+ * `hash` of the body. Decoding fails when the hash is not the body's own.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const Asset = hashed(Schema.Struct({ hash: Hash, type: AssetType, body: Schema.String }), (a) => a.body);
+/**
+ * One served file, as `Asset` decodes it.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Asset = typeof Asset.Type;
 
 /** An HTTP route under the brain's origin: slash-led names, no empty, `.` or `..` segment. */
 const ROUTE = /^(?:\/(?!\.\.?(?:\/|$))[\w.-]+)+$/;
 const isProgramName = Schema.is(ProgramName);
 
+/**
+ * Schema for the tables one built brain file carries: `programs` by program name, and `assets` by
+ * route.
+ *
+ * **Details**
+ *
+ * A program's key must be a `pack/program` name. An asset's key must be a path that starts with a
+ * slash and has no empty, `.` or `..` segment. A bad key fails the decode; it is never dropped
+ * quietly.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const Built = Schema.Struct({
   // A refined key would drop a bad name or route quietly, so each record checks its keys instead.
   programs: Schema.Record(Schema.String, BuiltProgram).check(
@@ -67,6 +124,12 @@ export const Built = Schema.Struct({
     ),
   ),
 });
+/**
+ * The built tables, as `Built` decodes them.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Built = typeof Built.Type;
 
 /** Built tables from outside (disk, a generated module): a bad value is BuildError `table`. */

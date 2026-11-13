@@ -1,3 +1,12 @@
+/**
+ * The process table and its rules: names, lifecycle events, watches, and who may write what.
+ *
+ * Nothing about a process is kept outside the ledger. `ProcessTable` folds the brain's own lines
+ * into the current picture, and a call on it only decides: the caller writes what the answer
+ * allows, in the same ledger turn.
+ *
+ * @stability unstable
+ */
 import { applyCell } from "@demlik/tea";
 import { Equal, Option, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
@@ -37,6 +46,14 @@ export const ProcessName = Text.check(Schema.isPattern(new RegExp(`^${RESERVED}(
 /** A client id has no `:`, the mark of a process name such as `counter:1`. */
 const ClientId = Text.check(Schema.isPattern(new RegExp(`^(?!${PROCESSES}$)[a-z0-9][a-z0-9._-]*$`)));
 
+/**
+ * Who is calling the process table: the `owner`, which may act only on names it registered, and
+ * the `recipient` its watches deliver to. Trusted wiring sets both; neither is decoded from a
+ * public request.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Caller = { readonly owner: typeof Owner.Type; readonly recipient: typeof Recipient.Type };
 
 /** Where a registered name's own lifecycle events live: `processes/<name>`. */
@@ -61,9 +78,32 @@ export const brainOnly = (write: { readonly stream: string; readonly id: string;
 export const inRunnerSpace = (id: string): boolean =>
   /^process_[^/]+\/(?:due\/|[0-9]+\/[0-9]+\/answer(?:$|\/))/.test(id);
 
-/** What a monitor answers for a target that was never live; a monitor result, never an exit reason. */
+/**
+ * Schema for what a monitor answers for a target that is not live when the watch is made, whether
+ * it ended or never started. A monitor result, never an exit reason.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const NoProc = Schema.TaggedStruct("noproc", {});
 
+/**
+ * Schema for the letter a monitor gets when the process it watches ends, as OTP's `DOWN`.
+ *
+ * **Details**
+ *
+ * It carries the watch's `ref`, the process, the recipient it is for, and the reason: the
+ * process's exit reason, unchanged, or `noproc` when the process was not live when the watch was
+ * made.
+ *
+ * **Gotchas**
+ *
+ * The shape alone is not a signal. A letter tagged `DOWN` counts as one only under its signal id,
+ * written by the brain, for a watch that exists. Anything else is plain mail.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const Down = Schema.TaggedStruct("DOWN", {
   ref: Text,
   process: ProcessId,
@@ -83,8 +123,24 @@ const oneErrorPerTry = Schema.makeFilter(
   (value: Schema.Struct.Type<typeof deadFields>) => value.errors.length === value.tries || "one error class per try",
 );
 
+/**
+ * Schema for what a runner reports about a letter that reached its delivery limit: the `tries`,
+ * the `limit`, the letter's id `m`, the `build`, and one error class per try, at most 32.
+ * `ProcessManager.dead` adds the process, its program and its name to make a `Dead`.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const DeadInput = Schema.Struct(deadFields).check(oneErrorPerTry);
 
+/**
+ * Schema for the `dead` entry the brain writes on `<process>/dead` when a letter reaches its
+ * delivery limit: the fields of `DeadInput`, plus the process, its program and its name, which the
+ * brain reads from its own table and never takes from the reporter.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const Dead = Schema.TaggedStruct("dead", {
   ...deadFields,
   process: ProcessId,
@@ -92,6 +148,18 @@ export const Dead = Schema.TaggedStruct("dead", {
   name: ProcessName,
 }).check(oneErrorPerTry);
 
+/**
+ * Schema for the activity marker a process keeps in its own storage: `idle`, or `stepping` with
+ * the letter it is on and its build.
+ *
+ * **Details**
+ *
+ * The runner saves `stepping` before a step and `idle` after it. A process that wakes and finds
+ * `stepping` knows a step was cut short, and `recoverActivity` reads that as `interrupted`.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const Activity = Schema.TaggedUnion({
   idle: { process: ProcessId },
   stepping: { process: ProcessId, letter: Text, build: Text },
@@ -107,6 +175,18 @@ const Recovered = Schema.TaggedUnion({
   },
 });
 
+/**
+ * Reads a saved activity marker back after a wake.
+ *
+ * **Details**
+ *
+ * A marker that was never written is `idle`. A `stepping` marker becomes `interrupted`, with its
+ * process, letter and build: the step it names did not finish. Anything else fails with a
+ * `LedgerError` whose reason is `bad_row`.
+ *
+ * @stability unstable
+ * @category decoding
+ */
 export const recoverActivity = (raw: unknown): Result.Result<typeof Recovered.Type, LedgerError> => {
   if (raw === undefined) {
     return Result.succeed(Recovered.cases.idle.make({}));
@@ -131,9 +211,41 @@ export const recoverActivity = (raw: unknown): Result.Result<typeof Recovered.Ty
   );
 };
 
+/**
+ * Checks whether one more restart fits in the restart window, as OTP's restart intensity.
+ *
+ * **Details**
+ *
+ * It counts the restart times in `times` that fall within `period` before `now`, adds the restart
+ * being asked for, and answers true while the total is at most `intensity`. The order of `times`
+ * does not matter.
+ *
+ * @stability unstable
+ * @category guards
+ */
 export const canRestart = (times: ReadonlyArray<number>, now: number, period: number, intensity: number): boolean =>
   times.filter((at) => at >= now - period).length + 1 <= intensity;
 
+/**
+ * Error for a call the process table refuses. A refusal writes nothing.
+ *
+ * **Details**
+ *
+ * - `not_parent`: the caller is not the owner that registered the name.
+ * - `name_taken`: a first start asks for a name that is registered, or a restart names another
+ *   program than the name's.
+ * - `alive`: the process is still live, so it cannot be restarted or marked down.
+ * - `stale`: a restart names a process that is no longer its name's current one, or a child's
+ *   requester has ended.
+ * - `id_reused`: the start id was first used with another request.
+ * - `id_collision`: the fresh process id is already in the table.
+ * - `ended`: the process is unknown, or no longer live.
+ * - `bad_ref`: the monitor reference already watches another process.
+ * - `bad_name`, `bad_text`: a name, a reference or another text did not pass its schema.
+ *
+ * @stability unstable
+ * @category errors
+ */
 export class ProcessError extends Schema.TaggedError<ProcessError>()("ProcessError", {
   reason: Schema.Literals([
     "not_parent",
@@ -165,8 +277,21 @@ const shown = (watch: Held): Watch => ({
   round: watch.round,
 });
 
+/**
+ * What a start answers: the new process's id, and the log rev of its `started` line.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type StartAnswer = { readonly process: string; readonly rev: number };
 
+/**
+ * One live process as `ProcessTable.info` lists it: its id, its registered name, its program, the
+ * hash of its build, and how many times its name has been restarted.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type ProcessInfo = {
   readonly process: string;
   readonly name: string;
@@ -194,6 +319,13 @@ export const inSignalSpace = led("DOWN");
 
 /** Ids for what the brain tells a program. Only the brain writes one. */
 export const inNoticeSpace = led("notice");
+/**
+ * Makes the letter id of a notice: the JSON array `["notice", key]`, which is in the notice id
+ * space, so only the brain may write under it.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const noticeId = (key: string): string => JSON.stringify(["notice", key]);
 
 /**
@@ -254,7 +386,7 @@ export class ProcessTable {
     const name = this.#model.names.get(request.name);
 
     if (request._tag === "first") {
-      // A child's requester must still be live in the turn that would write its start (P42).
+      // A child's requester must still be live in the turn that would write its start.
       if (request.requester?._tag === "process" && !this.isLive(request.requester.process)) {
         return denied("stale");
       }
@@ -295,7 +427,7 @@ export class ProcessTable {
       : Option.some({ program: registered.program, state: life.state });
   }
 
-  /** The registered name that asked for this name's first life, when a child start wrote one (P42). */
+  /** The registered name that asked for this name's first life, when a child start wrote one. */
   starter(name: string): Option.Option<string> {
     const first = [...this.#model.lives.values()].find((life) => life.name === name);
     const requester = first?.request._tag === "first" ? first.request.requester : undefined;
