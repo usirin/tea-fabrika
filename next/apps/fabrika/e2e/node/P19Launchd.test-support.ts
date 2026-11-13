@@ -15,6 +15,7 @@ import { BrainSpec } from "@kampus/libfabrika/desktop/BrainSpec";
 import * as Native from "@kampus/libfabrika/node/launchd/BrainControlLaunchd";
 import * as ServiceLaunchd from "@kampus/libfabrika/node/launchd/BrainServiceLaunchd";
 import * as LaunchdStatus from "@kampus/libfabrika/node/launchd/LaunchdStatus";
+import * as ProcessGroups from "@kampus/libfabrika/node/launchd/ProcessGroups.test-support";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as Snapshot from "@kampus/libfabrika/settings/Snapshot";
 import * as Sources from "@kampus/libfabrika/settings/Sources";
@@ -81,12 +82,10 @@ const alive = (pid: number) =>
     );
   });
 
-const Ps = Schema.Struct({ pid: Schema.Int, parent: Schema.Int, group: Schema.Int });
-
 const processes = Effect.fn("P19Host.processes")(function* () {
   const out = yield* command("ps", ["-axo", "pid=,ppid=,pgid="]);
   yield* checked(out.code === 0, "cannot-observe-processes");
-  return yield* Schema.decodeUnknownEffect(Schema.Array(Ps))(
+  return yield* Schema.decodeUnknownEffect(Schema.Array(ProcessGroups.Row))(
     out.stdout
       .trim()
       .split("\n")
@@ -98,30 +97,27 @@ const processes = Effect.fn("P19Host.processes")(function* () {
   );
 });
 
-const descendants = (rows: ReadonlyArray<typeof Ps.Type>, root: number): ReadonlyArray<number> => {
-  const ids = new Set([root]);
-
-  for (let n = 0; n < rows.length; n++) {
-    for (const row of rows) {
-      if (ids.has(row.parent)) {
-        ids.add(row.pid);
-      }
-    }
-  }
-
-  return [...new Set(rows.filter((row) => ids.has(row.pid)).map((row) => row.group))];
-};
+/**
+ * The one place a group is signaled. The group is decoded again here: a 0 or a 1 fails the test
+ * and never reaches `kill`, where -1 means every process this user owns.
+ */
+const signal = Effect.fn("P19Host.signal")(function* (name: "TERM" | "KILL", group: number) {
+  const owned = yield* Schema.decodeUnknownEffect(ProcessGroups.Owned)(group).pipe(
+    Effect.mapError((cause) => new HostError({ reason: "refused-group", cause: Redacted.make(cause) })),
+  );
+  yield* command("kill", [`-${name}`, `-${owned}`]);
+});
 
 const Config = Schema.Struct({
   home: Schema.String,
-  target: Schema.String,
+  // One service, `gui/<uid>/<label>`. A bare domain would let `launchctl bootout` end the whole login.
+  target: Schema.String.check(Schema.isPattern(/^gui\/[1-9][0-9]*\/[A-Za-z0-9][A-Za-z0-9._-]+$/u)),
   url: Schema.String,
   owner: Schema.Int,
   stopTimeout: Schema.Int,
   poll: Schema.Int,
 });
 type Config = typeof Config.Type;
-const SavedGroups = Schema.Array(Schema.Int);
 
 const status = Effect.fn("P19Host.status")(function* (target: string) {
   const out = yield* command("launchctl", ["print", target]);
@@ -154,7 +150,7 @@ const guard = Effect.fn("P19Host.guard")(function* (file: string) {
     if (loaded._tag === "loaded" && loaded.pid !== null) {
       const rows = yield* processes();
 
-      for (const group of descendants(rows, loaded.pid)) {
+      for (const group of ProcessGroups.descendants(rows, loaded.pid)) {
         groups.add(group);
       }
 
@@ -168,7 +164,7 @@ const guard = Effect.fn("P19Host.guard")(function* (file: string) {
 
     for (const group of groups) {
       if (yield* alive(-group)) {
-        yield* command("kill", ["-TERM", `-${group}`]);
+        yield* signal("TERM", group);
       }
     }
 
@@ -186,7 +182,7 @@ const guard = Effect.fn("P19Host.guard")(function* (file: string) {
         Effect.gen(function* () {
           for (const group of groups) {
             if (yield* alive(-group)) {
-              yield* command("kill", ["-KILL", `-${group}`]);
+              yield* signal("KILL", group);
             }
           }
         }),
@@ -237,12 +233,38 @@ export const bundle = Effect.fn("P19Host.bundle")(function* (source: string, out
           cwd: root,
           platform: "node",
           external: [/^node:/],
+          // The app's package.json says "sideEffects": false, which drops this helper's guard and controller mains.
+          treeshake: { moduleSideEffects: [{ test: /P19Launchd\.test-support\.ts$/, sideEffects: true }] },
           plugins: [
             {
               name: "p19-entry",
-              resolveId: (id: string, importer: string | undefined) => {
+              resolveId(id: string, importer: string | undefined) {
                 if (id === "p19:entry") {
                   return id;
+                }
+
+                const from =
+                  importer !== undefined && path.isAbsolute(importer)
+                    ? importer
+                    : path.join(root, "next/apps/fabrika/package.json");
+                const outside = (resolved: string) => {
+                  if (!dependencies.has(resolved)) {
+                    dependencies.set(
+                      resolved,
+                      path.join(`${output}.dependencies`, String(dependencies.size), path.basename(resolved)),
+                    );
+                  }
+
+                  return { id: resolved, external: true };
+                };
+
+                // Alchemy's packages find their own files beside themselves at run time and export ESM only,
+                // so they stay outside the bundle too, found by Rolldown's resolver in place of require.
+                if (/^(?:alchemy|@alchemy\.run\/[^/]+)(?:\/|$)/.test(id)) {
+                  // oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown's resolver answers through a Promise
+                  return this.resolve(id, from, { skipSelf: true }).then((found) =>
+                    found === null ? undefined : outside(found.id),
+                  );
                 }
 
                 if (
@@ -252,20 +274,7 @@ export const bundle = Effect.fn("P19Host.bundle")(function* (source: string, out
                   ) ||
                   /^@rolldown\//.test(id)
                 ) {
-                  const from =
-                    importer !== undefined && path.isAbsolute(importer)
-                      ? importer
-                      : path.join(root, "next/apps/fabrika/package.json");
-                  const resolved = createRequire(from).resolve(id);
-
-                  if (!dependencies.has(resolved)) {
-                    dependencies.set(
-                      resolved,
-                      path.join(`${output}.dependencies`, String(dependencies.size), path.basename(resolved)),
-                    );
-                  }
-
-                  return { id: resolved, external: true };
+                  return outside(createRequire(from).resolve(id));
                 }
 
                 return undefined;
@@ -343,7 +352,7 @@ const controller = Effect.fn("P19Host.controller")(function* (specFile: string, 
       const groups = (yield* fs.exists(`${spec.home}/groups.json`))
         ? yield* fs
             .readFileString(`${spec.home}/groups.json`)
-            .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(SavedGroups))))
+            .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(ProcessGroups.Saved))))
         : [];
 
       for (const group of groups) {
@@ -411,7 +420,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
     guardFile = `${home}/guard.mjs`;
   const boot = `import { NodeRuntime, NodeServices } from "@effect/platform-node"; import { Effect } from "effect"; import { Digest, SecureRandom } from "effect/crypto";`;
   yield* bundle(
-    `${boot} import { localInstance } from ${JSON.stringify(path.join(app, "src/local-instance.ts"))}; import { FileSystem } from "effect"; NodeRuntime.runMain(Effect.scoped(Effect.gen(function*(){ const fs=yield* FileSystem.FileSystem; yield* localInstance(${JSON.stringify(built)}, { name:"p19-isolated", person:"person_01m6v5270hf3c8x2q7w9z4k5mn", founder:"public-host-test", window:null, port:${chosen}, home:${JSON.stringify(home)} }); yield* fs.writeFileString(${JSON.stringify(`${home}/ready.json`)}, JSON.stringify({pid:process.pid,build:${JSON.stringify(built.build)},node:process.versions.node,electron:process.versions.electron})); yield* Effect.never; })).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto, SecureRandom.layerWebCrypto])));`,
+    `${boot} import { localInstance } from ${JSON.stringify(path.join(app, "src/local-instance.ts"))}; import { FileSystem } from "effect"; NodeRuntime.runMain(Effect.scoped(Effect.gen(function*(){ const fs=yield* FileSystem.FileSystem; yield* localInstance(${JSON.stringify(built)}, { name:"p19-isolated", person:"person_01m6v5270hf3c8x2q7w9z4k5mn", founder:"public-host-test", window:null, rateLimit:{limit:${Number(settings.values["gateway.limit"])},window:${Number(settings.values["gateway.window"])}}, port:${chosen}, home:${JSON.stringify(home)} }); yield* fs.writeFileString(${JSON.stringify(`${home}/ready.json`)}, JSON.stringify({pid:process.pid,build:${JSON.stringify(built.build)},node:process.versions.node,electron:process.versions.electron})); yield* Effect.never; })).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto, SecureRandom.layerWebCrypto])));`,
     runtime,
     root,
   );
@@ -488,7 +497,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
       return yield* new HostError({ reason: "no-process-to-observe" });
     }
 
-    const expected = descendants(yield* processes(), current.pid);
+    const expected = ProcessGroups.descendants(yield* processes(), current.pid);
     yield* checked(expected.length > 0, "no-owned-group");
     yield* wait(
       Effect.gen(function* () {
@@ -498,7 +507,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
 
         const observed = yield* fs
           .readFileString(`${home}/groups.json`)
-          .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(SavedGroups))));
+          .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(ProcessGroups.Saved))));
         return expected.every((group) => observed.includes(group));
       }),
       config.stopTimeout,
@@ -590,7 +599,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
   yield* launch("--stop");
   const owned = yield* fs
     .readFileString(`${home}/groups.json`)
-    .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(SavedGroups))));
+    .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(ProcessGroups.Saved))));
   yield* checked(owned.length > 0, "guard-observed-no-groups");
 
   for (const group of owned) {

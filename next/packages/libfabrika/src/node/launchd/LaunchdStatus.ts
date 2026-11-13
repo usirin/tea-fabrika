@@ -42,11 +42,10 @@ export const decode = Effect.fnUntraced(function* (input: typeof Response.Type) 
   const [, uid, label] = response.target.split("/");
 
   if (response.code !== 0) {
-    if (
-      response.code === 113 &&
-      out === "" &&
-      err === `Could not find service "${label}" in domain for user gui: ${uid}\n`
-    ) {
+    const missing = `Could not find service "${label}" in domain for user gui: ${uid}\n`;
+
+    // macOS 14 prints "Bad request." as a first line; older output has only the second.
+    if (response.code === 113 && out === "" && (err === missing || err === `Bad request.\n${missing}`)) {
       return Status.cases.absent.make({});
     }
 
@@ -165,7 +164,8 @@ export const decode = Effect.fnUntraced(function* (input: typeof Response.Type) 
     home === undefined ||
     configuration === undefined ||
     env.get("ELECTRON_RUN_AS_NODE") !== "1" ||
-    !["running", "waiting"].includes(fields.get("state") ?? "") ||
+    // macOS 14 prints xpcproxy while a job spawns, SIGTERMed while it stops and "not running" once it has exited.
+    !["running", "waiting", "not running", "xpcproxy", "SIGTERMed"].includes(fields.get("state") ?? "") ||
     (pid !== undefined && !/^[1-9][0-9]*$/u.test(pid))
   ) {
     return yield* failed(response);

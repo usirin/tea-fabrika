@@ -40,6 +40,8 @@ it("pinned: L13 bundles keep native dependencies resolvable outside root node_mo
           const compiled = path.join(home, `${name}.mjs`);
           const linked = yield* Host.bundle(`export * from ${JSON.stringify(entry)};`, compiled, root);
           expect(yield* fs.exists(compiled)).toBe(true);
+          // The app's "sideEffects": false once emptied the helper's bundle, and its mains with it.
+          expect(yield* fs.readFileString(compiled)).toContain(name === "controller" ? "p19:guard" : "localInstance");
 
           for (const file of linked) {
             expect(yield* fs.exists(file)).toBe(true);
