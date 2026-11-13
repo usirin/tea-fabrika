@@ -280,7 +280,7 @@ const projectWalk = Effect.fnUntraced(function* (
       expect(reported.slice(before)).toEqual([
         {
           object: JSON.stringify(["p13-project", NAME]),
-          rows: [{ process: project.boot.process, method: "other", outcome: "ok", cpuMs, wallMs }],
+          rows: [{ process: project.boot.process, method: "audit", outcome: "ok", cpuMs, wallMs }],
         },
       ]);
       reached.add("usage");
