@@ -2,25 +2,28 @@
 import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "@effect/vitest";
+import { Effect } from "effect";
 
 const APP = resolve(import.meta.dirname, "..");
-const homes: string[] = [];
 
-const fixture = () => {
-  const home = mkdtempSync("/tmp/fh.");
-  homes.push(home);
+// The test's scope removes the folder when the test ends (0061).
+const fixture = Effect.acquireRelease(
+  Effect.sync(() => {
+    const home = mkdtempSync("/tmp/fh.");
 
-  for (const file of ["package.json", "build.ts"]) {
-    copyFileSync(join(APP, file), join(home, file));
-  }
+    for (const file of ["package.json", "build.ts"]) {
+      copyFileSync(join(APP, file), join(home, file));
+    }
 
-  for (const dir of ["src", "node_modules"]) {
-    symlinkSync(join(APP, dir), join(home, dir), "dir");
-  }
+    for (const dir of ["src", "node_modules"]) {
+      symlinkSync(join(APP, dir), join(home, dir), "dir");
+    }
 
-  return home;
-};
+    return home;
+  }),
+  (home) => Effect.sync(() => rmSync(home, { recursive: true, force: true })),
+);
 
 const command = (home: string) =>
   spawnSync(process.execPath, ["build.ts"], {
@@ -41,25 +44,23 @@ const verify = (home: string, result: ReturnType<typeof command>) => {
   expect(readFileSync(join(home, "dist/brain.mjs"), "utf8").length).toBeGreaterThan(0);
 };
 
-afterEach(() => {
-  for (const home of homes.splice(0)) {
-    rmSync(home, { recursive: true, force: true });
-  }
-});
-
 describe("P16 app build command", () => {
-  it("scenario: node build.ts exits zero and writes brain.mjs in a fresh folder", () => {
-    const home = fixture();
-    verify(home, command(home));
-  });
-  it("scenario: plant a parameter property in the real command and reject Node's import failure", () => {
-    const home = fixture(),
-      file = join(home, "build.ts");
-    writeFileSync(file, `class Options { constructor(readonly out: string) {} }\n${readFileSync(file, "utf8")}`);
-    const result = command(home);
-    expect(result.stderr).toContain("ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX");
-    expect(result.stderr).toContain("TypeScript parameter property");
-    expect(result.stderr).toContain("class Options { constructor(readonly out: string) {} }");
-    expect(() => verify(home, result)).toThrow();
-  });
+  it.effect("scenario: node build.ts exits zero and writes brain.mjs in a fresh folder", () =>
+    Effect.gen(function* () {
+      const home = yield* fixture;
+      verify(home, command(home));
+    }),
+  );
+  it.effect("scenario: plant a parameter property in the real command and reject Node's import failure", () =>
+    Effect.gen(function* () {
+      const home = yield* fixture,
+        file = join(home, "build.ts");
+      writeFileSync(file, `class Options { constructor(readonly out: string) {} }\n${readFileSync(file, "utf8")}`);
+      const result = command(home);
+      expect(result.stderr).toContain("ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX");
+      expect(result.stderr).toContain("TypeScript parameter property");
+      expect(result.stderr).toContain("class Options { constructor(readonly out: string) {} }");
+      expect(() => verify(home, result)).toThrow();
+    }),
+  );
 });
