@@ -264,7 +264,7 @@ describe("T246, P37 decodes TypeID process ids", () => {
 });
 
 describe("p98, a span that ends is never dropped", () => {
-  it.effect("its rows are in the object's own SQLite before end returns, and a later process's flush sends them", () =>
+  it.live("its rows are in the object's own SQLite before end returns, and a later process's flush sends them", () =>
     Effect.gen(function* () {
       const { db, open } = yield* home;
       // Effect.runSync: nothing may wait on a fiber or a timer for the rows to land.

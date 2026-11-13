@@ -45,13 +45,13 @@ const verify = (home: string, result: ReturnType<typeof command>) => {
 };
 
 describe("P16 app build command", () => {
-  it.effect("scenario: node build.ts exits zero and writes brain.mjs in a fresh folder", () =>
+  it.live("scenario: node build.ts exits zero and writes brain.mjs in a fresh folder", () =>
     Effect.gen(function* () {
       const home = yield* fixture;
       verify(home, command(home));
     }),
   );
-  it.effect("scenario: plant a parameter property in the real command and reject Node's import failure", () =>
+  it.live("scenario: plant a parameter property in the real command and reject Node's import failure", () =>
     Effect.gen(function* () {
       const home = yield* fixture,
         file = join(home, "build.ts");

@@ -83,7 +83,7 @@ const spyOnFetch = (impl: typeof fetch) =>
 const buildsPair = Schema.Tuple([Schema.NonEmptyString, Schema.NonEmptyString]);
 const pinned: ReadonlyArray<readonly [string, string]> = [["build-a", "build-b"]];
 
-it.effect.prop(
+it.live.prop(
   "a later dev command links its first start to the last runtime in that home",
   [buildsPair],
   ([generated]) =>
@@ -134,7 +134,7 @@ it.effect.prop(
   { arbitrary: { seed: 119120, runs: 20 } },
 );
 
-it.effect.prop(
+it.live.prop(
   "instance readiness waits for the started event to reach the ledger",
   [Schema.String.check(Schema.isUUID())],
   ([build]) =>
