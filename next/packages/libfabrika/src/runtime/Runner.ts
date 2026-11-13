@@ -985,12 +985,13 @@ export class ProgramRunner extends Context.Service<
           if (!inNoticeSpace(id)) {
             const port = inputPort(state, m);
 
-            if (port === undefined || !port.write || port.personOnly || !(yield* state.loaded.execution.admit(m))) {
+            if (port === undefined || !port.write || port.personOnly) {
               return refused;
             }
           }
 
-          return yield* state.loaded.execution.step(model, m).pipe(
+          return yield* (inNoticeSpace(id) ? Effect.succeed(true) : state.loaded.execution.admit(m)).pipe(
+            Effect.flatMap((admitted) => (admitted ? state.loaded.execution.step(model, m) : Effect.succeed(refused))),
             Effect.catchIf(
               (error) => error.reason === "step" && error.source === undefined,
               () => Effect.succeed(refused),
