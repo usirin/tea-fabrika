@@ -27,21 +27,43 @@
 //       push         botpush.mjs, to the branch (to its -wip backup for a mid-lane handover, and
 //                    stop there)
 //       pr           open the PR from the body file, or update the open one
-//       catchup      catchup.sh <pr> <ticket>, which waits for CI and squash-lands
+//       queue        as `land.ts queue <pr> --wait` below
+//
+//   land.ts queue <pr> [--wait]
+//     the lead session, for any pull request whose steps passed (pr/Queue.ts, 0162): refuses one
+//     that is closed, a draft or not into main; leak-greps its net change, each of its commits and
+//     its title and description, which become the squash commit's text; reads `ci-required` at its
+//     head, once, or with --wait again each minute for up to an hour, in the background; then one
+//     `gh pr merge --squash --match-head-commit <head>`, which adds it to GitHub's merge queue.
+//     It prints `queued`, never `merged`: GitHub tests it on newest main and merges it later. No
+//     --admin, no --auto, no other merge method.
+//
+//   land.ts merged <pr>...
+//     the lead session, later: one read of each pull request, no wait. Merged into main: closes
+//     each ticket its description names on a line of its own, `fabrika close ticket <N>`, with a
+//     comment naming the pull request and its merge commit (0015), and starts one box cleanup sweep
+//     (`gcloop.ts kick`, 0101), which removes the lane's boxes and worktree. Not merged: one line
+//     saying how it stands. Running it again closes nothing twice.
 //
 // Every refusal before the push puts the tree's HEAD and refs/notes/fabrika back where they were,
 // so a refused run changes nothing. It never resolves a conflict and never reads a key.
 //
 // Each part is an exported Effect (readReady, checkTree, draftPr, mergeMain, leakCheck, signLead,
-// push, openPr, catchup), so the lead's flows (0064, ticket 656) can run them as steps; `run` only
+// push, openPr, queue), so the lead's flows (0064, ticket 656) can run them as steps; `run` only
 // calls them in order.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, DateTime, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
+import { Console, DateTime, Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
+import * as ChecksGh from "./ci/ChecksGh.ts";
+import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
+import * as PushesProcess from "./pr/PushesProcess.ts";
+import * as Queue from "./pr/Queue.ts";
+import * as SweepsProcess from "./pr/SweepsProcess.ts";
+import * as TicketsCli from "./pr/TicketsCli.ts";
 
-const Check = Schema.Literals(["env", "ready", "check", "leak", "fetch", "merge", "sign", "push", "pr", "catchup"]);
+const Check = Schema.Literals(["env", "ready", "check", "leak", "fetch", "merge", "sign", "push", "pr", "queue"]);
 
 class Refused extends Schema.TaggedError<Refused>()("Refused", {
   check: Check,
@@ -117,11 +139,11 @@ const HERE = import.meta.dirname;
 const loadEnv = Effect.gen(function* () {
   const out = yield* must("env", "env.sh failed", HERE, "sh", [
     "-c",
-    '. "$0" && printf "%s\\n%s\\n%s\\n%s\\n%s\\n" "$MAIN" "$BOXES" "$GH_REPO" "$FABRIKA_COAUTHOR" "$HOME"',
+    '. "$0" && printf "%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n" "$MAIN" "$BOXES" "$GH_REPO" "$FABRIKA_COAUTHOR" "$HOME" "${FABRIKA_HOME:-$HOME/Library/Application Support/@kampus/fabrika-app}"',
     `${HERE}/env.sh`,
   ]);
-  const [MAIN = "", BOXES = "", GH_REPO = "", COAUTHOR = "", HOME = ""] = out.split("\n");
-  return { MAIN, BOXES, GH_REPO, COAUTHOR, HOME };
+  const [MAIN = "", BOXES = "", GH_REPO = "", COAUTHOR = "", HOME = "", TRACKER_HOME = ""] = out.split("\n");
+  return { MAIN, BOXES, GH_REPO, COAUTHOR, HOME, TRACKER_HOME };
 });
 
 const lastLines = (output: string) => output.trimEnd().split("\n").slice(-30).join("\n");
@@ -520,22 +542,30 @@ export const openPr = Effect.fn("land.openPr")(function* (
   return number;
 });
 
-/** Runs catchup.sh, which waits for CI on the pushed head and squash-lands it. */
-export const catchup = Effect.fn("land.catchup")(function* ({ ticket, ready }: Lane, pr: number) {
-  const code = yield* Effect.scoped(
-    Effect.flatMap(
-      ChildProcess.make("sh", [`${HERE}/catchup.sh`, String(pr), ticket], {
-        cwd: ready.tree,
-        stdout: "inherit",
-        stderr: "inherit",
-      }),
-      (h) => h.exitCode,
-    ),
-  ).pipe(Effect.mapError(() => new Refused({ check: "catchup", reason: "catchup.sh could not start", output: "" })));
+type Env = Effect.Success<typeof loadEnv>;
 
-  if (Number(code) !== 0) {
-    return yield* new Refused({ check: "catchup", reason: `catchup.sh ${pr} ${ticket} exited ${code}`, output: "" });
-  }
+/** The services the queue's two acts run on: GitHub through `gh`, the repo's own scripts, the tracker. */
+const queueServices = (env: Env) =>
+  Layer.mergeAll(
+    PullRequestsGh.layer(env.GH_REPO, env.MAIN),
+    PushesProcess.layer(HERE),
+    ChecksGh.layer(env.GH_REPO),
+    TicketsCli.layer(env.MAIN, env.TRACKER_HOME),
+    SweepsProcess.layer(HERE),
+  );
+
+/**
+ * Adds pull request `pr` to GitHub's merge queue (pr/Queue.ts): the leak checks, `ci-required`
+ * green at its head, then one pinned squash. With `wait`, the check is given the lane's hour to end.
+ * `dir` is the checkout the head is fetched into: the main checkout unless a lane names its tree.
+ */
+export const queue = Effect.fn("land.queue")(function* (env: Env, pr: number, wait: boolean, dir = env.MAIN) {
+  return yield* Queue.add({ dir, pr, ...(wait ? { wait: Queue.LANE_WAIT } : {}) }).pipe(
+    Effect.provide(queueServices(env)),
+    Effect.mapError(
+      (e) => new Refused({ check: e._tag === "LeakGrepRefused" ? "leak" : "queue", reason: e.reason, output: "" }),
+    ),
+  );
 });
 
 /** Puts HEAD and the notes back as they were before the merge: the tree was clean, so nothing else is lost. */
@@ -577,13 +607,40 @@ const run = Command.make(
     }
 
     const pr = yield* openPr(lane, draft);
-    yield* say(`PR https://github.com/${lane.env.GH_REPO}/pull/${pr}; catchup.sh ${pr} ${ticket}`);
-    yield* catchup(lane, pr);
-    yield* say(`landed PR ${pr}`);
+    yield* say(
+      `PR https://github.com/${lane.env.GH_REPO}/pull/${pr}; waiting for ${Queue.REQUIRED} to add it to the queue`,
+    );
+    yield* say(Queue.line(yield* queue(lane.env, pr, true, lane.ready.tree)));
   }),
 );
 
-const land = Command.make("land").pipe(Command.withSubcommands([ready, run]));
+const PrNumber = Argument.Int("pr");
+
+const queueCommand = Command.make(
+  "queue",
+  { pr: PrNumber, wait: Flag.Boolean("wait") },
+  Effect.fn("land.queueCommand")(function* ({ pr, wait }) {
+    yield* Console.log(Queue.line(yield* queue(yield* loadEnv, pr, wait)));
+  }),
+);
+
+const merged = Command.make(
+  "merged",
+  { prs: PrNumber.pipe(Argument.atLeast(1)) },
+  Effect.fn("land.merged")(function* ({ prs }) {
+    const env = yield* loadEnv;
+
+    for (const pr of prs) {
+      const settled = yield* Queue.settle({ repo: env.GH_REPO, pr }).pipe(
+        Effect.provide(queueServices(env)),
+        Effect.mapError((e) => new Refused({ check: "queue", reason: e.reason, output: "" })),
+      );
+      yield* Console.log(settled.lines.join("\n"));
+    }
+  }),
+);
+
+const land = Command.make("land").pipe(Command.withSubcommands([ready, run, queueCommand, merged]));
 
 if (import.meta.main) {
   NodeRuntime.runMain(

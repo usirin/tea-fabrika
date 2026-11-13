@@ -16,8 +16,10 @@ export const layer = (scripts: string): Layer.Layer<Pushes, never, ChildProcessS
     Pushes,
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-      const ran = (cmd: string, args: ReadonlyArray<string>, cwd: string) =>
-        run(cmd, args, cwd).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
+      const ran = (cmd: string, args: ReadonlyArray<string>, cwd: string, stdin?: string) =>
+        run(cmd, args, cwd, stdin === undefined ? {} : { stdin }).pipe(
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        );
 
       const leakGrep = Effect.fn("PushesProcess.leakGrep")(
         function* (dir: string, head: string) {
@@ -31,6 +33,46 @@ export const layer = (scripts: string): Layer.Layer<Pushes, never, ChildProcessS
           Effect.fail(new LeakGrepRefused({ reason: `leakgrep.sh could not start: ${e.message}` })),
         ),
       );
+
+      const refusedToStart = Effect.catchTag("PlatformError", (e: { readonly message: string }) =>
+        Effect.fail(new LeakGrepRefused({ reason: `the leak grep could not start: ${e.message}` })),
+      );
+
+      const leakChange = Effect.fn("PushesProcess.leakChange")(function* (dir: string, head: string) {
+        const fetched = yield* ran("git", ["-C", dir, "fetch", "-q", "origin", "main", head], dir);
+
+        if (fetched.code !== 0) {
+          return yield* new LeakGrepRefused({ reason: `main and ${head} could not be fetched: ${lastLine(fetched)}` });
+        }
+
+        // The diff is read whole before the grep starts, so a diff that fails is never an empty pass.
+        const range = `origin/main...${head}`;
+        const diff = yield* ran(
+          "git",
+          ["-C", dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=0", range],
+          dir,
+        );
+
+        if (diff.code !== 0) {
+          return yield* new LeakGrepRefused({ reason: `the diff ${range} does not read: ${lastLine(diff)}` });
+        }
+
+        const grep = yield* ran("sh", [`${scripts}/leakgrep.sh`], dir, `${diff.out}\n`);
+
+        if (grep.code !== 0) {
+          return yield* new LeakGrepRefused({ reason: `leakgrep.sh exited ${grep.code}: ${lastLine(grep)}` });
+        }
+      }, refusedToStart);
+
+      const leakText = Effect.fn("PushesProcess.leakText")(function* (dir: string, text: string) {
+        const grep = yield* ran("sh", [`${scripts}/leakgrep.sh`, "--text", "/dev/stdin"], dir, text);
+
+        if (grep.code !== 0) {
+          return yield* new LeakGrepRefused({
+            reason: `leakgrep.sh --text exited ${grep.code}: ${lastLine(grep)}`,
+          });
+        }
+      }, refusedToStart);
 
       const step = Effect.fn("PushesProcess.step")(function* (cmd: string, args: ReadonlyArray<string>, dir: string) {
         const pushed = yield* ran(cmd, args, dir);
@@ -56,6 +98,6 @@ export const layer = (scripts: string): Layer.Layer<Pushes, never, ChildProcessS
         ),
       );
 
-      return Pushes.of({ leakGrep, push });
+      return Pushes.of({ leakGrep, leakChange, leakText, push });
     }),
   );

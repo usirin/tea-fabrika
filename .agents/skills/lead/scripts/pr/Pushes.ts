@@ -17,6 +17,13 @@ export class Pushes extends Context.Service<
   {
     /** leakgrep.sh on each commit of `origin/main..head` in the checkout `dir`. */
     readonly leakGrep: (dir: string, head: string) => Effect.Effect<void, LeakGrepRefused>;
+    /**
+     * leakgrep.sh on the net change `origin/main...head` in the checkout `dir`, after fetching main
+     * and `head` from origin: what a squash of `head` would add to main.
+     */
+    readonly leakChange: (dir: string, head: string) => Effect.Effect<void, LeakGrepRefused>;
+    /** leakgrep.sh `--text` on words about to be public, such as a pull request's title and description. */
+    readonly leakText: (dir: string, text: string) => Effect.Effect<void, LeakGrepRefused>;
     /** Pushes `head` to `branch` on origin, with the step notes, from the checkout `dir`. */
     readonly push: (dir: string, branch: string, head: string) => Effect.Effect<void, PushRefused>;
   }
