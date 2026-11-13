@@ -1,7 +1,7 @@
 ---
 id: 0161
 title: Today's hand-run tooling makes plain commits, with no step signature and no bot, and the rule that nobody writes their own exam stays as practice until next/'s own pipeline holds it
-status: amended-in-part by [0164](0164-the-bot-stays-without-signing.md)
+status: amended-in-part by [0164](0164-the-bot-stays-without-signing.md), [0177](0177-fix-round-is-one-agent.md)
 date: 2026-11-13
 tags: [signing, commits, bot, push, lead, hand-run, exam, merge, friction]
 ---
