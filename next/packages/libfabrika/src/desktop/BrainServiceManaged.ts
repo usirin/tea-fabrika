@@ -11,6 +11,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Id from "../Id.ts";
 import * as Declarations from "../settings/Declarations.ts";
@@ -61,48 +62,61 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
   const translate = (cause: BrainControlError | BrainProbeError) =>
     cause.reason._tag === "Conflict" || cause.reason._tag === "Foreign" ? "Conflict" : "Operation";
   const Failed = Schema.TaggedUnion({ Conflict: {}, Operation: {} });
-  const command = Effect.fnUntraced(function* (cmd: BrainLife.Command, action: "up" | "stop") {
-    const began = yield* Clock.currentTimeMillis;
-    yield* Effect.annotateCurrentSpan({
-      "fab.action": action,
-      "fab.build": spec.build,
-      "fab.settings": settings.hash,
-      "fab.cmd": cmd.id,
-      "fab.command": cmd.type,
-      "fab.sentAt": String(began),
-    });
-    const work: Effect.Effect<
-      void | typeof Status.Type | typeof Readiness.Type | typeof Children.Type,
-      BrainControlError | BrainProbeError
-    > = cmd.type === "ready" ? probe.ready : cmd.type === "cleanup" ? probe.cleanup : control[cmd.type];
-    const answer = yield* work.pipe(Effect.result);
-    const at = yield* Clock.currentTimeMillis;
-    yield* Effect.annotateCurrentSpan({
-      "fab.elapsed": at - began,
-      "fab.result": answer._tag === "Failure" ? answer.failure.reason._tag : "success",
-    });
+  const command = Effect.fnUntraced(
+    function* (cmd: BrainLife.Command, action: "up" | "stop") {
+      const began = yield* Clock.currentTimeMillis;
+      yield* Effect.annotateCurrentSpan({
+        "fab.action": action,
+        "fab.build": spec.build,
+        "fab.settings": settings.hash,
+        "fab.cmd": cmd.id,
+        "fab.command": cmd.type,
+        "fab.sentAt": String(began),
+      });
+      const work: Effect.Effect<
+        void | typeof Status.Type | typeof Readiness.Type | typeof Children.Type,
+        BrainControlError | BrainProbeError,
+        Scope.Scope
+      > = cmd.type === "ready" ? probe.ready : cmd.type === "cleanup" ? probe.cleanup : control[cmd.type];
+      const answer = yield* work.pipe(Effect.result);
+      const at = yield* Clock.currentTimeMillis;
+      yield* Effect.annotateCurrentSpan({
+        "fab.elapsed": at - began,
+        "fab.result": answer._tag === "Failure" ? answer.failure.reason._tag : "success",
+      });
 
-    if (answer._tag === "Failure") {
-      if (answer.failure.reason._tag === "Command" && answer.failure.reason.code !== undefined) {
-        yield* Effect.annotateCurrentSpan("fab.native.code", answer.failure.reason.code);
+      if (answer._tag === "Failure") {
+        if (answer.failure.reason._tag === "Command" && answer.failure.reason.code !== undefined) {
+          yield* Effect.annotateCurrentSpan("fab.native.code", answer.failure.reason.code);
+        }
+
+        if (answer.failure.reason._tag === "Command" && answer.failure.reason.signal !== undefined) {
+          yield* Effect.annotateCurrentSpan("fab.native.signal", answer.failure.reason.signal);
+        }
+
+        const error = translate(answer.failure);
+        return {
+          cause: Redacted.make(answer.failure),
+          cmds: yield* send({ type: `${cmd.type}_err`, cmd, error: Failed.cases[error].make({}), at } as BrainLife.Msg),
+        };
       }
 
-      if (answer.failure.reason._tag === "Command" && answer.failure.reason.signal !== undefined) {
-        yield* Effect.annotateCurrentSpan("fab.native.signal", answer.failure.reason.signal);
+      const cmds = yield* send({ type: `${cmd.type}_ok`, cmd, value: answer.success ?? null, at } as BrainLife.Msg);
+
+      if (cmd.type === "remove" && model._tag === "failed_stop") {
+        return yield* new BrainServiceError({
+          reason: new Timeout({ action: "stop", cause: Redacted.make("deadline") }),
+        });
       }
 
-      const error = translate(answer.failure);
       return {
-        cause: Redacted.make(answer.failure),
-        cmds: yield* send({ type: `${cmd.type}_err`, cmd, error: Failed.cases[error].make({}), at } as BrainLife.Msg),
+        cause: null,
+        cmds,
       };
-    }
-
-    return {
-      cause: null,
-      cmds: yield* send({ type: `${cmd.type}_ok`, cmd, value: answer.success ?? null, at } as BrainLife.Msg),
-    };
-  }, Effect.withSpan("BrainService.command"));
+    },
+    Effect.scoped,
+    Effect.withSpan("BrainService.command"),
+  );
   const flush = sink.flush.pipe(
     Effect.provideService(RecordManager, records),
     Effect.provideService(Archive, archive),

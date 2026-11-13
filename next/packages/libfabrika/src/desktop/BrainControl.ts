@@ -6,6 +6,7 @@
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
 
 /**
  * A loaded job remains loaded even while it has no process.
@@ -121,6 +122,7 @@ export class BrainControl extends Context.Service<
     readonly install: Effect.Effect<void, BrainControlError>;
     readonly start: Effect.Effect<void, BrainControlError>;
     readonly stop: Effect.Effect<void, BrainControlError>;
-    readonly remove: Effect.Effect<void, BrainControlError>;
+    /** Keeps removal reversible until the caller's scope succeeds. */
+    readonly remove: Effect.Effect<void, BrainControlError, Scope.Scope>;
   }
 >()("@kampus/libfabrika/desktop/BrainControl") {}

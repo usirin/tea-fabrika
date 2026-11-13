@@ -235,40 +235,37 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
 
     yield* success("/bin/launchctl", ["bootout", `${yield* domain}/${label}`]);
   }).pipe(Effect.asVoid);
-  const remove = Effect.scoped(
-    Effect.gen(function* () {
-      yield* canonical;
-      const before = yield* existing;
+  const remove = Effect.gen(function* () {
+    yield* canonical;
+    const before = yield* existing;
 
-      if (before === null) {
-        return;
-      }
+    if (before === null) {
+      return;
+    }
 
-      const compiled = yield* compile();
+    const compiled = yield* compile();
 
-      if (before !== compiled.bytes || (yield* existing) !== before) {
-        return yield* conflict("plist changed before removal");
-      }
+    if (before !== compiled.bytes || (yield* existing) !== before) {
+      return yield* conflict("plist changed before removal");
+    }
 
-      // A cancelled removal keeps the matching plist available for inspection and retry.
-      yield* Effect.acquireRelease(
-        fs.link(plist, `${compiled.xml}.previous`).pipe(Effect.mapError(storage)),
-        (_, exit) =>
-          Exit.isSuccess(exit)
-            ? Effect.void
-            : fs.link(`${compiled.xml}.previous`, plist).pipe(
-                Effect.catchReason("PlatformError", "AlreadyExists", () => Effect.void),
-                Effect.mapError(storage),
-                Effect.orDie,
-              ),
-      );
+    const restore = fs.link(`${compiled.xml}.previous`, plist).pipe(
+      Effect.catchReason("PlatformError", "AlreadyExists", () => Effect.void),
+      Effect.mapError(storage),
+      Effect.orDie,
+    );
+    // Keep the backup until the lifecycle accepts the reply, including its deadline check.
+    yield* Effect.acquireRelease(fs.link(plist, `${compiled.xml}.previous`).pipe(Effect.mapError(storage)), (_, exit) =>
+      Exit.isSuccess(exit) ? Effect.void : restore,
+    );
+    yield* Effect.gen(function* () {
       yield* fs.remove(plist).pipe(
         Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
         Effect.mapError(storage),
       );
       yield* syncHome;
-    }),
-  );
+    }).pipe(Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : restore)));
+  });
   return BrainControl.of({ inspect, install, start, stop, remove });
 });
 
