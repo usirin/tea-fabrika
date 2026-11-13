@@ -1,9 +1,9 @@
-import * as Digest from "effect/crypto/Digest";
 /**
  * Scoped native commands and exclusive home-owned plist publication.
  *
  * @stability unstable
  */
+import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";

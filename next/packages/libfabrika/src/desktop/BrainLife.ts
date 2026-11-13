@@ -111,7 +111,7 @@ const Msg = Schema.Union([
   ...responses("remove", Schema.Null),
 ]);
 /**
- * Requests and settled replies accepted by the lifecycle.
+ * Requests, clock observations and settled replies accepted by the lifecycle.
  *
  * @stability unstable
  * @category models

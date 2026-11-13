@@ -8,14 +8,14 @@ import type * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 /**
- * Readiness for the expected instance, including its identity.
+ * Schema for a readiness answer about the expected instance: still waiting, or ready.
  *
  * @stability unstable
  * @category schemas
  */
 export const Readiness = Schema.TaggedUnion({ waiting: {}, ready: {} });
 /**
- * Confirmation that all owned groups and the listener have gone.
+ * Schema for an owned-resource answer: still waiting, or every owned group and the listener gone.
  *
  * @stability unstable
  * @category schemas

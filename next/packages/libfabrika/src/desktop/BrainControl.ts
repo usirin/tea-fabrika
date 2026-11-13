@@ -9,7 +9,8 @@ import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 
 /**
- * A loaded job remains loaded even while it has no process.
+ * Schema for the job's state in the service manager: absent, or loaded with its executable,
+ * arguments, home and configuration. A loaded job remains loaded even while it has no process.
  *
  * @stability unstable
  * @category schemas
@@ -85,14 +86,14 @@ export class Command extends Schema.TaggedError<Command>()("Command", {
  */
 export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
 /**
- * Unrecognized service-manager output.
+ * Service-manager output, or a job value, that cannot be read or written without guessing.
  *
  * @stability unstable
  * @category errors
  */
 export class Unsupported extends Schema.TaggedError<Unsupported>()("Unsupported", { cause: Schema.Defect() }) {}
 /**
- * The job or file belongs to another configuration.
+ * The job or its file belongs to another configuration, or the home is not canonical.
  *
  * @stability unstable
  * @category errors

@@ -65,6 +65,13 @@ export const gatewayWindow = Setting.make("gateway.window", {
   since: "0.0.0",
 });
 
+/**
+ * Setting for the delay in whole seconds that the service manager waits between crash restarts
+ * of the local brain.
+ *
+ * @stability unstable
+ * @category settings
+ */
 export const brainThrottle = Setting.make("desktop.brain-throttle", {
   schema: Positive,
   default: 2,
@@ -74,6 +81,13 @@ export const brainThrottle = Setting.make("desktop.brain-throttle", {
   since: "0.0.0",
 });
 
+/**
+ * Setting for the interval in milliseconds between two readiness or shutdown checks of the local
+ * brain. A native command that is interrupted gets the same interval to exit before it is killed.
+ *
+ * @stability unstable
+ * @category settings
+ */
 export const brainPoll = Setting.make("desktop.brain-poll", {
   schema: Positive,
   default: 100,
@@ -83,6 +97,13 @@ export const brainPoll = Setting.make("desktop.brain-poll", {
   since: "0.0.0",
 });
 
+/**
+ * Setting for the most milliseconds one attempt to start or reuse the local brain may take
+ * before it fails.
+ *
+ * @stability unstable
+ * @category settings
+ */
 export const brainStartTimeout = Setting.make("desktop.brain-start-timeout", {
   schema: Positive,
   default: 60000,
@@ -92,6 +113,13 @@ export const brainStartTimeout = Setting.make("desktop.brain-start-timeout", {
   since: "0.0.0",
 });
 
+/**
+ * Setting for the most milliseconds one stop may take to confirm that the local brain and what
+ * it owns are gone, before it fails.
+ *
+ * @stability unstable
+ * @category settings
+ */
 export const brainStopTimeout = Setting.make("desktop.brain-stop-timeout", {
   schema: Positive,
   default: 5000,

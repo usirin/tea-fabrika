@@ -30,7 +30,7 @@ export class Timeout extends Schema.TaggedError<Timeout>()("Timeout", {
 }) {}
 
 /**
- * Another job or listener owns the requested resource.
+ * Another job, file or listener owns the requested resource.
  *
  * @stability unstable
  * @category errors
