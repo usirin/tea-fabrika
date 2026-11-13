@@ -55,7 +55,7 @@ import { Children, INPUT_BYTES, Started } from "../processes/Children.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { ProcessName } from "../processes/Process.ts";
 import { MailRefusal } from "../processes/ProgramMail.ts";
-import type { Accounting } from "../processes/Quotas.ts";
+import { QuotasError, RecoveryReserveExhausted, type Accounting } from "../processes/Quotas.ts";
 import * as Chaos from "./Chaos.ts";
 import {
   Alarm,
@@ -428,7 +428,7 @@ export class ProgramRunner extends Context.Service<
           }
 
           const wake = running ? (live?.wake ?? null) : null;
-          const next = wake === null ? until : until === null ? wake : Math.min(wake, until);
+          const next = retryAt ?? (wake === null ? until : until === null ? wake : Math.min(wake, until));
 
           if (alarmAt === next) {
             return;
@@ -436,6 +436,10 @@ export class ProgramRunner extends Context.Service<
 
           yield* alarm.set(next);
           alarmAt = next;
+        });
+        const waitForRoom = Effect.gen(function* () {
+          const backoff = supervision?.policy.backoff.minMs ?? defaultPolicy.backoff.minMs;
+          yield* setAlarm((yield* Clock.currentTimeMillis) + backoff);
         });
         const adopt = Effect.fnUntraced(function* (id: string, build: string) {
           if (process.id === id && process.build === build) {
@@ -812,12 +816,24 @@ export class ProgramRunner extends Context.Service<
                     : typeof original;
             const down = wrapped instanceof ProgramDown ? wrapped : new ProgramDown({ reason, cause: original });
             const failure = (reason === "step" ? Failure.cases.fresh : Failure.cases.saved).make({ ...attempt, error });
-            // The step's own failure is the answer; a later recovery write's failure never replaces it.
+            // A reserve fault reports the brain's stop, keeping the failed step as its cause.
             yield* observed(
               { type: "threw", seq: attempt.seq, error, reason: fromFailure(failure), from: meta },
               attempt.process,
               { failure, content: original },
-            ).pipe(Effect.mapError(() => down));
+            ).pipe(
+              Effect.mapError((error) => {
+                const quota =
+                  error instanceof QuotasError
+                    ? error
+                    : error instanceof LedgerError && error.cause instanceof QuotasError
+                      ? error.cause
+                      : undefined;
+                return quota?.reason._tag === "RecoveryReserveExhausted"
+                  ? new QuotasError({ reason: new RecoveryReserveExhausted({ ...quota.reason, cause: down }) })
+                  : down;
+              }),
+            );
             return yield* down;
           }
 
@@ -1544,7 +1560,7 @@ export class ProgramRunner extends Context.Service<
                       live = next;
                     }
 
-                    yield* setAlarm();
+                    yield* waitForRoom;
                     return [] as ReadonlyArray<Dispatched>;
                   }),
                 ),
@@ -1762,7 +1778,7 @@ export class ProgramRunner extends Context.Service<
                 const { fresh } = yield* catchUp(state, { mine: id });
                 return { answer: undefined, jobs: [...sends, ...fresh] };
               }).pipe(
-                Effect.catchTag("QuotaWaiting", () => Effect.as(setAlarm(), { answer: undefined, jobs: [] })),
+                Effect.catchTag("QuotaWaiting", () => Effect.as(waitForRoom, { answer: undefined, jobs: [] })),
                 // A storage failure while draining leaves the alarm that tries it again.
                 Effect.onExit((exit) =>
                   exit._tag === "Failure" &&
@@ -1972,7 +1988,15 @@ export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError"
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
-type RunnerFailure = LedgerError | ProgramDown | RunnerError | SinkError | ProcessError | NotGranted | RepliesError;
+type RunnerFailure =
+  | LedgerError
+  | ProgramDown
+  | RunnerError
+  | SinkError
+  | ProcessError
+  | NotGranted
+  | RepliesError
+  | QuotasError;
 
 const cmdType = (job: Dispatched): string =>
   Option.match(decodeTyped(job.cmd), { onNone: () => "", onSome: (c) => c.type });

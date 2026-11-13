@@ -4,7 +4,6 @@
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import type { LedgerError } from "../ledger/Ledger.ts";
 
 /** A program's exhausted allowance.
  * @stability unstable
@@ -89,7 +88,8 @@ export interface Use {
  * @category models
  */
 export interface Accounting {
-  readonly check: Effect.Effect<void, LedgerError>;
+  readonly check: Effect.Effect<void, QuotasError>;
+  readonly recordFault: (fault: RecoveryReserveExhausted) => Effect.Effect<void, QuotasError>;
   readonly change: (operation: string, writes: number, bytes: number, at: number, recovery?: boolean) => void;
   readonly protect: <A>(step: () => A) => A;
   readonly status: Effect.Effect<

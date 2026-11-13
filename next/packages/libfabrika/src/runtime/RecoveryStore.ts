@@ -1,6 +1,6 @@
 import { Context, Effect, Layer, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
-import type { Accounting } from "../processes/Quotas.ts";
+import { QuotasError, type Accounting } from "../processes/Quotas.ts";
 import { type Sql } from "../Sql.ts";
 import { Receipt } from "./internal/recovery.ts";
 import { Supervision } from "./internal/supervisor.ts";
@@ -16,10 +16,10 @@ type Journal<S extends Kept> = Schema.Codec<S, unknown> & {
 };
 
 type Store<S extends Kept> = {
-  readonly load: Effect.Effect<S | null, LedgerError>;
-  readonly save: (value: unknown) => Effect.Effect<void, LedgerError>;
-  readonly input: (letter: string) => Effect.Effect<Schema.Json | null, LedgerError>;
-  readonly receipt: (letter: string) => Effect.Effect<Receipt | null, LedgerError>;
+  readonly load: Effect.Effect<S | null, LedgerError | QuotasError>;
+  readonly save: (value: unknown) => Effect.Effect<void, LedgerError | QuotasError>;
+  readonly input: (letter: string) => Effect.Effect<Schema.Json | null, LedgerError | QuotasError>;
+  readonly receipt: (letter: string) => Effect.Effect<Receipt | null, LedgerError | QuotasError>;
 };
 
 const decodeReceipt = Schema.decodeUnknownSync(Schema.fromJsonString(Receipt));
@@ -71,7 +71,7 @@ export const recoveryStore = <S extends Kept>(
         return options.accounting === undefined ? f() : options.accounting.protect(f);
       },
       catch: (error) =>
-        error instanceof LedgerError
+        error instanceof LedgerError || error instanceof QuotasError
           ? error
           : new LedgerError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", cause: error }),
     });
@@ -245,5 +245,7 @@ export const recovering = (sql: Sql): boolean => {
   }
 
   const [row] = sql.exec("SELECT value FROM process_recovery LIMIT 1");
-  return row === undefined ? false : recoveryState(JSON.parse(String(row.value)));
+  return row === undefined
+    ? false
+    : recoveryState(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(row.value));
 };

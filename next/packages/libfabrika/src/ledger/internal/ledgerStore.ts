@@ -463,5 +463,5 @@ export const committedEntries = (sql: Sql) => {
     return [];
   }
 
-  return sql.exec("SELECT * FROM entries ORDER BY rev").map(Schema.decodeUnknownSync(Row));
+  return sql.exec("SELECT * FROM entries ORDER BY rev").map((row) => decodeRow(row));
 };

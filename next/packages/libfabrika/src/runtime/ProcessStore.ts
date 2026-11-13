@@ -7,7 +7,7 @@ import { lineFor } from "../ledger/Log.ts";
 import { INPUT_BYTES } from "../processes/Children.ts";
 import { type From } from "../processes/Mailbox.ts";
 import { Activity } from "../processes/Process.ts";
-import { Quotas, type Accounting } from "../processes/Quotas.ts";
+import { Quotas, QuotasError, type Accounting } from "../processes/Quotas.ts";
 import { Rev } from "../Rev.ts";
 import { type Sql } from "../Sql.ts";
 import { recovering } from "./RecoveryStore.ts";
@@ -62,11 +62,11 @@ const encodeRecord = Schema.encodeSync(RuntimeRecord);
 
 type ProcessStorage = {
   readonly select: (process: string) => Effect.Effect<ProcessStorage>;
-  readonly readActivity: Effect.Effect<typeof Activity.Type | undefined, LedgerError>;
+  readonly readActivity: Effect.Effect<typeof Activity.Type | undefined, LedgerError | QuotasError>;
   /** Makes the activity marker durable before the runner starts or finishes a step. */
-  readonly activity: (value: typeof Activity.Type) => Effect.Effect<void, LedgerError>;
+  readonly activity: (value: typeof Activity.Type) => Effect.Effect<void, LedgerError | QuotasError>;
   /** The saved checkpoint, or null before the first save. */
-  readonly load: Effect.Effect<Checkpoint | null, LedgerError>;
+  readonly load: Effect.Effect<Checkpoint | null, LedgerError | QuotasError>;
   /** Replaces the checkpoint and adds `placed` to the letter index, in one transaction. */
   readonly save: (
     value: {
@@ -75,17 +75,17 @@ type ProcessStorage = {
       readonly cmds: ReadonlyArray<unknown>;
     },
     placed?: ReadonlyArray<Placed>,
-  ) => Effect.Effect<void, LedgerError>;
+  ) => Effect.Effect<void, LedgerError | QuotasError>;
   /** An accepted letter's first placing, or null when this process never accepted it. */
-  readonly placed: (id: string) => Effect.Effect<Placed | null, LedgerError>;
+  readonly placed: (id: string) => Effect.Effect<Placed | null, LedgerError | QuotasError>;
   /**
    * A letter's first placing by any life in this store, or null. One object's store holds one
    * registered name, so this is every life of that name: a successor keeps its predecessors'
    * accepted history without copying their rows (P34).
    */
-  readonly placedByAny: (id: string) => Effect.Effect<Placed | null, LedgerError>;
+  readonly placedByAny: (id: string) => Effect.Effect<Placed | null, LedgerError | QuotasError>;
   /** Appends one RuntimeRecord to the process's stream. A retry answers its first placing. */
-  readonly record: (id: string, event: unknown, from: From) => Effect.Effect<unknown, LedgerError>;
+  readonly record: (id: string, event: unknown, from: From) => Effect.Effect<unknown, LedgerError | QuotasError>;
 };
 
 export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>()(
@@ -99,9 +99,9 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
       /** The object's storage calls, wrapped in Effect by its platform edge. Node uses SQL. */
       readonly storage?:
         | {
-            readonly put: (key: string, value: unknown) => Effect.Effect<void, LedgerError>;
-            readonly sync: () => Effect.Effect<void, LedgerError>;
-            readonly get?: (key: string) => Effect.Effect<unknown, LedgerError>;
+            readonly put: (key: string, value: unknown) => Effect.Effect<void, LedgerError | QuotasError>;
+            readonly sync: () => Effect.Effect<void, LedgerError | QuotasError>;
+            readonly get?: (key: string) => Effect.Effect<unknown, LedgerError | QuotasError>;
           }
         | undefined;
     },
@@ -128,10 +128,12 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
                   : options.accounting.protect(() => step(clock.currentTimeMillisUnsafe()));
               },
               catch: (error) =>
-                new LedgerError({
-                  reason: Schema.isSchemaError(error) ? "bad_row" : "storage",
-                  cause: error,
-                }),
+                error instanceof LedgerError || error instanceof QuotasError
+                  ? error
+                  : new LedgerError({
+                      reason: Schema.isSchemaError(error) ? "bad_row" : "storage",
+                      cause: error,
+                    }),
             }),
           );
         });

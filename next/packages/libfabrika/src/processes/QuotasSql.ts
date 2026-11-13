@@ -8,7 +8,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import { LedgerError } from "../ledger/Ledger.ts";
 import { Entry, encodedBytes, lineFor } from "../ledger/Log.ts";
 import { accountingEntries } from "../ledger/RefereeSql.ts";
 import { WritePolicy, RuntimeWrite } from "../ledger/WritePolicy.ts";
@@ -391,6 +390,7 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
 
     sql.exec("INSERT OR IGNORE INTO quota_fault (name,value) VALUES (?,?)", options.name, "");
   };
+  initialize();
   const load = (channel: "local" | "recovery") => {
     const [row] = sql.exec("SELECT value FROM quota_local WHERE account=?", channel);
     return row === undefined ? machine(channel).init(null, {})[0] : decode(row.value);
@@ -408,8 +408,6 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
   const error = (cause: unknown) =>
     cause instanceof QuotasError ? cause : new QuotasError({ reason: new Storage({ cause }) });
   const protect = <A>(step: () => A): A => {
-    initialize();
-
     try {
       return step();
     } catch (cause) {
@@ -428,19 +426,37 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
   };
   return {
     protect,
+    recordFault: (failure) =>
+      Effect.try({
+        try: () => {
+          if (fault() !== null) {
+            return;
+          }
+
+          sql.exec(
+            "UPDATE quota_fault SET value=? WHERE name=?",
+            faultEncode({
+              operation: "ledger",
+              writes: failure.resource === "writes" ? failure.required : 0,
+              bytes: failure.resource === "storage" ? failure.required : 0,
+              fault: new RecoveryReserveExhausted({ ...failure, cause: null }),
+            }),
+            options.name,
+          );
+        },
+        catch: error,
+      }),
     check: Effect.try({
       try: () => {
-        initialize();
         const stopped = fault();
 
         if (stopped !== null) {
           throw new QuotasError({ reason: stopped.fault });
         }
       },
-      catch: (cause) => new LedgerError({ reason: "storage", cause }),
+      catch: error,
     }),
     change: (operation, writes, bytes, at, recovery = false) => {
-      initialize();
       const channel = recovery ? "recovery" : "local";
 
       if (writes === 0 && bytes === 0) {
@@ -471,7 +487,6 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
     status: Effect.clockWith((clock) =>
       Effect.try({
         try: () => {
-          initialize();
           const local = load("local");
           const recovery = applyCell(machine("recovery"), load("recovery"), {
             type: "advance",
@@ -486,7 +501,6 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
       Effect.try({
         try: () =>
           sql.transaction(() => {
-            initialize();
             const stopped = fault();
 
             if (stopped === null) {
