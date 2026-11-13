@@ -55,6 +55,13 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+*2026-11-12:* ticket 893 slice 1 in `next/` saves process view watchers across object sleep
+and removes a watch on publish after its Project route leaves. Unknown delivery failures retain
+membership. [The storage pattern](../../.patterns/durable-objects-sleep.md). This finishes no
+Tier 1 row; the count stays 21 of 44. P14's first-window lane next brings this fix into its branch
+and proves a real press after idle updates the window without reload. Socket absence checking is
+slice 2 and remains separate.
+
 *2026-11-12:* P45's slice 1 (ticket 884) merged as [PR 1089](https://github.com/usirin/tea-fabrika/pull/1089), in `next/`: `@kampus/inbox` keeps one row
 per fact in arrival order and declares no client or agent input. It has no window or boot entry.
 Brain letters under `noticeId(...)` reach a program without an input port. Client entry points
