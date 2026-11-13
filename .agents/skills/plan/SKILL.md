@@ -38,6 +38,10 @@ the blank approval line.
 - `plancheck.sh` checks file owners and keeps exam paths with `tests`.
 - When the plan changes a skill (owner, 2026-11-08), a rule code checks or could check becomes a
   check and leaves the prose. Only judgment stays in prose.
+- Name each host-only law: one that can only run on the real machine (launchd, the real Electron
+  app, a real OS process or socket). Say it runs before the first review, and who runs it: the
+  build step, or the lead right after the build ([0178](../../../.decisions/0178-host-only-laws-run-first.md)). A fixture
+  that stands in for a real tool's output comes from a real run and is labeled `vector:`.
 - Screenshots at five layouts when a window changes (`AGENTS.md`, "Shoot more than one layout").
 - End the Size section with `Estimate: <n> steps, $<d>`, the lane's budget: chain.ts stops a lane
   at twice it ([0076](../../../.decisions/0076-a-lane-stops-at-its-budget.md)). `n` is the steps

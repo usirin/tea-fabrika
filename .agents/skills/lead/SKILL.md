@@ -558,6 +558,9 @@ visible, and never weaken the rules to hide this message.
 5. **Run the steps in order,** in the background: tests, build, review (no mutation step, 0066). Each runs
    through `drive.ts`, except a step with Electron or socket work, which a Claude agent runs
    (above). No builder starts before tests that exist. Each brief names its skill.
+   Never start a review while a host-only law the plan names has not passed on a real machine
+   ([0178](../../../.decisions/0178-host-only-laws-run-first.md)). The build runs it, or you run it right after
+   the build (step 7). The owner's Mac may be used for it, with no asking.
    box.sh run --step checks order and slots, and saves the run row.
 6. **After each step:** read drive's last line, the report and the diff, and log the run the same day:
    one row file in `field/runs/` (`fieldrow.py` for Codex, `clauderow.ts` for a Claude agent, a
@@ -572,6 +575,9 @@ visible, and never weaken the rules to hide this message.
    that would have caught it. Running the steps by hand is how `next/`'s pipeline learns.
 7. **Run what the box cannot,** yourself: Electron e2e and screenshots. One Electron app at a time,
    each run with its own short `FABRIKA_HOME`, never `FABRIKA_FOREGROUND=1`. Look at every shot.
+   A host-only law runs here before the first review, never at the end of the lane (0178). On the
+   real machine a test touches only its own label, files and processes: its own temp home and its
+   own test label under launchd, no focus taken, and nothing left behind.
 8. **Ready to land.** A lane agent never signs as lead, pushes, opens the pull request or runs
    catch-up: the permission check refuses a subagent the lead key, and the lane stops
    ([0056](../../../.decisions/0056-lead-runs-a-refused-step-itself.md), ticket 652). Its last act

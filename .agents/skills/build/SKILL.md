@@ -51,7 +51,12 @@ unchanged as its own file in `field/findings/`.
 The test config and typecheck.sh hold worker, home and typecheck limits.
 
 - Step-commit checks staged formatting. Run `pnpm lint` once.
-- Electron cannot start in a box. Reason from the code and say what the lead's rerun must show.
+- A host-only law the plan names runs on the real machine before any review, and the build is not
+  done until it has passed there ([0178](../../../.decisions/0178-host-only-laws-run-first.md)). Run it and
+  report its real output. If you cannot, as in a box, where Electron cannot start, say exactly what
+  stopped it and what the lead's run must show: the lead runs it right after the build.
+- On the real machine a test touches only its own label, files and processes. It uses its own temp
+  home, never takes focus, and leaves nothing behind. One Electron test app at a time.
 
 ## Never
 
