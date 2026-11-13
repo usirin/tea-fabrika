@@ -70,6 +70,12 @@ is not changed. This record amends the note's R1 and R6 where they use the word.
 - Not decided here: what a room of two is called on screen and how it is named; a room between two
   people; the verb `join`; two agents with one name in a room.
 
+## Amendments
+
+- 2026-11-13 (owner): the reason, stated the same day: fabrika is not a chat tool. Private talk,
+  with a person or with an agent, happens outside fabrika, in whatever tool the person picks. The
+  Decision's fourth bullet said only "between two people"; it covers a talk with an agent too.
+
 ## Records
 
 - [`.glossary/TERMS.md`](../.glossary/TERMS.md): the `DM` row.
