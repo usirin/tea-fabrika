@@ -15,7 +15,8 @@ const types = () => {
   expectTypeOf<Contract.PersonCheck["Service"]>().toEqualTypeOf<{
     readonly ask: (reason: string) => Effect.Effect<typeof Contract.Answer.Type, Contract.PersonCheckError>;
   }>();
-  expectTypeOf<typeof Contract.PersonCheckError.Type.reason>().toEqualTypeOf<"unavailable">();
+  expectTypeOf<typeof Contract.PersonCheckError.Type.reason>().toEqualTypeOf<Contract.Unavailable>();
+  expectTypeOf<Contract.Unavailable["cause"]>().toEqualTypeOf<unknown>();
   expectTypeOf<"layer" extends keyof typeof Contract.PersonCheck ? true : false>().toEqualTypeOf<false>();
   expectTypeOf<"layer" extends keyof typeof Contract ? true : false>().toEqualTypeOf<false>();
   expectTypeOf<ReturnType<typeof PersonCheckTest.layer>>().toEqualTypeOf<Layer.Layer<Contract.PersonCheck>>();

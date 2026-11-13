@@ -1,6 +1,6 @@
 // Test-owned sibling Layer. Exhaustion fails closed instead of inventing another checked person.
 import { Effect, Layer } from "effect";
-import { Answer, PersonCheck, PersonCheckError } from "./PersonCheck.ts";
+import { Answer, PersonCheck, PersonCheckError, Unavailable } from "./PersonCheck.ts";
 
 export const layer = (
   answers: ReadonlyArray<"touch" | "click" | "declined" | "unavailable">,
@@ -19,7 +19,9 @@ export const layer = (
           return Answer.cases.declined.make({});
         }
 
-        return yield* new PersonCheckError({ reason: "unavailable", cause: new Error("No test check available") });
+        return yield* new PersonCheckError({
+          reason: new Unavailable({ cause: new Error("No test check available") }),
+        });
       }),
     });
   });
