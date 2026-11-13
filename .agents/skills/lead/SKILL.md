@@ -387,8 +387,8 @@ Measured on a throwaway lane (ticket 522, 2026-11-10, $0.10 at list price): a te
 file was collected and signed as one step commit, a review on the read-only Codex row read it with
 `git diff` and said merge-ready, the chain found the lane's open pull request, and `catchup.sh`
 merged main in, signed it as lead and pushed. A command that fails does not end a turn; only a
-refused ask does. The merge itself was not run: the `commits` check runs only for a pull request
-into main, so catch-up on a scratch base waits for it until its hour is up.
+refused ask does. The merge itself was not run: the `commits` check ran only for a pull request
+into main, so catch-up on a scratch base waited for it until its hour was up. That check is gone (0161).
 
 The mutation step has one wiring spot: `MUTATION_AGENT` and `mutationDraft` in `drive.ts`, under
 the heading `MUTATION WIRING`. `mutationDraft` runs `mutbox.ts` (ticket 483) and then the agent's
