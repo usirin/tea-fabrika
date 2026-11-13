@@ -1,13 +1,23 @@
-// Where an object's old raw health rows go: one R2 bucket, `measurements`, behind our own small interface,
-// so nothing here imports Cloudflare. Tier 1, P37 (law p101). P12 passes the env's R2 binding.
-//
-// R2's `put` takes a `sha256` and fails when the bytes do not match it, and `head` answers the stored
-// checksums. So `put` here answers the hash R2 says it stored, and the sink deletes its local rows
-// only when that equals the hash it worked out itself.
+/**
+ * Where an object's old measurements go: one R2 bucket behind our own small interface, so nothing
+ * here imports Cloudflare. The object's wiring passes the bucket's calls in.
+ *
+ * R2's `put` takes a `sha256` and fails when the bytes do not match it, and `head` answers the
+ * stored checksums. So `put` here answers the hash R2 says it stored, and the sink deletes its
+ * local rows only when that equals the hash it worked out itself.
+ *
+ * @stability unstable
+ */
 import { Context, Effect, Layer, Schema } from "effect";
 import { SinkError } from "./Trace.ts";
 
-/** The two R2 calls the archive makes. R2 fails a `put` whose body does not match `sha256`. */
+/**
+ * The two R2 calls the archive makes, as plain Promise calls. R2 fails a `put` whose body does not
+ * match `sha256`, and `head` answers null when it finds no file.
+ *
+ * @stability unstable
+ * @category models
+ */
 export interface BucketCalls {
   readonly put: (key: string, body: Uint8Array, sha256: string) => Promise<void>;
   readonly head: (key: string) => Promise<{ readonly sha256: string } | null>;
@@ -15,7 +25,17 @@ export interface BucketCalls {
 
 const hex = (bytes: Uint8Array): string => Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 
-/** The body's SHA-256, as lowercase hex. An unnamed `Effect.fn`: the sink's own work ends no span. */
+/**
+ * Computes a body's SHA-256, as lowercase hex.
+ *
+ * **Details**
+ *
+ * It opens no span, since the sink's own work must leave no span for the sink to keep. A WebCrypto
+ * failure is a `SinkError` with `reason: "storage"`.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const sha256 = Effect.fn(function* (body: Uint8Array) {
   const bytes = new Uint8Array(body);
   const fail = (cause: unknown) => new SinkError({ reason: "storage", held: 0, cause });
@@ -28,6 +48,18 @@ export const sha256 = Effect.fn(function* (body: Uint8Array) {
 const Head = Schema.NullOr(Schema.Struct({ sha256: Schema.String }));
 const decodeHead = Schema.decodeUnknownEffect(Head);
 
+/**
+ * Service that stores one file of old measurements and says what the store holds afterwards.
+ *
+ * **Details**
+ *
+ * `put` answers the hash the store reports, never the hash of what was sent. The sink deletes its
+ * local rows only when that hash equals the one it worked out itself, so a lost or damaged upload
+ * costs a retry and no data.
+ *
+ * @stability unstable
+ * @category services
+ */
 export class Archive extends Context.Service<
   Archive,
   {
