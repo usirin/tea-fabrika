@@ -4,8 +4,30 @@ import { fileURLToPath } from "node:url";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { BaseSequencer, createVitest } from "vitest/node";
+import { nextFiles } from "./.github/ci/shard-rows.ts";
 import { inLaneStep } from "./.github/ci/workflow-lint.ts";
 import { assign, measured, Shards, wall, WORKERS, restLoads } from "./vitest.shards.ts";
+
+it("scenario: L6 the six measured heaviest next files occupy six machines with bounded loads", () => {
+  // Today's CI: the real file set and the heaviest six from the plan's two green main runs.
+  // Keep these names independent of the table so an accidentally tiny row cannot hide the file.
+  const heaviest = [
+    "next/packages/libfabrika/src/node/StartChild.test.ts",
+    "next/apps/fabrika/src/chaos.laws.test.ts",
+    "next/packages/libfabrika/src/node/ProgramMailRuntime.test.ts",
+    "next/apps/fabrika/src/instance-wire.test.ts",
+    "next/packages/libfabrika/src/node/Replies.test.ts",
+    "next/apps/fabrika/src/start-child.laws.test.ts",
+  ];
+  const files = nextFiles(import.meta.dirname).map((path) => ({ path, seconds: measured[path] ?? 1 }));
+  const placed = assign(files, 6);
+  expect(new Set(heaviest.map((path) => placed[files.findIndex((file) => file.path === path)]))).toHaveLength(6);
+  const loads = Array.from({ length: 6 }, (_, machine) =>
+    files.reduce((sum, file, index) => sum + (placed[index] === machine ? file.seconds : 0), 0),
+  );
+  const mean = loads.reduce((sum, load) => sum + load, 0) / 6;
+  expect(Math.max(...loads)).toBeLessThanOrEqual(mean + Math.max(...files.map((file) => file.seconds)));
+});
 
 it("vector: next medians and four provisional split estimates match the recorded main runs", () => {
   // Today's CI, both versions. Main runs 42717511599, 42716453289 and 42715921306.

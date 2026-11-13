@@ -614,11 +614,9 @@ describe("P12 real dev.ts wire", () => {
     const s = await instance(),
       c = await connected(s),
       pid = await counter(c);
-    const accepted: Array<{ rev: number; pos: number }> = [];
-
-    for (let n = 0; n < PAGE + 3; n++) {
-      accepted.push(placing(await send(c, pid, `page-${n}`)));
-    }
+    const accepted = (await Promise.all(Array.from({ length: PAGE + 3 }, (_, n) => send(c, pid, `page-${n}`)))).map(
+      placing,
+    );
 
     const first = await read(c, "counter:1/inbox");
     expect(first).toHaveLength(PAGE);
