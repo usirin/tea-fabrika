@@ -295,7 +295,9 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
   day, and keep building. The bump that takes the release deletes the patch
   ([patch upstream locally](./docs/direction/patch-upstream-locally.md)). First read the
   package's decisions, patterns and source and build on its answer; patch only a gap or bug that
-  read proved ([0054](./.decisions/0054-read-upstream-before-patching-it.md)).
+  read proved ([0054](./.decisions/0054-read-upstream-before-patching-it.md)). An upstream issue
+  reports one bug we proved, with its repro; a list of missing features found by reading is
+  patched locally and not reported in bulk (owner, 2026-11-09).
 - **Read the installed version.** Agents know older libraries. Before you write or judge
   code against one, read the lockfile's version and that version's docs. A lint rule that
   fires a lot means ask why before you call it a false alarm.
@@ -314,6 +316,9 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
 - **Solve a problem we have.** A big vision gets saved as a note and tied back to a real
   problem. An experiment picks the tech. Aim at two people working together first:
   packages for others and publishing are recorded as later.
+- **Judge an idea against the plan, never against today's code.** A "not yet", "later" or "too
+  small today" claim is checked against what the plan says we are building, never against what
+  exists today. A plan file that is behind a decision is fixed the same turn (owner, 2026-11-11).
 - **Moving a job from an agent to code?** Say what the agent was absorbing that code will
   not (the case nobody listed), what the "I don't know" exit is, and whether the rule
   makes honesty expensive. Check a rule against real moves you made this session: would
@@ -457,7 +462,8 @@ every row.
 A report says which of these ran, and which could not run and why.
 
 A flaky test is fixed the day it is seen, by removing its cause; nobody reruns it until green and moves on
-([0036](./.decisions/0036-a-flaky-test-is-fixed.md)).
+([0036](./.decisions/0036-a-flaky-test-is-fixed.md)). A refusal, failure or problem seen a second time gets its root
+cause found and a ticket filed, never another workaround or another ask (owner, 2026-11-10).
 
 `pnpm lint` fails on an export nobody uses that `unreachable-ledger.json` does
 not name yet (`pnpm lint:dead` runs that part alone). With code-graph 0.12.0,
@@ -641,6 +647,10 @@ Write-ups are read by busy people, some of them not native English speakers.
   ([tiers](./docs/plan/tiers.md)). Each person answers for their own agents, so a first slice
   does not defend against them; strangers on a public address are a different case.
   Tier size never pushes work out: split the tier, and say what a new idea changes now.
+  Any piece of work follows the same order: make it work, then better, then secure, and a stuck
+  thing gets the smallest change that makes it run while the better or safer version becomes a
+  ticket (owner, 2026-11-11,
+  [0171](./.decisions/0171-make-it-work-then-better-then-secure.md)).
 - **Secure and simple.** For any security step, say when a person meets it and how
   often. No prompt on opening the app, nothing hourly. The protection goes in code, not in a
   chore.
