@@ -33,7 +33,7 @@ Tier 7 others   ---------------------------------------------->  someone else ca
 Only Tier 1 is committed. It started 2026-11-05 with its exam. `next/` does not wait on today's
 pipeline, which is paused: the lead session's agents build Tier 1 by hand, with the pipeline's steps
 for each pull request, one [Tier 1 row](./tier-1.md#the-pull-requests-one-at-a-time) at a time.
-Tier 1 has 43 rows. How many are on main, and where the rest stand, is in
+Tier 1 has 44 rows. How many are on main, and where the rest stand, is in
 [the plan's state](./README.md#where-we-are-now). A tier is a project. The approval of 2026-11-01
 covers what Tier 1 builds, not its breakdown.
 

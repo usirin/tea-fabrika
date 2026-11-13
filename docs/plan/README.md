@@ -55,7 +55,7 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
-*2026-11-12:* P45's slice 1 (ticket 884) is built in `next/`: `@kampus/inbox` keeps one row
+*2026-11-12:* P45's slice 1 (ticket 884) merged as [PR 1089](https://github.com/usirin/tea-fabrika/pull/1089), in `next/`: `@kampus/inbox` keeps one row
 per fact in arrival order and declares no client or agent input. It has no window or boot entry.
 Brain letters under `noticeId(...)` reach a program without an input port. Client entry points
 refuse those ids; a refused or throwing notice is skipped and counted on its span.
@@ -70,13 +70,14 @@ minutes between the two: each pull request passed alone and they broke together,
 pull request now lands only when its checks ran on a head that holds main
 ([0146](../../.decisions/0146-a-pull-request-lands-only-on-ci-that-saw-main.md)).
 
-*2026-11-12, P40 slice 2, ticket 878:* `next/` has an explicit `dev --repo` route that checks one
+*2026-11-12, P40 slice 2, ticket 878, merged as [PR 1072](https://github.com/usirin/tea-fabrika/pull/1072):* `next/` has an explicit `dev --repo` route that checks one
 default-branch commit through P38 before building the shipped programs. Repository selections,
 trust answers and opening results use the local instance's ledger. First use defaults to no;
 noninteractive first use reports awaiting trust. Repository code is never loaded by this slice.
 P38 slices 1, 2 and 3a supply its foundation. The next pack build/settings slice is shared with
 P38 slice 5 and still needs the later isolation work. P40 stays open through slice 4's cold-author
-check. Real Git and Alchemy checks remain the lead's host checks before landing this slice.
+check. Slice 2's real Git and Alchemy law, L11, ran in CI on the merged head and not on the host.
+*It said: real Git and Alchemy checks remain the lead's host checks before landing this slice.*
 
 *2026-11-12:* ticket 844 ([PR 1027](https://github.com/usirin/tea-fabrika/pull/1027)) changes
 P10's law p67 in `next/`, as [0140](../../.decisions/0140-gateway-refuses-client-id-and-by.md) and
@@ -124,18 +125,19 @@ notes and P44, the checklist, joined, so it has 43 rows; it said 44.* *Changed 2
 row finished on 2026-11-11, so the count stays 20, but slices of seven rows merged that day (see
 below). *It said: no Tier 1 row merged on 2026-11-11.*
 
-*2026-11-12:* P41's slice 2 (ticket 764) is [PR 1029](https://github.com/usirin/tea-fabrika/pull/1029): program mail is delivered
+*2026-11-12:* P41's slice 2 (ticket 764) merged as [PR 1029](https://github.com/usirin/tea-fabrika/pull/1029): program mail is delivered
 between two real Process objects in `next/`. The sender's object asks the Project to save the
 letter, and the target's `mailed` sets its one alarm. It finishes no Tier 1 row, so the count stays
 20. P41's slice 3, the example a person sees from a pack, waits on P40's pack path, P34c's walls
 and how a pack asks for its grant. *It said, below: slice 2 is at its tests step, draft PR 993.*
 
-*2026-11-12:* P43's slice 1 (ticket 765) is [PR 1030](https://github.com/usirin/tea-fabrika/pull/1030): the merger,
+*2026-11-12:* P43's slice 1 (ticket 765) merged as [PR 1030](https://github.com/usirin/tea-fabrika/pull/1030): the merger,
 alone, in `next/`. Mailed `land`, it reads the change, brings it up to date with main, waits for
 its kind's named checks on that head, merges pinned to it and mails back one reply. The `CodeHost`
 and `Ci` contracts join libfabrika, each with an in-memory Layer; no GitHub Layer yet, so it lands
-nothing real, and today's lead scripts keep landing every pull request. P43 is planned in 5 slices:
-the queue program (slice 2) waits on P42's start piece, both in Durable Objects (slice 3) build on
+nothing real, and today's lead scripts keep landing every pull request. P43 is planned in 5 slices.
+Slice 2, the queue program and the merger's last look at main, merged as
+[PR 1096](https://github.com/usirin/tea-fabrika/pull/1096). Both in Durable Objects (slice 3) build on
 P41's slice 2, then GitHub behind the contracts and the switch. It finishes no Tier 1 row, so the count stays
 20. *It said, above: P43 joined Tier 1, not planned or sized.*
 
@@ -162,10 +164,10 @@ slice 2. The 2026-11-11 entry below says what was being built earlier that day.
 
 *2026-11-11:* the checklist is Tier 1's program, and notes is Tier 2's first real app
 ([0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)). P44's first slice, the agent's
-half (ticket 839), is built as [PR 1019](https://github.com/usirin/tea-fabrika/pull/1019): the
+half (ticket 839), merged as [PR 1019](https://github.com/usirin/tea-fabrika/pull/1019): the
 `items` read port, an optional `note` of 1 to 256 characters on `check`, where a checked item keeps
 its first note, and ticket 847's three gaps in the laws closed. P13 keeps its two platform slices,
-and P25 hands the bridge `[checklist]`. → the lead lands it once its steps pass
+and P25 hands the bridge `[checklist]`. *It said: the lead lands it once its steps pass.*
 
 *2026-11-11:* in `next/`, a running copy of fabrika is an instance in code too (ticket 681,
 [0080](../../.decisions/0080-a-running-copy-is-an-instance.md)): `local-instance.ts`,
