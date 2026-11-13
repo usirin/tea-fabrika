@@ -12,10 +12,11 @@ export interface Env extends Bindings {
   readonly INSTANCE: string;
 }
 
+// Strict: the boot struct holds host rights (`starts`), so a field it does not name is refused.
 export const settings = Effect.fn("instance.settings")(function* (env: Env) {
-  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Settings))(env.INSTANCE).pipe(
-    Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-  );
+  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Settings), { onExcessProperty: "error" })(
+    env.INSTANCE,
+  ).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
 });
 
 export const connectionRuntime = (ctx: DurableObjectState, env: Env) =>
@@ -34,6 +35,8 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
               { name: "counter:1", id: "counter:1", program: "fabrika/counter" },
               { name: "checklist:1", id: "checklist:1", program: "fabrika/checklist" },
             ],
+            // The app grants no start until a program needs one; a local instance's caller may.
+            starts: config.starts ?? [],
             door: (options) =>
               Gateway.pipe(
                 Effect.provide(
