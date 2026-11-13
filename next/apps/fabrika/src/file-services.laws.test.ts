@@ -3,10 +3,26 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
-import { Cause, Effect, Exit, FileSystem, Layer, Path, PlatformError, Schema, Sink, Stream } from "effect";
+import { it } from "@effect/vitest";
+import * as Declarations from "@kampus/libfabrika/settings/Declarations";
+import {
+  Arbitrary,
+  Cause,
+  Effect,
+  Exit,
+  FileSystem,
+  Layer,
+  Logger,
+  Path,
+  PlatformError,
+  References,
+  Schema,
+  Sink,
+  Stream,
+} from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
-import { expect, it, vi } from "vitest";
+import { expect, vi } from "vitest";
 import { build } from "./build.ts";
 import { Row } from "./exam/compiler.ts";
 
@@ -210,9 +226,12 @@ vi.mock("./exam/compiler.ts", async (original) => ({
 const instances = vi.hoisted(() => [] as Array<{ readonly port: number }>);
 
 vi.mock("./local-instance.ts", () => ({
-  localInstance: (_built: unknown, options: { readonly port: number }) =>
+  localInstance: (
+    _built: unknown,
+    options: { readonly settings: { readonly values: Readonly<Record<string, unknown>> } },
+  ) =>
     Effect.suspend(() => {
-      instances.push(options);
+      instances.push({ port: Number(options.settings.values["instance.port"]) });
       return Effect.fail({ reason: "test_instance_ready" });
     }),
 }));
@@ -717,3 +736,115 @@ it("dev returns InstanceError for malformed saved settings without writing or bu
     { seed: 119120, numRuns: 20, examples: [["{"], ["null"], ["{}"]] },
   );
 });
+
+it.effect.prop(
+  "L10 [secrets] invalid saved legacy ports never reach warning logs across replacement and restart flows",
+  [
+    Arbitrary.schema(
+      Schema.Struct({ word: Schema.String.check(Schema.isUUID()), mark: Schema.Literals(['"', "+", "/", "&", " "]) }),
+    ).pipe(Arbitrary.map(({ word, mark }) => `private-${word}${mark}end`)),
+    Declarations.port.schema,
+    Arbitrary.schema(Schema.Json).pipe(Arbitrary.filter((value) => !Schema.is(Declarations.port.schema)(value))),
+    Arbitrary.array(Arbitrary.schema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))), {
+      minLength: 3,
+      maxLength: 8,
+    }),
+  ],
+  ([secret, port, invalid, choices]) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const argv = yield* Effect.acquireRelease(
+          Effect.sync(() => process.argv),
+          (argv) =>
+            Effect.sync(() => {
+              process.argv = argv;
+              cli.layer = undefined;
+              cli.work = undefined;
+              vi.unstubAllEnvs();
+            }),
+        );
+        // Only the counted FileSystem sees this home. No real folder or Worker is opened.
+        const folder = join(tmpdir(), `t753-saved-port-${choices[0]}`),
+          file = join(folder, "instance.json"),
+          source = join(folder, "view.tsx");
+        const w = recorded(folder, source, "export const view = 1;", false);
+        const founding = {
+          name: "test-project",
+          person: "test-person",
+          founder: "test-public",
+          window: null,
+          build: "old",
+        };
+        vi.stubEnv("FABRIKA_HOME", folder);
+        vi.stubEnv(Declarations.port.env, undefined);
+        cli.layer = w.layer;
+        process.argv = [
+          argv[0]!,
+          "dev.ts",
+          "--child",
+          `--parent=${process.ppid}`,
+          ...["name", "person", "founder"].map((field) => `--${field}=test`),
+        ];
+
+        for (const choice of choices) {
+          const moves = w.files.has(file) ? ["reopen", "replace", "valid", "remove"] : ["replace", "valid"];
+          const move = moves[choice % moves.length];
+
+          if (move === "remove") {
+            w.files.delete(file);
+          } else if (move === "replace" || move === "valid") {
+            const rejected = [secret, [secret], { value: secret }, invalid];
+            w.files.set(
+              file,
+              JSON.stringify({
+                ...founding,
+                port: move === "valid" ? port : rejected[Math.floor(choice / moves.length) % rejected.length],
+              }),
+            );
+          }
+
+          const saved = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(
+            w.files.get(file) ?? "{}",
+          );
+          const refused = saved.port !== undefined && !Schema.is(Declarations.port.schema)(saved.port);
+          const entries: Array<{ readonly level: string; readonly text: string }> = [];
+          const logger = Logger.layer([
+            Logger.make((entry) => {
+              entries.push({ level: entry.logLevel, text: Logger.formatJson.log(entry) });
+            }),
+          ]);
+          const before = w.calls.length;
+          instances.length = 0;
+          cli.work = undefined;
+          vi.resetModules();
+          yield* Effect.tryPromise({
+            try: () => import("../dev.ts"),
+            catch: (cause: unknown) => new Error("dev import failed", { cause }),
+          });
+          expect(cli.work).toBeDefined();
+          const exit = yield* Effect.exit(
+            cli.work!.pipe(Effect.provide(logger), Effect.provideService(References.MinimumLogLevel, "All")),
+          );
+
+          for (const entry of entries) {
+            for (const form of [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)]) {
+              expect(entry.text).not.toContain(form);
+            }
+          }
+
+          if (refused) {
+            expect(entries.filter((entry) => entry.level === "Warn")).toEqual([]);
+            instanceFailure(exit, "settings");
+            expect(
+              w.calls.slice(before).filter(([call, path]) => call === "write" || call === "temp" || path === source),
+            ).toEqual([]);
+            expect(instances).toEqual([]);
+          } else {
+            expect(instances.map((instance) => instance.port)).toEqual([Declarations.port.default]);
+            expect(entries.some((entry) => entry.level === "Warn")).toBe(saved.port !== undefined);
+          }
+        }
+      }),
+    ),
+  { arbitrary: { seed: 119120, runs: 100 } },
+);

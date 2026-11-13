@@ -12,12 +12,14 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Id } from "@kampus/libfabrika";
 import { workerLoader } from "@kampus/libfabrika/workers";
+import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import { Effect, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { heldPort } from "./port.test-support.ts";
+import * as RecordWireTest from "./record-wire.test-support.ts";
 
 const APP = resolve(import.meta.dirname, "..");
 const homes: string[] = [];
@@ -338,16 +340,16 @@ describe("P16 stack and sealed loader", () => {
         let accepted = 0;
 
         for (const name of ["local", "cloud"]) {
-          const settings = {
+          const settings = RecordWireTest.settingsFixture({
             name,
             port: 18787,
             person: "person-test",
             founder: (multibyte ? "雪" : "a").repeat(length),
             window: null,
             build: built.build,
-            rateLimit: { limit: 100_000, window: 60_000 },
-          };
-          const result = await Effect.runPromise(Effect.result(stack(built, settings)));
+          });
+          const checked = await Effect.runPromise(readSettings({ INSTANCE: JSON.stringify(settings) }));
+          const result = await Effect.runPromise(Effect.result(stack(built, checked)));
           const expectedBytes = Buffer.byteLength(JSON.stringify(settings));
 
           if (expectedBytes >= 5 * 1024) {
@@ -654,15 +656,14 @@ describe("P16 copied-file real instance, serial", () => {
                     Effect.gen(function* () {
                       const instance = yield* localInstance(
                         { ...built, brain: join(alone, "brain.mjs") },
-                        {
+                        RecordWireTest.startupFixture({
                           home: h,
                           name: "p16-isolation",
                           person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
                           founder: key.line,
                           window: key.raw,
                           port: brainPort,
-                          rateLimit: { limit: 100_000, window: 60_000 },
-                        },
+                        }),
                       );
                       yield* Effect.tryPromise({
                         try: async () => {
@@ -749,7 +750,6 @@ describe("P16 copied-file real instance, serial", () => {
             founder: key.line,
             window: key.raw,
             port,
-            rateLimit: { limit: 100_000, window: 60_000 },
           });
           const copied = { ...built, brain: join(alone, "brain.mjs") };
           let pid = "",
@@ -761,7 +761,7 @@ describe("P16 copied-file real instance, serial", () => {
               Effect.runPromise(
                 Effect.scoped(
                   Effect.gen(function* () {
-                    const runtime = yield* localInstance(copied, options(port));
+                    const runtime = yield* localInstance(copied, RecordWireTest.startupFixture(options(port)));
                     yield* Effect.tryPromise({
                       try: async () => {
                         const a = new Client(runtime.url, key, "a"),

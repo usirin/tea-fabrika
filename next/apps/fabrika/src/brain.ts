@@ -1,5 +1,6 @@
 import { makeDurableObjectBridge, makeWorkerBridge } from "@alchemy.run/cloudflare/Bridge";
-import type { Descriptor, Incoming } from "@kampus/libfabrika";
+import type { SettingsStart } from "@kampus/libfabrika";
+import { type Descriptor, type Incoming } from "@kampus/libfabrika";
 import type { Child } from "@kampus/libfabrika/processes/Children";
 import type { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
@@ -16,16 +17,28 @@ import {
   processDescriptor,
   signingReply,
   commitReply,
+  settingsWire,
 } from "@kampus/libfabrika/workers/runtime";
 import { DurableObject, WorkerEntrypoint, env } from "cloudflare:workers";
 import { Effect, Redacted, Schema } from "effect";
 import { assets, programs } from "virtual:fabrika-built";
 import type { ConnectionId } from "./door.ts";
 import { Objects } from "./objects.ts";
-import { connectionRuntime, projectRuntime, settings, type Env } from "./runtime.ts";
+import { connectionRuntime, projectRuntime, type Env } from "./runtime.ts";
 
 export class Project extends DurableObject<Env> {
-  readonly runtime = projectRuntime(this.ctx, this.env);
+  readonly owner = projectRuntime(this.ctx, this.env);
+  readonly runtime = settingsWire(this.owner.contextEffect);
+
+  settingsStart(input: SettingsStart.Input) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the trusted Project settings endpoint returns a Promise
+    return Effect.runPromise(this.owner.settingsStart(input));
+  }
+
+  settingsRead(start: string) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the trusted Project settings endpoint returns a Promise
+    return Effect.runPromise(this.owner.settingsRead(start));
+  }
 
   target(name: string, code: string) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
@@ -216,7 +229,7 @@ export class Project extends DurableObject<Env> {
 type ContextProject = (typeof ProjectService)["Service"];
 
 export class Process extends DurableObject<Env> {
-  readonly runtime = processRuntime(this.ctx, this.env, programs);
+  readonly runtime = settingsWire(processRuntime(this.ctx, this.env, programs).contextEffect);
 
   usage(rows: unknown) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object usage delivery returns a Promise
@@ -284,7 +297,7 @@ export class Process extends DurableObject<Env> {
 }
 
 export class Connection extends DurableObject<Env> {
-  readonly runtime = connectionRuntime(this.ctx, this.env);
+  readonly runtime = settingsWire(connectionRuntime(this.ctx, this.env).contextEffect);
 
   fetch(request: Request) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Worker fetch returns a Promise
@@ -351,6 +364,10 @@ export class Control extends WorkerEntrypoint<Env, { token: string }> {
 export default {
   fetch(request: Request, env: Env) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Worker fetch returns a Promise
-    return Effect.runPromise(settings(env).pipe(Effect.flatMap((config) => fetch(request, env, config, assets))));
+    return Effect.runPromise(
+      fetch(request, env, undefined, assets).pipe(
+        Effect.catchCause(() => Effect.succeed(new Response("Settings unavailable", { status: 503 }))),
+      ),
+    );
   },
 };

@@ -12,6 +12,7 @@ import { SecureRandom } from "effect/crypto";
 import type { Project as SeededProject } from "./jobs-wire.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
+import * as RecordWireTest from "./record-wire.test-support.ts";
 import { programs } from "./table.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -205,15 +206,18 @@ it.live(
           }
         }),
       );
-      const running = yield* localInstance(built, {
-        home,
-        name: "jobs-wire",
-        person: PERSON,
-        founder: root.line,
-        window: root.raw,
-        port: port.port,
-        rateLimit: { limit: 100_000, window: 60_000 },
-      });
+      const running = yield* localInstance(
+        built,
+        // The settings fixture names the same gateway budget, 100,000 a minute.
+        RecordWireTest.startupFixture({
+          home,
+          name: "jobs-wire",
+          person: PERSON,
+          founder: root.line,
+          window: root.raw,
+          port: port.port,
+        }),
+      );
       const url = `http://127.0.0.1:${port.port}`;
       expect(running).toBeDefined();
       const grant = Effect.fnUntraced(function* (key: ReturnType<typeof identity>, id: string) {

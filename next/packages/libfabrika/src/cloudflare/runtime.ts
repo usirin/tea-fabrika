@@ -1,19 +1,5 @@
 import { makeRpcStub } from "@alchemy.run/cloudflare/Bridge";
-import {
-  Cause,
-  Clock,
-  Context,
-  Effect,
-  Exit,
-  Layer,
-  ManagedRuntime,
-  Option,
-  Result,
-  Schema,
-  Semaphore,
-  Stream,
-  Tracer,
-} from "effect";
+import { Cause, Clock, Context, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream, Tracer } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import * as Redacted from "effect/Redacted";
 import { admitted } from "../access/Access.ts";
@@ -26,6 +12,7 @@ import * as JobsLedger from "../jobs/JobsLedger.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerRemote from "../ledger/LedgerRemote.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
+import { LedgerStreams } from "../ledger/LedgerStreams.ts";
 import * as LedgerStreamsSql from "../ledger/LedgerStreamsSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
@@ -50,6 +37,9 @@ import { ProcessStore } from "../runtime/ProcessStore.ts";
 import { ProgramDown } from "../runtime/Program.ts";
 import type { Descriptor } from "../runtime/Runner.ts";
 import { defaultPolicy, ProgramRunner, Sent } from "../runtime/Runner.ts";
+import { RecordedStart } from "../settings/RecordedStart.ts";
+import * as SettingsStart from "../settings/Start.ts";
+import * as Starts from "../settings/Starts.ts";
 import { type Sql } from "../Sql.ts";
 import { Archive, type BucketCalls } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
@@ -77,6 +67,11 @@ import { mailLayer } from "./mail.ts";
 import type { RecordShape } from "./objects.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient } from "./platform.ts";
 import * as Publish from "./Publish.ts";
+import * as SettingsInput from "./SettingsInput.ts";
+import * as SettingsRecorded from "./SettingsRecorded.ts";
+import * as SettingsRuntime from "./SettingsRuntime.ts";
+import * as SettingsStartsLedger from "./SettingsStartsLedger.ts";
+import * as SettingsStartsRemote from "./SettingsStartsRemote.ts";
 import { bind as bindTail } from "./tail.ts";
 import * as WatcherManagerRemote from "./WatcherManagerRemote.ts";
 
@@ -94,6 +89,7 @@ const SavedDescriptor = Schema.Struct({
 });
 
 export interface Env {
+  readonly INSTANCE: string;
   readonly PROJECT: DurableObjectNamespace<ProjectBinding>;
   readonly PROCESS: DurableObjectNamespace<ProcessBinding>;
   readonly CONNECTION: DurableObjectNamespace<ConnectionBinding>;
@@ -102,16 +98,143 @@ export interface Env {
   readonly MEASUREMENTS: R2Bucket;
 }
 
-export interface BrainOptions {
-  readonly name: string;
-  readonly person: string;
-  readonly founder: string;
-  readonly window: string | null;
-  readonly port: number;
-  readonly build: string;
-  readonly rateLimit: { readonly limit: number; readonly window: number };
-  readonly limits?: { readonly recordBytes: number };
+export type BrainOptions = SettingsStart.Input;
+
+/**
+ * Decodes the `INSTANCE` binding's JSON as a start's input and checks its settings. Returns the
+ * input, the decoded values and the snapshot in its canonical encoding. It records nothing.
+ *
+ * @stability unstable
+ * @category decoding
+ */
+export const settings = (env: Pick<Env, "INSTANCE">) => SettingsInput.decode(env.INSTANCE);
+
+const checkedSettings = (env: Env) =>
+  settings(env).pipe(Effect.mapError((cause) => new Starts.StartsError({ reason: new Starts.Decode({ cause }) })));
+
+type CheckedSettings = Effect.Success<ReturnType<typeof settings>>;
+
+/**
+ * Layer that provides `RecordedStart` to a Worker or an object by recording the start with the
+ * Project object.
+ *
+ * **Details**
+ *
+ * It takes the start's input from the `INSTANCE` binding, or from `input` when one is given, and
+ * records it over RPC with the Project object the input names. The Project object does not use
+ * this layer: it records the start in its own ledger.
+ *
+ * @stability unstable
+ * @category layers
+ */
+export function recordedLayer(env: Env): Layer.Layer<RecordedStart, Starts.StartsError>;
+export function recordedLayer(
+  env: Env,
+  input: Effect.Effect<CheckedSettings, LedgerError>,
+): Layer.Layer<RecordedStart, LedgerError | Starts.StartsError>;
+export function recordedLayer(
+  env: Env,
+  input: Effect.Effect<CheckedSettings, LedgerError | Starts.StartsError> = checkedSettings(env),
+) {
+  return Layer.unwrap(
+    input.pipe(
+      Effect.map(({ input }) =>
+        SettingsRecorded.layer(input).pipe(Layer.provide(SettingsStartsRemote.layer(projectStub(env, input.name)))),
+      ),
+    ),
+  );
 }
+
+/**
+ * @stability unstable
+ */
+export { SettingsRuntime };
+
+/**
+ * Converts a `Starts` answer into the reply sent over RPC: `ok` with the receipt, or the failure's
+ * reason by its tag alone. The effect no longer fails with `StartsError`.
+ *
+ * @stability unstable
+ * @category error handling
+ */
+export const settingsReply = <R>(work: Effect.Effect<SettingsStart.Receipt, Starts.StartsError, R>) =>
+  work.pipe(
+    Effect.map((value) => SettingsStart.Reply.cases.ok.make({ value })),
+    Effect.catchReasons("StartsError", {
+      Decode: () => Effect.succeed(SettingsStart.Reply.cases.Decode.make({})),
+      Missing: () => Effect.succeed(SettingsStart.Reply.cases.Missing.make({})),
+      Refused: () => Effect.succeed(SettingsStart.Reply.cases.Refused.make({})),
+      Storage: () => Effect.succeed(SettingsStart.Reply.cases.Storage.make({})),
+      Unreachable: () => Effect.succeed(SettingsStart.Reply.cases.Unreachable.make({})),
+    }),
+  );
+
+/**
+ * Replaces a `StartsError` with its wire summary, `Start.Failure`: the reason's tag and no cause.
+ * Other failures pass through unchanged.
+ *
+ * **When to use**
+ *
+ * Use when a failure leaves the Worker or an object. A cause may hold the start's input, and this
+ * keeps it inside.
+ *
+ * @stability unstable
+ * @category error handling
+ */
+export const settingsFailure = <A, E, R>(work: Effect.Effect<A, E | Starts.StartsError, R>) =>
+  work.pipe(
+    Effect.catchIf(
+      (error): error is Starts.StartsError => error instanceof Starts.StartsError,
+      (error) =>
+        Effect.fail(error).pipe(
+          Effect.catchReasons("StartsError", {
+            Decode: () =>
+              Effect.fail(
+                SettingsStart.Failure.make({ reason: SettingsStart.Failure.fields.reason.cases.Decode.make({}) }),
+              ),
+            Missing: () =>
+              Effect.fail(
+                SettingsStart.Failure.make({ reason: SettingsStart.Failure.fields.reason.cases.Missing.make({}) }),
+              ),
+            Refused: () =>
+              Effect.fail(
+                SettingsStart.Failure.make({ reason: SettingsStart.Failure.fields.reason.cases.Refused.make({}) }),
+              ),
+            Storage: () =>
+              Effect.fail(
+                SettingsStart.Failure.make({ reason: SettingsStart.Failure.fields.reason.cases.Storage.make({}) }),
+              ),
+            Unreachable: () =>
+              Effect.fail(
+                SettingsStart.Failure.make({ reason: SettingsStart.Failure.fields.reason.cases.Unreachable.make({}) }),
+              ),
+          }),
+        ),
+    ),
+  );
+
+/**
+ * Wraps an object's context for its RPC methods, so a failed build crosses RPC as a fixed summary.
+ *
+ * **Details**
+ *
+ * `runPromise` gets the context, provides it to the work and runs it. When the context fails to
+ * build, a `StartsError` becomes `Start.Failure`, and a `LedgerError` keeps only its `reason`.
+ *
+ * @stability unstable
+ * @category constructors
+ */
+export const settingsWire = <R, E>(context: Effect.Effect<Context.Context<R>, E>) => {
+  const contextEffect = settingsFailure(context).pipe(
+    Effect.mapError((error) => (error instanceof LedgerError ? new LedgerError({ reason: error.reason }) : error)),
+  );
+  return {
+    contextEffect,
+    runPromise: <A, E2>(work: Effect.Effect<A, E2, R>) =>
+      // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC sends only fixed settings failure summaries
+      Effect.runPromise(contextEffect.pipe(Effect.flatMap((services) => Effect.provideContext(work, services)))),
+  };
+};
 
 export interface ProjectDoorOptions {
   readonly sql: Sql;
@@ -129,8 +252,9 @@ export interface ProjectDoorOptions {
 }
 
 export interface ProjectOptions {
+  readonly input?: Effect.Effect<Effect.Success<ReturnType<typeof settings>>, LedgerError>;
   readonly mail?: { readonly grants: Grants };
-  readonly config: BrainOptions;
+  readonly config?: BrainOptions;
   readonly programs: Readonly<Record<string, ProgramSource>>;
   readonly bootstrap: { readonly name: string; readonly id: string; readonly program: string };
   /** Which program may start which (P42), a host right. None when absent. */
@@ -140,7 +264,15 @@ export interface ProjectOptions {
   ) => Effect.Effect<
     GatewayCalls,
     unknown,
-    Ledger | LedgerTransaction | Id.Generator | ClientManager | SpanSink | RecordManager | Archive | Jobs
+    | Ledger
+    | LedgerTransaction
+    | Id.Generator
+    | ClientManager
+    | SpanSink
+    | RecordManager
+    | Archive
+    | Jobs
+    | RecordedStart
   >;
 }
 
@@ -268,7 +400,7 @@ const checkedValue = Effect.fnUntraced(function* <A>(
 export const configureProcess = Effect.fn("process.configure")(function* <E>(
   ctx: DurableObjectState,
   descriptor: Descriptor,
-  runtime: ManagedRuntime.ManagedRuntime<ProcessService, E>,
+  runtime: { readonly contextEffect: Effect.Effect<Context.Context<ProcessService>, E> },
   drain = false,
 ) {
   const storage = StorageClient.make(ctx.storage);
@@ -371,7 +503,28 @@ export const complete = Effect.fn(function* <A, E, R>(
 });
 
 export const recordingLayer = (sql: Sql, env: Env, project: string, object: string) =>
-  Layer.mergeAll(recordLayer(env, project), archiveLayer(env), SpanSink.layer(sql, { object }));
+  Layer.effectContext(
+    Effect.gen(function* () {
+      const start = yield* RecordedStart;
+      const services = yield* Layer.build(
+        Layer.mergeAll(recordLayer(env, project), archiveLayer(env), SpanSink.layer(sql, { object })),
+      );
+      const tracer = yield* Tracer.Tracer.pipe(Effect.provideContext(services));
+      return Context.add(
+        services,
+        Tracer.Tracer,
+        Tracer.make({
+          context: tracer.context,
+          span: (options) => {
+            const span = tracer.span(options);
+            span.attribute("fab.settings", start.snapshot.hash);
+            span.attribute("fab.build", start.input.build);
+            return span;
+          },
+        }),
+      );
+    }),
+  );
 
 const fingerprint = Effect.fnUntraced(function* (value: string) {
   const ssh = value.startsWith("ssh-");
@@ -390,11 +543,9 @@ const fingerprint = Effect.fnUntraced(function* (value: string) {
   return `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
 });
 
-const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectState, env: Env, options: ProjectOptions) {
-  const { config, programs, bootstrap } = options;
-  const name = ctx.id.name ?? config.name,
-    sql = cloudflareSql(ctx.storage);
-  const turn = yield* Semaphore.make(1);
+const projectLedger = (ctx: DurableObjectState, env: Env, name: string) => {
+  const sql = cloudflareSql(ctx.storage);
+  const turn = Semaphore.makeUnsafe(1);
   const notifications = Context.Reference<Array<Effect.Effect<void, LedgerError>> | null>(
     "@kampus/libfabrika/cloudflare/runtime.WriteNotifications",
     { defaultValue: () => null },
@@ -412,16 +563,6 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
       ),
     );
   });
-  const by = `brain:${name}`;
-  const ids = yield* ProcessIdGenerator;
-  const founder = {
-    name,
-    person: config.person,
-    keys: [config.founder],
-    window: config.window,
-    by: yield* fingerprint(config.founder),
-    build: config.build,
-  };
   const ring = Effect.fn("project.ring")(function* (to: string, stream: string, rev: number) {
     yield* rpc(GatewayClient.make(env.CONNECTION.getByName(to)).ring(stream, rev));
   });
@@ -444,6 +585,31 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     RefereeSql.layer(sql),
     LedgerStreamsSql.layer(sql),
   ).pipe(Layer.provide(bell));
+  const starts = SettingsStartsLedger.fromLedger().pipe(Layer.provide(ledgerLayer));
+  return { sql, turn, write, ledgerLayer, starts };
+};
+
+const projectLogic = Effect.fn("project.init")(function* (
+  ctx: DurableObjectState,
+  env: Env,
+  options: ProjectOptions,
+  local: ReturnType<typeof projectLedger>,
+) {
+  const checked = yield* RecordedStart;
+  const config = { ...checked.input, ...checked.input.founding, port: checked.values.port };
+  const { programs, bootstrap } = options;
+  const name = ctx.id.name ?? config.name;
+  const { sql, turn, write, ledgerLayer } = local;
+  const by = `brain:${name}`;
+  const ids = yield* ProcessIdGenerator;
+  const founder = {
+    name,
+    person: config.person,
+    keys: [config.founder],
+    window: config.window,
+    by: yield* fingerprint(config.founder),
+    build: config.build,
+  };
   const base = Layer.mergeAll(ledgerLayer, recordingLayer(sql, env, name, `project:${name}`));
   const processManager = ProcessManager.layer(
     {
@@ -457,12 +623,18 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     JobsLedger.layer,
     ClientManagerLedger.layer(founder),
     // P42: a child start decides in the turns of the manager that writes it.
-    ChildrenLedger.layer({ grants: options.starts ?? [] }).pipe(Layer.provideMerge(processManager)),
+    ChildrenLedger.layer({ grants: options.starts ?? checked.input.starts ?? [] }).pipe(
+      Layer.provideMerge(processManager),
+    ),
   ).pipe(Layer.provideMerge(base));
-  const services = yield* Layer.build(managers);
+  const services = Context.add(
+    yield* Layer.build(managers).pipe(Effect.provideService(RecordedStart, checked)),
+    RecordedStart,
+    checked,
+  );
   const mail = yield* ProgramMail.pipe(
     Effect.provide(
-      ProgramMailLedger.layer({ grants: options.mail?.grants ?? {} }).pipe(
+      ProgramMailLedger.layer({ grants: options.mail?.grants ?? checked.input.mail?.grants ?? {} }).pipe(
         Layer.provide(Layer.succeedContext(services)),
       ),
     ),
@@ -959,13 +1131,66 @@ export class ProjectService extends Context.Service<ProjectService, Effect.Succe
   "@kampus/libfabrika/cloudflare/runtime.ProjectService",
 ) {}
 
-export const projectLayer = (ctx: DurableObjectState, env: Env, options: ProjectOptions) =>
-  Layer.effect(ProjectService, projectLogic(ctx, env, options)).pipe(
-    Layer.provide(Layer.merge(ProcessIdGenerator.layer, Id.Generator.layer)),
+export const projectLayer = (
+  ctx: DurableObjectState,
+  env: Env,
+  options: ProjectOptions,
+  local = projectLedger(ctx, env, ctx.id.name ?? options.config?.name ?? "project"),
+) => {
+  const input: Effect.Effect<CheckedSettings, LedgerError | Starts.StartsError> = options.input ?? checkedSettings(env);
+  return Layer.unwrap(
+    input.pipe(
+      Effect.map(({ input }) => {
+        const starts = Layer.effect(
+          Starts.Starts,
+          Starts.Starts.pipe(
+            Effect.map((starts) => ({
+              record: (value: SettingsStart.Input) => local.write(starts.record(value)),
+              read: starts.read,
+            })),
+          ),
+        ).pipe(Layer.provide(local.starts));
+        const recorded = SettingsRecorded.layer(input).pipe(Layer.provide(starts));
+        return Layer.effect(ProjectService, projectLogic(ctx, env, options, local)).pipe(
+          Layer.provide(Layer.merge(ProcessIdGenerator.layer, Id.Generator.layer)),
+          Layer.provide(recorded),
+        );
+      }),
+    ),
   );
+};
 
-export const projectRuntime = (ctx: DurableObjectState, env: Env, options: ProjectOptions) =>
-  ManagedRuntime.make(projectLayer(ctx, env, options));
+export const projectRuntime = (ctx: DurableObjectState, env: Env, options: ProjectOptions) => {
+  const local = projectLedger(ctx, env, ctx.id.name ?? options.config?.name ?? "project");
+  const minimal = SettingsRuntime.runtime(local.starts.pipe(Layer.provideMerge(local.ledgerLayer)));
+  const ready = Layer.unwrap(
+    minimal.contextEffect.pipe(
+      Effect.map((services) =>
+        projectLayer(ctx, env, options, {
+          ...local,
+          ledgerLayer: Layer.mergeAll(
+            Layer.succeed(Ledger, Context.get(services, Ledger)),
+            Layer.succeed(LedgerTransaction, Context.get(services, LedgerTransaction)),
+            Layer.succeed(Referee, Context.get(services, Referee)),
+            Layer.succeed(LedgerStreams, Context.get(services, LedgerStreams)),
+          ),
+          starts: Layer.succeed(Starts.Starts, Context.get(services, Starts.Starts)),
+        }),
+      ),
+    ),
+  );
+  const runtime = SettingsRuntime.runtime(ready);
+  const dispose = Effect.all([runtime.disposeEffect, minimal.disposeEffect], { discard: true, concurrency: 1 });
+  return {
+    ...runtime,
+    disposeEffect: dispose,
+    settingsStart: (input: SettingsStart.Input) =>
+      minimal.provide(settingsReply(Starts.Starts.use((starts) => local.write(starts.record(input))))),
+    settingsRead: (start: string) => minimal.provide(settingsReply(Starts.Starts.use((starts) => starts.read(start)))),
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the object owner closes both runtime scopes
+    dispose: () => Effect.runPromise(dispose),
+  };
+};
 
 /** Composes durable job storage on the Project's database for trusted startup code. */
 export const projectJobsLayer = (ctx: DurableObjectState, env: Env) =>
@@ -994,6 +1219,7 @@ const processLogic = Effect.fnUntraced(function* (
   env: Env,
   programs: Readonly<Record<string, ProgramSource>>,
 ) {
+  const checked = yield* RecordedStart;
   // The object is its registered name's; its first process's descriptor names its storage.
   const [project] = yield* Schema.decodeUnknownEffect(
     Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
@@ -1009,7 +1235,7 @@ const processLogic = Effect.fnUntraced(function* (
   const all = Layer.mergeAll(ProcessStore.layer(sql, { process: saved.id, storage }), Mailbox.layer).pipe(
     Layer.provideMerge(base),
   );
-  const services = yield* Layer.build(all);
+  const services = yield* Layer.build(all).pipe(Effect.provideService(RecordedStart, checked));
   const store = Context.get(services, ProcessStore),
     sink = Context.get(services, SpanSink);
   // The name's live process, as the manager's status last answered it. Writes, loading and span
@@ -1163,4 +1389,6 @@ export class ProcessService extends Context.Service<ProcessService, Effect.Succe
 ) {}
 
 export const processRuntime = (ctx: DurableObjectState, env: Env, programs: Readonly<Record<string, ProgramSource>>) =>
-  ManagedRuntime.make(Layer.effect(ProcessService, processLogic(ctx, env, programs)));
+  SettingsRuntime.runtime(
+    Layer.effect(ProcessService, processLogic(ctx, env, programs)).pipe(Layer.provide(recordedLayer(env))),
+  );

@@ -1,4 +1,5 @@
 import { Cause, Effect, Path, Predicate, Schema } from "effect";
+import type { Options } from "./settings.ts";
 
 class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {
   reason: Schema.Literal("storage"),
@@ -28,7 +29,7 @@ const portTaken = (cause: Cause.Cause<unknown>) =>
 
 export const localInstance = Effect.fn("brain.localInstance")(function* (
   built: Omit<import("./build.ts").Built, "assets">,
-  options: Omit<import("./settings.ts").Settings, "build"> & { readonly home: string },
+  options: Options,
 ) {
   const path = yield* Path.Path;
   process.env.DO_NOT_TRACK = "1";
@@ -37,13 +38,13 @@ export const localInstance = Effect.fn("brain.localInstance")(function* (
   const { startDev } = yield* Effect.tryPromise({
     // oxlint-disable-next-line fabrika/no-promises -- edge: defer Alchemy loading until telemetry is disabled
     try: () => import("./instance.ts"),
-    catch: (cause) => new BrainError({ reason: "storage", cause }),
+    catch: (cause: unknown) => new BrainError({ reason: "storage", cause }),
   });
   // oxlint-disable-next-line fabrika/no-promises -- edge: the platform module is loaded at the local command boundary
   const { ProcessIdGenerator } = yield* Effect.tryPromise({
     // oxlint-disable-next-line fabrika/no-promises -- edge: load the platform dependency at the command boundary
     try: () => import("@kampus/libfabrika/processes/ProcessIdGenerator"),
-    catch: (cause) => new BrainError({ reason: "storage", cause }),
+    catch: (cause: unknown) => new BrainError({ reason: "storage", cause }),
   });
   // Alchemy listens with a strict port, so a taken one fails here and no other port is tried.
   const started = startDev(built, options).pipe(Effect.provide(ProcessIdGenerator.layer));
@@ -52,7 +53,7 @@ export const localInstance = Effect.fn("brain.localInstance")(function* (
       portTaken(cause)
         ? Effect.fail(
             new PortError({
-              message: `Port ${options.port} is taken, so the instance did not start. Stop what uses it, or set instance.port to another port.`,
+              message: `Port ${options.settings.values["instance.port"]} is taken, so the instance did not start. Stop what uses it, or set instance.port to another port.`,
             }),
           )
         : Effect.failCause(cause),

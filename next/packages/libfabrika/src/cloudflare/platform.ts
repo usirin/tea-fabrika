@@ -66,6 +66,12 @@ export class ProjectClient extends Context.Service<
 >()("@kampus/libfabrika/cloudflare/platform.ProjectClient") {
   static make(stub: ProjectBinding): ProjectClient["Service"] {
     return {
+      settingsStart: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: trusted settings RPC enters Effect
+        Effect.tryPromise({ try: () => stub.settingsStart(...args), catch: unreachable }),
+      settingsRead: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: trusted settings RPC enters Effect
+        Effect.tryPromise({ try: () => stub.settingsRead(...args), catch: unreachable }),
       clientConnect: () =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Project clientConnect RPC enters Effect
         Effect.tryPromise({ try: () => stub.clientConnect(), catch: unreachable }),

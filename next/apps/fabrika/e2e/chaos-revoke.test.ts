@@ -9,6 +9,7 @@ import { Clock, Effect, Fiber, FileSystem, Layer, Path, Queue, Schema, Stream } 
 import { SecureRandom } from "effect/crypto";
 import { localInstance } from "../src/local-instance.ts";
 import { heldPort } from "../src/port.test-support.ts";
+import * as RecordWireTest from "../src/record-wire.test-support.ts";
 import { programs } from "../src/table.ts";
 
 import { Outcome } from "@demlik/tea";
@@ -301,15 +302,17 @@ const served = Effect.gen(function* () {
     catch: (cause) => new WireFailure({ cause }),
   });
   const { port } = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
-  const instance = yield* localInstance(built, {
-    home,
-    name: PROJECT,
-    person: PERSON,
-    founder: root.line,
-    window: old.raw,
-    port,
-    rateLimit: { limit: 100_000, window: 60_000 },
-  }).pipe(Effect.provide(SecureRandom.layerWebCrypto), Effect.provide(localState()));
+  const instance = yield* localInstance(
+    built,
+    RecordWireTest.settingsFixture({
+      home,
+      name: PROJECT,
+      person: PERSON,
+      founder: root.line,
+      window: old.raw,
+      port,
+    }),
+  ).pipe(Effect.provide(SecureRandom.layerWebCrypto), Effect.provide(localState()));
   const from = {
     by: root.fingerprint,
     for: PERSON,
