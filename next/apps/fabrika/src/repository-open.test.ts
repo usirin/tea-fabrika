@@ -2,6 +2,7 @@
 // No substitute for the real dev subprocess or private append transport is used.
 import { generateKeyPairSync } from "node:crypto"; // edge: the founder uses SSH's public-key packet format
 import { DatabaseSync } from "node:sqlite"; // edge: inspect the real object's durable rows after dev exits
+import { stripVTControlCharacters } from "node:util"; // edge: decode script's terminal output before reading JSON lines
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Row } from "@kampus/libfabrika/ledger/Log";
@@ -59,10 +60,13 @@ const entries = Effect.fnUntraced(function* (home: string) {
 });
 
 const jsonLines = (text: string) =>
-  text.split(/\r?\n/).flatMap((line) => {
-    const result = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(line);
-    return Result.isSuccess(result) ? [result.success] : [];
-  });
+  // Prompt.Confirm writes cursor-show after its newline, directly before dev's JSON report.
+  stripVTControlCharacters(text)
+    .split(/\r?\n/)
+    .flatMap((line) => {
+      const result = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(line);
+      return Result.isSuccess(result) ? [result.success] : [];
+    });
 
 const reports = (text: string, commit: string, result: "ready" | "awaiting_trust") =>
   jsonLines(text).filter((line) => {

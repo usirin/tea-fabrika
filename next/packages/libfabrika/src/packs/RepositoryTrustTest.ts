@@ -18,6 +18,10 @@ import * as RepositoryTrustLedger from "./RepositoryTrustLedger.ts";
 
 export type Store = { readonly sql: Sql; readonly reopen: Effect.Effect<void> };
 
+class TrustLawFailed extends Schema.TaggedError<TrustLawFailed>()("TrustLawFailed", {
+  cause: Schema.Defect(),
+}) {}
+
 // Effect 4 owns schema generation; fast-check chooses its seed and the operation tape.
 const generated = <S extends Schema.ConstraintDecoder<unknown>>(schema: S): fc.Arbitrary<S["Type"]> =>
   fc.nat().map((seed) => {
@@ -184,7 +188,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's runner returns a Promise
         const check = async () => fc.assert(property, { seed: 119120, numRuns: 300 });
         // oxlint-disable-next-line fabrika/no-promises -- edge: await fast-check within the scoped test
-        yield* Effect.tryPromise({ try: check, catch: (cause: unknown) => new Error("trust law failed", { cause }) });
+        yield* Effect.tryPromise({ try: check, catch: (cause: unknown) => new TrustLawFailed({ cause }) });
       }),
     );
 
@@ -300,7 +304,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's runner returns a Promise
           const check = async () => fc.assert(property, { seed: 119120, numRuns: 300 });
           // oxlint-disable-next-line fabrika/no-promises -- edge: await fast-check within the scoped test
-          yield* Effect.tryPromise({ try: check, catch: (cause: unknown) => new Error("trust law failed", { cause }) });
+          yield* Effect.tryPromise({ try: check, catch: (cause: unknown) => new TrustLawFailed({ cause }) });
         }),
     );
 
@@ -406,7 +410,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's runner returns a Promise
         const check = async () => fc.assert(property, { seed: 119120, numRuns: 300 });
         // oxlint-disable-next-line fabrika/no-promises -- edge: await fast-check within the scoped test
-        yield* Effect.tryPromise({ try: check, catch: (cause: unknown) => new Error("trust law failed", { cause }) });
+        yield* Effect.tryPromise({ try: check, catch: (cause: unknown) => new TrustLawFailed({ cause }) });
       }),
     );
   });
