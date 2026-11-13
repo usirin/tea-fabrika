@@ -266,6 +266,9 @@ export class ProgramRunner extends Context.Service<
     readonly mailed: Effect.Effect<void, RunnerFailure>;
     /** The object's alarm fired at `at`: the program's timer, if it asked for one by then. */
     readonly due: (at: number) => Effect.Effect<void, RunnerFailure>;
+    /** The new process's first turn, OTP's init/1: loads the program and arms its alarm. Safe to
+     *  call again: a live runner only catches up. */
+    readonly init: () => Effect.Effect<void, RunnerFailure>;
     readonly restart: (request: { readonly id: string; readonly build: string }) => Effect.Effect<void, RunnerFailure>;
   }
 >()("@kampus/libfabrika/ProgramRunner") {
@@ -826,6 +829,44 @@ export class ProgramRunner extends Context.Service<
           return yield* step._tag === "stepped" ? Effect.succeed(step) : Effect.fail(new ProgramDown({ reason }));
         });
 
+        /** A throw in the program's init is supervision's, as a step's is: observed, then the wait.
+         *  The journal takes the attempt, under the letter `<pid>/init`, only once init has thrown,
+         *  so a load whose init returns leaves the journal and its counts as they were. */
+        const booted = (init: Effect.Effect<Step, ProgramDown>): Effect.Effect<Step, RunnerFailure> =>
+          init.pipe(
+            Effect.catchIf(
+              (down: ProgramDown) => supervision !== null && down.source === undefined,
+              Effect.fnUntraced(function* (down: ProgramDown): Effect.fn.Return<never, RunnerFailure> {
+                const { at } = yield* (yield* coordinator).status(process.name);
+                const letter = `${process.id}/init`;
+                yield* complete({
+                  type: "begin",
+                  process: process.id,
+                  letter,
+                  build: process.build,
+                  phase: "saved",
+                  at,
+                });
+                const j = supervision?.journal;
+
+                if (j?._tag !== "stepping" || j.attempt.letter !== letter) {
+                  return yield* new LedgerError({ reason: "bad_row", cause: down });
+                }
+
+                const { phase: _phase, at: _at, ...attempt } = j.attempt;
+                const error = down.errorClass;
+                const failure = Failure.cases.saved.make({ ...attempt, error });
+                const meta = yield* from(null, yield* traceId);
+                yield* observed(
+                  { type: "threw", seq: attempt.seq, error, reason: fromFailure(failure), from: meta },
+                  attempt.process,
+                  { failure, content: Object.hasOwn(down, "cause") ? down.cause : down },
+                ).pipe(Effect.mapError(() => down));
+                return yield* down;
+              }),
+            ),
+          );
+
         /** Loads the program and its checkpoint, climbing saved state through its upgrades. */
         const load = Effect.fnUntraced(function* () {
           const loaded = yield* loader.load(process.program, process.build);
@@ -838,7 +879,7 @@ export class ProgramRunner extends Context.Service<
           const saved = yield* store.load;
 
           if (saved === null) {
-            const boot = yield* stepped(yield* loaded.execution.init(null), "load");
+            const boot = yield* stepped(yield* booted(loaded.execution.init(null)), "load");
             const fresh: Live = {
               loaded,
               model: boot.model,
@@ -860,7 +901,7 @@ export class ProgramRunner extends Context.Service<
 
           const cmds = decoded.success;
           const { saved: next, ran } = yield* loaded.execution.upgrade(saved.saved);
-          const boot = yield* stepped(yield* loaded.execution.init(next.model), "saved_state");
+          const boot = yield* stepped(yield* booted(loaded.execution.init(next.model)), "saved_state");
           const upgraded = saved.saved.v !== next.v || ran.length > 0;
 
           if (upgraded) {
@@ -1582,6 +1623,7 @@ export class ProgramRunner extends Context.Service<
         const open = call("runner.open");
         const msg = call("runner.step");
         const due = call("runner.due");
+        const init = call("runner.init");
         const restart = call("runner.restart.request");
 
         return {
@@ -1724,6 +1766,22 @@ export class ProgramRunner extends Context.Service<
                 ),
               ),
               time,
+            ),
+          init: () =>
+            init(
+              Effect.gen(function* () {
+                if (!recovering(supervision)) {
+                  // A program that throws in init is supervision's: once it holds the crash, the start answers.
+                  yield* ready().pipe(
+                    Effect.catchIf(
+                      (error) => error._tag === "ProgramDown" && recovering(supervision),
+                      () => Effect.void,
+                    ),
+                  );
+                }
+
+                return { answer: undefined, jobs: [] };
+              }),
             ),
           restart: (request: { readonly id: string; readonly build: string }) =>
             restart(
