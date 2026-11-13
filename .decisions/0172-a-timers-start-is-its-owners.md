@@ -75,8 +75,7 @@ The known way: on Unix, a deleted user's cron jobs stop running. `userdel` runs 
 
 ## Decision
 
-**A start with no member's input behind it belongs to the brain or to the process owner, never to
-nobody.**
+**A start with no member's input behind it belongs to the brain or to the process owner.**
 
 - A restart or a start at boot is the brain's own. The brain's process manager already writes those
   lines `by` the brain's key.
@@ -102,6 +101,8 @@ nobody.**
 
 - What happens to a removed member's running processes and their saved state.
 - Who may take those processes over.
+- Who owns a process the brain starts at boot.
+- Whether a restarted process, which is a new process, keeps the owner of the one it replaces.
 - The names of the `Write` union's cases. A naming decision is coming separately. This file says
   `caused` and `own` only because the code does today.
 
