@@ -1,6 +1,6 @@
 # Summon guidelines: naming agents in the shell, and the grammar for it
 
-**Proposed 2026-11-06.** Walked when Tier 5 starts (owner, 2026-11-08): summoned agents, names and rooms. The seven principles below are proposed. Two sections are decided: the
+**Proposed 2026-11-06.** Walked when Tier 5 starts (owner, 2026-11-08): summoned agents, names and rooms. *Changed 2026-11-12:* a lane's room needs `summon`, `join` and rooms before Tier 5, so the proposed parts are walked as each slice needs them ([0158](../../.decisions/0158-the-pipeline-arrives-as-a-lane-in-its-room.md)). The seven principles below are proposed. Two sections are decided: the
 owner settled threads, forks and who may talk to whose agent the same night, in
 [threads, forks and the verbs](#threads-forks-and-the-verbs), and later that night made a talk a
 room with members, in [rooms, mentions and turns in order](#rooms-mentions-and-turns-in-order),

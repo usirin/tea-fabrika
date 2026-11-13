@@ -146,7 +146,9 @@ if it is not written then ([the data shape comes first](../AGENTS.md#before-you-
 - Which plan tier carries the first slice. Rooms read by other people need `next/`'s brain (R7),
   agents sit in Tier 5 and pipeline steps in Tier 6. [0068](0068-tiers-carry-every-part.md) asks
   each tier to carry a slice of programs working together and of a person starting a program; a
-  lane talking in a room may be one such slice. The plan says which.
+  lane talking in a room may be one such slice. The plan says which. *Answered 2026-11-12:* the
+  slices come forward, ahead of Tiers 5 and 6
+  ([0158](0158-the-pipeline-arrives-as-a-lane-in-its-room.md)).
 
 ## Records
 

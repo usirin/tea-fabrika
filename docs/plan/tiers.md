@@ -391,3 +391,7 @@ Git history keeps the old wording.
   and of programs working together.
 - 2026-11-11, [0111](../../.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md): the merge
   queue's first stage joins Tier 1 as P43, and Tier 6 hardens it.
+- 2026-11-12, [0158](../../.decisions/0158-the-pipeline-arrives-as-a-lane-in-its-room.md): the
+  pipeline arrives as a lane in its room, slice by slice, each with something a person can see.
+  fabsh on screen, `summon`, `join` and rooms come forward for it, after the checklist's window;
+  Tiers 5 and 6 still harden them, and no tier table row moves.

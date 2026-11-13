@@ -55,6 +55,12 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+*2026-11-12:* the pipeline arrives in `next/` as a lane in its room, slice by slice, each ending in
+something a person can see ([0158](../../.decisions/0158-the-pipeline-arrives-as-a-lane-in-its-room.md)).
+The order so far: the checklist's window (P14), fabsh on screen, `summon` and `join`, then the
+lane's room. No Tier 1 row moves. The landing end is on main (P43's merger and queue program); the
+room, fabsh on screen and `summon` are not built in `next/` yet.
+
 *2026-11-12:* P45's slice 1 (ticket 884) is built in `next/`: `@kampus/inbox` keeps one row
 per fact in arrival order and declares no client or agent input. It has no window or boot entry.
 Brain letters under `noticeId(...)` reach a program without an input port. Client entry points
