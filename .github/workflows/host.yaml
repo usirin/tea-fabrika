@@ -28,8 +28,10 @@ concurrency:
 
 jobs:
   launchd:
-    # macOS 14, the version the test's launchctl output was read on.
-    runs-on: macos-14
+    # The oldest macOS GitHub still hosts. The test's launchctl output was read on macOS 14, whose
+    # images were retired on 2026-11-02 (actions/runner-images issue 15226): `macos-14` ends a job
+    # before its first step with "The configuration 'macos-14-arm64-us-default' is not supported".
+    runs-on: macos-15
     # Unmeasured on a runner. The test alone took about 2 minutes on a laptop.
     timeout-minutes: 20
     steps:
