@@ -40,6 +40,7 @@ import { ProgramMail, type ProgramMailError, type Delivery, type Grants } from "
 import * as ProgramMailLedger from "../processes/ProgramMailLedger.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import { Alarm, CheckedWriter, Recording, type Incoming } from "../runtime/Entry.ts";
+import type { Declaration } from "../runtime/Execution.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
 import { ProgramDown } from "../runtime/Program.ts";
@@ -741,22 +742,38 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     }).pipe(write);
   });
   const Bootstrap = Schema.Struct({ process: Schema.String });
-  const boot =
-    original !== undefined
-      ? {
-          process: (yield* Schema.decodeUnknownEffect(Bootstrap)(original.body).pipe(
-            Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-          )).process,
-          rev: original.rev,
-        }
-      : yield* place(
-          Start.cases.first.make({
-            id: bootstrap.id,
-            name: bootstrap.name,
-            code: { program: bootstrap.program, hash: loaded.hash },
-          }),
-          yield* from(),
-        );
+  const boots = yield* Effect.forEach(
+    loaded,
+    Effect.fnUntraced(function* ({ entry, program }) {
+      const original = yield* ledger.read(`processes/${entry.name}`, 0).pipe(
+        Stream.filter((fact) => fact.id === entry.id),
+        Stream.runHead,
+        Effect.map(Option.getOrUndefined),
+      );
+      return original !== undefined
+        ? {
+            process: (yield* Schema.decodeUnknownEffect(Bootstrap)(original.body).pipe(
+              Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+            )).process,
+            rev: original.rev,
+          }
+        : yield* place(
+            Start.cases.first.make({
+              id: entry.id,
+              name: entry.name,
+              code: { program: entry.program, hash: program.hash },
+            }),
+            yield* from(),
+          );
+    }),
+    { concurrency: 1 },
+  );
+  const boot = boots[0];
+
+  if (boot === undefined) {
+    return yield* new LedgerError({ reason: "bad_row" });
+  }
+
   // A malformed pending row still fails the build; only the deliveries run after it, as handle_continue.
   const pending = yield* Effect.forEach(
     sql.exec("SELECT process FROM dev_descriptors WHERE pending>0"),
@@ -1042,7 +1059,7 @@ const processLogic = Effect.fnUntraced(function* (
         return yield* rpc(p.own(active, id, stream, event, { traceId: span.traceId, spanId: span.spanId }));
       }),
     }),
-    WatcherManagerRemote.layer((client, update) => rpc(p.publish(client, update))),
+    WatcherManagerRemote.layer((client, update) => rpc(p.publish(client, { ...update, pid: active }))),
     Layer.succeed(Alarm, {
       // Keep the program's wake; the platform requires a positive alarm time.
       set: (at) =>
