@@ -152,8 +152,8 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
       return yield* conflict("home is not canonical");
     }
   });
-  const existing = Effect.gen(function* () {
-    const stat = yield* fs.lstat(plist).pipe(
+  const readPlist = Effect.fnUntraced(function* (file: string) {
+    const stat = yield* fs.lstat(file).pipe(
       Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(null)),
       Effect.mapError(storage),
     );
@@ -166,8 +166,9 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
       return yield* conflict("plist ownership");
     }
 
-    return yield* fs.readFileString(plist).pipe(Effect.mapError(storage));
+    return yield* fs.readFileString(file).pipe(Effect.mapError(storage));
   });
+  const existing = readPlist(plist);
   const compile = Effect.fnUntraced(function* () {
     const dir = yield* fs
       .makeTempDirectoryScoped({ directory: spec.home, prefix: ".brain-" })
@@ -249,20 +250,26 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
       return yield* conflict("plist changed before removal");
     }
 
-    const restore = fs.link(`${compiled.xml}.previous`, plist).pipe(
+    const captured = `${compiled.xml}.previous`;
+    const restore = fs.link(captured, plist).pipe(
       Effect.catchReason("PlatformError", "AlreadyExists", () => Effect.void),
       Effect.mapError(storage),
       Effect.orDie,
     );
-    // Keep the backup until the lifecycle accepts the reply, including its deadline check.
-    yield* Effect.acquireRelease(fs.link(plist, `${compiled.xml}.previous`).pipe(Effect.mapError(storage)), (_, exit) =>
+    // Rename captures the actual directory entry; checking before unlink would race a replacement.
+    // Keep it until the lifecycle accepts the reply, including its deadline check.
+    yield* Effect.acquireRelease(fs.rename(plist, captured).pipe(Effect.mapError(storage)), (_, exit) =>
       Exit.isSuccess(exit) ? Effect.void : restore,
     );
     yield* Effect.gen(function* () {
-      yield* fs.remove(plist).pipe(
-        Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
-        Effect.mapError(storage),
-      );
+      if ((yield* readPlist(captured)) !== compiled.bytes) {
+        return yield* conflict("plist changed during removal");
+      }
+
+      if ((yield* existing) !== null) {
+        return yield* conflict("plist replaced during removal");
+      }
+
       yield* syncHome;
     }).pipe(Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : restore)));
   });
