@@ -3,7 +3,7 @@
 **Tier 1 approved 2026-11-01. Tiers 2 to 7 proposed. Order of work set 2026-11-01.** Walked when
 Tier 2 starts (owner, 2026-11-08): the first proposed tier's plan.
 
-**Changed 2026-11-13 ([0159](../../.decisions/0159-fabsh-summon-join-come-first.md)): the next thing built is `fabsh`, `summon` and `join`, working
+**Changed 2026-11-13 ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)): the next thing built is `fabsh`, pipes, `summon` and `join`, working
 for real, with whatever they need, so fabrika is built inside fabrika.** The tiers below still show
 the order from before that day: `fabsh` and pipes in Tier 2, agents in Tier 5, rooms in no tier,
 and thin slices in Tier 1. The changed Tier 1 follows in its own pull request. Until it lands,
@@ -397,6 +397,6 @@ Git history keeps the old wording.
   and of programs working together.
 - 2026-11-11, [0111](../../.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md): the merge
   queue's first stage joins Tier 1 as P43, and Tier 6 hardens it.
-- 2026-11-13, [0159](../../.decisions/0159-fabsh-summon-join-come-first.md): the next thing built is `fabsh`, `summon` and
+- 2026-11-13, [0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md): the next thing built is `fabsh`, pipes, `summon` and
   `join`, working for real, with whatever they need. Tier 1 changes to put them first, in its own
   pull request; no tier table above is changed yet.

@@ -1,12 +1,12 @@
 ---
 id: 0159
-title: The next thing built in next/ is fabsh, summon and join working for real, with whatever they need, so fabrika is built inside fabrika, never thin slices of them behind the rest of Tier 1
+title: The next thing built in next/ is the four primitives, fabsh, pipes, summon and join, working for real with whatever they need, so fabrika is built inside fabrika, never thin slices of them behind the rest of Tier 1
 status: accepted
 date: 2026-11-13
-tags: [plan, tiers, tier-1, fabsh, summon, join, rooms, order, next]
+tags: [plan, tiers, tier-1, fabsh, pipes, summon, join, rooms, order, next]
 ---
 
-# 0159: The next thing built in next/ is fabsh, summon and join working for real, with whatever they need, so fabrika is built inside fabrika, never thin slices of them behind the rest of Tier 1
+# 0159: The next thing built in next/ is the four primitives, fabsh, pipes, summon and join, working for real with whatever they need, so fabrika is built inside fabrika, never thin slices of them behind the rest of Tier 1
 
 ```mermaid
 flowchart LR
@@ -19,14 +19,16 @@ flowchart LR
 
 ```text
 A sketch: the lines this scope makes work. The verb `join` is still a lean in the summon guidelines.
+fabsh$ a | b                                   a pipe: what a puts out is mailed to b (0109)
 fabsh$ summon claude haiku as scout
 fabsh$ @scout what changed in next/ yesterday?
 fabsh$ join #bug-17
 fabsh$ #bug-17 @scout here is the failing run
 ```
 
-**What this decides:** the next thing built in `next/` is `fabsh`, `summon` and `join`, working for
-real with everything they need, and the plan changes so this comes first.
+**What this decides:** the next thing built in `next/` is the four primitives, `fabsh`, pipes,
+`summon` and `join`, working for real with everything they need, and the plan changes so this
+comes first.
 
 ## Context
 
@@ -48,18 +50,20 @@ the checklist's window ([0137](0137-tier-1s-program-is-the-checklist.md)) finish
 `fabsh`'s view needs the same parts.
 
 This record amends 0068, 0078 and 0088 in part. The thin slices they ask for are not the target
-for these three things. Their other slices (hands, programs written outside fabrika, a flow fabrika
+for these four primitives. Their other slices (hands, programs written outside fabrika, a flow fabrika
 runs) are not changed here. It also amends
 [0279](0279-tuval-is-a-package-desk-in-tier-2.md) in its timing only: a second tile and its keys no
 longer wait for Tier 2. That the desk is a program stands.
 
 ## Decision
 
-**The next thing built in `next/` is `fabsh`, `summon` and `join`, working for real, with whatever
-they need.**
+**The next thing built in `next/` is the four primitives, `fabsh`, pipes, `summon` and `join`,
+working for real, with whatever they need.**
 
-- **The scope is three things a person types, and everything under them.**
+- **Done is the four primitives themselves, and everything under them.**
   - `fabsh`: a regular program in a tile that takes a line.
+  - Pipes: `a | b` in a `fabsh` line, shell writing over saved program mail
+    ([0109](0109-a-pipe-is-saved-program-mail.md)).
   - `summon`: starts an agent under a name, and `@name` talks to it
     ([0157](0157-summon-starts-an-agent-and-at-talks-to-it.md)).
   - `join`: puts a person in a room with people and agents
@@ -67,10 +71,12 @@ they need.**
     [0158](0158-no-dms-only-rooms.md)).
 - **For real, never a thin slice.** Each works well enough to be used every day to build fabrika.
 - **Whatever they need is in scope,** from whatever tier the plan had it in: the window that shows
-  a program, a second tile and the keys to move between tiles, pipes for `fabsh`'s built-ins, the
-  link to the agent harnesses, rooms.
-- **The order:** the window, then `fabsh` on screen, then pipes for its built-ins, then `summon`
-  and `join`. All of it comes before the programs with their own React views.
+  a program, a second tile and the keys to move between tiles, the link to the agent harnesses,
+  rooms.
+- **The order:** the window, then `fabsh` on screen, then pipes, working first for `fabsh`'s
+  built-ins, then `summon` and `join`.
+- **A program with its own React view is not part of done.** The tracker and the ticket page are
+  the first work after it, built inside fabrika.
 - **The purpose is the test.** Once this works, the next work is built inside fabrika, by talking
   to a summoned agent there.
 - **Tier 1 changes to enable this.** The rows this scope needs come first. The rows it does not
@@ -80,7 +86,8 @@ they need.**
 
 - A plan, a walk or a recommendation about what comes next starts from this scope, never from the
   tier a piece was in before 2026-11-13.
-- No plan answers this scope with a thin slice or a stub of `fabsh`, `summon` or `join`.
+- No plan answers this scope with a thin slice or a stub of `fabsh`, pipes, `summon` or `join`.
+- Nothing is added to done without the owner.
 - A Tier 1 row this scope does not need never blocks it.
 
 ## Consequences

@@ -1,7 +1,7 @@
 ---
 id: 0088
 title: All six core ideas get their thin slice in Tier 1, each as small as it can be and still work, never in an early tier left unnamed
-status: amended-in-part by [0159](0159-fabsh-summon-join-come-first.md)
+status: amended-in-part by [0159](0159-fabsh-pipes-summon-join-first.md)
 date: 2026-11-10
 tags: [tiers, plan, next, hands, programs, packs, pipes, agent, flow, slice, tier-1]
 ---
