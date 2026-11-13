@@ -1,7 +1,11 @@
-// `fabrika settings`: one fresh load of the declared settings, printed with their origins,
-// defaults and descriptions. It selects no repo, as a dev start does, so it reads only the
-// person's file, the declared environment names and the declared flags. The whole report is built
-// before anything prints, and it writes nothing and starts nothing.
+/**
+ * `fabrika settings`: one fresh load of the declared settings, printed with their origins,
+ * defaults and descriptions. It selects no repo, as a dev start does, so it reads only the
+ * person's file, the declared environment names and the declared flags. The whole report is built
+ * before anything prints, and it writes nothing and starts nothing.
+ *
+ * @stability unstable
+ */
 import { Config, Console, Effect, Path } from "effect";
 import { Command, Flag } from "effect/cli";
 import * as Declarations from "../../settings/Declarations.ts";
@@ -17,6 +21,19 @@ const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) 
 
 const optional = (name: string) => Config.String(name).pipe(Config.withDefault(undefined));
 
+/**
+ * Creates the `settings` command, which prints the settings this fabrika reads, with their origins
+ * and defaults.
+ *
+ * **Details**
+ *
+ * Each declared setting is also a flag at its own path, as `--instance.port`, and `--all` adds the
+ * settings their defaults supply. `options.version` is the running fabrika's version, handed to
+ * the load as it is.
+ *
+ * @stability unstable
+ * @category commands
+ */
 export const make = (options: { readonly version: string }) =>
   Command.make(
     "settings",

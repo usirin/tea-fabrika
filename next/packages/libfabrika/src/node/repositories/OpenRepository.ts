@@ -1,3 +1,9 @@
+/**
+ * Opening a selected repository on Node: read and check it before the instance starts, then record
+ * the selection and the person's trust answer once there is a ledger.
+ *
+ * @stability unstable
+ */
 import { DateTime, Effect, Redacted, Schema } from "effect";
 import * as Id from "../../Id.ts";
 import * as Log from "../../ledger/Log.ts";
@@ -31,7 +37,7 @@ const failed = (reason: "storage" | "document" | "read", cause: unknown, message
           : "Selected repository: trust could not be saved."),
   });
 
-// P38's messages can include rejected values and parser input. Keep only known labels and keys.
+// A settings error's messages can include rejected values and parser input. Keep only known labels and keys.
 const documentFailed = (cause: Files.SettingsError) => {
   const labels = [
     ".fabrika/fabrika.toml",
@@ -67,7 +73,19 @@ const documentFailed = (cause: Files.SettingsError) => {
   );
 };
 
-/** Validate before starting the shipped instance. No source resolution or code loading happens here. */
+/**
+ * Reads a selected repository and loads its settings, before any instance starts: it opens the
+ * clone at `location`, takes its snapshot and resolves the settings from that snapshot's document
+ * with the person's file, the flags and the environment.
+ *
+ * **Details**
+ *
+ * It resolves no source folder and loads no code. A failure carries a message for the person. A
+ * settings failure names the file, the line and the key, never the rejected value.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const prepare = Effect.fn("repositoryOpen.prepare")(function* (
   location: string,
   options: Omit<Parameters<typeof Load.load>[0], "repo">,
@@ -92,7 +110,21 @@ export const prepare = Effect.fn("repositoryOpen.prepare")(function* (
   return { snapshot: { ...snapshot, present: text !== null }, settings: loaded.snapshot, values: loaded.values };
 });
 
-/** Local identity is supplied by the instance, never the document or terminal answer. */
+/**
+ * Records a prepared selection on the ledger and settles whether the person trusts it. It answers
+ * the opening's last state: `ready`, `refused` or `awaiting_trust`.
+ *
+ * **Details**
+ *
+ * It writes `selected`, then reuses the person's last saved decision for this clone when there is
+ * one. With none, an interactive call asks `confirm` once and writes the `decision`; a call that is
+ * not interactive stops at `awaiting_trust` and writes nothing more. An accepted or a denied
+ * selection ends with an `opened` event. Who is asking (`actor`, `by` and `build`) comes from the
+ * instance's options, never from the repository's document or the terminal answer.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const open = Effect.fn("repositoryOpen.open")(function* <R>(
   prepared: Effect.Success<ReturnType<typeof prepare>>,
   options: {

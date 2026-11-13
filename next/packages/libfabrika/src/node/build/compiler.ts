@@ -1,28 +1,51 @@
-// The React Compiler's one compile step, and the check on what it skipped (docs/direction/react-compiler.md,
-// C1 and C5). Tier 1's exam, item 13 (docs/plan/tier-1-detail.md, "The exam PR").
-//
-// `compile` is what the build calls on every `.tsx` file (`build.ts`, Tier 1's P12 and P16). `check`
-// is what `pnpm lint:compiler` runs over `next/**/*.tsx`, with no bundle, through the app's exam
-// command (`next/apps/fabrika/src/exam/compiler.ts`). Both fail on the same findings:
-//
-// - a function the Compiler skipped, with its reason and line;
-// - a purity finding, such as a clock read in render or in a handler a view passes down;
-// - a function with `"use no memo"` and no row in `compiler-ledger.json`;
-// - a row in `compiler-ledger.json` whose function no longer carries `"use no memo"` (a stale row);
-// - a component that draws JSX and did not compile, with no word from the Compiler. That is what a
-//   later port that prints its cache another way looks like, so it breaks loudly.
-//
-// The one way out of a finding is `"use no memo"` in the function plus a row the owner adds, in a
-// change of its own. The ledger starts empty and only shrinks. There is no setting to loosen it.
+/**
+ * The React Compiler's one compile step, and the check on what it skipped
+ * (docs/direction/react-compiler.md).
+ *
+ * `compile` is what the build calls on every `.tsx` file (`build.ts`). `check` is what
+ * `pnpm lint:compiler` runs over `next/**\/*.tsx`, with no bundle, through the app's exam command
+ * (`next/apps/fabrika/src/exam/compiler.ts`). The build runs `check` too, so both fail on the same
+ * findings:
+ *
+ * - a function the Compiler skipped, with its reason and line;
+ * - a purity finding, such as a clock read in render or in a handler a view passes down;
+ * - a function with `"use no memo"` and no row in `compiler-ledger.json`;
+ * - a row in `compiler-ledger.json` whose function no longer carries `"use no memo"` (a stale row);
+ * - a component that draws JSX and did not compile, with no word from the Compiler. That is what a
+ *   later port that prints its cache another way looks like, so it breaks loudly.
+ *
+ * The one way out of a finding is `"use no memo"` in the function plus a row the owner adds, in a
+ * change of its own. The ledger starts empty and only shrinks. There is no setting to loosen it.
+ *
+ * @stability unstable
+ */
 import { Schema } from "effect";
 import { parseSync } from "oxc-parser";
 import { type OxcError, transformSync } from "oxc-transform-react";
 
-/** A row of `compiler-ledger.json`: a function left out of the Compiler on purpose, and why. */
+/**
+ * Schema for a row of `compiler-ledger.json`: a function left out of the Compiler on purpose, and
+ * why.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const Row = Schema.Struct({ file: Schema.String, fn: Schema.String, reason: Schema.String });
+/**
+ * A row of `compiler-ledger.json`.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Row = typeof Row.Type;
 
-/** One thing the check refuses, at a function in a file. */
+/**
+ * One thing the check refuses, at a function in a file, with the reason in words. `line` is 0 for
+ * a stale ledger row, which has no place in the source.
+ *
+ * @stability unstable
+ * @category models
+ */
 export interface Finding {
   readonly file: string;
   readonly fn: string;
@@ -30,7 +53,18 @@ export interface Finding {
   readonly reason: string;
 }
 
-/** The one compile step: oxc's Rust port of the React Compiler, with its findings reported. */
+/**
+ * Compiles one `.tsx` file with oxc's Rust port of the React Compiler, and answers the code with
+ * what the Compiler reported.
+ *
+ * **Details**
+ *
+ * It does not throw on a function it cannot compile: it leaves that function as it was and reports
+ * why. It reports impure calls in render too. `check` turns the reports into findings.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const compile = (file: string, code: string) =>
   transformSync(file, code, {
     jsx: { runtime: "automatic" },
@@ -230,8 +264,12 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
 };
 
 /**
- * What the check refuses across files, each given as its path from the top of the repo and its
- * text. A ledger row whose file is not among them is stale too.
+ * Checks files against the Compiler and the ledger, and returns every finding. Each file is given
+ * as its path from the top of the repo and its text. A ledger row whose file is not among them is
+ * stale too, and is a finding.
+ *
+ * @stability unstable
+ * @category checking
  */
 export const check = (files: ReadonlyMap<string, string>, ledger: readonly Row[]): readonly Finding[] => [
   ...[...files].flatMap(([file, text]) =>

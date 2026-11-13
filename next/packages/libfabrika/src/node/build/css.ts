@@ -1,10 +1,15 @@
-// One stylesheet with its local `@import`s inlined by lightningcss's own bundler, which keeps the
-// cascade: layer order, source order, and a refusal when a remote import follows a bundled one.
-// Each file it reads is checked first (`check`), since the bundler would keep a local `url()` and
-// wrap a `layer` or `supports()` import that the build does not accept.
-// A window's stylesheet is served from the brain's table, which holds scripts and stylesheets only,
-// so any other local file a stylesheet names stops the build instead of answering 404 later.
-// Every file is found and read through Effect's FileSystem and Path, which the caller provides.
+/**
+ * One stylesheet with its local `@import`s inlined by lightningcss's own bundler, which keeps the
+ * cascade: layer order, source order, and a refusal when a remote import follows a bundled one.
+ * Each file it reads is checked first (`check`), since the bundler would keep a local `url()` and
+ * wrap a `layer` or `supports()` import that the build does not accept.
+ *
+ * A window's stylesheet is served from the brain's table, which holds scripts and stylesheets only,
+ * so any other local file a stylesheet names stops the build instead of answering 404 later.
+ * Every file is found and read through Effect's `FileSystem` and `Path`, which the caller provides.
+ *
+ * @stability unstable
+ */
 import { Effect, FileSystem, Path } from "effect";
 import { bundleAsync, transform } from "lightningcss";
 import { BuildError } from "../../runtime/Built.ts";
@@ -136,6 +141,22 @@ const cyclic = (edges: ReadonlyMap<string, ReadonlySet<string>>) => {
   return [...edges.keys()].some(visit);
 };
 
+/**
+ * Inlines one stylesheet's local `@import`s, in order, and answers the whole sheet as text.
+ *
+ * **Details**
+ *
+ * Each file is checked as the bundler reads it. A remote import stays as it is. A failure is a
+ * `BuildError` with `reason: "bundle"` and a message that names what is broken.
+ *
+ * **Gotchas**
+ *
+ * It refuses a `url()` that names a local file, an `@import` with a `layer` or a `supports()`
+ * condition, and a sheet that imports itself through any chain.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const inlineStylesheet = Effect.fn("build.css")(function* (file: string) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
