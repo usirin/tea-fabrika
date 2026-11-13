@@ -32,7 +32,7 @@ const Port = Schema.Struct({
 type Port = typeof Port.Type;
 const Declarations = Arbitrary.array(Arbitrary.array(Arbitrary.schema(Port), { maxLength: 16 }), { maxLength: 4 });
 
-const fields = (shape: Port["shape"]): Schema.Struct.Fields => {
+const fields = (shape: Port["shape"]): Readonly<Record<string, Schema.Top & Schema.Codec<unknown, unknown>>> => {
   const shared = Schema.Struct({ label: text, count: Schema.Int });
   return shape === "text"
     ? { name: Schema.String, note: Schema.optionalKey(Schema.String) }
@@ -440,7 +440,7 @@ const makeForm = (form: Declaration) => {
           : member.wrap === "suspend_encodeKeys"
             ? Schema.suspend(() => encoded)
             : member.wrap === "filter"
-              ? plain.check(Schema.makeFilter((value) => !Object.values(value).some((v) => v === "blocked")))
+              ? plain.check(Schema.makeFilter((value) => !Object.values<unknown>(value).some((v) => v === "blocked")))
               : plain;
     return { tags: member.tags, fields: Object.keys(fields), schema };
   });

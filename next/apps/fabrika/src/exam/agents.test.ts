@@ -46,7 +46,7 @@ type Tool = {
 
 type InputDeclaration = {
   readonly name: string;
-  readonly schema: Schema.Struct<Schema.Struct.Fields> | Schema.Null;
+  readonly schema: Schema.Struct<Readonly<Record<string, Schema.Top & Schema.Codec<unknown, unknown>>>> | Schema.Null;
   readonly readOnly: boolean;
   readonly personOnly: boolean;
 };

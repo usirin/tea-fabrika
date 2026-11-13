@@ -366,6 +366,9 @@ const Payload = Schema.Record(Schema.String, Schema.Json).check(
 
 const Fields = Schema.Record(Schema.String, Schema.Unknown);
 
+/** Narrows a JSON value to its object case. `Predicate.isObject` alone leaves a type no rest pattern takes. */
+const isJsonObject = (u: Schema.Json): u is Schema.JsonObject => Predicate.isObject(u);
+
 // Keep the Msg's codecs and checks intact. Only add and remove the port's discriminator.
 const writePortCodec = (msg: Declared, key: string) =>
   Payload.pipe(
@@ -374,7 +377,7 @@ const writePortCodec = (msg: Declared, key: string) =>
       SchemaTransformation.transform<Schema.Json, Readonly<Record<string, Schema.Json>>>({
         decode: (value) => ({ ...value, type: key }),
         encode: (wire) => {
-          if (!Predicate.isObject(wire)) {
+          if (!isJsonObject(wire)) {
             return {};
           }
 
