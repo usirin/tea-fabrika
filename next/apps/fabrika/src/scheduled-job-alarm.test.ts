@@ -48,6 +48,7 @@ const Beat = Schema.Struct({
 
 const Letter = Schema.Struct({
   id: Schema.String,
+  pos: Schema.Int,
   body: Schema.Struct({ m: Schema.Unknown }),
 });
 
@@ -163,11 +164,14 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
 
         for (const row of timers) {
           const timer = Schema.decodeUnknownSync(Timer)(row.body.m);
-          expect(row.id).toBe(`${pid}/due/${timer.at}`);
+          // format: the runner writes a timer letter's id as `<process>/due/<at>/<pos>`, with the inbox
+          // position whose model asked for this wake, so the same wake asked for again is a new
+          // letter (P14 slice 2, plan amendment A-Timer-4). The letter itself lands next, at `pos + 1`.
+          expect(row.id).toBe(`${pid}/due/${timer.at}/${row.pos - 1}`);
         }
 
         for (const beat of beats) {
-          expect(timers.some((row) => row.id === `${pid}/due/${beat.body.due}`)).toBe(true);
+          expect(timers.some((row) => row.id === `${pid}/due/${beat.body.due}/${row.pos - 1}`)).toBe(true);
         }
 
         // Bracket the alarm read with views: retry when a tick crosses the observation.

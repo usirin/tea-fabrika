@@ -213,7 +213,15 @@ vi.mock("@kampus/libfabrika/node/build", async (original) => ({
     Effect.succeed({
       "fabrika/counter": { hash: createHash("sha256").update("counter").digest("hex"), source: "counter" },
     }),
-  bundle: () => Effect.succeed({ output: [{ type: "chunk", code: "export default {};" }] }),
+  bundle: (_input: unknown, _plugins: unknown, options: { readonly phase?: string }) =>
+    Effect.succeed({
+      output: [
+        { type: "chunk", code: "export default {};" },
+        ...(options.phase === "tab"
+          ? [{ type: "asset", fileName: "index.html", source: '<!doctype html><script src="/window.js"></script>' }]
+          : []),
+      ],
+    }),
 }));
 
 vi.mock("./exam/compiler.ts", async (original) => ({
@@ -255,6 +263,11 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
     [join(root, "compiler-ledger.json"), "[]"],
     [join(out, "brain.mjs"), "last good"],
   ]);
+
+  for (const module of ["@manti-ui/styles/index.css", "@kampus/fabrika-design/tokens.css", "@kampus/tuval/style.css"]) {
+    files.set(decodeURIComponent(new URL(import.meta.resolve(module)).pathname), ":root { --test-color: red; }");
+  }
+
   const modes: Array<ReadonlyArray<unknown>> = [];
   const calls: Array<ReadonlyArray<unknown>> = [],
     paths: Array<ReadonlyArray<string>> = [];
@@ -275,6 +288,7 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
       files.set(path, text);
     });
   const fs = FileSystem.layerNoop({
+    realPath: (path) => Effect.succeed(path),
     glob: () => Effect.succeed([relative(root, source)]),
     exists: (path) =>
       Effect.sync(() => files.has(path) || [...files.keys()].some((file) => file.startsWith(`${path}/`))),
@@ -366,8 +380,27 @@ for (const failed of [false, true]) {
           const result = await Effect.runPromiseExit(
             build({ out: w.out, files: [source] }).pipe(Effect.provide(w.layer)),
           );
+          // P14 slice 2 (ticket 828): the app's build selects its tab, so the tab's three stylesheets are
+          // read through the same FileSystem too, and every read still comes before the first write.
+          const reads = w.calls.flatMap(([call, file]) => (call === "read" ? [String(file)] : []));
+          expect(reads.filter((file) => file === source || file === join(root, "compiler-ledger.json"))).toEqual([
+            source,
+            join(root, "compiler-ledger.json"),
+          ]);
           expect(w.calls[0]).toEqual(["read", source]);
           expect(w.calls[1]).toEqual(["read", join(root, "compiler-ledger.json")]);
+          const ledgerRead = w.calls.findIndex(
+            ([call, file]) => call === "read" && file === join(root, "compiler-ledger.json"),
+          );
+          expect(
+            w.calls.slice(0, ledgerRead).every(([call]) => call === "read"),
+            "only reads come before the compiler ledger read",
+          ).toBe(true);
+          const styles = reads.filter((file) => file.endsWith(".css"));
+          expect(new Set(styles).size, "the tab's stylesheets are read through FileSystem").toBe(3);
+          const lastRead = w.calls.findLastIndex(([call]) => call === "read");
+          const firstWrite = w.calls.findIndex(([call]) => call === "write");
+          expect(firstWrite === -1 || lastRead < firstWrite, "a read came after a write").toBe(true);
           const renames = w.calls.filter(([call]) => call === "rename");
           expect(renames).toEqual([
             ["rename", w.out, w.backup],

@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { inspect } from "node:util";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { it as effect } from "@effect/vitest";
+import { checklist } from "@kampus/checklist";
 import { counter } from "@kampus/counter";
 import { nodeExecution, type Descriptor, type Incoming } from "@kampus/libfabrika";
 import { revokeText } from "@kampus/libfabrika/access/Text";
@@ -382,7 +383,13 @@ const storage = (db: DatabaseSync, alarms?: AlarmHooks) => {
     },
     delete: async (key: string) => values.delete(key),
     sync: async () => {},
-    setAlarm: async (at: number) => alarms?.set(at),
+    setAlarm: async (at: number) => {
+      if (at <= 0) {
+        throw new TypeError("setAlarm() cannot be called with an alarm time <= 0");
+      }
+
+      alarms?.set(at);
+    },
     deleteAlarm: async () => alarms?.clear(),
   };
 };
@@ -453,6 +460,7 @@ const world = (
 ) => {
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
   table.programs["fabrika/counter"] = { hash: "counter-a", source: "counter" };
+  table.programs["fabrika/checklist"] = { hash: "checklist-a", source: "checklist" };
   table.programs.approvals = { hash: "approvals-a", source: "approvals" };
   table.programs.poison = { hash: "poison-a", source: "poison" };
   table.programs[requestProgram.name] = { hash: "requester-a", source: "requester" };
@@ -749,6 +757,11 @@ const world = (
               check: (kind: string, event: unknown) => box.check(kind, event),
               admit: (msg: unknown) => box.admit(msg),
             };
+          }
+
+          if (id.startsWith("checklist-")) {
+            const Box = programBox(checklist, "checklist-a");
+            return Reflect.construct(Box, []);
           }
 
           const approval = id.startsWith("approvals-"),
@@ -1182,12 +1195,13 @@ describe("P12 Project configure recovery", () => {
 
       expect(await w.reopen()).toMatchObject([
         { process: descriptor.id, name: "counter:1", program: "fabrika/counter" },
+        { process: expect.any(String), name: "checklist:1", program: "fabrika/checklist" },
       ]);
       // The next reopen delivers the same descriptor once and clears pending.
       await vi.waitFor(() => expect(Number(row().pending)).toBe(0), { timeout: 2_000 });
-      expect(w.attempts).toHaveLength(fault === "healthy" ? 1 : 2);
+      expect(w.attempts.filter((attempt) => attempt.name === "counter:1")).toHaveLength(fault === "healthy" ? 1 : 2);
 
-      for (const attempt of w.attempts) {
+      for (const attempt of w.attempts.filter((attempt) => attempt.name === "counter:1")) {
         expect(attempt).toEqual(descriptor);
       }
 

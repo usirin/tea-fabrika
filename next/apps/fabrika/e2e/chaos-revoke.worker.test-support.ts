@@ -20,7 +20,10 @@ const heldOwner = (ctx: Parameters<typeof projectRuntime>[0], env: Parameters<ty
   projectRuntime(ctx, env, {
     input: settings(env).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause }))),
     programs,
-    bootstrap: { name: "counter:1", id: "counter:1", program: "fabrika/counter" },
+    bootstrap: [
+      { name: "counter:1", id: "counter:1", program: "fabrika/counter" },
+      { name: "checklist:1", id: "checklist:1", program: "fabrika/checklist" },
+    ],
     door: (options) =>
       Effect.gen(function* () {
         const release = yield* Deferred.make<void>();

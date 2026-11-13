@@ -660,6 +660,11 @@
                 "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
               },
               {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
+              },
+              {
                 "name": "playwright",
                 "importNames": ["_electron"],
                 "message": "Launch a test window through apps/fabrika/test-window.ts."
@@ -735,6 +740,11 @@
               {
                 "name": "toml-eslint-parser",
                 "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               },
               {
                 "name": "playwright",
@@ -916,6 +926,11 @@
                 "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
               },
               {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
+              },
+              {
                 "name": "playwright",
                 "importNames": ["_electron"],
                 "message": "Launch a test window through apps/fabrika/test-window.ts."
@@ -1015,6 +1030,11 @@
                 "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
               },
               {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
+              },
+              {
                 "name": "playwright",
                 "importNames": ["_electron"],
                 "message": "Launch a test window through apps/fabrika/test-window.ts."
@@ -1081,6 +1101,11 @@
               {
                 "name": "toml-eslint-parser",
                 "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
               },
               {
                 "name": "playwright",

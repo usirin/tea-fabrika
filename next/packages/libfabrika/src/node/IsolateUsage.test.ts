@@ -628,7 +628,7 @@ it.effect(
             const beforeProject = seen.length;
             const projectOptions: ProjectOptions = {
               programs: { "usage-fixture": { hash: "fixture-build", source: "fixture" } },
-              bootstrap: { name: "bootstrap:1", id: "bootstrap", program: "usage-fixture" },
+              bootstrap: [{ name: "bootstrap:1", id: "bootstrap", program: "usage-fixture" }],
               door: (options) =>
                 Effect.sync(() => {
                   policy = options.policy;

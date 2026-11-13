@@ -26,6 +26,7 @@ import {
   Schema,
   Stream,
 } from "effect";
+import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { type Envelope, type NotGranted, SessionManager, SignRequest, Writer } from "../coordination/index.ts";
 import { processId, processIds } from "../Id.test-support.ts";
@@ -1596,6 +1597,117 @@ describe("p35 Cmd order, replay and recorded failures", () => {
       }).pipe(Effect.provide(w.layer())),
     );
   });
+  it.effect.prop(
+    "A-Timer: asking for the same wake after a new input delivers a second timer with its own arrival",
+    {
+      asked: Schema.Union([Schema.Literal(0), Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100_000 }))]),
+      lag: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100_000 })),
+    },
+    ({ asked, lag }) =>
+      Effect.gen(function* () {
+        const w = yield* Effect.tryPromise({
+          try: () => world(),
+          catch: (cause: unknown): Error => new Error("Runner fixture failed", { cause }),
+        });
+        yield* Effect.gen(function* () {
+          const r: Runner = yield* w.ProgramRunner;
+          const arrivals = [1_000_000 + asked + lag, 1_000_000 + asked + lag * 2];
+          const ids: Array<string> = [];
+
+          for (const [n, arrivedAt] of arrivals.entries()) {
+            yield* r.msg(w.input(n + 1, { type: "schedule", at: asked }));
+            const before = yield* r.open("scheduled");
+            expect(before.view.wake).toBe(asked);
+            ids.push(`${PROCESS}/due/${asked}/${before.rev}`);
+            yield* TestClock.setTime(arrivedAt);
+            yield* r.due(before.view.wake!);
+            const timers = (yield* inbox).filter((row) => row.id.includes("/due/"));
+            expect((yield* r.open("delivered")).view).toMatchObject({
+              count: n + 1,
+              replies: n + 1,
+              wake: asked + 10,
+            });
+            expect(timers.map((row) => body(row).m)).toEqual(
+              arrivals.slice(0, n + 1).map((clock) => ({ type: "timer", at: asked, arrivedAt: clock })),
+            );
+            expect(w.workCalls()).toBe(n + 1);
+          }
+
+          expect((yield* inbox).filter((row) => row.id.includes("/due/")).map((row) => row.id)).toEqual(ids);
+          expect(new Set(ids).size).toBe(2);
+        }).pipe(Effect.provide(w.layer()));
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
+  it.effect.prop(
+    "A-Timer: a due repeated after a failed step keeps one letter and its first arrival",
+    {
+      asked: Schema.Union([Schema.Literal(0), Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100_000 }))]),
+      lag: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100_000 })),
+    },
+    ({ asked, lag }) =>
+      Effect.gen(function* () {
+        const w = yield* Effect.tryPromise({
+          try: () => world(),
+          catch: (cause: unknown): Error => new Error("Runner fixture failed", { cause }),
+        });
+        const arrivedAt = 1_000_000 + asked + lag;
+        yield* Effect.gen(function* () {
+          const r: Runner = yield* w.ProgramRunner;
+          yield* r.msg(w.input(1, { type: "schedule", at: asked }));
+          const before = yield* r.open("scheduled");
+          const saved = yield* ProcessStore.use((store) => store.load);
+          w.fault.record = true;
+          yield* TestClock.setTime(arrivedAt);
+          expect(yield* failure(r.due(asked))).toMatchObject({ _tag: "LedgerError" });
+          const first = (yield* inbox).filter((row) => row.id.includes("/due/"));
+          expect(first).toHaveLength(1);
+          expect(first[0]!.id).toBe(`${PROCESS}/due/${asked}/${before.rev}`);
+          expect(body(first[0]!).m).toEqual({ type: "timer", at: asked, arrivedAt });
+          expect(yield* ProcessStore.use((store) => store.load)).toEqual(saved);
+          expect(w.workCalls()).toBe(0);
+          yield* TestClock.adjust(lag);
+          yield* r.due(asked);
+          expect((yield* inbox).filter((row) => row.id.includes("/due/"))).toEqual(first);
+          expect((yield* r.open("repeated")).view).toMatchObject({ count: 1, wake: asked + 10 });
+        }).pipe(Effect.provide(w.layer()));
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
+  it.effect.prop(
+    "A-Timer: a due writes no timer when the program asks for no wake or a later wake",
+    {
+      at: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100_000 })),
+      gap: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100_000 })),
+    },
+    ({ at, gap }) =>
+      Effect.gen(function* () {
+        const w = yield* Effect.tryPromise({
+          try: () => world(),
+          catch: (cause: unknown): Error => new Error("Runner fixture failed", { cause }),
+        });
+        yield* Effect.gen(function* () {
+          const r: Runner = yield* w.ProgramRunner;
+          expect((yield* r.open("initial")).view.wake).toBeNull();
+          const initialRows = yield* inbox;
+          const initialSteps = yield* steps;
+          yield* r.due(at);
+          expect(yield* inbox).toEqual(initialRows);
+          expect(yield* steps).toEqual(initialSteps);
+          yield* r.msg(w.input(1, { type: "schedule", at: at + gap }));
+          const scheduled = yield* r.open("later");
+          const scheduledRows = yield* inbox;
+          const scheduledSteps = yield* steps;
+          expect(scheduled.view.wake).toBeGreaterThan(at);
+          yield* r.due(at);
+          expect(yield* inbox).toEqual(scheduledRows);
+          expect(yield* steps).toEqual(scheduledSteps);
+          expect(yield* r.open("unchanged")).toEqual(scheduled);
+          expect(w.workCalls()).toBe(0);
+        }).pipe(Effect.provide(w.layer()));
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
   it("plant, mint a new timer id: a repeated due time saves and fires exactly once", async () => {
     const w = await world();
     await Effect.runPromise(
@@ -2310,7 +2422,7 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
     { arbitrary: { seed: 119120, runs: 12 } },
   );
 
-  for (const id of [`${PROCESS}/1/0/answer`, `${PROCESS}/due/42`]) {
+  for (const id of [`${PROCESS}/1/0/answer`, `${PROCESS}/due/42/0`]) {
     it.effect.prop(
       `plant, leave ${id} public: mail cannot squat on a runner-owned id`,
       {
@@ -2319,7 +2431,7 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
           n: Arbitrary.schema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
         }).pipe(
           Arbitrary.map(({ process, n }) =>
-            id.includes("/due/") ? `${process}/due/${n}` : `${process}/${n}/0/answer`,
+            id.includes("/due/") ? `${process}/due/${n}/${n}` : `${process}/${n}/0/answer`,
           ),
         ),
       },

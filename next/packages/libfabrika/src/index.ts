@@ -43,7 +43,9 @@ export {
   type View,
   WatcherManager,
 } from "./runtime/Entry.ts";
-export { diff, type Patch } from "./runtime/Patch.ts";
+export { apply, diff, type Patch } from "./runtime/Patch.ts";
+export * as ProgramClient from "./runtime/Client.ts";
+export { clientMachineFor } from "./runtime/Client.ts";
 export {
   EventPolicy,
   Input,
@@ -77,15 +79,16 @@ export { RecordedStart } from "./settings/RecordedStart.ts";
 export * as SettingsStarts from "./settings/Starts.ts";
 // A program window's typed contract, and the rows a client records (P14).
 export {
-  ClientRecord,
-  ClientRow,
   commandMsg,
   defineWindow,
+  type AnyTile,
+  type TileProps,
   type WindowData,
   type WindowMsg,
   type WindowProps,
   type WindowRegistration,
 } from "./runtime/Window.ts";
+export { ClientRecord, ClientRow } from "./transport/ClientRows.ts";
 /**
  * @stability unstable
  */

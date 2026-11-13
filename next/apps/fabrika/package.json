@@ -17,7 +17,12 @@
     "@kampus/libfabrika": "workspace:*",
     "@effect/platform-node": "catalog:",
     "effect": "catalog:",
-    "oxc-parser": "catalog:"
+    "oxc-parser": "catalog:",
+    "@kampus/tuval": "workspace:*",
+    "@kampus/fabrika-design": "workspace:*",
+    "@manti-ui/styles": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261027.1",
@@ -28,7 +33,6 @@
     "rolldown": "catalog:",
     "fast-check": "catalog:",
     "playwright": "catalog:",
-    "react-dom": "catalog:",
     "@kampus/checklist": "workspace:*",
     "@kampus/inbox": "workspace:*",
     "@kampus/chaos": "workspace:*",
@@ -36,7 +40,9 @@
     "@alchemy.run/cloudflare": "catalog:",
     "alchemy": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:"
   },
   "volta": {
     "extends": "../../../package.json"

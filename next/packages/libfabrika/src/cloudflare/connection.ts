@@ -195,6 +195,15 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
     yield* rpc(p.disconnect(state.client as ConnectionId));
     connections.delete(ws);
   });
+  // The runtime leaves a peer's close frame unanswered, and a browser then keeps its socket closing
+  // for 10 s before it reports the close. One close frame back ends it at once (RFC 6455, 5.5.1). It
+  // carries the peer's code, or 1000 for a code no frame may carry (1005, 1006). A socket that is
+  // already gone refuses the frame, and nothing is left to answer.
+  const answerClose = (ws: WebSocket, code: number) =>
+    Effect.try({
+      try: () => ws.close(code === 1000 || (code >= 3000 && code <= 4999) ? code : 1000, "closed"),
+      catch: (cause) => new LedgerError({ reason: "unreachable", cause }),
+    }).pipe(Effect.ignore);
   const ring = Effect.fn("connection.ring")(function* (stream: string, rev: number) {
     const span = yield* Effect.currentSpan;
     const onRefused = (reason: string) => Effect.sync(() => span.attribute(REFUSED, reason));
@@ -281,7 +290,11 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
       const work = (yield* connected(ws)).frame(text);
       yield* state._tag === "online" ? recorded(work) : work;
     }),
-    close: Effect.fnUntraced(function* (ws: WebSocket) {
+    close: Effect.fnUntraced(function* (ws: WebSocket, code?: number) {
+      if (code !== undefined) {
+        yield* answerClose(ws, code);
+      }
+
       return yield* (yield* attached(ws))._tag === "online" ? recorded(close(ws)) : close(ws);
     }),
     ring: (stream: string, rev: number) => recorded(ring(stream, rev), (counted) => counted).pipe(Effect.asVoid),

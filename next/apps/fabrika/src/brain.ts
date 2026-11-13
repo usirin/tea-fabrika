@@ -309,9 +309,9 @@ export class Connection extends DurableObject<Env> {
     return this.runtime.runPromise(ConnectionService.use((g) => g.message(ws, text)));
   }
 
-  webSocketClose(ws: WebSocket) {
+  webSocketClose(ws: WebSocket, code: number) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the WebSocket event enters Effect
-    return this.runtime.runPromise(ConnectionService.use((g) => g.close(ws)));
+    return this.runtime.runPromise(ConnectionService.use((g) => g.close(ws, code)));
   }
 
   webSocketError(ws: WebSocket) {

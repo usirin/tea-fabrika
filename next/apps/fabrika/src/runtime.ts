@@ -34,7 +34,10 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
     input: checkedSettings(env),
     programs,
     // The program is the core pack's `fabrika/counter`; its registered name stays `counter:1`.
-    bootstrap: { name: "counter:1", id: "counter:1", program: "fabrika/counter" },
+    bootstrap: [
+      { name: "counter:1", id: "counter:1", program: "fabrika/counter" },
+      { name: "checklist:1", id: "checklist:1", program: "fabrika/checklist" },
+    ],
     door: (options) =>
       Effect.gen(function* () {
         const checked = yield* RecordedStart;

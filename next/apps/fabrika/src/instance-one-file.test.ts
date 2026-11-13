@@ -121,6 +121,11 @@ const CounterTurn = Schema.Struct({
   model: Schema.Struct({ count: Schema.Number }),
 });
 
+const ChecklistTurn = Schema.Struct({
+  _tag: Schema.Literal("stepped"),
+  model: Schema.Struct({ items: Schema.Array(Schema.Unknown) }),
+});
+
 const turn = async <A>(
   schema: Schema.Codec<A, unknown>,
   program: Loaded,
@@ -675,6 +680,14 @@ describe("P16 copied-file real instance, serial", () => {
                             if (name === "fabrika/counter") {
                               const counted = await turn(CounterTurn, program, "init", [null]);
                               expect(counted.model).toEqual({ count: 0 });
+                              continue;
+                            }
+
+                            // P14 slice 2: the table's second core program. It is no planted one, so
+                            // it loads and starts as itself, as the counter does.
+                            if (name === "fabrika/checklist") {
+                              const listed = await turn(ChecklistTurn, program, "init", [null]);
+                              expect(listed.model).toEqual({ items: [] });
                               continue;
                             }
 
