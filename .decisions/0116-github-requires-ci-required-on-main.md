@@ -1,7 +1,7 @@
 ---
 id: 0116
 title: GitHub requires the ci-required check on main beside commits, and a pull request need not be up to date to merge
-status: accepted
+status: amended-in-part by [0161](0161-no-step-signing-by-hand.md), [0162](0162-no-friction-before-a-merge.md), [0163](0163-the-lead-acts-on-the-owners-word.md)
 date: 2026-11-11
 tags: [ci, merge, ruleset, github-actions, catchup, required-check]
 ---

@@ -155,7 +155,7 @@ export const suite = (driver: Driver) =>
         expect(yield* replies(h)).toHaveLength(1);
       }),
     );
-    type Real = { h: World; inspect: Effect.Effect<void, unknown> };
+    type Real = { h: World; inspect: Effect.Effect<void, unknown>; token: Redacted.Redacted<string> };
     const Cell = Schema.Struct({
       pick: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
       reason: Schema.Literals(["unavailable", "rate_limited", "refused"]),
@@ -165,6 +165,11 @@ export const suite = (driver: Driver) =>
       const state = yield* r.h.current().model;
 
       if (state === null || state._tag === "idle") {
+        if (state?._tag === "idle") {
+          yield* r.inspect;
+          r.h = yield* driver.open(r.token);
+        }
+
         yield* r.h.host.fail(
           "change",
           cell.pick % 2 === 0 ? { kind: "fault", reason: cell.reason } : { kind: "defect" },
@@ -279,21 +284,52 @@ export const suite = (driver: Driver) =>
         }
 
         yield* inspect;
-        yield* h.reset;
+        const walking = yield* driver.open(Redacted.make(value.text));
+        yield* walking.land("walking");
+        const walk: Real = {
+          h: walking,
+          token: Redacted.make(value.text),
+          inspect: Effect.suspend(() =>
+            Effect.gen(function* () {
+              driver.unleaked(
+                [
+                  JSON.stringify(yield* walk.h.current().checkpoint),
+                  JSON.stringify(yield* walk.h.current().letters(NAME)),
+                  JSON.stringify(yield* walk.h.current().letters("queue")),
+                  JSON.stringify(yield* walk.h.savedReplies),
+                  ...captured.text(),
+                  ...logs,
+                ],
+                [value.text, value.token],
+              );
+            }),
+          ),
+        };
         const model = { n: 0 };
 
         for (const command of commands) {
-          yield* step(command, model, { h, inspect });
+          yield* step(command, model, walk);
         }
 
         // Finish a real checked merge so captures cannot be empty even when the random walk abandoned.
-        yield* finish(h);
+        yield* finish(walk.h);
+        yield* walk.inspect;
         const status = yield* h.host.read(1);
 
         if (status?.state === "open") {
-          yield* h.reset;
-          yield* h.land("finish");
-          yield* finish(h);
+          const final = yield* driver.open(Redacted.make(value.text));
+          yield* final.land("finish");
+          yield* finish(final);
+          driver.unleaked(
+            [
+              JSON.stringify(yield* final.current().checkpoint),
+              JSON.stringify(yield* final.current().letters(NAME)),
+              JSON.stringify(yield* final.current().letters("queue")),
+              ...captured.text(),
+              ...logs,
+            ],
+            [value.text, value.token],
+          );
         }
 
         yield* inspect;

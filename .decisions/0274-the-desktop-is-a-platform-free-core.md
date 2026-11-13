@@ -48,3 +48,4 @@ runtime is used through Alchemy ([0042](0042-platform-pieces-go-through-alchemy.
 
 - Like every layer, it must run in a browser tab.
 - A desktop process in the brain, where today's app keeps the layout.
+  *Correction, 2026-11-13: in today's version the host process keeps the desk, layout and focus, and steps it one key at a time (`apps/fabrika/src/host/serve.ts:344`, `apps/fabrika/src/desk/desk.ts:147`, its `Workspace` with `focused`). The app only shows it.*

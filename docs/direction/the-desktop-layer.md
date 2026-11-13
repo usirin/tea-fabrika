@@ -15,6 +15,8 @@ a program, `next/programs/desk`, built in as `fabrika/desk`, and it arrives in T
 split, close and prefix keys. Tier 1 has one fixed layout at wiring, each window keeps its
 own focus, and it has no desk process. See [the app and its menu bar](#the-app-and-its-menu-bar).*
 
+*2026-11-13: [0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md) overtook this stopgap. The desk program comes now, and W1 and W4 hold again from it on: the desk's state is a process in the brain, with one focus per workspace.*
+
 ```ts
 // A sketch. The desktop's own state is one more process in the brain, like a tmux server.
 type Desktop = {

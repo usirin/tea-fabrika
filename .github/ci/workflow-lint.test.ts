@@ -15,7 +15,7 @@ const guard = (job: string) =>
   `\${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.${job} != 'false') }}`;
 
 const env = {
-  BASE: `\${{ github.event.pull_request.base.sha || github.event.before }}`,
+  BASE: `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}`,
   HEAD: `\${{ github.event.pull_request.head.sha || github.sha }}`,
   EVENT: `\${{ github.event_name }}`,
 };
@@ -35,6 +35,7 @@ const valid = (label: string, extra: string) => ({
   on: {
     push: { branches: ["main"] },
     pull_request: { types: ["opened", "synchronize", "reopened", "ready_for_review"] },
+    merge_group: { types: ["checks_requested"] },
   },
   concurrency: {
     group: `check-\${{ github.event.pull_request.number || github.sha }}`,
@@ -221,6 +222,12 @@ const plants: [string, (workflow: Workflow) => void][] = [
       w.on.pull_request.types = w.on.pull_request.types.filter((t) => t !== type);
     },
   ]),
+  [
+    "the merge queue's group stops running the checks",
+    (w) => {
+      delete (w.on as Record<string, unknown>)["merge_group"];
+    },
+  ],
   [
     "every pull request event cancels the run before it",
     (w) => {
