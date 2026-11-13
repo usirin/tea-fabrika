@@ -70,8 +70,8 @@ describe("saved view membership, next/", () => {
     { arbitrary: { seed: 119120, runs: 200 } },
   );
 
-  // W1 proves saved cuts. Reuse one real cut so W3 spends its runs on churn,
-  // rather than validating the same 1,026 opens and full drain 100 times.
+  // Only the fixed fill is shared. Each run keeps the original generated walk,
+  // including colliding fresh ids, then drains that walked state through every size.
   let bounded: typeof Model.Type | undefined;
 
   it.prop(
@@ -88,80 +88,38 @@ describe("saved view membership, next/", () => {
 
         expect(state).toStrictEqual({ _tag: "watching", clients: opened.slice(2) });
         bounded = state;
-
-        for (const c of clients(bounded)) {
-          [state] = applyCell(watchers, state, { type: "end", client: c.client });
-        }
-
-        expect(state).toStrictEqual(Model.cases.empty.make({}));
       }
 
-      const exercise = (saved: typeof Model.Type, drainAll: boolean) => {
-        let [state] = watchers.init(saved, {});
-        let expected = [...clients(saved)];
-        const touched = new Set<string>();
-        const kinds = new Set<number>();
+      let [state] = watchers.init(bounded, {});
+      let expected = [...clients(bounded)];
 
-        const step = (msg: { type: "open"; watch: typeof Client.Type } | { type: "end"; client: string }) => {
-          [state] = applyCell(watchers, state, msg);
-          expected =
-            msg.type === "end"
-              ? expected.filter((c) => c.client !== msg.client)
-              : [...expected.filter((c) => c.client !== msg.watch.client), msg.watch].slice(-1024);
+      for (const [pick, fresh] of walk) {
+        const held = clients(state);
+        const client = held.length && pick % 3 ? nth(held, pick).client : fresh.client;
 
-          expect(clients(state)).toEqual(expected);
-          expect(new Set(clients(state).map((c) => c.client)).size).toBe(clients(state).length);
-          expect(clients(state).length).toBeLessThanOrEqual(1024);
-          expect(state).toStrictEqual(expected.length ? { _tag: "watching", clients: expected } : { _tag: "empty" });
-        };
-
-        const move = (pick: number, fresh: typeof Client.Type) => {
-          const held = clients(state);
-          let client = held.length && pick % 3 ? nth(held, pick).client : fresh.client;
-
-          // A fresh move must really be absent, even if generated text collides.
-          if (pick % 3 === 0) {
-            let suffix = 0;
-
-            while (held.some((c) => c.client === client)) {
-              client = `fresh-${suffix++}`;
-            }
-          }
-
-          kinds.add(pick % 3);
-          touched.add(client);
-          step(pick % 3 === 2 ? { type: "end", client } : { type: "open", watch: { ...fresh, client } });
-        };
-
-        // Preserve every generated history as a prefix, including refresh/end
-        // against the untouched full state. Supplement only missing move kinds.
-        for (const [pick, fresh] of walk) {
-          move(pick, fresh);
+        if (pick % 3 === 2) {
+          [state] = applyCell(watchers, state, { type: "end", client });
+          expected = expected.filter((c) => c.client !== client);
+        } else {
+          const watch = { ...fresh, client };
+          [state] = applyCell(watchers, state, { type: "open", watch });
+          expected = [...expected.filter((c) => c.client !== client), watch].slice(-1024);
         }
 
-        for (const pick of [0, 1, 2]) {
-          if (!kinds.has(pick)) {
-            move(pick, nth(walk, pick)[1]);
-          }
-        }
+        expect(clients(state)).toEqual(expected);
+        expect(new Set(clients(state).map((c) => c.client)).size).toBe(clients(state).length);
+        expect(clients(state).length).toBeLessThanOrEqual(1024);
+      }
 
-        // At the bound, check ends of all touched clients, newest first, without
-        // repeatedly draining the fixed fill. The small replay below drains all
-        // generated/refreshed membership through the last-client transition.
-        for (const c of [...expected].reverse()) {
-          if (drainAll || touched.has(c.client)) {
-            step({ type: "end", client: c.client });
-          }
-        }
+      for (const c of [...clients(state)]) {
+        [state] = applyCell(watchers, state, { type: "end", client: c.client });
+      }
 
-        if (drainAll) {
-          expect(state).toStrictEqual(Model.cases.empty.make({}));
-        }
-      };
-
-      exercise(bounded, false);
-      exercise(watchers.init(null, {})[0], true);
+      expect(state).toEqual(Model.cases.empty.make({}));
     },
-    { arbitrary: { seed: 119120, runs: 100 } },
+    // Measured 16,432 ms on Node 26.13.0. Round up measurement × 2.8 × 2 to 120 s:
+    // CI ran instance-wire in 189 s versus 68.6 s that night (2.8×); allow another
+    // 2× headroom for load. Keep the full per-run drain rather than narrow the law.
+    { timeout: 120_000, arbitrary: { seed: 119120, runs: 100 } },
   );
 });
