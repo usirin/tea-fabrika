@@ -1,3 +1,9 @@
+/**
+ * Source folders for an opened repository: a path from a settings file, resolved to the commit or
+ * to disk.
+ *
+ * @stability unstable
+ */
 import { Effect, FileSystem, Path, Redacted } from "effect";
 import type { ObjectId } from "../../repositories/Repositories.ts";
 import {
@@ -22,7 +28,21 @@ const missing = (cause: unknown) =>
     message: "Selected repository: source folder is missing.",
   });
 
-/** Resolves paths from the original document. Committed symlinks are read as blobs, never from disk. */
+/**
+ * Builds the `resolve` function of one opened repository, which turns a folder path written in a
+ * settings file into a `Source`.
+ *
+ * **Details**
+ *
+ * It walks the path one part at a time. Inside the repository's root, a repo file's path is looked
+ * up in the commit's tree, and a committed symlink is followed by reading its blob, never the
+ * checkout. Outside the root, and for every path from the person's file, it reads the disk. A path
+ * that does not exist fails as `MissingPath`; a link cycle, an empty link, a parent that is not a
+ * folder or a source that is not a folder fails as `ReadFailed`.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const resolver = Effect.fn("repositorySources.resolver")(function* (options: {
   readonly root: string;
   readonly person: string;

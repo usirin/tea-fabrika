@@ -1,3 +1,10 @@
+/**
+ * The local brain's driver on Node: it starts the local runtime through a deploy the caller
+ * gives, follows its starts, exits and restarts, and hands back stand-ins for its bindings that
+ * call it over a private control socket.
+ *
+ * @stability unstable
+ */
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { SystemError } from "@alchemy.run/cloudflare-runtime/core/RuntimeError";
 import { applyCell } from "@demlik/tea";
@@ -70,6 +77,29 @@ const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) 
   };
 });
 
+/**
+ * Starts the local instance's brain and answers its address with stand-ins for its bindings:
+ * `project`, `process`, `record`, `loader` and `bucket`, each a call over the private control
+ * socket.
+ *
+ * **Details**
+ *
+ * `deploy` gets a context that holds the runtime's lifecycle hook and the control plugin, and a
+ * scope of its own for the runtime. The driver waits for the control socket to listen, for at most
+ * 30 seconds, and for the first start. It saves every start, exit, restart wait, brake and stop as
+ * a `BrainEvent` in a durable outbox under `home` and sends them to the project, so an event
+ * outlives a crash on either side. Once a second it samples the runtime's memory, and at 500 MB or
+ * more it ends the process with SIGTERM, so that exit is recorded with the reason `memory`. Closing
+ * the caller's scope stops the runtime and records `stopped`.
+ *
+ * **Gotchas**
+ *
+ * The control socket listens on 127.0.0.1 only and takes a random bearer token made for this
+ * start. A call made while no port is known fails as `offline`.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const startDev = Effect.fn("brain.instance")(function* <E, R>(
   options: {
     readonly name: string;

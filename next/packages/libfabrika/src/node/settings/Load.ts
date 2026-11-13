@@ -1,6 +1,10 @@
-// One load of fabrika's settings at a process start: read both files, check them whole, resolve
-// the four sources and make the snapshot the process keeps. It returns all of that or one
-// SettingsError, so nothing starts on settings that were not checked.
+/**
+ * One load of fabrika's settings at a process start: read both files, check them whole, resolve
+ * the four sources and make the snapshot the process keeps. It returns all of that or one
+ * `SettingsError`, so nothing starts on settings that were not checked.
+ *
+ * @stability unstable
+ */
 import { Effect, FileSystem, Predicate } from "effect";
 import * as Declarations from "../../settings/Declarations.ts";
 import * as Files from "../../settings/Files.ts";
@@ -17,6 +21,21 @@ interface Place {
   readonly name: string;
 }
 
+/**
+ * Loads fabrika's settings once, at a process start: parses and checks the repo's file and the
+ * person's file whole, resolves the flags, the environment and the two files into values, and
+ * makes the snapshot the process keeps.
+ *
+ * **Details**
+ *
+ * It answers the checked values with their snapshot, or one `SettingsError`. A person's file that
+ * is missing counts as empty. The repo's file comes in as text already read, and with no repo
+ * selected it counts as empty. A repo that needs a newer fabrika is refused before the person's
+ * file is read.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const load = Effect.fnUntraced(function* (options: {
   readonly person: Place;
   /** A start that selects no repo reads none, and the repo's file counts as empty. */

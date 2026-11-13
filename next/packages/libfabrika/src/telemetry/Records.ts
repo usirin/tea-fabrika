@@ -1,22 +1,38 @@
-// A record part's logic: the one code `job/<process>/<part>` and `spans/<part>` both run. Each part
-// is its own object with its own SQLite; a part that reaches its cap writes `rolled` and takes no new
-// span, and the next part does. Tier 1, P37 (laws p100 and p102).
-//
-// A write, in one step: (1) drop the rows whose span id this part holds; (2) when none are left,
-// answer `written`; (3) when the part has rolled, or its size is at or past the cap, write `rolled`
-// if it is missing and answer it, with `had` naming the batch's span ids this part holds; (4) else
-// write the rows and answer `written`. The size is checked before the write, so a resend after a
-// lost answer never lands in two parts. Nothing but content is ever deleted, and content only by
-// `deleteContent`.
+/**
+ * A record part's logic: the one code `job/<process>/<part>` and `spans/<part>` both run. Each part
+ * is its own object with its own SQLite. A part that reaches its cap writes `rolled` and takes no
+ * new span, and the next part does.
+ *
+ * A write, in one step: (1) drop the rows whose span id this part holds; (2) when none are left,
+ * answer `written`; (3) when the part has rolled, or its size is at or past the cap, write `rolled`
+ * if it is missing and answer it, with `had` naming the batch's span ids this part holds; (4) else
+ * write the rows and answer `written`. The size is checked before the write, so a resend after a
+ * lost answer never lands in two parts. Nothing but content is ever deleted, and content only by
+ * `deleteContent`.
+ *
+ * @stability unstable
+ */
 import { Context, Effect, Layer, Option, Schema, Stream } from "effect";
 import type { Sql } from "../Sql.ts";
 import { type Chain, Content, partName, Rolled, SinkError, SpanRow, sinkError } from "./Trace.ts";
 
-/** A part's answer to a write. `had`: the batch's span ids this part already holds. */
+/**
+ * Schema for a part's answer to a write: `written`, or `rolled` with the next part's name. `had`
+ * lists the batch's span ids this part already holds, so the sender sends only the rest on.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const Written = Schema.TaggedUnion({
   written: {},
   rolled: { next: Schema.String, had: Schema.Array(Schema.String) },
 });
+/**
+ * A part's answer to a write: `written` or `rolled`.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Written = typeof Written.Type;
 
 /** One span as the sink sends it, with its failure's message when it failed. */
@@ -45,7 +61,13 @@ type Deletion = typeof Deletion.Type;
 /** How many spans one page holds. */
 const PAGE = 500;
 
-/** What a record part's object answers across an object call. Its answers are decoded here. */
+/**
+ * The four calls a record part's object answers across an object call. The answers are unchecked:
+ * `RecordManager.remote` decodes each one.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type RecordCalls = {
   write(chain: Chain, part: number, rows: ReadonlyArray<Sent>): Effect.Effect<unknown, unknown>;
   read(chain: Chain, part: number, after: number): Effect.Effect<unknown, unknown>;
@@ -317,6 +339,19 @@ const sqlStore = (sql: Sql): Store => {
   };
 };
 
+/**
+ * Creates one record part's four calls over its own `Sql`: `write`, `read`, `content` and
+ * `deleteContent`. A part object's methods hand off to these.
+ *
+ * **Details**
+ *
+ * `chain` and `at` say which part this is, and `cap` is the size in bytes at which it rolls.
+ * Building it touches nothing: the tables come with the first call. A throw from storage is a
+ * `SinkError`.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const recordPart = (sql: Sql, chain: Chain, at: number, cap: number) => {
   const calls = local(part(sqlStore(sql), chain, at, cap));
   return {
@@ -396,6 +431,19 @@ const parts = (make: (name: string) => Store, cap: number) => {
   };
 };
 
+/**
+ * Service that writes, reads and deletes content in a record's parts. One code serves a JobRecord
+ * and the span record.
+ *
+ * **Details**
+ *
+ * Nothing in a part is ever removed but content, and content only by `deleteContent`. A resend
+ * after a lost answer never lands a span in two parts: a part drops the spans it already holds,
+ * and it checks its size before it writes.
+ *
+ * @stability unstable
+ * @category services
+ */
 export class RecordManager extends Context.Service<
   RecordManager,
   {
@@ -407,6 +455,7 @@ export class RecordManager extends Context.Service<
     ) => Effect.Effect<Written, SinkError>;
     /** Every span of the chain, part 0 first and on through each `rolled`, in write order. */
     readonly read: (chain: Chain) => Stream.Stream<SpanRow, SinkError>;
+    /** A span's content, in whichever part holds the span. None when the span never failed or no part has it. */
     readonly content: (chain: Chain, spanId: string) => Effect.Effect<Option.Option<Content>, SinkError>;
     /** Turns a span's `kept` content into `deleted {by, at, reason}`, in whichever part holds it. */
     readonly deleteContent: (

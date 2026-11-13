@@ -1,3 +1,9 @@
+/**
+ * The local runtime's life as one tea machine. The driver in `dev.ts` sends it what the runtime
+ * reports and reads the state back; nothing here does input or output.
+ *
+ * @stability unstable
+ */
 import { Machine } from "@demlik/tea/effect";
 import { Schema } from "effect";
 
@@ -23,6 +29,19 @@ const Session = Schema.Struct({
   build: Schema.String,
 });
 
+/**
+ * Schema for where the local runtime stands: `starting` and `listening` before its first start,
+ * `spawned` and `online` while a process runs, `exited` and `waiting` between an exit and its
+ * replacement, `braked` when restarting gave up, and `stopping` then `stopped` on the way out.
+ *
+ * **Details**
+ *
+ * A state holds a pid only while a process runs, and it keeps the control socket's port across an
+ * exit. `replacement` is `pending` from an exit until a listener is heard again.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const DevState = Schema.TaggedUnion({
   starting: { last: Schema.NullOr(Schema.String) },
   listening: { last: Schema.NullOr(Schema.String), port: Port },
@@ -74,7 +93,12 @@ const heard = (port: number | null): Listener => {
   return Listener.cases.known.make({ port });
 };
 
-/** The control socket's port, kept after an exit as main keeps it; null when none is known. */
+/**
+ * Returns the control socket's port, or null when none is known. The port is kept after an exit.
+ *
+ * @stability unstable
+ * @category getters
+ */
 export const address = (s: DevState): number | null => {
   if (s._tag === "listening" || s._tag === "online") {
     return s.port;
@@ -87,7 +111,12 @@ export const address = (s: DevState): number | null => {
   return s.listener._tag === "known" ? s.listener.port : null;
 };
 
-/** The live process the memory sampler may read; null when none runs. */
+/**
+ * Returns the pid of the live process the memory sampler may read, or null when none runs.
+ *
+ * @stability unstable
+ * @category getters
+ */
 export const target = (s: DevState): number | null => {
   if (s._tag === "spawned" || s._tag === "online") {
     return s.pid;
@@ -108,13 +137,24 @@ const replacement = (s: DevState): Replacement => {
   return s.replacement;
 };
 
-/** The replacement still waiting for its listener. */
+/**
+ * Returns the id of the replacement still waiting for its listener, or null when none waits.
+ *
+ * @stability unstable
+ * @category getters
+ */
 export const pending = (s: DevState): string | null => {
   const r = replacement(s);
   return r._tag === "pending" ? r.id : null;
 };
 
-/** The latest start of this runtime, which its exit, restart, brake and stop rows name. */
+/**
+ * Returns the latest start of this runtime, the one its exit, restart, brake and stop events name.
+ * Null before the first start and after the stop.
+ *
+ * @stability unstable
+ * @category getters
+ */
 export const latest = (s: DevState): string | null => {
   if (s._tag === "starting" || s._tag === "listening" || s._tag === "stopped") {
     return null;
@@ -132,6 +172,19 @@ const active = (s: DevState) => {
   return tag !== "braked" && tag !== "stopping" && tag !== "stopped";
 };
 
+/**
+ * The local runtime's life as a tea machine with no Cmds: the driver does the work and sends what
+ * happened.
+ *
+ * **Details**
+ *
+ * It starts in `starting` with the last start an earlier run saved, so this run's first start can
+ * name the one it follows. A start is ignored once the machine is `braked`, `stopping` or
+ * `stopped`. A replacement counts as up when its listener is heard, not when its process starts.
+ *
+ * @stability unstable
+ * @category machines
+ */
 export const devLife = Machine.make({
   model: DevState,
   msg: Msg,

@@ -1,11 +1,14 @@
-// The span sink: every object installs one Tracer, and a span that ends is in the object's own SQLite
-// before `end` returns. `flush` ships it to its record later, when the runner says. Tier 1, P37
-// (laws p98, p99 and p101).
-//
-// The queue is a table, `unsent`, not memory: an object sleeps and loses memory, and a timer fiber
-// is what "a wait is data" forbids. Nothing is dropped. A write that cannot land (`SQLITE_FULL`) is
-// held in memory and tried again at each later `end`, and the next `flush` fails the step with
-// `storage`: let it crash. The sink's own calls end no span.
+/**
+ * The span sink: every object installs one Tracer, and a span that ends is in the object's own
+ * SQLite before `end` returns. `flush` ships it to its record later, when the runner says.
+ *
+ * The queue is a table, `unsent`, not memory: an object sleeps and loses memory, and a timer fiber
+ * is what "a wait is data" forbids. Nothing is dropped. A write that cannot land (`SQLITE_FULL`) is
+ * held in memory and tried again at each later `end`, and the next `flush` fails the step with
+ * `storage`: let it crash. The sink's own calls end no span.
+ *
+ * @stability unstable
+ */
 import { applyCell } from "@demlik/tea";
 import {
   Cause,
@@ -224,6 +227,24 @@ class SinkSpan extends Tracer.NativeSpan {
   }
 }
 
+/**
+ * Service for the span sink: the calls that ship what the object's `Tracer` kept, and that read its
+ * metrics back.
+ *
+ * **Details**
+ *
+ * A span that ends is in the object's own SQLite, with its measurement, before `end` returns, so
+ * an object that sleeps loses nothing. A span that carries the refusal tag is only counted, by
+ * piece and hour: it leaves no span row and no measurement.
+ *
+ * **Gotchas**
+ *
+ * A write that meets a full disk holds its spans in memory and tries again at each later `end`.
+ * The next `flush` then fails with `storage` before it sends anything, so the failure is seen.
+ *
+ * @stability unstable
+ * @category services
+ */
 export class SpanSink extends Context.Service<
   SpanSink,
   {

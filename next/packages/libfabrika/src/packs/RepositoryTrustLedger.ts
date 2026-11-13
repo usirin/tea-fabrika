@@ -1,3 +1,8 @@
+/**
+ * `RepositoryTrust` on the ledger: one stream per person and clone.
+ *
+ * @stability unstable
+ */
 import { Effect, Layer, Option, Redacted, Schema, Stream } from "effect";
 import { Digest } from "effect/crypto";
 import { Ledger } from "../ledger/Ledger.ts";
@@ -21,6 +26,26 @@ const storage = (cause: unknown) => new RepositoryTrustError({ reason: new Stora
 const invalid = (cause: unknown) =>
   new RepositoryTrustError({ reason: new InvalidHistory({ cause: Redacted.make(cause) }) });
 
+/**
+ * Layer that provides `RepositoryTrust` on the ledger, in the stream `repository/<person>/<key>`.
+ * It asks for `Ledger` and `Digest`.
+ *
+ * **Details**
+ *
+ * `history` checks every entry: the event decodes with no extra key, belongs to this key and
+ * person, keeps one repository id, and each `decision` and `opened` follows a `selected` with the
+ * same commit, hash and trace. Saved settings are read again against the declared settings.
+ * `write` appends under an id made from the event's `request`, so a retry of the same event is
+ * one entry.
+ *
+ * **Gotchas**
+ *
+ * `history` reads at most 4096 entries. Past that it fails as `InvalidHistory`: it never answers a
+ * cut-off history, and old decisions are never dropped to make room.
+ *
+ * @stability unstable
+ * @category layers
+ */
 export const layer = Layer.effect(
   RepositoryTrust,
   Effect.gen(function* () {
