@@ -1,3 +1,8 @@
+/**
+ * Instance starts recorded and read through RPC calls to the object that keeps them.
+ *
+ * @stability unstable
+ */
 import { Effect, Layer, Schema } from "effect";
 import * as Start from "../settings/Start.ts";
 import {
@@ -12,6 +17,12 @@ import {
 } from "../settings/Starts.ts";
 import * as SettingsInput from "./SettingsInput.ts";
 
+/**
+ * The two RPC calls the layer makes. The Project object's binding has this shape.
+ *
+ * @stability unstable
+ * @category models
+ */
 export interface Calls {
   readonly settingsStart: (input: Start.Input) => PromiseLike<unknown>;
   readonly settingsRead: (start: string) => PromiseLike<unknown>;
@@ -19,6 +30,18 @@ export interface Calls {
 
 const unreachable = (cause: unknown) => new StartsError({ reason: new Unreachable({ cause }) });
 
+/**
+ * Layer that records and reads instance starts by calling the object that keeps them.
+ *
+ * **Details**
+ *
+ * No reply is trusted as it comes. Each one is decoded. An `ok` receipt is checked again, must be
+ * for the asked start, and on `record` must match the input. A call that throws fails with
+ * `Unreachable`. A failed reply fails with the same reason here.
+ *
+ * @stability unstable
+ * @category layers
+ */
 export const layer = (calls: Calls) =>
   Layer.succeed(Starts, {
     record: (input) =>

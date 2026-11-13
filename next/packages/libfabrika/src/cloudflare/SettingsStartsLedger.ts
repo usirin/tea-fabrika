@@ -1,3 +1,8 @@
+/**
+ * Instance starts kept in the ledger, one entry per start.
+ *
+ * @stability unstable
+ */
 import { DateTime, Effect, Equal, Layer, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { Doorbell } from "../ledger/Ledger.ts";
@@ -43,7 +48,22 @@ const saved = Effect.fnUntraced(function* (entry: Entry, start: string) {
   }).pipe(Effect.mapError(decode));
 });
 
-/** Uses the same referee and write coordination as full Project construction. */
+/**
+ * Layer that keeps instance starts in the ledger, through the `Referee` it is given.
+ *
+ * **Details**
+ *
+ * A start is one `instance_started` entry, the first in the stream `settings/instance/<start>`,
+ * with the start's id as the entry's id. `record` answers the saved receipt when that entry
+ * already holds the same start, and fails with `Refused` when it holds a different one. Before
+ * either call answers, the saved entry is checked again: its id, its stream, its tag and its
+ * settings.
+ *
+ * The layer asks for a `Referee` and builds none: the caller picks the storage and the doorbell.
+ *
+ * @stability unstable
+ * @category layers
+ */
 export const fromLedger = () =>
   Layer.effect(
     Starts,
@@ -128,6 +148,16 @@ export const fromLedger = () =>
     }),
   );
 
+/**
+ * Layer that keeps instance starts in the ledger of one `Sql`, with a referee of its own.
+ *
+ * **Details**
+ *
+ * It is `fromLedger` over `RefereeSql`. The doorbell it gives that referee does nothing.
+ *
+ * @stability unstable
+ * @category layers
+ */
 export const layer = (sql: Sql) =>
   fromLedger().pipe(
     Layer.provide(RefereeSql.layer(sql)),

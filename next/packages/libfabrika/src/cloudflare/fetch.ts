@@ -8,6 +8,17 @@ import { projectStub, recordedLayer, rpc, SettingsRuntime, type BrainOptions, ty
 const isolates = new WeakMap<Env, ReturnType<typeof httpRuntime>>();
 const httpRuntime = (env: Env) => SettingsRuntime.runtime(recordedLayer(env));
 
+/**
+ * Returns the effect that gives the Worker's `RecordedStart` context, built on first use.
+ *
+ * **Details**
+ *
+ * One runtime is kept per `env` object. The first use records the start, and later uses read the
+ * same context. A failed build is not kept: the next use tries again.
+ *
+ * @stability unstable
+ * @category getters
+ */
 export const httpContext = (env: Env) => {
   const known = isolates.get(env);
 

@@ -94,12 +94,33 @@ export interface Env {
 
 export type BrainOptions = SettingsStart.Input;
 
+/**
+ * Decodes the `INSTANCE` binding's JSON as a start's input and checks its settings. Returns the
+ * input, the decoded values and the snapshot in its canonical encoding. It records nothing.
+ *
+ * @stability unstable
+ * @category decoding
+ */
 export const settings = (env: Pick<Env, "INSTANCE">) => SettingsInput.decode(env.INSTANCE);
 
 const checkedSettings = (env: Env) =>
   settings(env).pipe(Effect.mapError((cause) => new Starts.StartsError({ reason: new Starts.Decode({ cause }) })));
 
 type CheckedSettings = Effect.Success<ReturnType<typeof settings>>;
+
+/**
+ * Layer that provides `RecordedStart` to a Worker or an object by recording the start with the
+ * Project object.
+ *
+ * **Details**
+ *
+ * It takes the start's input from the `INSTANCE` binding, or from `input` when one is given, and
+ * records it over RPC with the Project object the input names. The Project object does not use
+ * this layer: it records the start in its own ledger.
+ *
+ * @stability unstable
+ * @category layers
+ */
 export function recordedLayer(env: Env): Layer.Layer<RecordedStart, Starts.StartsError>;
 export function recordedLayer(
   env: Env,
@@ -118,8 +139,18 @@ export function recordedLayer(
   );
 }
 
+/**
+ * @stability unstable
+ */
 export { SettingsRuntime };
 
+/**
+ * Converts a `Starts` answer into the reply sent over RPC: `ok` with the receipt, or the failure's
+ * reason by its tag alone. The effect no longer fails with `StartsError`.
+ *
+ * @stability unstable
+ * @category error handling
+ */
 export const settingsReply = <R>(work: Effect.Effect<SettingsStart.Receipt, Starts.StartsError, R>) =>
   work.pipe(
     Effect.map((value) => SettingsStart.Reply.cases.ok.make({ value })),
@@ -132,7 +163,18 @@ export const settingsReply = <R>(work: Effect.Effect<SettingsStart.Receipt, Star
     }),
   );
 
-/** Keep input-bearing settings failures inside the Worker at its RPC boundary. */
+/**
+ * Replaces a `StartsError` with its wire summary, `Start.Failure`: the reason's tag and no cause.
+ * Other failures pass through unchanged.
+ *
+ * **When to use**
+ *
+ * Use when a failure leaves the Worker or an object. A cause may hold the start's input, and this
+ * keeps it inside.
+ *
+ * @stability unstable
+ * @category error handling
+ */
 export const settingsFailure = <A, E, R>(work: Effect.Effect<A, E | Starts.StartsError, R>) =>
   work.pipe(
     Effect.catchIf(
@@ -165,7 +207,17 @@ export const settingsFailure = <A, E, R>(work: Effect.Effect<A, E | Starts.Start
     ),
   );
 
-/** An object's services as its RPC methods reach them: a failed build leaves only its fixed summary. */
+/**
+ * Wraps an object's context for its RPC methods, so a failed build crosses RPC as a fixed summary.
+ *
+ * **Details**
+ *
+ * `runPromise` gets the context, provides it to the work and runs it. When the context fails to
+ * build, a `StartsError` becomes `Start.Failure`, and a `LedgerError` keeps only its `reason`.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const settingsWire = <R, E>(context: Effect.Effect<Context.Context<R>, E>) => {
   const contextEffect = settingsFailure(context).pipe(
     Effect.mapError((error) => (error instanceof LedgerError ? new LedgerError({ reason: error.reason }) : error)),

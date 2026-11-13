@@ -1,3 +1,8 @@
+/**
+ * The layer that puts an instance start on record and hands it on as `RecordedStart`.
+ *
+ * @stability unstable
+ */
 import { Effect, Layer } from "effect";
 import { Digest } from "effect/crypto";
 import { RecordedStart } from "../settings/RecordedStart.ts";
@@ -5,6 +10,22 @@ import type * as Start from "../settings/Start.ts";
 import { Decode, Starts, StartsError } from "../settings/Starts.ts";
 import * as SettingsInput from "./SettingsInput.ts";
 
+/**
+ * Layer that provides `RecordedStart` for one start's input.
+ *
+ * **Details**
+ *
+ * It checks the input, records it through `Starts`, and checks that the receipt matches the input:
+ * the same start, settings, build and repo, and the same origin when the input names one. Any
+ * failure is a `StartsError`, and the layer does not build, so nothing that needs `RecordedStart`
+ * runs.
+ *
+ * Recording the same start again answers the first receipt, so every object of one instance can
+ * build this layer for the same input.
+ *
+ * @stability unstable
+ * @category layers
+ */
 export const layer = (input: Start.Input) =>
   Layer.effect(
     RecordedStart,

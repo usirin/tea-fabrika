@@ -1,5 +1,22 @@
+/**
+ * A runtime for one layer whose build can be tried again after it fails.
+ *
+ * @stability unstable
+ */
 import { Context, Duration, Effect, Exit, Layer, ManagedRuntime, Scope, ScopedCache } from "effect";
 
+/**
+ * Creates a one-slot cache that builds `ready` on its first read and keeps the built context.
+ *
+ * **Details**
+ *
+ * A build that succeeds is kept until the cache's scope closes. A build that fails is not kept:
+ * its scope is closed, and the next read builds the layer again. What the layer itself needs is
+ * taken once, when the cache is made.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const make = <ROut, E, RIn>(ready: Layer.Layer<ROut, E, RIn>) =>
   ScopedCache.makeWith({
     capacity: 1,
@@ -18,7 +35,23 @@ export const make = <ROut, E, RIn>(ready: Layer.Layer<ROut, E, RIn>) =>
       Exit.isSuccess(exit) ? Duration.infinity : Duration.zero,
   });
 
-/** The outer runtime owns only the holder; each entry acquires the retryable context. */
+/**
+ * Creates a runtime for `ready` that builds it on first use and builds it again after a failure.
+ *
+ * **When to use**
+ *
+ * Use when a later call must be able to succeed after an earlier build failed. A plain
+ * `ManagedRuntime` builds its layer once and keeps a failed build.
+ *
+ * **Details**
+ *
+ * Every use reads the built context through `make`'s cache. A good build is shared by all later
+ * uses. A failed build is not kept, so the next use builds again. `dispose` closes the cache and
+ * the build with it.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const runtime = <ROut, E>(ready: Layer.Layer<ROut, E>) => {
   class Holder extends Context.Service<Holder, { readonly get: Effect.Effect<Context.Context<ROut>, E> }>()(
     "@kampus/libfabrika/cloudflare/SettingsRuntime.Holder",
