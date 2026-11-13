@@ -40,7 +40,7 @@ export const launch = Effect.fn("testWindow.launch")(function* (options: {
   // Fail on P28's missing window before trying to launch Electron in a box.
   yield* fs.access(entry);
   const env = {
-    PATH: process.env.PATH,
+    PATH: process.env.PATH ?? "",
     TMPDIR: home,
     HOME: home,
     FABRIKA_HOME: home,

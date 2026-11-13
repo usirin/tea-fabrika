@@ -133,6 +133,7 @@ export const startWorker = Effect.fn("emailExam.startWorker")(function* (
     window: null,
     port: port.port,
     build: built.build,
+    rateLimit: { limit: 100_000, window: 60_000 },
   });
   const stack = Alchemy.Stack(
     "p36-exam",
