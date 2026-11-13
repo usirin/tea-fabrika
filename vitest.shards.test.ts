@@ -8,6 +8,24 @@ import { nextFiles } from "./.github/ci/shard-rows.ts";
 import { inLaneStep } from "./.github/ci/workflow-lint.ts";
 import { assign, measured, Shards, wall, WORKERS, restLoads } from "./vitest.shards.ts";
 
+it("vector: L5 known next timings use the larger of the two completed main runs", () => {
+  // Today's CI. Samples from attempt 1 of main runs 43329697311 and 43334183021,
+  // in that order, as recorded in T890's approved plan. Until the third run, use the larger.
+  // Lead runs it: download the full 210-file samples and job ids, then refresh both
+  // this provisional vector and the older complete vector below with the three-run medians.
+  for (const [path, samples] of [
+    ["next/packages/libfabrika/src/node/StartChild.test.ts", [484.6, 590.5]],
+    ["next/apps/fabrika/src/chaos.laws.test.ts", [365.1, 382.8]],
+    ["next/packages/libfabrika/src/node/Replies.test.ts", [152.3, 177.7]],
+    ["next/apps/fabrika/src/start-child.laws.test.ts", [130.2, 177.2]],
+    ["next/apps/fabrika/src/instance-wire.test.ts", [147.5, 186.2]],
+    ["next/apps/fabrika/src/door.test.ts", [127.4, 143.6]],
+    ["next/apps/fabrika/src/runtime-recovery.laws.test.ts", [92.7, 99.8]],
+  ] as const) {
+    expect.soft(measured[path], path).toBe(Math.max(...samples));
+  }
+});
+
 it("scenario: L6 the six measured heaviest next files occupy six machines with bounded loads", () => {
   // Today's CI: the real file set and the heaviest six from the plan's two green main runs.
   // Keep these names independent of the table so an accidentally tiny row cannot hide the file.
