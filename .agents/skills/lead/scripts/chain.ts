@@ -35,12 +35,16 @@
 //                      for the next push; no answer in time, or no type error in a failed job,
 //                      goes on, and the last line says why
 //   loosening  Check   loosening.sh on the lane's exam diff, its output posted on the PR (0014):
-//                      0 hits lands, any hit parks for the lead's hand check, an error is stuck
-//   landing    Act     catchup.sh: merge main in, wait for CI, squash-land
-//   over               done (landed), ask (parked for the lead, the why in `reason`) or stuck
+//                      0 hits goes on, any hit parks for the lead's hand check, an error is stuck
+//   landing    Act     ./pr/Queue.ts: the leak checks on the change, each commit and the PR's title
+//                      and description, a wait for `ci-required` at the head within
+//                      `CHAIN_QUEUE_MINUTES` (60), then one squash pinned to that head, which adds
+//                      the PR to GitHub's merge queue (0162). GitHub tests it on newest main and
+//                      merges it later; the chain never merges main in and never waits for the merge
+//   over               done (queued), ask (parked for the lead, the why in `reason`) or stuck
 //
 // The moves, pure (`moveOf`): tests done -> build -> (host) -> review -> open -> (CI's typecheck)
-// -> loosen -> land. Every
+// -> loosen -> queue. Every
 // review runs at a head the host step ran at: a review whose head it has not seen runs it first,
 // and that round counts against `MaxSteps`. A lane runs no
 // mutation step: mutation runs hourly against main instead (.decisions/0066). `--start mutation`
@@ -54,9 +58,11 @@
 // on one step; 16 steps a lane with no backstop; 20 minutes a host command), and
 // `CHAIN_WAIT_MINUTES`, `CHAIN_WAITS`, `CHAIN_STUCKS`, `CHAIN_STEPS`, `CHAIN_HOST_MINUTES` and
 // `CHAIN_TYPECHECK_MINUTES` (20, the wait for CI's typecheck job) and `CHAIN_TYPECHECK_EVERY` (10
-// seconds between reads of it) override them from outside. Running out of retries is a typed
+// seconds between reads of it) and `CHAIN_QUEUE_MINUTES` (60, the wait for `ci-required` before the
+// queue) override them from outside. Running out of retries is a typed
 // `RetriesExhausted`, reported as stuck (decided with the clanka walk, 2026-11-09). Exit codes: 0
-// landed, 20 parked (ask), 30 stuck, 2 usage.
+// queued, 20 parked (ask), 30 stuck, 2 usage. The lead runs `land.ts merged <pr>` later, which
+// closes the PR's tickets and starts the box cleanup once GitHub has merged it.
 //
 // The lane's budget (.decisions/0076). Every stuck step carries its fault, `tool` or `work`
 // (drive's `faultFrom`). The machine keeps the marks of the lane's last 5 steps; when 3 of them were
@@ -84,7 +90,7 @@
 // step's commit to the branch and opens the draft when the branch has none (./pr/Publish.ts). The
 // `opening` phase pushes the reviewed head, gives the pull request the brief's `## pr` words and
 // marks it ready (`Publish.ready`), through the typed PullRequests service.
-// The chain holds every right (the bot's push, the PR, catch-up, the commit and its signature); a
+// The chain holds every right (the bot's push, the PR, the merge queue, the commit and its signature); a
 // box or the judgment agent holds only its model login
 // (.decisions/0028-the-parent-holds-every-right.md). The steps run the unmodified harness
 // (.decisions/0026-fabrika-never-owns-the-agent-loop.md).
@@ -140,6 +146,7 @@ import * as Plants from "./plants.ts";
 import * as Publish from "./pr/Publish.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
+import * as Queue from "./pr/Queue.ts";
 import * as RunId from "./runid.ts";
 
 const HERE = import.meta.dirname;
@@ -181,6 +188,11 @@ export const TypecheckMinutes = Context.Reference<number>("chain/TypecheckMinute
 /** Seconds between two reads of that job while it runs (./ci/typecheck.ts says why this many). */
 export const TypecheckEvery = Context.Reference<number>("chain/TypecheckEvery", {
   defaultValue: () => Typecheck.EVERY,
+});
+
+/** Minutes the lane waits for `ci-required` at its head to end before it asks for the merge queue. */
+export const QueueMinutes = Context.Reference<number>("chain/QueueMinutes", {
+  defaultValue: () => Queue.LANE_WAIT.minutes,
 });
 
 /** The one schedule for a step drive refused for a slot: every `minutes`, `times` times. */
@@ -628,7 +640,10 @@ export type StepRecord = typeof StepRecord.Type;
 export const ChainRecord = Schema.Struct({
   lane: Schema.String,
   pr: Schema.NullOr(Schema.Number),
+  /** When GitHub was found to have merged the PR already; the chain itself only queues. */
   landed: Schema.NullOr(Schema.String),
+  /** When the chain added the PR to GitHub's merge queue. */
+  queued: Schema.optionalKey(Schema.String),
   steps: Schema.Array(StepRecord),
   /** Why the chain last stopped to ask a person (0076), when it did. */
   stop: Schema.optionalKey(Stop),
@@ -696,12 +711,12 @@ type Cmds =
   | ReturnType<typeof land>
   | ReturnType<typeof hostRun>;
 
-/** How the lane ends: landed, parked for the lead, or stuck; a stop of 0076 says which rule fired. */
+/** How the lane ends: queued, parked for the lead, or stuck; a stop of 0076 says which rule fired. */
 export type End = { readonly kind: "done" | "ask" | "stuck"; readonly reason: string; readonly stop?: Stop };
 export const exitOf = (e: End): number => (e.kind === "done" ? 0 : e.kind === "ask" ? 20 : 30);
 
 /**
- * The Check, pure: what loosening.sh's exit means before catch-up (0014). Exit 0 (no hits) lands,
+ * The Check, pure: what loosening.sh's exit means before the queue (0014). Exit 0 (no hits) goes on,
  * and `null` says so. Exit 1 is the hit list, parked for the lead's hand check. Anything else is an
  * operating error or an output that never reached the PR: the check fails closed, so it is stuck.
  */
@@ -1010,12 +1025,12 @@ export const makeMachine = (limits: Limits) =>
           ? over(
               s.lane,
               m.value.ok
-                ? { kind: "done", reason: `PR ${s.pr} landed: ${m.value.detail}` }
-                : { kind: "stuck", reason: `PR ${s.pr} did not land: ${m.value.detail}` },
+                ? { kind: "done", reason: `PR ${s.pr} queued: ${m.value.detail}` }
+                : { kind: "stuck", reason: `PR ${s.pr} not queued: ${m.value.detail}` },
             )
           : stay(s),
       land_err: (s): Step =>
-        s.phase === "landing" ? over(s.lane, { kind: "stuck", reason: `catchup.sh for PR ${s.pr} threw` }) : stay(s),
+        s.phase === "landing" ? over(s.lane, { kind: "stuck", reason: `queueing PR ${s.pr} threw` }) : stay(s),
     },
   });
 
@@ -1509,7 +1524,7 @@ const handlers = (s: Setup) => {
         writeFileSync(
           bodyFile,
           [
-            `\`loosening.sh ${from} ${cmd.head}\`, run by \`chain.ts ${s.lane}\` after review and before catch-up (exit ${ran.code}):`,
+            `\`loosening.sh ${from} ${cmd.head}\`, run by \`chain.ts ${s.lane}\` after review and before the merge queue (exit ${ran.code}):`,
             "",
             "```text",
             text || "(no output)",
@@ -1578,22 +1593,35 @@ const handlers = (s: Setup) => {
         note(`round ${round}: host ${line.outcome}, head ${hosted.head.slice(0, 8)}: ${line.reason.slice(0, 200)}`);
         return { outcome: hosted.outcome._tag, head: hosted.head, reason: hosted.outcome.reason };
       }).pipe(Effect.provide(NodeServices.layer)),
+    // The reviewed head enters GitHub's merge queue (./pr/Queue.ts, 0162). The wait is for
+    // `ci-required` at that head only; the merge is GitHub's, later, and nothing here waits for it.
     land: (cmd: { pr: number }) =>
       Effect.gen(function* () {
-        note(`catchup.sh ${cmd.pr} ${s.ticket}`);
+        const minutes = yield* QueueMinutes;
+        note(`queue: PR ${cmd.pr}, waiting up to ${minutes} minutes for ${Queue.REQUIRED}`);
         s.beats.enter("land", null);
-        const size = existsSync(errFile) ? statSync(errFile).size : 0;
-        const ran = yield* spawnEffect("sh", [join(HERE, "catchup.sh"), String(cmd.pr), s.ticket], {
-          errFile,
+        const services = Layer.mergeAll(
+          PushesProcess.layer(HERE),
+          PullRequestsGh.layer(env.GH_REPO, env.MAIN),
+          ChecksGh.layer(env.GH_REPO),
+        );
+        const added = yield* Queue.add({
+          dir: env.MAIN,
+          pr: cmd.pr,
+          wait: { minutes, every: Queue.LANE_WAIT.every },
+        }).pipe(
+          Effect.map((a) => ({ ok: true, detail: Queue.line(a), at: a._tag })),
+          Effect.catch((e) => Effect.succeed({ ok: false, detail: e.reason, at: null })),
+          Effect.provide(Layer.provide(services, NodeServices.layer)),
+        );
+        note(`queue: ${added.detail}`);
+        const now = new Date().toISOString();
+        writeRecord({
+          ...readRecord(),
+          ...(added.at === "queued" ? { queued: now } : {}),
+          landed: added.at === "merged" ? now : null,
         });
-        // catchup.sh says why it stopped on stderr; its last stdout line is only its last push.
-        const reason = existsSync(errFile)
-          ? (readFileSync(errFile).subarray(size).toString("utf8").trim().split("\n").at(-1) ?? "")
-          : "";
-        const last = (ran.code === 0 ? "" : reason) || (ran.out.trim().split("\n").at(-1) ?? "");
-        note(`catchup.sh exited ${ran.code}: ${last}`);
-        writeRecord({ ...readRecord(), landed: ran.code === 0 ? new Date().toISOString() : null });
-        return { ok: ran.code === 0, detail: last || `exit ${ran.code}; see ${errFile}` };
+        return { ok: added.ok, detail: added.detail };
       }),
   };
 };
@@ -1904,6 +1932,7 @@ const main = () => {
       overridden(HostMinutes, "CHAIN_HOST_MINUTES"),
       overridden(TypecheckMinutes, "CHAIN_TYPECHECK_MINUTES"),
       overridden(TypecheckEvery, "CHAIN_TYPECHECK_EVERY"),
+      overridden(QueueMinutes, "CHAIN_QUEUE_MINUTES"),
     ),
   ).catch((e: unknown) => {
     console.log(JSON.stringify({ outcome: "stuck", reason: String(e), exit: 30 }));

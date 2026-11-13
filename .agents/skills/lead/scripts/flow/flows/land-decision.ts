@@ -36,5 +36,5 @@ export const landDecision = (d: Decision): Flow.Flow =>
     Step.act("bot-push", { dir: d.dir, branch: d.branch }),
     Step.act("open-pr", { dir: d.dir, branch: d.branch, title: d.title, body: d.body }),
     Step.listen("ci", { dir: d.dir, branch: d.branch }),
-    Step.act("catchup", { dir: d.dir, branch: d.branch, ticket: d.ticket }, { lead: true }),
+    Step.act("queue", { dir: d.dir, branch: d.branch }, { lead: true }),
   ]);

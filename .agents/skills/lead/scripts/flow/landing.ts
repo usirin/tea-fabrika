@@ -10,12 +10,17 @@
 //   bot-push    act     botpush.mjs: the branch and the step notes, as the bot
 //   open-pr     act     gh: finds the branch's open pull request, or opens one
 //   ci          listen  gh pr checks --watch: waits for CI; red is stuck
-//   catchup     act     catchup.sh: merges main in, signs it as the lead, waits and squashes (a `lead` step)
+//   queue       act     pr/Queue.ts: the leak checks, ci-required green, then one pinned squash that adds
+//                       the pull request to GitHub's merge queue; it ends queued, not merged (a `lead` step)
 //
 // What each exit code means is a pure function below, so a test reads it without running a script.
 
-import { Effect, Path, Schema, Stream } from "effect";
+import { Effect, Layer, Path, Schema, Stream } from "effect";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
+import * as ChecksGh from "../ci/ChecksGh.ts";
+import * as PullRequestsGh from "../pr/PullRequestsGh.ts";
+import * as PushesProcess from "../pr/PushesProcess.ts";
+import * as Queue from "../pr/Queue.ts";
 import * as Outcome from "./Outcome.ts";
 import { type Runner, StepFailed } from "./Runners.ts";
 import type { Step } from "./Step.ts";
@@ -62,8 +67,6 @@ const Pr = Schema.Struct({
   body: Schema.String,
 });
 
-const Land = Schema.Struct({ dir: Schema.String, branch: Branch.fields.branch, ticket: Schema.String });
-
 // ---------------------------------------------------------------- what each exit code means
 
 /** A command that passes on 0 and is stuck otherwise. */
@@ -93,6 +96,12 @@ export const leakOutcome = (ran: Ran): Outcome.Outcome =>
     : ran.code === 1
       ? Outcome.ask(`the leak grep has a hit for the lead's hand check: ${tail(ran.output)}`)
       : Outcome.stuck(`leakgrep.sh could not check (exit ${ran.code}): ${tail(ran.output)}`);
+
+/** A refused add: a leak hit asks for the lead's hand check, as leak-grep does; anything else is stuck. */
+export const queueRefused = (e: { readonly _tag: string; readonly reason: string }): Outcome.Outcome =>
+  e._tag === "LeakGrepRefused"
+    ? Outcome.ask(`the leak grep refused before the queue: ${e.reason}`)
+    : Outcome.stuck(`not added to the merge queue: ${e.reason}`);
 
 /** The pull request number in `gh pr list --json number -q .[0].number`'s answer, or `null`. */
 export const listedPr = (ran: Ran): number | null => {
@@ -182,11 +191,26 @@ export const runners: Readonly<Record<string, Runner<Spawns>>> = {
     const checks = yield* run(dir, "gh", ["pr", "checks", String(pr), "--watch", "--interval", "30"]);
     return Outcome.answer(passOrStuck(`CI on PR ${pr}`, checks));
   }),
-  catchup: Effect.fn("landing.catchup")(function* (step) {
-    const { dir, branch, ticket } = yield* readArgs(Land, step);
+  queue: Effect.fn("landing.queue")(function* (step) {
+    const { dir, branch } = yield* readArgs(Branch, step);
     const pr = yield* openPr(dir, branch);
+    const repo = PullRequestsGh.repoFromUrl((yield* run(dir, "git", ["remote", "get-url", "origin"])).output);
+
+    if (repo === null) {
+      return yield* new StepFailed({ reason: `${dir}'s origin is not a GitHub repo` });
+    }
+
+    const services = Layer.mergeAll(
+      PullRequestsGh.layer(repo, dir),
+      PushesProcess.layer(yield* script()),
+      ChecksGh.layer(repo),
+    );
+    // The `ci` step before this one waited for the checks, so the required one is read once here.
     return Outcome.answer(
-      passOrStuck(`catchup.sh ${pr}`, yield* run(dir, "sh", [yield* script("catchup.sh"), String(pr), ticket])),
+      yield* Queue.add({ dir, pr }).pipe(
+        Effect.provide(services),
+        Effect.match({ onFailure: queueRefused, onSuccess: (added) => Outcome.done(Queue.line(added)) }),
+      ),
     );
   }),
 };

@@ -4,7 +4,15 @@ import { NodeServices } from "@effect/platform-node";
 import { Effect, type Scope } from "effect";
 import { describe, expect, it } from "vitest";
 import { landDecision } from "./flows/land-decision.ts";
-import { commitOutcome, createdPr, leakOutcome, listedPr, passOrStuck, runners as landing } from "./landing.ts";
+import {
+  commitOutcome,
+  createdPr,
+  leakOutcome,
+  listedPr,
+  passOrStuck,
+  queueRefused,
+  runners as landing,
+} from "./landing.ts";
 import * as Step from "./Step.ts";
 
 const ran = <A, E>(law: Effect.Effect<A, E, NodeServices.NodeServices | Scope.Scope>) =>
@@ -37,6 +45,9 @@ describe("what the landing scripts' exit codes mean", () => {
     expect(leakOutcome(r(0))._tag).toBe("done");
     expect(leakOutcome(r(1))._tag).toBe("ask");
     expect(leakOutcome(r(2))._tag).toBe("stuck");
+    expect(queueRefused({ _tag: "LeakGrepRefused", reason: "private_word" })._tag).toBe("ask");
+    expect(queueRefused({ _tag: "NotQueued", reason: "pr 9: draft" })._tag).toBe("stuck");
+    expect(queueRefused({ _tag: "PullRequestsError", reason: "gh: offline" })._tag).toBe("stuck");
     expect(listedPr(r(0, "812\n"))).toBe(812);
     expect(listedPr(r(0, "\n"))).toBeNull();
     expect(listedPr(r(1, "812"))).toBeNull();
