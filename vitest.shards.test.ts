@@ -196,19 +196,6 @@ it("vector: real CI medians include the previously unweighted scripts", () => {
   expect(measured["packages/pipeline/src/laws/standard.test.ts"]).toBe(3.5);
 });
 
-it("vector: the four catchup files carry their times from PR 770's CI run", () => {
-  // T559: the split files, one time each from run 42883743294, rounded to one decimal.
-  // Plant: drop these rows, so all four count as 1 s and can stack on one machine.
-  for (const [path, seconds] of [
-    [".agents/skills/lead/scripts/catchup.test.ts", 102.4],
-    [".agents/skills/lead/scripts/catchup.cleanup.test.ts", 124.1],
-    [".agents/skills/lead/scripts/catchup.nested-storage-checkout.test.ts", 175.7],
-    [".agents/skills/lead/scripts/catchup.nested-storage-driver.test.ts", 163.6],
-  ] as const) {
-    expect.soft(measured[path], path).toBe(seconds);
-  }
-});
-
 it("vector: the four build files carry their times from CI run 42922102030", () => {
   // T502, next/ (A9, A10): one time each from run 42922102030, on 2909594e, rounded to one decimal.
   // Plant: drop these rows, so all four count 1 s and the heavy build files can stack on one machine.
@@ -406,10 +393,9 @@ it("vector: L12 stale non-lane rows hold the three T554 run medians", () => {
   // Runs 42803733957, 42807559589, 42801440878. Gap >20 s; missing rows count 1 s.
   // The last four rows (box, boxrm, loosening, program-package-layout) come from PR 757's
   // check run 42874119130, attempts 5 to 14, a median of 10.
-  // Plant: restore catchup's old 47.2 seconds. Lane rows await the PR's own run.
-  // catchup.test.ts was split by PR 772 (ticket 572); its row is now main's 102.4 from run 42883743294.
+  // Plant: restore plancheck's older median. Lane rows await the PR's own run.
+  // catchup.test.ts had a row here until catchup.sh was retired for GitHub's merge queue (0162).
   const expected = {
-    ".agents/skills/lead/scripts/catchup.test.ts": 102.4,
     ".agents/skills/lead/scripts/box.test.ts": 348.7,
     ".agents/skills/lead/scripts/boxrm.test.ts": 295.0,
     ".agents/skills/lead/scripts/loosening.test.ts": 234.6,

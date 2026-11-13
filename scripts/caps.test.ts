@@ -97,7 +97,7 @@ describe("T325 K9 machine caps, today's tooling", () => {
         join(dirname(createRequire(import.meta.url).resolve("vitest/package.json")), "vitest.mjs"),
         "run",
         "--maxWorkers=1",
-        "skills/lead/scripts/catchup.test.ts",
+        "skills/lead/scripts/lanes.test.ts",
       ],
       {
         cwd: join(root, ".agents"),

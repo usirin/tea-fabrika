@@ -18,16 +18,11 @@ const LANE = "packages/pipeline/src/stages/pipeline/lane";
  * next/ medians use main runs 42717511599, 42716453289 and 42715921306, rounded to one decimal.
  * T871 medians use completed main runs 43239450301 (755d6f4ad), 43235822398 (2d60c9835)
  * and 43234969237 (27011b244), all attempt 1, with jobs and samples beside each row.
- * The four catchup files are one time each from PR 770's CI run 42883743294, rounded to one decimal.
  * The four build files (build.test.ts, build-assets.test.ts, build-one-file.test.ts, exam/bytes.test.ts) are one time each from CI run 42922102030, rounded to one decimal.
  * A file not measured counts 1 s.
  */
 export const measured: Record<string, number> = {
   ".agents/skills/lead/scripts/box.test.ts": 348.7,
-  ".agents/skills/lead/scripts/catchup.cleanup.test.ts": 124.1,
-  ".agents/skills/lead/scripts/catchup.nested-storage-checkout.test.ts": 175.7,
-  ".agents/skills/lead/scripts/catchup.nested-storage-driver.test.ts": 163.6,
-  ".agents/skills/lead/scripts/catchup.test.ts": 102.4,
   ".agents/skills/lead/scripts/gc.test.ts": 0.1,
   ".agents/skills/lead/scripts/redact.test.ts": 7.2,
   ".agents/skills/lead/scripts/skillscheck.test.ts": 25.9,
