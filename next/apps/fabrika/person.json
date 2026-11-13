@@ -7,35 +7,51 @@
       "properties": {
         "brain-poll": {
           "type": "integer",
+          "minimum": 1,
           "maximum": 9007199254740991,
-          "exclusiveMinimum": 0,
-          "title": "a positive whole number",
           "description": "The interval in milliseconds between brain readiness and shutdown checks.",
           "default": 100
         },
         "brain-start-timeout": {
           "type": "integer",
+          "minimum": 1,
           "maximum": 9007199254740991,
-          "exclusiveMinimum": 0,
-          "title": "a positive whole number",
           "description": "The maximum time in milliseconds to start or reuse a ready local brain.",
           "default": 60000
         },
         "brain-stop-timeout": {
           "type": "integer",
+          "minimum": 1,
           "maximum": 9007199254740991,
-          "exclusiveMinimum": 0,
-          "title": "a positive whole number",
           "description": "The maximum time in milliseconds to confirm the local brain and its children have stopped.",
           "default": 5000
         },
         "brain-throttle": {
           "type": "integer",
+          "minimum": 1,
           "maximum": 9007199254740991,
-          "exclusiveMinimum": 0,
-          "title": "a positive whole number",
           "description": "The delay in whole seconds between crash restarts of the local brain.",
           "default": 2
+        }
+      },
+      "additionalProperties": false
+    },
+    "gateway": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The most routed attempts one signed-in key may make in one gateway window.",
+          "default": 600
+        },
+        "window": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The gateway window in milliseconds.",
+          "default": 60000
         }
       },
       "additionalProperties": false

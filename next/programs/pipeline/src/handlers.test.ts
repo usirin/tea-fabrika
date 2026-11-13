@@ -1,7 +1,10 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Ci from "@kampus/libfabrika/ci/Ci";
+import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import * as CodeHost from "@kampus/libfabrika/codehost/CodeHost";
-import { Cause, Effect, Exit, Layer, Schema } from "effect";
+import * as CodeHostTest from "@kampus/libfabrika/codehost/CodeHostTest";
+import * as RepliesTest from "@kampus/libfabrika/runtime/RepliesTest";
+import { Cause, Context, Effect, Exit, Layer, Redacted, Schema } from "effect";
 import * as fc from "fast-check";
 import { handlers } from "./handlers.ts";
 
@@ -92,3 +95,25 @@ describe("L12: handlers map faults", () => {
     );
   });
 });
+
+it.effect.prop(
+  "S2: [secrets] the update handler strips a generated fault's cause before it can become queue mail",
+  {
+    body: Schema.String.check(Schema.isPattern(/^[A-Z0-9]{32}$/)),
+    reason: Schema.Literals(["unavailable", "rate_limited", "refused"]),
+  },
+  ({ body, reason }) =>
+    Effect.gen(function* () {
+      const token = `ghp_${body}`;
+      const services = yield* Layer.build(
+        Layer.merge(CodeHostTest.layer({ token: Redacted.make(token) }), CiTest.layer({ token: Redacted.make(token) })),
+      );
+      yield* Context.get(services, CodeHostTest.Control).fail("update", { kind: "fault", reason });
+      const outcome = yield* handlers.update!({ type: "update", attempt: 1, change: 1, head: "a".repeat(40) }).pipe(
+        Effect.provide(services),
+      );
+      RepliesTest.unleaked([JSON.stringify(outcome)], [token]);
+      expect(outcome).toEqual({ _tag: "Err", error: { _tag: reason } });
+    }),
+  { arbitrary: { seed: 119120, runs: 40 } },
+);

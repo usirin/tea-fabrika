@@ -408,6 +408,37 @@ describe("each rule refuses what it is there to refuse", () => {
   });
 });
 
+it("scenario: T877 L10 only the TOML adapter imports the parser and serializer", async () => {
+  // scenario: literal import names at every overriding config path are the rule's inputs.
+  const imports = [
+    'import "toml-eslint-parser";',
+    'import "toml-eslint-parser/lib/parser";',
+    'import "@decimalturn/toml-patch";',
+    'import "@decimalturn/toml-patch/dist/index.js";',
+  ].join("\n");
+  const banned = [
+    "next/programs/sample/src/machine.ts",
+    "next/packages/libfabrika/src/settings/TomlEdit.test.ts",
+    "next/packages/libfabrika/src/settings/internal/edit.ts",
+    "next/packages/libfabrika/src/node/settings/Load.ts",
+    "next/packages/libfabrika/src/runtime/Runner.ts",
+    "next/packages/libfabrika/src/access/Access.ts",
+    "next/packages/libfabrika/src/gateway/Gateway.ts",
+    "next/packages/libfabrika/src/ledger/Ledger.ts",
+    "next/apps/fabrika/dev.ts",
+    "next/apps/fabrika/src/settings-start.test.ts",
+    ".agents/skills/lead/scripts/example.ts",
+  ];
+  const adapter = "next/packages/libfabrika/src/settings/TomlParser.ts";
+  const result = await lintCopies(Object.fromEntries([...banned, adapter].map((file) => [file, imports])));
+
+  for (const file of banned) {
+    expect(result("eslint(no-restricted-imports)", file), file).toEqual([1, 2, 3, 4]);
+  }
+
+  expect(result("eslint(no-restricted-imports)", adapter)).toEqual([]);
+});
+
 // scenario: U11 is path-scoped, so its planted line must run under next/ with the real config.
 it("scenario: the isolate-boundary rule refuses a platform type outside cloudflare/", async () => {
   const file = "next/packages/libfabrika/src/runtime/usage.ts";
@@ -562,9 +593,9 @@ describe("a plain file cannot take a folder out of the checks", () => {
 });
 
 describe("rules that apply by path", () => {
-  const plantIn = (folder: string, text: string) => {
+  const plantIn = (folder: string, text: string, name = "planted.ts") => {
     const at = mkdtempSync(join(ROOT, folder, ".plant-"));
-    const file = join(at, "planted.ts");
+    const file = join(at, name);
     writeFileSync(file, text);
     return { at, file };
   };
@@ -626,6 +657,28 @@ describe("rules that apply by path", () => {
     expect(fires(file, "eslint(no-restricted-imports)")).toEqual([1]);
   });
 
+  // pinned: S1 checks the rule's own diagnostic, so an unresolved import cannot prove the ban.
+  describe.each(["program.ts", "tile.ts"])("S1 inbox %s imports", (name) => {
+    it.each([
+      ['import { x } from "@kampus/tuval";', [1]],
+      ['import { x } from "@kampus/tuval/window";', [1]],
+      ['import { x } from "../../../../packages/tuval/src/index.ts";', [1]],
+      ['import { Program } from "@kampus/libfabrika";', []],
+      ['import { slateDarkA } from "@radix-ui/colors";', [1]],
+      ['import "@radix-ui/colors/slate-dark-alpha.css";', [1]],
+      ['import { _electron } from "playwright";', [1]],
+      ['import { _electron } from "@playwright/test";', [1]],
+      ['import { parse } from "toml-eslint-parser";', [1]],
+      ['import "toml-eslint-parser/lib/parser";', [1]],
+      ['import { TomlParser } from "@kampus/libfabrika/settings/TomlParser";', [1]],
+      ['import { TomlParser } from "../../../../packages/libfabrika/src/settings/TomlParser.ts";', [1]],
+    ])("pinned: S1 preserves the import limits for %s", (text, lines) => {
+      const { at, file } = plantIn("next/programs/inbox/src", `${text}\n`, name);
+      made.push(at);
+      expect(fires(file, "eslint(no-restricted-imports)")).toEqual(lines);
+    });
+  });
+
   it("a `use` in a .ts file under packages/ is left alone: it is Effect's, not a hook", () => {
     const { at, file } = plantIn("packages", HOOK);
     made.push(at);
@@ -678,4 +731,32 @@ it("scenario: P19 desktop-core refuses a native import through the real config",
   const path = "next/packages/libfabrika/src/desktop/BrainServiceManaged.ts";
   const result = await lintCopies({ [path]: 'import { readFile } from "node:fs";\nexport const read = readFile;\n' });
   expect(result("fabrika(service-contract)", path)).toEqual([1]);
+});
+
+// scenario: L12 checks the real config at the new module's paths, including both filename rules.
+it("scenario: T878 L12 repositories keeps private imports, names and one-machine rules", async () => {
+  const src = "next/packages/libfabrika/src/";
+  const files = {
+    [`${src}repositories/Repositories.ts`]: "export const snapshot = 1;\n",
+    [`${src}repositories/repositories.ts`]: "export const snapshot = 1;\n",
+    [`${src}repositories/internal/read.ts`]: "/** @internal */\nexport const read = 1;\n",
+    [`${src}repositories/internal/Read.ts`]: "/** @internal */\nexport const read = 1;\n",
+    [`${src}repositories/Private.ts`]: 'import {open} from "../packs/internal/open.ts";\nexport {open};\n',
+    [`${src}packs/Private.ts`]: 'import {read} from "../repositories/internal/read.ts";\nexport {read};\n',
+    [`${src}repositories/Names.ts`]: "export const snapshotOf = 1;\n",
+    [`${src}repositories/Machines.ts`]:
+      'import {Machine} from "@demlik/tea/effect";\nexport const first = Machine.make({});\nexport const second = Machine.make({});\n',
+    [`${src}repositories/Platform.ts`]: 'import {spawn} from "node:child_process";\nexport {spawn};\n',
+  };
+  const result = await lintCopies(files);
+  expect(result("fabrika(modules)", `${src}repositories/Repositories.ts`)).toEqual([]);
+  expect(result("unicorn(filename-case)", `${src}repositories/Repositories.ts`)).toEqual([]);
+  expect(result("unicorn(filename-case)", `${src}repositories/repositories.ts`)).toEqual([1]);
+  expect(result("unicorn(filename-case)", `${src}repositories/internal/read.ts`)).toEqual([]);
+  expect(result("unicorn(filename-case)", `${src}repositories/internal/Read.ts`)).toEqual([1]);
+  expect([...new Set(result("eslint(no-restricted-imports)", `${src}repositories/Private.ts`))]).toEqual([1]);
+  expect([...new Set(result("eslint(no-restricted-imports)", `${src}packs/Private.ts`))]).toEqual([1]);
+  expect(result("fabrika(no-of)", `${src}repositories/Names.ts`)).toEqual([1]);
+  expect(result("fabrika(one-machine-per-file)", `${src}repositories/Machines.ts`)).toEqual([3]);
+  expect(result("fabrika(no-node-imports)", `${src}repositories/Platform.ts`)).toEqual([1]);
 });

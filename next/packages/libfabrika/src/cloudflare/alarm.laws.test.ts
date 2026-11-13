@@ -80,6 +80,7 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
                 Layer.succeed(SpanSink, {
                   batch: (work) => work,
                   flush: Effect.succeed({ sent: 0 }),
+                  check: Effect.void,
                   summaries: unexpected,
                   sums: unexpected,
                 }),
@@ -95,6 +96,7 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
                   Effect.gen(function* () {
                     yield* Deferred.succeed(captured, yield* Alarm);
                     return ProgramRunner.of({
+                      init: () => Effect.void,
                       msg: () => Effect.succeed(Sent.cases.accepted.make({ rev: 0, pos: 0 })),
                       open: () => Effect.succeed({ rev: 0, view: {} }),
                       due: () => Effect.void,

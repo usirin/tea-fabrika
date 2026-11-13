@@ -35,13 +35,69 @@ const home = Effect.gen(function* () {
     path = yield* Path.Path;
   const root = yield* fs.makeTempDirectoryScoped({ prefix: "t664-start-" });
   const person = path.join(root, "fabrika.toml");
-  const repo = path.join(root, "repo-fabrika.toml");
   const write = (port: number | undefined) =>
     port === undefined
       ? fs.remove(person, { force: true })
       : fs.writeFileString(person, `# the person's\n[instance]\nport = ${port}\n`);
-  return { places: { person: { path: person, name: PERSON }, repo: { path: repo, name: REPO } }, write };
+  return { places: { person: { path: person, name: PERSON }, repo: { text: null, name: REPO } }, write };
 });
+
+it.effect.prop(
+  "T843 load: files, env and flags resolve the saved gateway policy and wrong scope stops startup (50 runs)",
+  {
+    limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 20 })),
+    window: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100_000 })),
+    source: Schema.Literals(["file", "env", "flags", "repo"]),
+  },
+  ({ limit, window, source }) =>
+    Effect.gen(function* () {
+      const h = yield* home;
+      const fs = yield* FileSystem.FileSystem;
+      const policy = `[gateway]\nlimit = ${limit}\nwindow = ${window}\n`;
+      yield* fs.writeFileString(h.places.person.path, source === "file" ? policy : "");
+      const result = yield* Effect.exit(
+        Load.load({
+          ...h.places,
+          repo: { name: REPO, text: source === "repo" ? policy : "" },
+          env: source === "env" ? { FABRIKA_GATEWAY_LIMIT: String(limit), FABRIKA_GATEWAY_WINDOW: String(window) } : {},
+          flags: source === "flags" ? { "gateway.limit": String(limit), "gateway.window": String(window) } : {},
+          version: "0.0.0",
+        }),
+      );
+      expect(Exit.isFailure(result)).toBe(source === "repo");
+
+      if (source === "repo") {
+        expect(Exit.isFailure(result)).toBe(true);
+      } else {
+        expect(Exit.isSuccess(result)).toBe(true);
+
+        if (Exit.isSuccess(result)) {
+          expect(result.value.values).toMatchObject({ gatewayLimit: limit, gatewayWindow: window });
+          expect(result.value.snapshot.values).toMatchObject({ "gateway.limit": limit, "gateway.window": window });
+        }
+      }
+    }).pipe(Effect.provide(services)),
+  { arbitrary: { seed: SEED, runs: 50 } },
+);
+
+it.effect.prop(
+  "T843 startup rejects zero and unsafe policy values before composing an instance (50 runs)",
+  {
+    bad: Schema.Union([
+      Schema.Int.check(Schema.isLessThanOrEqualTo(0)),
+      Schema.Literals(["NaN", "Infinity", "1.5", "9007199254740992"]),
+    ]),
+  },
+  ({ bad }) =>
+    Effect.gen(function* () {
+      const h = yield* home;
+      const result = yield* Effect.exit(
+        Load.load({ ...h.places, env: {}, flags: { "gateway.limit": String(bad) }, version: "0.0.0" }),
+      );
+      expect(Exit.isFailure(result)).toBe(true);
+    }).pipe(Effect.provide(services)),
+  { arbitrary: { seed: SEED, runs: 50 } },
+);
 
 const action = fc.oneof(
   fc.record({
@@ -157,10 +213,10 @@ describe("L14 [secrets], a start saves and says only declared settings", () => {
                 const h = yield* home;
                 const fs = yield* FileSystem.FileSystem;
                 yield* fs.writeFileString(h.places.person.path, place.person);
-                yield* fs.writeFileString(h.places.repo.path, place.repo);
                 // The founding facts reach dev.ts as flags; none is a setting, so none is a source.
                 const loaded = yield* Load.load({
                   ...h.places,
+                  repo: { name: REPO, text: place.repo },
                   flags: { founder: word, window: word, person: word },
                   env: { [field]: word },
                   version: "0.0.0",

@@ -3,7 +3,7 @@
 //
 // The shape these tests hold the module to:
 // - `Load.load({ person, repo, flags, env, version })` reads the two files through `FileSystem`
-//   (`person` and `repo` are `{ path, name }`: where to read, and the name a person reads), parses
+//   (`person` is `{ path, name }`, `repo` is pinned `{ text, name }`), parses
 //   them with `Toml`, checks them with `Files.validate`, resolves `Declarations.all` and returns
 //   `{ values, snapshot }`. A missing file is an empty one; any other read failure is a
 //   `SettingsError` with reason `read`, and broken TOML one with reason `syntax`.
@@ -34,7 +34,7 @@ type File =
   | { readonly _tag: "text"; readonly text: string }
   | { readonly _tag: "folder" };
 
-/** Lay the two files out in a fresh scoped temp folder, and give `Load.load` their places. */
+/** The repo text is already pinned. Only the person's file is read from disk. */
 const lay = (repo: File, person: File) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem,
@@ -57,7 +57,7 @@ const lay = (repo: File, person: File) =>
         return at;
       });
     return {
-      repo: { path: yield* place("repo", repo), name: REPO },
+      repo: { text: repo._tag === "text" ? repo.text : null, name: REPO },
       person: { path: yield* place("person", person), name: PERSON },
     };
   });
@@ -132,7 +132,8 @@ const failures = fc.oneof(
       .oneof(fc.integer({ min: 65536, max: 2 ** 30 }), fc.integer({ min: -(2 ** 30), max: 0 }))
       .map((p) => `[instance]\nport = ${p}\n`),
   }),
-  fc.record({ kind: fc.constant("read" as const), in: fc.constantFrom("repo", "person"), body: fc.constant("") }),
+  // T878 L2 in RepositoriesGit.test.ts replaces the repo disk-read refusal: Load receives bytes.
+  fc.record({ kind: fc.constant("read" as const), in: fc.constant("person"), body: fc.constant("") }),
 );
 
 describe("L11, no failed load reaches build, Alchemy startup or the settings-start write", () => {
@@ -220,10 +221,6 @@ it("T753 L8 one load reads each source once, checks the repo first and reports s
           readFileString: (path) => {
             touched.push(path);
 
-            if (path === REPO) {
-              return Effect.succeed(`fabrika-version = "${v.newer ? "1.0.0" : "0.0.0"}"\n`);
-            }
-
             // A second read changes the value, proving the report uses the first snapshot.
             return Effect.succeed(
               v.personPresent
@@ -235,7 +232,9 @@ it("T753 L8 one load reads each source once, checks the repo first and reports s
         const exit = await Effect.runPromise(
           Load.load({
             person: { path: PERSON, name: PERSON },
-            ...(v.selected ? { repo: { path: REPO, name: REPO } } : {}),
+            ...(v.selected
+              ? { repo: { text: `fabrika-version = "${v.newer ? "1.0.0" : "0.0.0"}"\n`, name: REPO } }
+              : {}),
             version: "0.0.0",
             flags: v.override ? { "instance.port": String(fileValue) } : {},
             env: {},
@@ -245,10 +244,10 @@ it("T753 L8 one load reads each source once, checks the repo first and reports s
 
         if (v.selected && v.newer) {
           expect(reason(exit)).toBe("version");
-          expect(touched).toEqual([REPO]);
+          expect(touched).toEqual([]);
         } else {
           expect(Exit.isSuccess(exit)).toBe(true);
-          expect(touched).toEqual(v.selected ? [REPO, PERSON] : [PERSON]);
+          expect(touched).toEqual([PERSON]);
 
           if (Exit.isSuccess(exit)) {
             const wanted = v.override || v.personPresent ? fileValue : Declarations.port.default;
@@ -260,7 +259,7 @@ it("T753 L8 one load reads each source once, checks the repo first and reports s
             expect(row.origin._tag).toBe(v.override ? "flag" : v.personPresent ? "file" : "default");
             const report = Print.report(rows, { all: v.all });
             expect(report.includes(`${row.path} =`)).toBe(v.all || row.origin._tag !== "default");
-            expect(touched).toEqual(v.selected ? [REPO, PERSON] : [PERSON]);
+            expect(touched).toEqual([PERSON]);
           }
         }
       },

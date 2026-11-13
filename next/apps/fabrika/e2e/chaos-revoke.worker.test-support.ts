@@ -1,16 +1,18 @@
 // next/, p90 only. Keep the real entry and replace only its gateway's policy callback.
 import { applyCell } from "@demlik/tea";
 import { Gateway } from "@kampus/libfabrika/gateway/Gateway";
+import * as RateLimiterSql from "@kampus/libfabrika/gateway/RateLimiterSql";
 import { LedgerError } from "@kampus/libfabrika/ledger/Ledger";
 import { Answer } from "@kampus/libfabrika/transport/Wire";
 import { projectLayer, ProjectService } from "@kampus/libfabrika/workers/runtime";
 import { Context, Deferred, Effect, Layer, ManagedRuntime, Predicate, Schema } from "effect";
+import * as RateLimiter from "effect/persistence/RateLimiter";
 import { programs } from "virtual:fabrika-built";
 import { Project as RealProject } from "../src/brain.ts";
 import { settings } from "../src/runtime.ts";
 import * as Hold from "./chaos-revoke.test-support.ts";
 
-export { Connection, Control, Process, RecordPart } from "../src/brain.ts";
+export { Connection, Control, IsolateTail, Process, RecordPart } from "../src/brain.ts";
 // oxlint-disable-next-line import/no-default-export -- edge: the local runtime loads the real Worker's default fetch
 export { default } from "../src/brain.ts";
 
@@ -30,6 +32,7 @@ const heldRuntime = (ctx: Parameters<typeof projectLayer>[0], env: Parameters<ty
             return [previous, model] as const;
           });
         const config = yield* settings(env);
+        const rateLimit = { limit: 100_000, window: 60_000 };
         const services = yield* Layer.build(
           projectLayer(ctx, env, {
             config,
@@ -51,6 +54,7 @@ const heldRuntime = (ctx: Parameters<typeof projectLayer>[0], env: Parameters<ty
                     ping: { min: 30_000, max: 75_000 },
                     inputCap: 1_000_000,
                     spentCap: 100_000,
+                    rateLimit,
                     deliver: (pid, _envelope, _span, incoming) => options.deliver(pid, incoming),
                     policy: Effect.fnUntraced(function* (pid: string) {
                       const policy = yield* options.policy(pid);
@@ -74,7 +78,13 @@ const heldRuntime = (ctx: Parameters<typeof projectLayer>[0], env: Parameters<ty
                           : undefined,
                     },
                     events: { personOnly: [] },
-                  }),
+                  }).pipe(
+                    Layer.provide(
+                      RateLimiter.layer.pipe(
+                        Layer.provide(RateLimiterSql.layer(options.sql, { build: config.build, policy: rateLimit })),
+                      ),
+                    ),
+                  ),
                 ),
               ),
           }),

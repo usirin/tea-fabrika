@@ -18,6 +18,7 @@
     "next/apps/fabrika": "next-app",
     "next/packages/libfabrika": "next-library",
     "next/programs/checklist": "next-program",
+    "next/programs/inbox": "next-program",
     "next/programs/chaos": "next-program",
     "next/programs/counter": "next-program",
     "next/programs/pipeline": "next-program"

@@ -60,12 +60,14 @@ same turn, and never waits for a code pull request or the end of the day (owner,
 ## Two versions, side by side
 
 A new version of fabrika is growing in `next/`, built on
-[the five layers](./docs/direction/a-local-first-sync-engine.md). As of 2026-11-11,
-`next/` is on main, and 20 of Tier 1's 44 rows have merged, plus P17a, half of P17
+[the five layers](./docs/direction/a-local-first-sync-engine.md). As of 2026-11-12,
+`next/` is on main, and 21 of Tier 1's 44 rows have merged
 ([where we are](./docs/plan/README.md#where-we-are-now); 39 since 2026-11-10, when the owner
 added P38, [0069](./.decisions/0069-choices-are-settings.md), 43 since the four thin slices,
-P39 to P42, [0088](./.decisions/0088-six-slices-in-tier-1.md), and 44 since the merge queue's first stage, P43,
-[0111](./.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md)). Everything
+P39 to P42, [0088](./.decisions/0088-six-slices-in-tier-1.md), 44 since the merge queue's first stage, P43,
+[0111](./.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md), 43 since the checklist replaced two rows,
+[0137](./.decisions/0137-tier-1s-program-is-the-checklist.md), and 44 since a thin inbox, P45,
+[0151](./.decisions/0151-a-thin-inbox-is-a-tier-1-row.md)). Everything
 else (`packages/`, `programs/`, `apps/`) is today's
 version. It keeps running for daily use until the new one takes each job over
 ([clean slate](./docs/direction/clean-slate.md)).
@@ -679,8 +681,11 @@ Write-ups are read by busy people, some of them not native English speakers.
   and the owner picks one (owner, 2026-11-08). That covers all work in flight: the ask desk,
   the inbox, the project window and typography. The keys editor already does it.
 - **Show it running.** A PR that adds or changes a program's window carries
-  screenshots from the real built app, saved in that program's `docs/` folder
-  and shown in the PR body. Take them the way `apps/fabrika/e2e.ts` drives the
+  screenshots from the real built app, uploaded to the pull request with `gh`'s
+  `--attach` and never committed
+  ([0160](./.decisions/0160-pr-shots-are-never-committed.md)). The step that
+  shoots writes them under `runs/`, and the lead attaches them, each with alt
+  text. Take them the way `apps/fabrika/e2e.ts` drives the
   app: Playwright on Electron, with `FABRIKA_HOME` set to a test home of its
   own in a temp folder, never your real one. Look at each shot, and say in the
   PR what looks broken, empty or wrong.

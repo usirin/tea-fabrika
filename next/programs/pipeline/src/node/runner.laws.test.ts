@@ -12,6 +12,7 @@ import { InputId, Writer } from "@kampus/libfabrika/coordination";
 import { Doorbell } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
+import * as ChildrenLedger from "@kampus/libfabrika/processes/ChildrenLedger";
 import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
@@ -110,6 +111,7 @@ const life = Effect.fnUntraced(function* (
     Layer.provideMerge(
       Layer.mergeAll(
         ProgramMailLedger.layer({ grants: { [NAME]: ["queue"] } }),
+        ChildrenLedger.layer({ grants: [] }),
         Layer.succeed(MailWakeups, { wake: () => Effect.void }),
       ),
     ),
@@ -120,7 +122,7 @@ const life = Effect.fnUntraced(function* (
   const context = yield* Layer.buildWithScope(shared, scope);
 
   for (const [name, code] of [
-    [NAME, "merger"],
+    [NAME, "pipeline/merger"],
     ["queue", "queue"],
   ] as const) {
     const status = yield* ProcessManager.use((p) => p.status(name)).pipe(Effect.provide(context), Effect.result);
@@ -153,7 +155,7 @@ const life = Effect.fnUntraced(function* (
     }),
   );
   const own = Layer.mergeAll(
-    ProgramLoader.layer({ merger: program }, handlers).pipe(Layer.provide(Layer.succeedContext(services))),
+    ProgramLoader.layer({ "pipeline/merger": program }, handlers).pipe(Layer.provide(Layer.succeedContext(services))),
     ProcessStore.layer(store.sql("process"), { process: PROCESS }),
     Layer.succeed(Alarm, { set: (at: number | null) => store.alarms.set(NAME, at) }),
     Layer.succeed(WatcherManager, { publish: () => Effect.void }),
@@ -162,7 +164,7 @@ const life = Effect.fnUntraced(function* (
   ).pipe(Layer.provideMerge(Layer.succeedContext(context)));
   const built = yield* Layer.buildWithScope(
     ProgramRunner.layer(
-      { id: PROCESS, name: NAME, program: "merger", build: BUILD, owner },
+      { id: PROCESS, name: NAME, program: "pipeline/merger", build: BUILD, owner },
       { recovery: { sql: store.sql("recovery"), name: NAME, capacity: 1024 ** 3 } },
     ).pipe(Layer.provide(own)),
     scope,

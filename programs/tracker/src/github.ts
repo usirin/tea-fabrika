@@ -31,7 +31,7 @@ export interface GitHubSettings {
 
 /** The connected repositories. Add one here and its open pull requests show in the list. */
 export const GITHUB: GitHubSettings = {
-  repos: ["https://github.com/usirin/tea-fabrika"],
+  repos: ["https://github.com/kamp-us/tea-fabrika"],
   under: ["programs", "packages", "apps"],
 };
 
