@@ -3,7 +3,7 @@ import { Schema } from "effect";
 import { checklistMachine } from "./program.ts";
 
 const press = Cmd.make("press", {
-  input: Schema.Struct({ m: checklistMachine.msg }),
+  input: Schema.Struct({ m: Schema.toType(checklistMachine.msg) }),
   ok: Schema.Null,
   err: [],
 });
@@ -18,6 +18,8 @@ export const tile = Machine.make({
   cmds: [press],
   init: () => [{ draft: "" }, []],
   update: {
+    press_ok: (s) => [s, []],
+    press_err: (s) => [s, []],
     typed: (_s, m) => [{ draft: m.text.slice(0, 80) }, []],
     submit: (s) => (s.draft === "" ? [s, []] : [{ draft: "" }, [press({ m: { type: "add", name: s.draft } })]]),
   },

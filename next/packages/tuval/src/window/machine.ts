@@ -462,7 +462,7 @@ const linkUpdate = Object.fromEntries(
 export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: WindowChecks<P>) => {
   const client = clientMachineFor(checks);
   const step: ClientStep = (s, m) => {
-    const [next, cmds] = applyCell(client, s, m);
+    const [next, cmds] = applyCell<C.Client, C.ClientMsg, ReturnType<typeof client.init>[1][number]>(client, s, m);
     return [next, cmds.map((c) => c.pid)];
   };
   return Machine.make({
@@ -509,9 +509,9 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           return [s, []];
         }
 
-        const msg = Schema.decodeUnknownResult(child.msg)(m.msg);
+        const msg = Schema.decodeUnknownResult(Schema.toType(child.msg))(m.msg);
 
-        if (Result.isFailure(msg)) {
+        if (Result.isFailure(msg) || !Schema.is(Schema.Struct({ type: Schema.String }))(msg.success)) {
           return [s, []];
         }
 
@@ -526,7 +526,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           return [s, []];
         }
 
-        let next = { ...s, tiles: s.tiles.map((row) => (row.id === t.id ? { ...row, own } : row)) };
+        let next: WindowModel = { ...s, tiles: s.tiles.map((row) => (row.id === t.id ? { ...row, own } : row)) };
         const out: Array<Out[number]> = [];
 
         for (const cmd of cmds) {

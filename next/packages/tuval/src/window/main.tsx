@@ -580,7 +580,7 @@ export const startWindow = Effect.fn("Window.start")(function* (options: WindowO
     ctx: { tiles: options.tiles },
     interpret: {
       key: Effect.fn("ClientKey.current")(function* (cmd) {
-        const key = yield* keys.current(cmd.rejected);
+        const key = yield* keys.current(cmd.rejected).pipe(Effect.mapError((error) => ({ ...error })));
         yield* Deferred.succeed(identityFor(cmd.rejected), key);
         return { found: key.found };
       }),
@@ -596,7 +596,7 @@ export const startWindow = Effect.fn("Window.start")(function* (options: WindowO
         return connections.get(cmd.dial)?.text("ping") ? null : yield* Effect.fail(F.closed.make({}));
       }),
       persist: Effect.fn("Client.persist")(function* () {
-        const claimed = yield* keys.claimPersist;
+        const claimed = yield* keys.claimPersist.pipe(Effect.mapError((error) => ({ ...error })));
 
         if (!claimed) {
           return false;
@@ -608,7 +608,9 @@ export const startWindow = Effect.fn("Window.start")(function* (options: WindowO
       }),
       record: Effect.fn("ClientRows.record")(function* (cmd) {
         const id = yield* ids.next(Id.Entry).pipe(Effect.mapError(() => F.failed.make({})));
-        yield* rows.put(ClientRow.make({ id, tab, build: options.build, sentAt: yield* sentAt, record: cmd.record }));
+        yield* rows
+          .put(ClientRow.make({ id, tab, build: options.build, sentAt: yield* sentAt, record: cmd.record }))
+          .pipe(Effect.mapError((error) => ({ ...error })));
         return null;
       }),
     },
