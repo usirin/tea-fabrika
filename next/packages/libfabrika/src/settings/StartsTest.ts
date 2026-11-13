@@ -215,7 +215,12 @@ export const exclude = (output: unknown, secret: string) => {
   const visit = (value: unknown): void => {
     if (typeof value === "string") {
       for (const form of forms) {
-        expect(value).not.toContain(form);
+        // A walk visits every string of every output after each move. One assertion per string
+        // took two thirds of an entry flow law's time, so only a string that holds the form
+        // reaches the assertion, which then fails with its usual message.
+        if (value.includes(form)) {
+          expect(value).not.toContain(form);
+        }
       }
     } else if (typeof value === "object" && value !== null && !seen.has(value)) {
       seen.add(value);
