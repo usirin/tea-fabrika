@@ -293,11 +293,24 @@ jobs:
       # failed try, drops the top mirror, walking a chain of six that ends outside Canonical. Its
       # comment holds the measured limits; the cause is outside this repo (decision 0036). Three
       # dead mirrors, then a full install, take about 8 min, inside the step's 12.
+      # `ubuntu-latest` is Ubuntu 26.04 for this repository since it moved to the organization on
+      # 2026-11-13 (24.04 on every job before the move, 26.04 on every job after). That image has
+      # bubblewrap already, with an AppArmor profile of its own, `bwrap-userns-restrict`: what bwrap
+      # starts runs as `unpriv_bwrap`, which denies every capability. sandbox-runtime's seccomp
+      # helper needs CAP_SYS_ADMIN in the user namespace it makes inside the box, so every box ended
+      # with exit 1 before its program started: "apply-seccomp: write /proc/self/setgroups (nested
+      # userns is capability-restricted; caller must provide CAP_SYS_ADMIN): Permission denied" (run
+      # 43493167395, test (1): refused before the unload, ran after it). The sysctl does not reach a
+      # named profile, and a `deny` in a profile cannot be allowed back from a local file, so the
+      # profile is unloaded where the image has it. 24.04 has none.
       - name: apt packages
         timeout-minutes: 12
         run: |
           sudo sh .github/ci/apt.sh install expect zsh bubblewrap socat ripgrep
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          if [ -e /etc/apparmor.d/bwrap-userns-restrict ]; then
+            sudo apparmor_parser -R /etc/apparmor.d/bwrap-userns-restrict
+          fi
 
       - run: pnpm install --frozen-lockfile
       # Main runs every test. A pull request runs the tests that import what it
