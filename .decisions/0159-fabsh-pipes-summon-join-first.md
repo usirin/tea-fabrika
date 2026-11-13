@@ -119,3 +119,43 @@ working for real, with whatever they need.**
   React view names the programs the four primitives do not need, such as the tracker and the
   ticket page. A piece the four need is in scope even when it has a view of its own: `fabsh`'s
   view, the desk, and wherever a room's talk is shown.
+- 2026-11-13 (owner): done is seen in the Electron app and in a browser tab. The two are built side
+  by side from the first piece that draws, and a piece that draws is not done until it works in
+  both.
+  - Why: work built for a browser tab alone can meet the app late, find something broken there,
+    and need a deep change. Building both from the start finds it while the piece is small.
+  - This is the bar the plan already had: a tier's demo works in a browser tab and an Electron
+    window ([the tiers](../docs/plan/tiers.md#the-rules),
+    [Tier 1](../docs/plan/tier-1.md#what-done-looks-like)), and the desktop layer is one core with
+    `electron`, `browser` and `headless` backends
+    ([0274](0274-the-desktop-is-a-platform-free-core.md)). A reading of this file that left the
+    app for later is wrong.
+  - The app is one more client of the same window code. A browser stays a client of every
+    protocol ([a browser is always a client](../docs/direction/a-browser-is-always-a-client.md)),
+    and nothing is written for the app alone but what only the app has: its sealed keys and the
+    brain it starts ([0280](0280-the-app-starts-a-launchd-brain.md)).
+  - It pulls in Tier 1's row P19, the Electron app. P19 needs P18 and P4; P18 is already needed
+    by the four, and P4 is done.
+  - **The menu bar extra (P21) follows the app, in its simplest version:** just enough to approve
+    and deny a new window from the menu bar
+    ([0280](0280-the-app-starts-a-launchd-brain.md) puts the menu bar in the app from its first
+    slice). The thin menu bar grows into the full one: its plan reads the full design first and
+    adds no shape the full menu bar would have to undo, the rule
+    [0151](0151-a-thin-inbox-is-a-tier-1-row.md) set for the thin inbox. Remove and the rest of
+    P21 stay in its later slices. The app's demo (P23) still waits.
+  - **The cloud instance (P24) is built alongside, starting once the window works.** Each piece is
+    deployed there as it lands, as a quick check, the same way each is checked in the app.
+    - Why: the brain is workerd everywhere
+      ([the cloud is one more host](../docs/direction/the-cloud-is-one-more-host.md#decided-2026-10-30-the-brain-and-the-hands)),
+      so the gap is smaller than a browser tab against the app. But only the real cloud shows its
+      real limits, a public door, and hands that dial in over the internet, and those touch
+      `summon` and `@name`.
+    - A deploy still takes the owner's yes after `alchemy plan`
+      ([0295](0295-where-hot-reload-is-off.md),
+      [0014](0014-the-lead-merges-when-every-step-passed.md)). Whether one yes may cover the quick
+      deploys that follow is not decided here.
+    - P24 needs P16, P17 and P21: P16 is already needed, P17 is done, and P21 comes as above.
+  - **Recovery and the rest of the cloud rows (P26, P27, P28, P29, P36) are the first work after
+    done,** ahead of the programs with their own view. This changes the bullet above that puts the
+    tracker and the ticket page first after done: they follow these rows. Until then daily work in
+    `next/` lives only in the laptop's ledger, and the owner accepts that.
