@@ -51,6 +51,7 @@ Three words to know. **Plan-115** is [ticket 115's plan](./ticket-115.md): laws 
 18. **`@kampus/libfabrika`'s top level holds only the app layer's names.** Lower layers are on subpaths that only named importers may use. Why: with one top level, an import name could not tell a program reaching `app` from one reaching `transport`, and the strict one-layer-down rule would have nothing to read. It also keeps a program's box small. Cost: three more lines in an `exports` map, and a law. Sure: 80%. The doubt is how many names the app layer ends up saying again.
 19. **Fabrika is the logic, and Tuval is the projection of it.** Settled by the owner. `@kampus/tuval` holds everything a client does. `next/apps/fabrika` is only wiring and the deploy stack. Tuval may import `@kampus/libfabrika`, and never the other way. Why: a client's logic then has one home, and the library can't come to lean on a screen. Cost: tuval holds Electron code, on a subpath, and its `electron` row needs two named exceptions. Sure: 85%. The doubt is what counts as "dialing": see [Packages](#packages).
 20. **Tier 1 has no desk process.** Settled by the owner: the desk is a program, and it arrives in Tier 2 with split and close. Tier 1 has one fixed layout at wiring, and each window keeps its own focus. Why: nothing in Tier 1 moves a tile, so a process would only hold one constant. Cost: PR 223 mirrors focus between two windows, and that goes away until Tier 2. Sure: 85%.
+    *2026-11-13: this Tier 1 stopgap ended with [0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md). Focus is the desk process's, per [0274](../../.decisions/0274-the-desktop-is-a-platform-free-core.md) and [0277](../../.decisions/0277-size-belongs-to-the-viewer.md).*
 21. **`Backend` becomes `Host`, and `has` carries what the host can do.** Settled by the owner, in `brain-hands-window-agent.md`. Why: old hellos can never get the list back, so it goes in now, even with nothing reading it. Cost: 60 to 100 product lines, and one more field in each grant. Sure: 70%, as that note says. The doubt is capabilities that change, since a hello is said once.
 22. **The hello's `backend` becomes `platform`, and so does the `Host` field that holds it.** My call. Why: it is a plain field, not a tag, and `{platform: "browser", has: ["screen"]}` reads out loud. The hello and the service carry the same value, so they use one word. Cost: one word, and no fact has been written with the old one. Sure: 80%.
 23. **The tag key is `_tag`, and Effect Schema writes it.** Settled by the owner. Why: `Schema.TaggedUnion` gives makers, `match` and guards, and `catchTag` reads the same key, so data and errors share one word. Cost: the slice's `kind` and `is` move, and one new lint rule. Sure: 90%. See [Tags](#tags).
@@ -664,6 +665,7 @@ export const layout: Split = {dir: "row", parts: [
 ]};
 // next/packages/tuval/src/desktop/layout.ts keeps Split, Tile, isTile and tilesIn. `fold` still reads them.
 // window/machine.ts: `focus` is in the window's model, and `opened` comes from tilesIn(layout), not from a DESK view.
+// 2026-11-13: this Tier 1 stopgap ended with 0159. Focus is the desk process's, per 0274 and 0277.
 ```
 
 Nothing is lost. A focus move was never kept for its own sake, and PR 223's `desk:owner` log holds no one's real data. The desk's first letter in Tier 2 starts its own log.
@@ -2474,6 +2476,7 @@ No fact is lost by waiting on any of these. Each adds a kind of fact, and old sa
 - A tile can start from a saved line. Records no fact from Tier 1's time; nothing lost.
 - Split, close and prefix keys, since `tracker | ticket` beside `fabsh` needs them. They arrive with the desk.
 - The desk, `next/programs/desk`, built in as `fabrika/desk`. Layout and focus move into it, on the same Cmds as any program, with a grant for any start or monitor power it needs. Focus mirrors between windows again, and `ps` lists tiles. *Changed 2026-11-07 (owner): it said `runs`.* Tier 1 keeps no layout or focus as facts, and has none to lose.
+  *2026-11-13: this Tier 1 stopgap ended with [0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md). Focus is the desk process's, per [0274](../../.decisions/0274-the-desktop-is-a-platform-free-core.md) and [0277](../../.decisions/0277-size-belongs-to-the-viewer.md).*
 - `keep`, as a proposal: the tracker's filter is the first thing that needs it. Filters stay in the window's machine until then; nothing lost.
 - Topic, as a proposal: `tracker | ticket` is the first case that may need to read outside an inbox. A later Topic reads the same streams; nothing lost.
 
