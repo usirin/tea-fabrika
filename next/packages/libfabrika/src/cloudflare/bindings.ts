@@ -100,7 +100,7 @@ export interface GatewayCalls {
   ) => Effect.Effect<typeof Answer.Type, unknown>;
   readonly knock: (
     client: ConnectionId,
-    input: { readonly label: string; readonly pass?: string | null },
+    input: { readonly label: string; readonly pass?: string | null; readonly as?: "window" | "agent" | "hands" },
   ) => Effect.Effect<typeof Answer.Type, unknown>;
   readonly grant: (input: unknown) => Effect.Effect<typeof GrantReply.Type, unknown>;
   readonly disconnect: (client: ConnectionId) => Effect.Effect<void, unknown>;

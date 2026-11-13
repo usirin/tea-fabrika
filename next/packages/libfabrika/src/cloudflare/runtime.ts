@@ -21,9 +21,12 @@ import { ClientManager } from "../access/ClientManager.ts";
 import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
 import { NotGranted, SigningRefused, Writer, type Session } from "../access/SessionManager.ts";
 import * as Id from "../Id.ts";
+import type { Jobs } from "../jobs/Jobs.ts";
+import * as JobsLedger from "../jobs/JobsLedger.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerRemote from "../ledger/LedgerRemote.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
+import * as LedgerStreamsSql from "../ledger/LedgerStreamsSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { type Appended, fromHere, lineFor } from "../ledger/Log.ts";
@@ -137,7 +140,7 @@ export interface ProjectOptions {
   ) => Effect.Effect<
     GatewayCalls,
     unknown,
-    Ledger | LedgerTransaction | Id.Generator | ClientManager | SpanSink | RecordManager | Archive
+    Ledger | LedgerTransaction | Id.Generator | ClientManager | SpanSink | RecordManager | Archive | Jobs
   >;
 }
 
@@ -439,6 +442,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     LedgerSql.layer(sql, { reader: `project:${name}` }),
     LedgerTransactionSql.layer(sql),
     RefereeSql.layer(sql),
+    LedgerStreamsSql.layer(sql),
   ).pipe(Layer.provide(bell));
   const base = Layer.mergeAll(ledgerLayer, recordingLayer(sql, env, name, `project:${name}`));
   const processManager = ProcessManager.layer(
@@ -450,6 +454,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     ids.next,
   );
   const managers = Layer.mergeAll(
+    JobsLedger.layer,
     ClientManagerLedger.layer(founder),
     // P42: a child start decides in the turns of the manager that writes it.
     ChildrenLedger.layer({ grants: options.starts ?? [] }).pipe(Layer.provideMerge(processManager)),
@@ -961,6 +966,23 @@ export const projectLayer = (ctx: DurableObjectState, env: Env, options: Project
 
 export const projectRuntime = (ctx: DurableObjectState, env: Env, options: ProjectOptions) =>
   ManagedRuntime.make(projectLayer(ctx, env, options));
+
+/** Composes durable job storage on the Project's database for trusted startup code. */
+export const projectJobsLayer = (ctx: DurableObjectState, env: Env) =>
+  JobsLedger.layer.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        LedgerTransactionSql.layer(cloudflareSql(ctx.storage)),
+        LedgerStreamsSql.layer(cloudflareSql(ctx.storage)),
+      ),
+    ),
+    Layer.provide(
+      Layer.succeed(Doorbell, {
+        ring: (to, stream, rev) => rpc(GatewayClient.make(env.CONNECTION.getByName(to)).ring(stream, rev)),
+      }),
+    ),
+    Layer.provide(Id.Generator.layer),
+  );
 
 // The trace a delivered letter carries from the door, as P11's Incoming names it.
 const Delivered = Schema.Struct({

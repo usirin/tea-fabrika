@@ -1,7 +1,8 @@
 // The durable job service: record, take, start, finish and read one job. This file is the contract
 // only (0095); `JobsLedger.layer` keeps each job as its own ledger stream. Tier 1, P39 slice 1.
 import { Context, Schema } from "effect";
-import type { Effect } from "effect";
+import type { Effect, Stream } from "effect";
+import type { ProcessId } from "../ProcessId.ts";
 import type { Rev } from "../Rev.ts";
 import type { Executor, Job, Recorded, Request, Result } from "./Job.ts";
 
@@ -42,5 +43,7 @@ export class Jobs extends Context.Service<
       recorded: Recorded,
     ) => Effect.Effect<Receipt, JobsError>;
     readonly read: (id: string) => Effect.Effect<Job, JobsError>;
+    /** Jobs whose saved requests name this exact process generation. */
+    readonly forProcess: (process: typeof ProcessId.Type) => Stream.Stream<Job, JobsError>;
   }
 >()("@kampus/libfabrika/jobs/Jobs") {}

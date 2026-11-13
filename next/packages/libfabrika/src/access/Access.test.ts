@@ -76,7 +76,7 @@ const founded = (keys: ReadonlyArray<string> = ["pA"], window: string | null = "
 const granted = (
   signer: string,
   key: string,
-  over: { readonly as?: "window" | "agent"; readonly for?: string; readonly id?: string } = {},
+  over: { readonly as?: "window" | "agent" | "hands"; readonly for?: string; readonly id?: string } = {},
 ): MemberEvent => ({
   _tag: "granted",
   grant: {
@@ -219,7 +219,7 @@ const laterEvent: fc.Arbitrary<() => MemberEvent> = fc.oneof(
       .record({
         by: signer,
         key: fc.constantFrom(...LEAVES),
-        as: fc.constantFrom("window", "agent"),
+        as: fc.constantFrom("window", "agent", "hands"),
         for: forWhom,
       })
       .map((g) => () => granted(g.by, g.key, { as: g.as, for: g.for })),
@@ -728,7 +728,10 @@ describe("p28, the grant tree", () => {
           for (const key of [...ALL, ...m.keys.keys()]) {
             const k = m.keys.get(key);
             const should =
-              k !== undefined && (k.rank === "window" || k.rank === "agent") && k.live && chainLive(m, key);
+              k !== undefined &&
+              (k.rank === "window" || k.rank === "agent" || k.rank === "hands") &&
+              k.live &&
+              chainLive(m, key);
             const answer = admitted(m, key);
             expect(answer, key).toEqual(should ? { key, person: m.person, as: k?.rank } : { reason: "not_granted" });
           }

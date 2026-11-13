@@ -19,6 +19,7 @@ import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLed
 import { SignRequest } from "@kampus/libfabrika/access/SessionManager";
 import { grantText, addText, enrollmentText, revokeText } from "@kampus/libfabrika/access/Text";
 import * as RateLimiterSql from "@kampus/libfabrika/gateway/RateLimiterSql";
+import { Jobs } from "@kampus/libfabrika/jobs/Jobs";
 import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import { LedgerTransaction, type LedgerTurn } from "@kampus/libfabrika/ledger/LedgerTransaction";
@@ -446,6 +447,14 @@ const world = Effect.fnUntraced(function* (
     SpanSink.layer(sql, { object: START }),
     records,
     Archive.memory,
+    Layer.succeed(Jobs, {
+      request: () => Effect.die("unexpected job request in legacy gateway law"),
+      take: () => Effect.die("unexpected job take in legacy gateway law"),
+      started: () => Effect.die("unexpected job start in legacy gateway law"),
+      finish: () => Effect.die("unexpected job finish in legacy gateway law"),
+      read: () => Effect.die("unexpected job read in legacy gateway law"),
+      forProcess: () => Stream.die("unexpected job lookup in legacy gateway law"),
+    }),
     ProcessIdGenerator.layer,
     observedIds,
     RateLimiter.layer.pipe(
@@ -465,6 +474,14 @@ const world = Effect.fnUntraced(function* (
           SpanSink.layer(storage, { object: START }),
           records,
           Archive.memory,
+          Layer.succeed(Jobs, {
+            request: () => Effect.die("unexpected job request in legacy gateway law"),
+            take: () => Effect.die("unexpected job take in legacy gateway law"),
+            started: () => Effect.die("unexpected job start in legacy gateway law"),
+            finish: () => Effect.die("unexpected job finish in legacy gateway law"),
+            read: () => Effect.die("unexpected job read in legacy gateway law"),
+            forProcess: () => Stream.die("unexpected job lookup in legacy gateway law"),
+          }),
           ProcessIdGenerator.layer,
           Id.Generator.layer,
           RateLimiter.layer.pipe(

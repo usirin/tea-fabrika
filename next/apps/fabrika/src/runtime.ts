@@ -8,6 +8,8 @@ import { programs } from "virtual:fabrika-built";
 import { Gateway } from "./door.ts";
 import { Settings } from "./settings.ts";
 
+export { projectJobsLayer } from "@kampus/libfabrika/workers/runtime";
+
 export interface Env extends Bindings {
   readonly INSTANCE: string;
 }

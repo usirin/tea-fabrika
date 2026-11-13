@@ -15,7 +15,7 @@ const Pending = Schema.Struct({
   clients: Schema.NonEmptyArray(Schema.String),
   pass: Schema.NullOr(Schema.String),
   has: Schema.Array(Schema.String),
-  as: Schema.Literals(["window", "agent"]),
+  as: Schema.Literals(["window", "agent", "hands"]),
 });
 type Pending = typeof Pending.Type;
 
@@ -62,7 +62,7 @@ export const Row = Schema.Struct({
   clients: Schema.NonEmptyArray(Schema.String),
   pass: Schema.NullOr(Schema.String),
   has: Schema.Array(Schema.String),
-  as: Schema.Literals(["window", "agent"]),
+  as: Schema.Literals(["window", "agent", "hands"]),
 });
 type Row = typeof Row.Type;
 

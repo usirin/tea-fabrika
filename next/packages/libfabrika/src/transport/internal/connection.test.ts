@@ -40,8 +40,8 @@ const expected = (saved: Saved | null): unknown => {
     return { _tag: saved._tag, attached: saved };
   }
 
-  const { client, identity, version, watching, waits, busy } = saved;
-  return { _tag: busy ? "busy" : "idle", client, identity, version, watching, waits };
+  const { client, identity, version, watching, waits, busy, has, build } = saved;
+  return { _tag: busy ? "busy" : "idle", client, identity, version, watching, waits, has, build };
 };
 
 /** The attachment a loaded state saves, read from the Model alone. */
@@ -54,6 +54,8 @@ const projected = (model: Exclude<Model, { readonly _tag: "unloaded" }>): Saved 
     client: model.client,
     identity: model.identity,
     version: model.version,
+    ...(model.has === undefined ? {} : { has: model.has }),
+    ...(model.build === undefined ? {} : { build: model.build }),
     waits: model.waits,
     watching: model.watching,
     busy: model._tag === "busy",
@@ -66,8 +68,8 @@ const metadata = (model: Model) => {
     return model._tag === "unloaded" ? null : model.attached;
   }
 
-  const { client, identity, version, watching } = model;
-  return { client, identity, version, watching };
+  const { client, identity, version, watching, has, build } = model;
+  return { client, identity, version, watching, has, build };
 };
 
 const held = (model: Model): ReadonlyArray<W> => (model._tag === "idle" || model._tag === "busy" ? model.waits : []);
@@ -113,7 +115,13 @@ const id = fc.oneof(text, fc.integer({ min: -3, max: 80 }));
 const streams = ["events", "counter:1/inbox", "ünï/流", "😀"];
 const stream = fc.constantFrom(...streams);
 const after = fc.nat({ max: 12 });
-const identity = fc.record({ key: text, person: text, as: fc.constantFrom("window" as const, "agent" as const) });
+
+const identity = fc.record({
+  key: text,
+  person: text,
+  as: fc.constantFrom("window" as const, "agent" as const, "hands" as const),
+});
+
 const wait = fc.record({ id, stream, after }).map((w) => Wait.make(w));
 
 const hello = fc.record({
@@ -136,6 +144,8 @@ const observation = fc.oneof(
     .record({
       client: text,
       identity,
+      has: fc.array(text, { maxLength: 3 }),
+      build: text.map((value) => value || "build"),
       version: fc.integer({ min: 0, max: 9 }),
       waits: fc.uniqueArray(wait, { maxLength: 6, selector: (w) => w.id }),
       watching: fc.boolean(),

@@ -37,3 +37,5 @@ const open = Effect.gen(function* () {
 });
 
 JobsTest.suite(open);
+
+JobsTest.discoverySuite(open);
