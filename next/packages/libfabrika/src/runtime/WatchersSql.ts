@@ -73,8 +73,11 @@ export const layer = (
       const deliver = Effect.fnUntraced(function* (client: string, update: Update) {
         return yield* manager.publish(client, update).pipe(
           Effect.as("sent" as const),
-          Effect.catchReason("WatcherManagerError", "Gone", () => Effect.succeed("gone" as const)),
-          Effect.catchReason("WatcherManagerError", "Unreachable", () => Effect.succeed("unknown" as const)),
+          Effect.unwrapReason("WatcherManagerError"),
+          Effect.catchTags({
+            Gone: () => Effect.succeed("gone" as const),
+            Unreachable: () => Effect.succeed("unknown" as const),
+          }),
         );
       });
       return {
