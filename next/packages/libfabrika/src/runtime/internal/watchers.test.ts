@@ -70,23 +70,51 @@ describe("saved view membership, next/", () => {
     { arbitrary: { seed: 119120, runs: 200 } },
   );
 
+  // W1 proves saved cuts. Reuse one real cut so W3 spends its runs on churn,
+  // rather than validating the same 1,026 opens and full drain 100 times.
+  let bounded: typeof Model.Type | undefined;
+
   it.prop(
     "W3: churn at the bound refreshes order and evicts the oldest without tombstones",
     [Walk],
     ([walk]) => {
-      let [state] = watchers.init(null, {});
-      let expected: Array<typeof Client.Type> = [];
+      if (bounded === undefined) {
+        let [state] = watchers.init(null, {});
+        const opened = Array.from({ length: 1026 }, (_, i) => ({ client: `client-${i}`, at: i, position: i }));
 
-      // Reach the actual limit on every walk, then use state-guided refresh/end/new moves.
-      for (let i = 0; i < 1026; i++) {
-        const watch = { client: `client-${i}`, at: i, position: i };
-        [state] = applyCell(watchers, state, { type: "open", watch });
-        expected = [...expected, watch].slice(-1024);
+        for (const watch of opened) {
+          [state] = applyCell(watchers, state, { type: "open", watch });
+        }
+
+        expect(state).toStrictEqual({ _tag: "watching", clients: opened.slice(2) });
+        bounded = state;
+
+        for (const c of clients(bounded)) {
+          [state] = applyCell(watchers, state, { type: "end", client: c.client });
+        }
+
+        expect(state).toStrictEqual(Model.cases.empty.make({}));
       }
 
-      for (const [pick, fresh] of walk) {
+      let [state] = watchers.init(bounded, {});
+      let expected = [...clients(bounded)];
+
+      // Every run first evicts at the bound, refreshes a held client, then ends
+      // a held client. Keep the entire generated walk after these guided moves.
+      const guided = [0, 1, 2].map((pick) => [pick, nth(walk, pick)[1]] as const);
+
+      for (const [pick, fresh] of [...guided, ...walk]) {
         const held = clients(state);
-        const client = held.length && pick % 3 ? nth(held, pick).client : fresh.client;
+        let client = held.length && pick % 3 ? nth(held, pick).client : fresh.client;
+
+        // A fresh move must really be absent, even if generated text collides.
+        if (pick % 3 === 0) {
+          let suffix = 0;
+
+          while (held.some((c) => c.client === client)) {
+            client = `fresh-${suffix++}`;
+          }
+        }
 
         if (pick % 3 === 2) {
           [state] = applyCell(watchers, state, { type: "end", client });
@@ -100,13 +128,8 @@ describe("saved view membership, next/", () => {
         expect(clients(state)).toEqual(expected);
         expect(new Set(clients(state).map((c) => c.client)).size).toBe(clients(state).length);
         expect(clients(state).length).toBeLessThanOrEqual(1024);
+        expect(state).toStrictEqual(expected.length ? { _tag: "watching", clients: expected } : { _tag: "empty" });
       }
-
-      for (const c of [...clients(state)]) {
-        [state] = applyCell(watchers, state, { type: "end", client: c.client });
-      }
-
-      expect(state).toEqual(Model.cases.empty.make({}));
     },
     { arbitrary: { seed: 119120, runs: 100 } },
   );
