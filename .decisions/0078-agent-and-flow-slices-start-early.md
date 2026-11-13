@@ -1,7 +1,7 @@
 ---
 id: 0078
 title: An agent fabrika starts and a flow fabrika runs join the core ideas, so each gets a thin slice from Tier 1, never only in Tiers 5 and 6
-status: accepted
+status: amended-in-part by [0159](0159-fabsh-summon-join-come-first.md)
 date: 2026-11-10
 tags: [tiers, plan, next, agent, flow, pipeline, slice]
 ---

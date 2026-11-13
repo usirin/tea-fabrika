@@ -1,7 +1,7 @@
 ---
 id: 0068
 title: Each tier carries and updates a working slice of every core idea, so hands, outside programs, programs working together, a person starting a program, an agent fabrika starts and a flow fabrika runs start early, never in a late tier
-status: amended-in-part by [0075](0075-cold-author-checks-outside-programs.md), [0078](0078-agent-and-flow-slices-start-early.md), [0088](0088-six-slices-in-tier-1.md)
+status: amended-in-part by [0075](0075-cold-author-checks-outside-programs.md), [0078](0078-agent-and-flow-slices-start-early.md), [0088](0088-six-slices-in-tier-1.md), [0159](0159-fabsh-summon-join-come-first.md)
 date: 2026-11-10
 tags: [tiers, plan, next, hands, programs, packs, pipes, slice, client]
 ---
