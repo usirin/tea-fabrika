@@ -133,6 +133,25 @@ const summary = (error: unknown): unknown =>
       }
     : error;
 
+const place = (text: string): string =>
+  text.startsWith("node:") ? text : text.slice(Math.max(text.lastIndexOf("/"), text.lastIndexOf("\\")) + 1);
+
+/** Only frame locations lose folders; messages and Effect's frame markers stay intact. */
+const portable = (line: string): string => {
+  const frame = /^(\s*at )(.*?)( \{)?$/.exec(line);
+
+  if (frame === null) {
+    return line;
+  }
+
+  const [, at = "", body = "", ending = ""] = frame;
+  const definition = body.indexOf(" (definition)");
+  const open = body.indexOf(" (", definition === -1 ? 0 : definition + " (definition)".length);
+  return open === -1 || !body.endsWith(")")
+    ? `${at}${place(body)}${ending}`
+    : `${at}${place(body.slice(0, open))} (${place(body.slice(open + 2, -1))})${ending}`;
+};
+
 const cutContent = (text: string): string =>
   text.length <= MOST_CONTENT ? text : `${text.slice(0, MOST_CONTENT)}\n[cut: ${text.length} characters]`;
 
@@ -198,7 +217,11 @@ const ended = (span: Tracer.NativeSpan, endTime: bigint, exit: Exit.Exit<unknown
       onSome: (process) => Chain.cases.job.make({ process }),
     }),
     row,
-    content: Option.getOrNull(Option.map(failure, (cause) => cutContent(Cause.pretty(Cause.map(cause, summary))))),
+    content: Option.getOrNull(
+      Option.map(failure, (cause) =>
+        cutContent(Cause.pretty(Cause.map(cause, summary)).split("\n").map(portable).join("\n")),
+      ),
+    ),
   };
 };
 
