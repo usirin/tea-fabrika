@@ -19,6 +19,7 @@ import { Effect, Layer, Path, Schema, Stream } from "effect";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import * as ChecksGh from "../ci/ChecksGh.ts";
 import * as PullRequestsGh from "../pr/PullRequestsGh.ts";
+import { LeakGrepRefused } from "../pr/Pushes.ts";
 import * as PushesProcess from "../pr/PushesProcess.ts";
 import * as Queue from "../pr/Queue.ts";
 import * as Outcome from "./Outcome.ts";
@@ -98,8 +99,8 @@ export const leakOutcome = (ran: Ran): Outcome.Outcome =>
       : Outcome.stuck(`leakgrep.sh could not check (exit ${ran.code}): ${tail(ran.output)}`);
 
 /** A refused add: a leak hit asks for the lead's hand check, as leak-grep does; anything else is stuck. */
-export const queueRefused = (e: { readonly _tag: string; readonly reason: string }): Outcome.Outcome =>
-  e._tag === "LeakGrepRefused"
+export const queueRefused = (e: { readonly reason: string }): Outcome.Outcome =>
+  e instanceof LeakGrepRefused
     ? Outcome.ask(`the leak grep refused before the queue: ${e.reason}`)
     : Outcome.stuck(`not added to the merge queue: ${e.reason}`);
 

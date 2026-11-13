@@ -139,6 +139,7 @@ const HERE = import.meta.dirname;
 const loadEnv = Effect.gen(function* () {
   const out = yield* must("env", "env.sh failed", HERE, "sh", [
     "-c",
+    // oxlint-disable-next-line no-template-curly-in-string -- sh text: `${VAR:-default}` is the shell's own default
     '. "$0" && printf "%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n" "$MAIN" "$BOXES" "$GH_REPO" "$FABRIKA_COAUTHOR" "$HOME" "${FABRIKA_HOME:-$HOME/Library/Application Support/@kampus/fabrika-app}"',
     `${HERE}/env.sh`,
   ]);

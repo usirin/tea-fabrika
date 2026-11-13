@@ -53,22 +53,7 @@
 		{
 			"file": ".agents/skills/lead/scripts/chain.ts",
 			"rule": "fabrika(no-node-filesystem)",
-			"code": "import {"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-node-filesystem)",
 			"code": "import { join } from \"node:path\";"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-node-imports)",
-			"code": "import { spawn } from \"node:child_process\";"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-node-imports)",
-			"code": "} from \"node:fs\";"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/chain.ts",

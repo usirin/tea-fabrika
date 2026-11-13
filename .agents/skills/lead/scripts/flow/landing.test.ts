@@ -3,6 +3,9 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect, type Scope } from "effect";
 import { describe, expect, it } from "vitest";
+import { PullRequestsError } from "../pr/PullRequests.ts";
+import { LeakGrepRefused } from "../pr/Pushes.ts";
+import { NotQueued } from "../pr/Queue.ts";
 import { landDecision } from "./flows/land-decision.ts";
 import {
   commitOutcome,
@@ -45,9 +48,9 @@ describe("what the landing scripts' exit codes mean", () => {
     expect(leakOutcome(r(0))._tag).toBe("done");
     expect(leakOutcome(r(1))._tag).toBe("ask");
     expect(leakOutcome(r(2))._tag).toBe("stuck");
-    expect(queueRefused({ _tag: "LeakGrepRefused", reason: "private_word" })._tag).toBe("ask");
-    expect(queueRefused({ _tag: "NotQueued", reason: "pr 9: draft" })._tag).toBe("stuck");
-    expect(queueRefused({ _tag: "PullRequestsError", reason: "gh: offline" })._tag).toBe("stuck");
+    expect(queueRefused(new LeakGrepRefused({ reason: "private_word" }))._tag).toBe("ask");
+    expect(queueRefused(new NotQueued({ reason: "pr 9: draft" }))._tag).toBe("stuck");
+    expect(queueRefused(new PullRequestsError({ reason: "gh: offline" }))._tag).toBe("stuck");
     expect(listedPr(r(0, "812\n"))).toBe(812);
     expect(listedPr(r(0, "\n"))).toBeNull();
     expect(listedPr(r(1, "812"))).toBeNull();

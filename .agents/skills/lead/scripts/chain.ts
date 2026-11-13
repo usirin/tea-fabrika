@@ -101,17 +101,10 @@
 // in a fenced block, one per line; a `## host` that names none is a usage error. An older brief's `## mutation` is accepted and not run,
 // unless the lane starts at mutation, which needs it. drive appends its own answer tail.
 
-import { spawn } from "node:child_process";
-import {
-  appendFileSync,
-  closeSync,
-  existsSync,
-  openSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+// The chain's record, logs and brief are sync file calls: a debt agents-ledger.json named for this
+// import until three names left it and its line changed. The ledger only shrinks, so it is marked here.
+// oxlint-disable-next-line fabrika/no-node-imports, fabrika/no-node-filesystem -- edge: sync file calls not yet moved to Effect's FileSystem (0033)
+import { appendFileSync, existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
@@ -1036,49 +1029,6 @@ export const makeMachine = (limits: Limits) =>
 
 // ---------------------------------------------------------------- the world
 
-type Ran = { readonly code: number; readonly out: string };
-
-/**
- * One child in its own process group, so a stop reaches every command it started. `stdin` is a
- * file to read, or nothing. Its stdout is kept; stderr goes to `errFile`.
- */
-const spawnEffect = (
-  cmd: string,
-  args: readonly string[],
-  opts: { cwd?: string; stdin?: string; errFile: string; env?: NodeJS.ProcessEnv },
-) =>
-  Effect.callback<Ran>((resume) => {
-    const err = openSync(opts.errFile, "a");
-    const input = opts.stdin === undefined ? "ignore" : openSync(opts.stdin, "r");
-    const child = spawn(cmd, args, {
-      cwd: opts.cwd,
-      stdio: [input, "pipe", err],
-      detached: true,
-      env: opts.env,
-    });
-    const chunks: Buffer[] = [];
-    child.stdout?.on("data", (c: Buffer) => chunks.push(c));
-    const stopAll = () => {
-      if (child.pid === undefined) {
-        return;
-      }
-
-      try {
-        process.kill(-child.pid, "SIGTERM");
-      } catch {}
-    };
-    child.on("exit", (code) => {
-      closeSync(err);
-
-      if (typeof input === "number") {
-        closeSync(input);
-      }
-
-      resume(Effect.succeed({ code: code ?? -1, out: Buffer.concat(chunks).toString("utf8") }));
-    });
-    return Effect.sync(stopAll);
-  });
-
 type Setup = {
   readonly env: Env;
   readonly agents: Agents;
@@ -1196,7 +1146,6 @@ const handlers = (s: Setup) => {
   const state = join(env.BOXES, "state", `${s.lane}.json`);
   const md = join(env.BOXES, "state", `${s.lane}.md`);
   const chainState = join(env.BOXES, "state", `${s.lane}-chain.json`);
-  const errFile = join(env.BOXES, `${s.lane}-chain.err`);
   const note = (text: string) => appendFileSync(md, `- ${new Date().toISOString()} chain: ${text}\n`);
   const saved = (): {
     head?: string;
