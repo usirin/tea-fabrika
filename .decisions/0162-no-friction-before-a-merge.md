@@ -149,3 +149,15 @@ unsigned commit can merge and the rules above hold from that day.
   - the four steps and the draft pull request at the first commit
     ([0134](0134-no-code-stays-only-on-a-local-branch.md));
   - the settings of GitHub's queue, and when fabrika's own queue takes over from it.
+
+## Amendments
+
+- 2026-11-13: a record of what was set, not a new ruling. On the owner's word of 2026-11-13, the
+  ruleset "main only through a pull request" gained GitHub's `merge_queue` rule, so main now takes
+  changes only through GitHub's merge queue. Its settings as read that day: the merge method is
+  squash; a group holds one pull request (at least 1 and at most 1 to merge, with no wait for
+  more); up to 3 groups build at once; every group must be green (`ALLGREEN`); a group's checks
+  have 60 minutes to answer; and `ci-required` is the one required check. The squash commit takes
+  the pull request's title and description as its title and message. The repo's Actions allow list
+  gained `merge_group`, and `check.yaml` runs on it. This settles the first half of "the settings
+  of GitHub's queue" under "Not decided here"; when fabrika's own queue takes over stays open.
