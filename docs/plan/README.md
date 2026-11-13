@@ -55,6 +55,13 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+*2026-11-12:* P45's slice 1 (ticket 884) is built in `next/`: `@kampus/inbox` keeps one row
+per fact in arrival order and declares no client or agent input. It has no window or boot entry.
+Brain letters under `noticeId(...)` reach a program without an input port. Client entry points
+refuse those ids; a refused or throwing notice is skipped and counted on its span.
+The tile and dismissal on each device are slice 2; the gateway's delivery is slice 3. Those slices
+wait on the owner. This finishes no Tier 1 row, so the merged count stays 21 of 44.
+
 *2026-11-12:* P17, Tier 1's chaos row, is done in `next/`: P17b's third slice, the checklist faults
 and the real local p90 revoke, merged as [PR 1058](https://github.com/usirin/tea-fabrika/pull/1058), and p90 passes on main. That makes
 21 of Tier 1's 43 rows (44 since P45, a thin inbox, joined the same day, [0151](../../.decisions/0151-a-thin-inbox-is-a-tier-1-row.md)). P34c's third slice, each isolate call's CPU and wall time recorded, merged
