@@ -9,10 +9,10 @@ import { inLaneStep } from "./.github/ci/workflow-lint.ts";
 import { assign, measured, Shards, wall, WORKERS, restLoads } from "./vitest.shards.ts";
 
 it("vector: L5 known next timings use the larger of the two completed main runs", () => {
-  // Today's CI. Samples from attempt 1 of main runs 43329697311 and 43334183021,
-  // in that order, as recorded in T890's approved plan. Until the third run, use the larger.
-  // Lead runs it: download the full 210-file samples and job ids, then refresh both
-  // this provisional vector and the older complete vector below with the three-run medians.
+  // Today's CI. Unordered sample pairs from T890's approved plan for attempt 1 of main runs
+  // 43329697311 and 43334183021. Until the third run, use the larger.
+  // The complete observations and job IDs are in nextSamples below.
+  // Lead runs it: add the third green main run and use the three-run medians.
   for (const [path, samples] of [
     ["next/packages/libfabrika/src/node/StartChild.test.ts", [484.6, 590.5]],
     ["next/apps/fabrika/src/chaos.laws.test.ts", [365.1, 382.8]],
@@ -47,127 +47,439 @@ it("scenario: L6 the six measured heaviest next files occupy six machines with b
   expect(Math.max(...loads)).toBeLessThanOrEqual(mean + Math.max(...files.map((file) => file.seconds)));
 });
 
-it("vector: next medians and four provisional split estimates match the recorded main runs", () => {
-  // Today's CI, both versions. Main runs 42717511599, 42716453289 and 42715921306.
-  // The four split files are estimates: original commits-git median 247.6 / 4 = 61.9 s.
-  // T871 adds medians from runs 43239450301, 43235822398 and 43234969237, attempt 1.
-  // Split weights use ready run 43255323922: store 18.5 s, job 131312463038, shard 1;
-  // runtime 290.9 s, job 131312462890, shard 4.
-  const expected = {
-    "next/apps/fabrika/src/brain-life.test.ts": 27.4,
-    "next/apps/fabrika/src/build.test.ts": 39.9,
-    "next/apps/fabrika/src/door-recovery.test.ts": 52.6,
-    "next/apps/fabrika/src/door-spans.test.ts": 2.8,
-    "next/apps/fabrika/src/door.test.ts": 17.2,
-    "next/apps/fabrika/src/exam/alchemy-lifecycle.test.ts": 11.0,
-    "next/apps/fabrika/src/exam/bytes.test.ts": 4.9,
-    "next/apps/fabrika/src/exam/clock.test.ts": 0.0,
-    "next/apps/fabrika/src/exam/commits-git-chain.test.ts": 61.9,
-    "next/apps/fabrika/src/exam/commits-git-person.test.ts": 61.9,
-    "next/apps/fabrika/src/exam/commits-git-signatures.test.ts": 61.9,
-    "next/apps/fabrika/src/exam/commits-git-steps.test.ts": 61.9,
-    "next/apps/fabrika/src/exam/commits.test.ts": 0.6,
-    "next/apps/fabrika/src/exam/compiler.test.ts": 0.0,
-    "next/apps/fabrika/src/exam/deps.test.ts": 1.1,
-    "next/apps/fabrika/src/exam/edge-comment.test.ts": 0.0,
-    "next/apps/fabrika/src/exam/edges.test.ts": 3.7,
-    "next/apps/fabrika/src/exam/effect-functions.test.ts": 0.0,
-    "next/apps/fabrika/src/exam/laws-scan.test.ts": 0.0,
-    "next/apps/fabrika/src/exam/layers.test.ts": 0.0,
-    "next/apps/fabrika/src/exam/ledger-sql.test.ts": 4.5,
-    "next/apps/fabrika/src/exam/no-effect-run-outside-edge.test.ts": 0.0,
-    "next/apps/fabrika/src/exam/no-hand-tag.test.ts": 0.0,
-    "next/apps/fabrika/src/exam/no-of.test.ts": 0.0,
-    "next/apps/fabrika/src/exam/no-promises.test.ts": 34.1,
-    "next/apps/fabrika/src/exam/one-store-hook.test.ts": 0.3,
-    "next/apps/fabrika/src/exam/react-rules.test.ts": 0.0,
-    "next/apps/fabrika/src/exam/secret-types.test.ts": 4.6,
-    "next/apps/fabrika/src/exam/twin.test.ts": 20.0,
-    "next/apps/fabrika/src/file-services.laws.test.ts": 0.5,
-    "next/apps/fabrika/src/grant-readers.laws.test.ts": 1.8,
-    "next/apps/fabrika/src/local-instance.test.ts": 1.6,
-    "next/apps/fabrika/src/runtime-recovery.laws.test.ts": 0.4,
-    "next/apps/fabrika/src/runtime.laws.test.ts": 30.1,
-    "next/apps/fabrika/src/settings.test.ts": 0.0,
-    "next/apps/fabrika/src/instance-records.test.ts": 32.8,
-    "next/apps/fabrika/src/instance-wire.test.ts": 68.6,
-    "next/apps/fabrika/src/worker-mail.test.ts": 19.6,
-    "next/packages/libfabrika/src/Id.test.ts": 3.8,
-    "next/packages/libfabrika/src/Id.types.test.ts": 0.0,
-    "next/packages/libfabrika/src/Testing.test.ts": 0.0,
-    "next/packages/libfabrika/src/access/Access.test.ts": 1.4,
-    "next/packages/libfabrika/src/access/AccessSpans.test.ts": 4.9,
-    "next/packages/libfabrika/src/access/Authorization.test.ts": 16.4,
-    "next/packages/libfabrika/src/access/ClientManager.test.ts": 13.0,
-    "next/packages/libfabrika/src/access/Passkey.test.ts": 0.1,
-    "next/packages/libfabrika/src/access/SessionManager.test.ts": 8.8,
-    "next/packages/libfabrika/src/access/Text.test.ts": 0.0,
-    "next/packages/libfabrika/src/cloudflare/fetch.test.ts": 0.4,
-    "next/packages/libfabrika/src/cloudflare/index.test.ts": 0.0,
-    "next/packages/libfabrika/src/cloudflare/readers.laws.test.ts": 0.6,
-    "next/packages/libfabrika/src/cloudflare/runner-reply.laws.test.ts": 3.6,
-    "next/packages/libfabrika/src/cloudflare/supervision.laws.test.ts": 11.5,
-    "next/packages/libfabrika/src/gateway/GatewayRevocation.test.ts": 19.6,
-    "next/packages/libfabrika/src/gateway/internal/waiting.test.ts": 0.1,
-    "next/packages/libfabrika/src/ledger/Ledger.test.ts": 2.2,
-    "next/packages/libfabrika/src/ledger/LedgerCallSpans.test.ts": 0.6,
-    "next/packages/libfabrika/src/ledger/LedgerSpans.test.ts": 1.1,
-    "next/packages/libfabrika/src/ledger/LedgerTransaction.test.ts": 0.1,
-    "next/packages/libfabrika/src/ledger/Log.test.ts": 1.9,
-    "next/packages/libfabrika/src/ledger/Rings.test.ts": 0.2,
-    "next/packages/libfabrika/src/ledger/TraceId.test.ts": 0.8,
-    "next/packages/libfabrika/src/node/build/build-assets.test.ts": 48.6,
-    "next/packages/libfabrika/src/node/build/build-one-file.test.ts": 11.0,
-    "next/packages/libfabrika/src/node/ProgramMail.test.ts": 18.5,
-    "next/packages/libfabrika/src/node/ProgramMailRuntime.test.ts": 290.9,
-    "next/packages/libfabrika/src/node/Nemesis.laws.test.ts": 79.2,
-    "next/packages/libfabrika/src/node/dev/dev-errors.laws.test.ts": 2.1,
-    "next/packages/libfabrika/src/node/dev/dev-recording.laws.test.ts": 0.1,
-    "next/packages/libfabrika/src/node/dev/dev-secrets.laws.test.ts": 4.2,
-    "next/packages/libfabrika/src/node/dev/dev.laws.test.ts": 2.3,
-    "next/packages/libfabrika/src/node/dev/local-dev.test.ts": 2.5,
-    "next/packages/libfabrika/src/node/dev/supervision-spans.test.ts": 11.3,
-    "next/packages/libfabrika/src/presence/Connections.test.ts": 2.5,
-    "next/packages/libfabrika/src/processes/Mailbox.test.ts": 36.1,
-    "next/packages/libfabrika/src/processes/MailboxHistory.test.ts": 0.4,
-    "next/packages/libfabrika/src/processes/ProcessIdGenerator.test.ts": 1.3,
-    "next/packages/libfabrika/src/processes/ProcessLifecycle.test.ts": 14.8,
-    "next/packages/libfabrika/src/processes/ProcessManager.test.ts": 2.5,
-    "next/packages/libfabrika/src/processes/ProcessMonitors.test.ts": 20.2,
-    "next/packages/libfabrika/src/processes/ProcessSpans.test.ts": 6.0,
-    "next/packages/libfabrika/src/processes/ProcessStreams.test.ts": 8.5,
-    "next/packages/libfabrika/src/processes/ProcessTextCaps.test.ts": 14.1,
-    "next/packages/libfabrika/src/processes/ProcessWindow.test.ts": 1.2,
-    "next/packages/libfabrika/src/runtime/BrainLife.laws.test.ts": 0.1,
-    "next/packages/libfabrika/src/runtime/EffectFunctions.test.ts": 4.2,
-    "next/packages/libfabrika/src/runtime/Entry.test.ts": 0.0,
-    "next/packages/libfabrika/src/runtime/Execution.test.ts": 0.2,
-    "next/packages/libfabrika/src/runtime/Gateway.laws.test.ts": 1.3,
-    "next/packages/libfabrika/src/runtime/Patch.test.ts": 0.1,
-    "next/packages/libfabrika/src/runtime/ProcessStore.test.ts": 2.0,
-    "next/packages/libfabrika/src/runtime/Program.test.ts": 0.5,
-    "next/packages/libfabrika/src/runtime/Program.types.test.ts": 0.1,
-    "next/packages/libfabrika/src/runtime/RecoveryGaps.test.ts": 0.9,
-    "next/packages/libfabrika/src/runtime/RecoveryStore.test.ts": 0.1,
-    "next/packages/libfabrika/src/runtime/Runner.test.ts": 41.2,
-    "next/packages/libfabrika/src/runtime/RunnerRecovery.laws.test.ts": 0.7,
-    "next/packages/libfabrika/src/runtime/RunnerSupervision.test.ts": 67.5,
-    "next/packages/libfabrika/src/runtime/State.test.ts": 0.1,
-    "next/packages/libfabrika/src/runtime/internal/recovery.test.ts": 1.9,
-    "next/packages/libfabrika/src/runtime/internal/supervisor.laws.test.ts": 0.1,
-    "next/packages/libfabrika/src/telemetry/ArchiveCryptoFailure.test.ts": 0.0,
-    "next/packages/libfabrika/src/telemetry/P12Readers.laws.test.ts": 0.2,
-    "next/packages/libfabrika/src/telemetry/Records.test.ts": 0.6,
-    "next/packages/libfabrika/src/telemetry/Sink.test.ts": 1.0,
-    "next/packages/libfabrika/src/telemetry/internal/measurements.test.ts": 4.4,
-    "next/packages/libfabrika/src/transport/Answer.test.ts": 0.2,
-    "next/packages/libfabrika/src/transport/Hello.test.ts": 1.1,
-    "next/packages/libfabrika/src/transport/Sshsig.test.ts": 1.1,
-    "next/packages/libfabrika/src/transport/SshsigWebauthn.test.ts": 0.5,
-    "next/packages/libfabrika/src/transport/internal/binaryCryptoFailure.test.ts": 0.0,
-    "next/programs/counter/src/program.laws.test.ts": 0.1,
-    "next/programs/counter/src/runner.laws.test.ts": 0.3,
-  };
+// Today's CI, next/. Attempt 1 of main runs 43329697311 and 43334183021, in that order.
+// Recorded observations: the per-file samples and job IDs preserved in build commit f641f318.
+// This fixed snapshot copies those observations, never the measured table's computed weights.
+// The box cannot fetch the original logs. Lead runs it: verify the samples against those logs,
+// add the third green main run's samples and job IDs, then use the three-run medians.
+const nextSamples = {
+  // Jobs 131571231226, 131586276292.
+  "next/apps/fabrika/src/brain-life.test.ts": [39.1, 31.3],
+  // Jobs 131571231492, 131586276245.
+  "next/apps/fabrika/src/build-command.test.ts": [1.4, 1.4],
+  // Jobs 131571231356, 131586276350.
+  "next/apps/fabrika/src/build.test.ts": [38.0, 48.9],
+  // Jobs 131571231356, 131586276350.
+  "next/apps/fabrika/src/chaos.laws.test.ts": [365.1, 382.8],
+  // Jobs 131571231226, 131586276292.
+  "next/apps/fabrika/src/checklist-runner.laws.test.ts": [24.3, 30.4],
+  // Jobs 131571231492, 131586276245.
+  "next/apps/fabrika/src/door-recovery.test.ts": [17.6, 16.9],
+  // Jobs 131571231492, 131586276245.
+  "next/apps/fabrika/src/door-spans.test.ts": [2.3, 2.1],
+  // Jobs 131571231492, 131586276245.
+  "next/apps/fabrika/src/door.test.ts": [143.6, 127.4],
+  // Jobs 131571231395, 131586276297.
+  "next/apps/fabrika/src/error-cause.test.ts": [0.1, 0.1],
+  // Jobs 131571231492, 131586276245.
+  "next/apps/fabrika/src/exam/agent-may.test.ts": [2.9, 2.6],
+  // Jobs 131571231706, 131586276341.
+  "next/apps/fabrika/src/exam/agents.test.ts": [9.6, 5.1],
+  // Jobs 131571231492, 131586276245.
+  "next/apps/fabrika/src/exam/alchemy-lifecycle.test.ts": [10.9, 10.9],
+  // Jobs 131571231356, 131586276350.
+  "next/apps/fabrika/src/exam/bytes.test.ts": [6.3, 9.2],
+  // Jobs 131571231356, 131586276350.
+  "next/apps/fabrika/src/exam/client-manager-contract.test.ts": [9.9, 13.3],
+  // Jobs 131571231395, 131586276297.
+  "next/apps/fabrika/src/exam/clock.test.ts": [0.0, 0.0],
+  // Jobs 131571231706, 131586276341.
+  "next/apps/fabrika/src/exam/commits-git-chain.test.ts": [70.6, 47.2],
+  // Jobs 131571231226, 131586276292.
+  "next/apps/fabrika/src/exam/commits-git-person.test.ts": [84.5, 58.5],
+  // Jobs 131571231706, 131586276341.
+  "next/apps/fabrika/src/exam/commits-git-signatures.test.ts": [84.9, 55.4],
+  // Jobs 131571231226, 131586276292.
+  "next/apps/fabrika/src/exam/commits-git-steps.test.ts": [129.9, 92.1],
+  // Jobs 131571231356, 131586276350.
+  "next/apps/fabrika/src/exam/commits.test.ts": [0.7, 1.6],
+  // Jobs 131571231395, 131586276297.
+  "next/apps/fabrika/src/exam/compiler.test.ts": [0.0, 0.0],
+  // Jobs 131571231706, 131586276341.
+  "next/apps/fabrika/src/exam/deps.test.ts": [5.5, 4.4],
+  // Jobs 131571231395, 131586276297.
+  "next/apps/fabrika/src/exam/edge-comment.test.ts": [0.0, 0.0],
+  // Jobs 131571231395, 131586276297.
+  "next/apps/fabrika/src/exam/edges.test.ts": [4.1, 4.1],
+  // Jobs 131571231395, 131586276297.
+  "next/apps/fabrika/src/exam/effect-functions.test.ts": [0.0, 0.1],
+  // Jobs 131571231226, 131586276292.
+  "next/apps/fabrika/src/exam/highlight.test.ts": [1.4, 0.8],
+  // Jobs 131571231395, 131586276297.
+  "next/apps/fabrika/src/exam/laws-scan.test.ts": [0.0, 0.0],
+  // Jobs 131571231395, 131586276297.
+  "next/apps/fabrika/src/exam/layers.test.ts": [4.7, 5.0],
+  // Jobs 131571231395, 131586276297.
+  "next/apps/fabrika/src/exam/ledger-sql.test.ts": [8.0, 8.0],
+  // Jobs 131571231395, 131586276297.
+  "next/apps/fabrika/src/exam/markdown.test.tsx": [36.1, 34.9],
+  // Jobs 131571231395, 131586276297.
+  "next/apps/fabrika/src/exam/no-effect-run-outside-edge.test.ts": [0.0, 0.0],
+  // Jobs 131571231395, 131586276297.
+  "next/apps/fabrika/src/exam/no-hand-tag.test.ts": [0.0, 0.0],
+  // Jobs 131571231395, 131586276297.
+  "next/apps/fabrika/src/exam/no-of.test.ts": [0.0, 0.0],
+  // Jobs 131571231395, 131586276297.
+  "next/apps/fabrika/src/exam/no-promises.test.ts": [46.3, 45.8],
+  // Jobs 131571231492, 131586276245.
+  "next/apps/fabrika/src/exam/notes-contract.test.ts": [49.5, 45.3],
+  // Jobs 131571231706, 131586276341.
+  "next/apps/fabrika/src/exam/notes-fixture.test.ts": [0.1, 0.1],
+  // Jobs 131571231356, 131586276350.
+  "next/apps/fabrika/src/exam/notes.laws.test.ts": [3.9, 6.2],
+  // Jobs 131571231226, 131586276292.
+  "next/apps/fabrika/src/exam/object-imports.test.ts": [2.3, 1.6],
+  // Jobs 131571231356, 131586276350.
+  "next/apps/fabrika/src/exam/one-store-hook.test.ts": [0.3, 0.4],
+  // Jobs 131571231395, 131586276297.
+  "next/apps/fabrika/src/exam/react-rules.test.ts": [0.0, 0.0],
+  // Jobs 131571231356, 131586276350.
+  "next/apps/fabrika/src/exam/secret-types.test.ts": [3.6, 6.4],
+  // Jobs 131571231492, 131586276245.
+  "next/apps/fabrika/src/exam/twin.test.ts": [18.0, 16.8],
+  // Jobs 131571231226, 131586276292.
+  "next/apps/fabrika/src/file-services.laws.test.ts": [3.0, 2.0],
+  // Jobs 131571231706, 131586276341.
+  "next/apps/fabrika/src/grant-readers.laws.test.ts": [1.3, 0.9],
+  // Jobs 131571231395, 131586276297.
+  "next/apps/fabrika/src/instance-one-file.test.ts": [31.5, 28.4],
+  // Jobs 131571231706, 131586276341.
+  "next/apps/fabrika/src/instance-records.test.ts": [49.0, 40.1],
+  // Jobs 131571231492, 131586276245.
+  "next/apps/fabrika/src/instance-watch.laws.test.ts": [0.4, 0.4],
+  // Jobs 131571231356, 131586276350.
+  "next/apps/fabrika/src/instance-wire.test.ts": [147.5, 186.2],
+  // Jobs 131571231492, 131586276245.
+  "next/apps/fabrika/src/local-instance.test.ts": [1.0, 0.8],
+  // Jobs 131571231706, 131586276341.
+  "next/apps/fabrika/src/port.test.ts": [0.0, 0.0],
+  // Jobs 131571231356, 131586276350.
+  "next/apps/fabrika/src/record.laws.test.ts": [2.7, 2.8],
+  // Jobs 131571231226, 131586276292.
+  "next/apps/fabrika/src/runtime-recovery.laws.test.ts": [99.8, 92.7],
+  // Jobs 131571231226, 131586276292.
+  "next/apps/fabrika/src/runtime.decode.test.ts": [0.1, 0.1],
+  // Jobs 131571231226, 131586276292.
+  "next/apps/fabrika/src/runtime.laws.test.ts": [44.6, 49.3],
+  // Jobs 131571231395, 131586276297.
+  "next/apps/fabrika/src/settings-generated.test.ts": [4.2, 4.2],
+  // Jobs 131571231492, 131586276245.
+  "next/apps/fabrika/src/settings-start.test.ts": [10.5, 9.6],
+  // Jobs 131571231395, 131586276297.
+  "next/apps/fabrika/src/settings.test.ts": [0.0, 0.0],
+  // Jobs 131571231706, 131586276341.
+  "next/apps/fabrika/src/sibling.laws.test.ts": [13.5, 8.5],
+  // Jobs 131571231356, 131586276350.
+  "next/apps/fabrika/src/start-child.laws.test.ts": [130.2, 177.2],
+  // Jobs 131571231706, 131586276341.
+  "next/apps/fabrika/src/worker-mail.test.ts": [30.5, 19.1],
+  // Jobs 131571231226, 131586276292.
+  "next/apps/fabrika/src/worker-supervision.test.ts": [23.3, 22.4],
+  // Jobs 131571231395, 131586276297.
+  "next/apps/fabrika/src/worker-usage.test.ts": [1.6, 1.4],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/Id.cause.test.ts": [0.1, 0.1],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/Id.test.ts": [3.4, 7.3],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/Id.types.test.ts": [0.0, 0.0],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/Testing.test.ts": [0.0, 0.1],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/access/Access.test.ts": [1.8, 3.4],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/access/AccessMachine.laws.test.ts": [2.8, 1.6],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/access/AccessSpans.test.ts": [4.5, 4.0],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/access/Authorization.test.ts": [13.0, 16.1],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/access/ClientManager.test.ts": [14.0, 16.2],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/access/ClientManager.types.test.ts": [0.0, 0.0],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/access/Passkey.test.ts": [0.1, 0.1],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/access/SessionManager.test.ts": [7.5, 10.5],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/access/Text.test.ts": [0.0, 0.0],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/ci/Ci.test.ts": [0.4, 0.2],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts": [0.7, 0.7],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/cloudflare/connection.test.ts": [8.2, 6.8],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/cloudflare/error-cause.test.ts": [0.4, 0.2],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/cloudflare/fetch.test.ts": [0.6, 0.4],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/cloudflare/index.test.ts": [0.3, 0.2],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/cloudflare/mail.test.ts": [0.5, 0.6],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/cloudflare/p14.test.ts": [0.5, 0.3],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/cloudflare/platform.test.ts": [0.3, 0.2],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/cloudflare/reach.laws.test.ts": [0.2, 0.2],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/cloudflare/readers.laws.test.ts": [0.8, 0.6],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/cloudflare/runner-reply.laws.test.ts": [12.0, 7.8],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/cloudflare/supervision.laws.test.ts": [30.7, 16.8],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/cloudflare/tail.test.ts": [0.3, 0.2],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/codehost/CodeHost.test.ts": [0.4, 0.6],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/gateway/GatewayRevocation.test.ts": [41.9, 43.3],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/gateway/internal/rateLimit.test.ts": [0.2, 0.2],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/gateway/internal/waiting.test.ts": [4.5, 4.0],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/jobs/Job.test.ts": [14.1, 14.0],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/jobs/Jobs.types.test.ts": [0.0, 0.0],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/jobs/internal/job.test.ts": [37.4, 20.9],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/ledger/Ledger.test.ts": [1.8, 2.1],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/ledger/Ledger.types.test.ts": [0.0, 0.0],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/ledger/LedgerCallSpans.test.ts": [0.8, 0.8],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/ledger/LedgerSpans.test.ts": [1.4, 2.0],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/ledger/LedgerTransaction.test.ts": [0.3, 0.6],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/ledger/Log.test.ts": [1.8, 1.9],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/ledger/Rings.test.ts": [0.1, 0.2],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/ledger/TraceId.test.ts": [0.6, 0.5],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/node/Chaos.laws.test.ts": [0.1, 0.1],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/node/Children.test.ts": [93.0, 89.3],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/node/ErrorCause.test.ts": [2.1, 1.9],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/node/ErrorCause.types.test.ts": [0.0, 0.0],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/node/ExitReason.test.ts": [48.1, 58.9],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/node/IsolateUsage.test.ts": [77.5, 78.2],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/node/Nemesis.laws.test.ts": [10.5, 11.2],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/node/ProgramMail.test.ts": [35.0, 33.9],
+  // Jobs 131571231360, 131586276373.
+  "next/packages/libfabrika/src/node/ProgramMailRuntime.test.ts": [282.2, 171.0],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/node/RecordPart.test.ts": [1.3, 1.2],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/node/RecordPartResources.test.ts": [1.0, 0.9],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/node/RecoveryJournal.test.ts": [48.5, 41.7],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/node/Replies.test.ts": [152.3, 177.7],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/node/StartChild.test.ts": [590.5, 484.6],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/node/build/build-assets.test.ts": [34.7, 43.4],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/node/build/build-one-file.test.ts": [68.2, 48.3],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/node/build/css.test.ts": [14.6, 13.9],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/node/build/error-cause.test.ts": [0.2, 0.2],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/node/dev/DevLife.laws.test.ts": [0.2, 0.1],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/node/dev/dev-control.laws.test.ts": [11.3, 9.9],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/node/dev/dev-errors.laws.test.ts": [1.2, 1.1],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/node/dev/dev-recording.laws.test.ts": [0.1, 0.1],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/node/dev/dev-secrets.laws.test.ts": [3.4, 3.0],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/node/dev/dev.laws.test.ts": [2.2, 2.0],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/node/dev/error-cause.test.ts": [0.3, 0.2],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/node/dev/local-dev.test.ts": [2.6, 2.1],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/node/dev/supervision-spans.test.ts": [4.8, 4.6],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/node/gateway/RateLimit.test.ts": [4.3, 3.9],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/node/jobs/JobsLedger.test.ts": [21.2, 19.1],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/node/settings/Command.test.ts": [0.7, 0.5],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/node/settings/Load.test.ts": [1.0, 1.4],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/packs/ProgramName.test.ts": [0.1, 0.1],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/presence/Connections.test.ts": [0.7, 1.0],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/processes/ExitReason.test.ts": [0.5, 0.5],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/processes/Mailbox.test.ts": [2.6, 2.4],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/processes/MailboxHistory.test.ts": [0.4, 0.5],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/processes/ProcessIdGenerator.test.ts": [1.7, 1.7],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/processes/ProcessLifecycle.test.ts": [5.8, 7.7],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/processes/ProcessManager.test.ts": [0.9, 1.1],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/processes/ProcessMonitors.test.ts": [12.9, 11.3],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/processes/ProcessSpans.test.ts": [1.6, 2.2],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/processes/ProcessStreams.test.ts": [2.2, 1.9],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/processes/ProcessTextCaps.test.ts": [4.9, 3.4],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/processes/ProcessWindow.test.ts": [0.5, 0.4],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/processes/internal/processTable.laws.test.ts": [1.8, 1.6],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/processes/internal/programMail.test.ts": [0.1, 0.1],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/runtime/BrainLife.laws.test.ts": [0.1, 0.1],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/runtime/Built.test.ts": [1.5, 1.6],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/runtime/Chaos.laws.test.ts": [0.2, 0.1],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/runtime/EffectFunctions.test.ts": [16.0, 9.5],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/runtime/Entry.test.ts": [0.0, 0.0],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/runtime/ErrorCause.test.ts": [0.6, 0.6],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/runtime/Execution.test.ts": [0.4, 0.2],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/runtime/Gateway.laws.test.ts": [2.2, 1.4],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/runtime/IsolateUsage.test.ts": [0.0, 0.0],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/runtime/Patch.test.ts": [0.1, 0.1],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/runtime/ProcessStore.test.ts": [2.8, 2.0],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/runtime/Program.test.ts": [1.7, 1.1],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/runtime/Program.types.test.ts": [0.1, 0.1],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/runtime/RecoveryGaps.test.ts": [9.9, 9.0],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/runtime/RecoveryStore.test.ts": [0.3, 0.4],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/runtime/Runner.test.ts": [122.4, 115.9],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/runtime/RunnerOptions.test.ts": [0.0, 0.0],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/runtime/RunnerRecovery.laws.test.ts": [2.2, 1.4],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/runtime/RunnerSupervision.test.ts": [56.8, 49.8],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/runtime/State.test.ts": [0.1, 0.1],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/runtime/internal/exitReason.test.ts": [0.0, 0.0],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/runtime/internal/recovery.test.ts": [2.2, 1.6],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/runtime/internal/reply.test.ts": [0.2, 0.1],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/runtime/internal/supervisor.laws.test.ts": [0.6, 0.6],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/settings/Codec.test.ts": [0.2, 0.2],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/settings/Files.test.ts": [0.3, 0.3],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/settings/JsonSchema.test.ts": [0.6, 0.3],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/settings/Print.test.ts": [0.2, 0.2],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/settings/Reference.test.ts": [0.4, 0.3],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/settings/Setting.test.ts": [0.2, 0.2],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/settings/Snapshot.test.ts": [0.7, 0.7],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/settings/Sources.test.ts": [0.2, 0.1],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/settings/TomlParser.test.ts": [0.2, 0.2],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/telemetry/ArchiveCryptoFailure.test.ts": [0.0, 0.0],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/telemetry/ErrorCause.test.ts": [0.2, 0.2],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/telemetry/P12Readers.laws.test.ts": [0.2, 0.2],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/telemetry/Records.test.ts": [4.1, 3.7],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/telemetry/Sink.test.ts": [11.0, 11.4],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/telemetry/Trace.types.test.ts": [0.0, 0.0],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/telemetry/internal/measurements.test.ts": [8.4, 12.1],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/telemetry/internal/sink.test.ts": [0.7, 0.4],
+  // Jobs 131571231356, 131586276350.
+  "next/packages/libfabrika/src/telemetry/internal/sums.test.ts": [1.2, 2.3],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/transport/Answer.test.ts": [0.3, 0.2],
+  // Jobs 131571231226, 131586276292.
+  "next/packages/libfabrika/src/transport/Connection.test.ts": [3.3, 2.0],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/transport/ErrorCause.test.ts": [0.2, 0.2],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/transport/Hello.test.ts": [0.6, 0.6],
+  // Jobs 131571231706, 131586276341.
+  "next/packages/libfabrika/src/transport/Sshsig.test.ts": [1.5, 0.8],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/transport/SshsigWebauthn.test.ts": [0.4, 0.4],
+  // Jobs 131571231395, 131586276297.
+  "next/packages/libfabrika/src/transport/internal/binaryCryptoFailure.test.ts": [0.0, 0.0],
+  // Jobs 131571231492, 131586276245.
+  "next/packages/libfabrika/src/transport/internal/connection.test.ts": [1.6, 1.3],
+  // Jobs 131571231706, 131586276341.
+  "next/programs/chaos/src/program.laws.test.ts": [2.5, 1.3],
+  // Jobs 131571231356, 131586276350.
+  "next/programs/checklist/src/program.laws.test.ts": [0.2, 0.3],
+  // Jobs 131571231706, 131586276341.
+  "next/programs/counter/src/program.laws.test.ts": [0.3, 0.2],
+  // Jobs 131571231492, 131586276245.
+  "next/programs/counter/src/runner.laws.test.ts": [4.9, 4.2],
+  // Jobs 131571231226, 131586276292.
+  "next/programs/counter/src/window.types.test.ts": [0.0, 0.0],
+  // Jobs 131571231395, 131586276297.
+  "next/programs/pipeline/src/Change.test.ts": [1.0, 0.9],
+  // Jobs 131571231492, 131586276245.
+  "next/programs/pipeline/src/Merger.laws.test.ts": [1.6, 1.5],
+  // Jobs 131571231706, 131586276341.
+  "next/programs/pipeline/src/Settings.test.ts": [0.3, 0.2],
+  // Jobs 131571231356, 131586276350.
+  "next/programs/pipeline/src/handlers.test.ts": [0.7, 1.0],
+  // Jobs 131571231226, 131586276292.
+  "next/programs/pipeline/src/node/runner.laws.test.ts": [38.8, 27.1],
+} as const;
+
+it("vector: L5 all 210 next rows use the larger of the two recorded main-run samples", () => {
+  // Preserve exact file-set coverage as well as the weights, including measured zeroes.
+  const expected = Object.fromEntries(
+    Object.entries(nextSamples).map(([path, samples]) => [path, Math.max(...samples)]),
+  );
   expect(Object.fromEntries(Object.entries(measured).filter(([path]) => path.startsWith("next/")))).toEqual(expected);
 });
 
@@ -249,16 +561,17 @@ it("vector: the four catchup files carry their times from PR 770's CI run", () =
   }
 });
 
-it("vector: the four build files carry their times from CI run 42922102030", () => {
-  // T502, next/ (A9, A10): one time each from run 42922102030, on 2909594e, rounded to one decimal.
+it("vector: the four build files carry their refreshed main-run times", () => {
+  // T502, next/ (A9, A10), refreshed by T890. Samples and jobs are recorded in nextSamples.
+  // Attempt 1 of runs 43329697311 and 43334183021; use the larger until the third green run.
   // Plant: drop these rows, so all four count 1 s and the heavy build files can stack on one machine.
-  for (const [path, seconds] of [
-    ["next/apps/fabrika/src/build.test.ts", 39.9],
-    ["next/apps/fabrika/src/exam/bytes.test.ts", 4.9],
-    ["next/packages/libfabrika/src/node/build/build-assets.test.ts", 48.6],
-    ["next/packages/libfabrika/src/node/build/build-one-file.test.ts", 11.0],
+  for (const path of [
+    "next/apps/fabrika/src/build.test.ts",
+    "next/apps/fabrika/src/exam/bytes.test.ts",
+    "next/packages/libfabrika/src/node/build/build-assets.test.ts",
+    "next/packages/libfabrika/src/node/build/build-one-file.test.ts",
   ] as const) {
-    expect.soft(measured[path], path).toBe(seconds);
+    expect.soft(measured[path], path).toBe(Math.max(...nextSamples[path]));
   }
 });
 
