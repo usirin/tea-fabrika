@@ -11,6 +11,19 @@ import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";
 
 const runs = { seed: 119120, numRuns: 200 };
+const identityRuns = { ...runs, numRuns: 300 };
+// CI exhausted 60 s for L5 and both L2 properties. Allow 10 ms per real Git command,
+// including scoped setup/cleanup, and count the longest generated tape of four moves.
+// A fixture runs six commands. A complete open runs twelve; L5 injects the URL lookup,
+// leaving eleven real commands per open. Failed opens stop at or before that twelfth command.
+const gitCommandBudget = 10;
+// Fixture, clone, worktree, initial open, then four opens for each move.
+const identityGitCommands = 6 + 1 + 1 + 11 + 4 * 4 * 11;
+// Fixture, remove/commit/push, absent open, revert/push, four faulted opens,
+// remove origin, then the final open's four metadata commands.
+const failedReadGitCommands = 6 + 3 + 12 + 2 + 4 * 11 + 1 + 4;
+// Fixture, then add/commit/push and at most twelve open commands for each move.
+const legacyGitCommands = 6 + 4 * (3 + 12);
 const text = (bytes: Uint8Array | null) => (bytes === null ? null : new TextDecoder().decode(bytes));
 const services = Layer.mergeAll(NodeServices.layer, Digest.layerWebCrypto);
 
@@ -121,264 +134,276 @@ describe("T878 pinned repository reads", () => {
     );
   });
 
-  it("L5: real clone/common-directory identity separates same basenames and destinations but keeps aliases and credential changes", async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.stringMatching(/^[a-z][a-z0-9]{5,15}$/),
-        fc.array(fc.nat(), { minLength: 1, maxLength: 4 }),
-        async (credential, tape) =>
+  it(
+    "L5: real clone/common-directory identity separates same basenames and destinations but keeps aliases and credential changes",
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.stringMatching(/^[a-z][a-z0-9]{5,15}$/),
+          fc.array(fc.nat(), { minLength: 1, maxLength: 4 }),
+          async (credential, tape) =>
+            Effect.runPromise(
+              Effect.scoped(
+                Effect.gen(function* () {
+                  const f = yield* fixture("sha1", "release");
+                  const otherRoot = f.path.join(f.root, "other");
+                  yield* f.fs.makeDirectory(otherRoot);
+                  const clone = f.path.join(otherRoot, "selected");
+                  yield* git(otherRoot, ["clone", f.origin, clone]);
+                  const alias = f.path.join(f.root, "alias");
+                  yield* git(f.repo, ["worktree", "add", "--detach", alias, f.commit]);
+                  const real = yield* ChildProcessSpawner.ChildProcessSpawner;
+                  const key = (location: string, destination: string) => {
+                    const spawner = ChildProcessSpawner.make((command) => {
+                      if (command._tag !== "StandardCommand" || !command.args.includes("--get-url")) {
+                        return real.spawn(command);
+                      }
+
+                      // Model a host URL rewrite while keeping every transport on the local bare origin.
+                      const bytes = new TextEncoder().encode(destination);
+                      return Effect.succeed(
+                        ChildProcessSpawner.makeHandle({
+                          pid: ChildProcessSpawner.ProcessId(1),
+                          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
+                          isRunning: Effect.succeed(false),
+                          kill: () => Effect.void,
+                          stdin: Sink.drain,
+                          stdout: Stream.make(bytes),
+                          stderr: Stream.empty,
+                          all: Stream.make(bytes),
+                          getInputFd: () => Sink.drain,
+                          getOutputFd: () => Stream.empty,
+                          unref: Effect.succeed(Effect.void),
+                        }),
+                      );
+                    });
+                    return withReader(
+                      f.person,
+                      Repositories.use((service) => service.open(location)),
+                    ).pipe(
+                      Effect.map((handle) => handle.snapshot.key),
+                      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+                    );
+                  };
+                  const destination = "https://example.invalid/repo.git";
+                  const initial = yield* key(f.repo, destination);
+
+                  for (const cell of tape) {
+                    const authorized = `https://fixture:${credential}${cell}@example.invalid/repo.git`;
+                    expect(yield* key(f.repo, authorized)).toBe(initial);
+                    expect(yield* key(alias, authorized)).toBe(initial);
+                    expect(yield* key(clone, authorized)).not.toBe(initial);
+                    expect(yield* key(f.repo, `${destination}-${cell}`)).not.toBe(initial);
+                  }
+                }),
+              ).pipe(Effect.provide(services)),
+            ),
+        ),
+        identityRuns,
+      );
+    },
+    identityRuns.numRuns * identityGitCommands * gitCommandBudget,
+  );
+
+  it(
+    "L2: only an absent tree entry is an empty document; every requested Git failure refuses",
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (tape) =>
           Effect.runPromise(
             Effect.scoped(
               Effect.gen(function* () {
                 const f = yield* fixture("sha1", "release");
-                const otherRoot = f.path.join(f.root, "other");
-                yield* f.fs.makeDirectory(otherRoot);
-                const clone = f.path.join(otherRoot, "selected");
-                yield* git(otherRoot, ["clone", f.origin, clone]);
-                const alias = f.path.join(f.root, "alias");
-                yield* git(f.repo, ["worktree", "add", "--detach", alias, f.commit]);
-                const real = yield* ChildProcessSpawner.ChildProcessSpawner;
-                const key = (location: string, destination: string) => {
-                  const spawner = ChildProcessSpawner.make((command) => {
-                    if (command._tag !== "StandardCommand" || !command.args.includes("--get-url")) {
-                      return real.spawn(command);
-                    }
-
-                    // Model a host URL rewrite while keeping every transport on the local bare origin.
-                    const bytes = new TextEncoder().encode(destination);
-                    return Effect.succeed(
-                      ChildProcessSpawner.makeHandle({
-                        pid: ChildProcessSpawner.ProcessId(1),
-                        exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
-                        isRunning: Effect.succeed(false),
-                        kill: () => Effect.void,
-                        stdin: Sink.drain,
-                        stdout: Stream.make(bytes),
-                        stderr: Stream.empty,
-                        all: Stream.make(bytes),
-                        getInputFd: () => Sink.drain,
-                        getOutputFd: () => Stream.empty,
-                        unref: Effect.succeed(Effect.void),
-                      }),
-                    );
-                  });
-                  return withReader(
-                    f.person,
-                    Repositories.use((service) => service.open(location)),
-                  ).pipe(
-                    Effect.map((handle) => handle.snapshot.key),
-                    Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-                  );
-                };
-                const destination = "https://example.invalid/repo.git";
-                const initial = yield* key(f.repo, destination);
-
-                for (const cell of tape) {
-                  const authorized = `https://fixture:${credential}${cell}@example.invalid/repo.git`;
-                  expect(yield* key(f.repo, authorized)).toBe(initial);
-                  expect(yield* key(alias, authorized)).toBe(initial);
-                  expect(yield* key(clone, authorized)).not.toBe(initial);
-                  expect(yield* key(f.repo, `${destination}-${cell}`)).not.toBe(initial);
-                }
-              }),
-            ).pipe(Effect.provide(services)),
-          ),
-      ),
-      { seed: 119120, numRuns: 300 },
-    );
-  });
-
-  it("L2: only an absent tree entry is an empty document; every requested Git failure refuses", async () => {
-    await fc.assert(
-      fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (tape) =>
-        Effect.runPromise(
-          Effect.scoped(
-            Effect.gen(function* () {
-              const f = yield* fixture("sha1", "release");
-              yield* git(f.repo, ["rm", ".fabrika/fabrika.toml"]);
-              yield* git(f.repo, ["commit", "-m", "absent"]);
-              yield* git(f.repo, ["push", "origin", f.branch]);
-              const absent = yield* withReader(
-                f.person,
-                Effect.gen(function* () {
-                  return yield* (yield* Repositories).open(f.repo);
-                }),
-              );
-              expect(absent.snapshot.text).toBeNull();
-              // Restore the committed document for blob/type failures, without touching this checkout's git.
-              yield* git(f.repo, ["revert", "--no-edit", "HEAD"]);
-              yield* git(f.repo, ["push", "origin", f.branch]);
-              const real = yield* ChildProcessSpawner.ChildProcessSpawner;
-              const object = "a".repeat(40);
-              const validHead = `ref: refs/heads/release\tHEAD\n${object}\tHEAD\n`;
-              const faults = [
-                { operation: "fetch", flag: "--no-tags", output: "", code: 1 },
-                { operation: "ls-tree", flag: ".fabrika/fabrika.toml", output: "", code: 1 },
-                { operation: "cat-file", flag: "blob", output: "", code: 1 },
-                { operation: "ls-remote", flag: "--symref", output: "", code: 1 },
-                { operation: "rev-parse", flag: "--verify", output: "", code: 1 },
-                { operation: "rev-parse", flag: "--verify", output: "not-an-object", code: 0 },
-                { operation: "rev-parse", flag: "--show-object-format", output: "sha999", code: 0 },
-                { operation: "ls-remote", flag: "--symref", output: `${object}\tHEAD\n`, code: 0 },
-                { operation: "ls-remote", flag: "--symref", output: validHead + validHead, code: 0 },
-                { operation: "ls-remote", flag: "--symref", output: "ref: refs/heads/release\tHEAD\n", code: 0 },
-                { operation: "ls-remote", flag: "--symref", output: validHead.replace(object, "invalid"), code: 0 },
-                {
-                  operation: "ls-tree",
-                  flag: ".fabrika/fabrika.toml",
-                  output: `040000 tree ${object}\t.fabrika/fabrika.toml\0`,
-                  code: 0,
-                },
-                {
-                  operation: "ls-tree",
-                  flag: ".fabrika/fabrika.toml",
-                  output: `160000 commit ${object}\t.fabrika/fabrika.toml\0`,
-                  code: 0,
-                },
-                {
-                  operation: "ls-tree",
-                  flag: ".fabrika/fabrika.toml",
-                  output: `120000 blob ${object}\t.fabrika/fabrika.toml\0`,
-                  code: 0,
-                },
-                {
-                  operation: "ls-tree",
-                  flag: ".fabrika/fabrika.toml",
-                  output: `100644 blob ${object}\twrong-path\0`,
-                  code: 0,
-                },
-                {
-                  operation: "ls-tree",
-                  flag: ".fabrika/fabrika.toml",
-                  output: `100644 blob ${object}\t.fabrika/fabrika.toml`,
-                  code: 0,
-                },
-                { operation: "cat-file", flag: "blob", output: new Uint8Array([0xc3, 0x28]), code: 0 },
-              ];
-
-              for (const cell of tape) {
-                const fault = faults[cell % faults.length]!;
-                let hits = 0;
-                const injected = ChildProcessSpawner.make((command) => {
-                  if (
-                    command._tag === "StandardCommand" &&
-                    command.args.includes(fault.operation) &&
-                    command.args.includes(fault.flag)
-                  ) {
-                    hits++;
-                    const bytes =
-                      typeof fault.output === "string" ? new TextEncoder().encode(fault.output) : fault.output;
-                    return Effect.succeed(
-                      ChildProcessSpawner.makeHandle({
-                        pid: ChildProcessSpawner.ProcessId(1),
-                        exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(fault.code)),
-                        isRunning: Effect.succeed(false),
-                        kill: () => Effect.void,
-                        stdin: Sink.drain,
-                        stdout: Stream.make(bytes),
-                        stderr: Stream.empty,
-                        all: Stream.make(bytes),
-                        getInputFd: () => Sink.drain,
-                        getOutputFd: () => Stream.empty,
-                        unref: Effect.succeed(Effect.void),
-                      }),
-                    );
-                  }
-
-                  return real.spawn(command);
-                });
-                const exit = yield* withReader(
+                yield* git(f.repo, ["rm", ".fabrika/fabrika.toml"]);
+                yield* git(f.repo, ["commit", "-m", "absent"]);
+                yield* git(f.repo, ["push", "origin", f.branch]);
+                const absent = yield* withReader(
                   f.person,
                   Effect.gen(function* () {
                     return yield* (yield* Repositories).open(f.repo);
                   }),
-                ).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, injected), Effect.exit);
-                expect(hits).toBeGreaterThan(0);
-                expect(Exit.isFailure(exit)).toBe(true);
-
-                if (Exit.isFailure(exit)) {
-                  const fail = exit.cause.reasons.find((r) => r._tag === "Fail");
-                  expect(fail?._tag === "Fail" && fail.error._tag).toBe("RepositoriesError");
-                }
-              }
-
-              // Named replacement for Load's former repo disk-failure law.
-              const missingOrigin = yield* git(f.repo, ["remote", "remove", "origin"]);
-              void missingOrigin;
-              const refused = yield* withReader(
-                f.person,
-                Effect.gen(function* () {
-                  return yield* (yield* Repositories).open(f.repo);
-                }),
-              ).pipe(Effect.exit);
-              expect(Exit.isFailure(refused)).toBe(true);
-            }),
-          ).pipe(Effect.provide(services)),
-        ),
-      ),
-      runs,
-    );
-  });
-
-  it("L2: each committed legacy-file combination keeps its refusal rule despite opposite checkout files", async () => {
-    await fc.assert(
-      fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (tape) =>
-        Effect.runPromise(
-          Effect.scoped(
-            Effect.gen(function* () {
-              const f = yield* fixture("sha1", "release");
-              const names = ["fabrika.toml", ".fabrika.jsonc", ".fabrika/fabrika.toml"];
-
-              for (const cell of tape) {
-                const world = cell % 4;
-
-                for (const name of names) {
-                  yield* f.fs.remove(f.path.join(f.repo, name), { force: true });
-                }
-
-                yield* f.fs.writeFileString(
-                  f.path.join(f.repo, world < 2 ? "fabrika.toml" : ".fabrika.jsonc"),
-                  world < 2 ? "" : "{}",
                 );
-
-                if (world % 2 === 1) {
-                  yield* f.fs.writeFileString(f.path.join(f.repo, ".fabrika/fabrika.toml"), "");
-                }
-
-                yield* git(f.repo, ["add", "-A"]);
-                yield* git(f.repo, ["commit", "--allow-empty", "-m", "legacy combination"]);
+                expect(absent.snapshot.text).toBeNull();
+                // Restore the committed document for blob/type failures, without touching this checkout's git.
+                yield* git(f.repo, ["revert", "--no-edit", "HEAD"]);
                 yield* git(f.repo, ["push", "origin", f.branch]);
+                const real = yield* ChildProcessSpawner.ChildProcessSpawner;
+                const object = "a".repeat(40);
+                const validHead = `ref: refs/heads/release\tHEAD\n${object}\tHEAD\n`;
+                const faults = [
+                  { operation: "fetch", flag: "--no-tags", output: "", code: 1 },
+                  { operation: "ls-tree", flag: ".fabrika/fabrika.toml", output: "", code: 1 },
+                  { operation: "cat-file", flag: "blob", output: "", code: 1 },
+                  { operation: "ls-remote", flag: "--symref", output: "", code: 1 },
+                  { operation: "rev-parse", flag: "--verify", output: "", code: 1 },
+                  { operation: "rev-parse", flag: "--verify", output: "not-an-object", code: 0 },
+                  { operation: "rev-parse", flag: "--show-object-format", output: "sha999", code: 0 },
+                  { operation: "ls-remote", flag: "--symref", output: `${object}\tHEAD\n`, code: 0 },
+                  { operation: "ls-remote", flag: "--symref", output: validHead + validHead, code: 0 },
+                  { operation: "ls-remote", flag: "--symref", output: "ref: refs/heads/release\tHEAD\n", code: 0 },
+                  { operation: "ls-remote", flag: "--symref", output: validHead.replace(object, "invalid"), code: 0 },
+                  {
+                    operation: "ls-tree",
+                    flag: ".fabrika/fabrika.toml",
+                    output: `040000 tree ${object}\t.fabrika/fabrika.toml\0`,
+                    code: 0,
+                  },
+                  {
+                    operation: "ls-tree",
+                    flag: ".fabrika/fabrika.toml",
+                    output: `160000 commit ${object}\t.fabrika/fabrika.toml\0`,
+                    code: 0,
+                  },
+                  {
+                    operation: "ls-tree",
+                    flag: ".fabrika/fabrika.toml",
+                    output: `120000 blob ${object}\t.fabrika/fabrika.toml\0`,
+                    code: 0,
+                  },
+                  {
+                    operation: "ls-tree",
+                    flag: ".fabrika/fabrika.toml",
+                    output: `100644 blob ${object}\twrong-path\0`,
+                    code: 0,
+                  },
+                  {
+                    operation: "ls-tree",
+                    flag: ".fabrika/fabrika.toml",
+                    output: `100644 blob ${object}\t.fabrika/fabrika.toml`,
+                    code: 0,
+                  },
+                  { operation: "cat-file", flag: "blob", output: new Uint8Array([0xc3, 0x28]), code: 0 },
+                ];
 
-                // The checkout claims the opposite of the committed refusal or allowance.
-                for (const name of names) {
-                  yield* f.fs.remove(f.path.join(f.repo, name), { force: true });
+                for (const cell of tape) {
+                  const fault = faults[cell % faults.length]!;
+                  let hits = 0;
+                  const injected = ChildProcessSpawner.make((command) => {
+                    if (
+                      command._tag === "StandardCommand" &&
+                      command.args.includes(fault.operation) &&
+                      command.args.includes(fault.flag)
+                    ) {
+                      hits++;
+                      const bytes =
+                        typeof fault.output === "string" ? new TextEncoder().encode(fault.output) : fault.output;
+                      return Effect.succeed(
+                        ChildProcessSpawner.makeHandle({
+                          pid: ChildProcessSpawner.ProcessId(1),
+                          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(fault.code)),
+                          isRunning: Effect.succeed(false),
+                          kill: () => Effect.void,
+                          stdin: Sink.drain,
+                          stdout: Stream.make(bytes),
+                          stderr: Stream.empty,
+                          all: Stream.make(bytes),
+                          getInputFd: () => Sink.drain,
+                          getOutputFd: () => Stream.empty,
+                          unref: Effect.succeed(Effect.void),
+                        }),
+                      );
+                    }
+
+                    return real.spawn(command);
+                  });
+                  const exit = yield* withReader(
+                    f.person,
+                    Effect.gen(function* () {
+                      return yield* (yield* Repositories).open(f.repo);
+                    }),
+                  ).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, injected), Effect.exit);
+                  expect(hits).toBeGreaterThan(0);
+                  expect(Exit.isFailure(exit)).toBe(true);
+
+                  if (Exit.isFailure(exit)) {
+                    const fail = exit.cause.reasons.find((r) => r._tag === "Fail");
+                    expect(fail?._tag === "Fail" && fail.error._tag).toBe("RepositoriesError");
+                  }
                 }
 
-                if (world === 3) {
-                  yield* f.fs.writeFileString(f.path.join(f.repo, "fabrika.toml"), "");
-                } else {
-                  yield* f.fs.writeFileString(f.path.join(f.repo, ".fabrika/fabrika.toml"), "");
-                }
-
-                const result = yield* withReader(
+                // Named replacement for Load's former repo disk-failure law.
+                const missingOrigin = yield* git(f.repo, ["remote", "remove", "origin"]);
+                void missingOrigin;
+                const refused = yield* withReader(
                   f.person,
                   Effect.gen(function* () {
                     return yield* (yield* Repositories).open(f.repo);
                   }),
                 ).pipe(Effect.exit);
-                expect(Exit.isSuccess(result)).toBe(world === 3);
-
-                if (Exit.isSuccess(result)) {
-                  expect(result.value.snapshot.text).toBe("");
-                }
-              }
-            }),
-          ).pipe(Effect.provide(services)),
+                expect(Exit.isFailure(refused)).toBe(true);
+              }),
+            ).pipe(Effect.provide(services)),
+          ),
         ),
-      ),
-      runs,
-    );
-  });
+        runs,
+      );
+    },
+    runs.numRuns * failedReadGitCommands * gitCommandBudget,
+  );
+
+  it(
+    "L2: each committed legacy-file combination keeps its refusal rule despite opposite checkout files",
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (tape) =>
+          Effect.runPromise(
+            Effect.scoped(
+              Effect.gen(function* () {
+                const f = yield* fixture("sha1", "release");
+                const names = ["fabrika.toml", ".fabrika.jsonc", ".fabrika/fabrika.toml"];
+
+                for (const cell of tape) {
+                  const world = cell % 4;
+
+                  for (const name of names) {
+                    yield* f.fs.remove(f.path.join(f.repo, name), { force: true });
+                  }
+
+                  yield* f.fs.writeFileString(
+                    f.path.join(f.repo, world < 2 ? "fabrika.toml" : ".fabrika.jsonc"),
+                    world < 2 ? "" : "{}",
+                  );
+
+                  if (world % 2 === 1) {
+                    yield* f.fs.writeFileString(f.path.join(f.repo, ".fabrika/fabrika.toml"), "");
+                  }
+
+                  yield* git(f.repo, ["add", "-A"]);
+                  yield* git(f.repo, ["commit", "--allow-empty", "-m", "legacy combination"]);
+                  yield* git(f.repo, ["push", "origin", f.branch]);
+
+                  // The checkout claims the opposite of the committed refusal or allowance.
+                  for (const name of names) {
+                    yield* f.fs.remove(f.path.join(f.repo, name), { force: true });
+                  }
+
+                  if (world === 3) {
+                    yield* f.fs.writeFileString(f.path.join(f.repo, "fabrika.toml"), "");
+                  } else {
+                    yield* f.fs.writeFileString(f.path.join(f.repo, ".fabrika/fabrika.toml"), "");
+                  }
+
+                  const result = yield* withReader(
+                    f.person,
+                    Effect.gen(function* () {
+                      return yield* (yield* Repositories).open(f.repo);
+                    }),
+                  ).pipe(Effect.exit);
+                  expect(Exit.isSuccess(result)).toBe(world === 3);
+
+                  if (Exit.isSuccess(result)) {
+                    expect(result.value.snapshot.text).toBe("");
+                  }
+                }
+              }),
+            ).pipe(Effect.provide(services)),
+          ),
+        ),
+        runs,
+      );
+    },
+    runs.numRuns * legacyGitCommands * gitCommandBudget,
+  );
 
   it("L10: success, refusal and interruption release every acquired Git child and temporary directory", async () => {
     await fc.assert(
