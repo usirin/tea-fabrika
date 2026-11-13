@@ -55,6 +55,13 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+*2026-11-13:* the order of work changed ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)). The next thing built in `next/` is `fabsh`,
+pipes, `summon` and `join`, working for real, with whatever they need (the window, a second tile and its
+keys, the link to the agent harnesses, rooms), so fabrika is built inside
+fabrika. Tier 1's rows that this needs come first and the others wait. The changed Tier 1 is not
+written yet: it follows in its own pull request, and until then 0159 wins over
+[the tiers](./tiers.md) and [Tier 1](./tier-1.md) where they differ. No row's count changes.
+
 *2026-11-12:* ticket 893 slice 1 in `next/` saves process view watchers across object sleep
 and removes a watch on publish after its Project route leaves. Unknown delivery failures retain
 membership. [The storage pattern](../../.patterns/durable-objects-sleep.md). This finishes no

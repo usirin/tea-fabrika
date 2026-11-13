@@ -681,8 +681,11 @@ Write-ups are read by busy people, some of them not native English speakers.
   and the owner picks one (owner, 2026-11-08). That covers all work in flight: the ask desk,
   the inbox, the project window and typography. The keys editor already does it.
 - **Show it running.** A PR that adds or changes a program's window carries
-  screenshots from the real built app, saved in that program's `docs/` folder
-  and shown in the PR body. Take them the way `apps/fabrika/e2e.ts` drives the
+  screenshots from the real built app, uploaded to the pull request with `gh`'s
+  `--attach` and never committed
+  ([0160](./.decisions/0160-pr-shots-are-never-committed.md)). The step that
+  shoots writes them under `runs/`, and the lead attaches them, each with alt
+  text. Take them the way `apps/fabrika/e2e.ts` drives the
   app: Playwright on Electron, with `FABRIKA_HOME` set to a test home of its
   own in a temp folder, never your real one. Look at each shot, and say in the
   PR what looks broken, empty or wrong.
