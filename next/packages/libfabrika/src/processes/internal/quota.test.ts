@@ -140,6 +140,11 @@ describe("P34c quota machine", () => {
             expect(proposed.bytes).toBe(growth);
           } else {
             expect(proposed._tag).toBe("reserve_fault");
+
+            if (proposed._tag !== "reserve_fault") {
+              throw new Error("recovery beyond its allowance must fault");
+            }
+
             expect(proposed.fault).toMatchObject({
               _tag: "RecoveryReserveExhausted",
               resource: byteFault ? "storage" : "writes",
@@ -212,6 +217,11 @@ describe("P34c quota machine", () => {
           replay: { letter, recovery: "restart:1" },
         })[0];
         expect(twice._tag).toBe("reserve_fault");
+
+        if (twice._tag !== "reserve_fault") {
+          throw new Error("a replay cannot spend the same letter's room twice");
+        }
+
         expect(twice.total).toEqual(model.total);
         expect(twice.operation).toBe("replay:twice");
       }),

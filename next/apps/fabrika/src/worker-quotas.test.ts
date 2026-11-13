@@ -265,7 +265,7 @@ const world = Effect.fnUntraced(function* (mode: "writes" | "storage" | "reserve
   const facts = Effect.fnUntraced(function* (stream: string) {
     return Schema.decodeUnknownSync(Rows)(yield* rpc(project, "read", stream, 0, "audit"));
   });
-  return { instance, project, home, send, start, facts, limits };
+  return { instance, project, home, send, start, facts, limits, build: built.build };
 });
 
 // Locate stores by their committed data, never by a machine-specific directory or object ID.
@@ -351,7 +351,9 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
           expect(before.process).toHaveProperty("recovery.total", { writes: 0, bytes: 0 });
 
           if (mode === "storage") {
-            expect(yield* w.send(alpha, "too-large", { type: "inc", text: "😀".repeat(6000) })).toHaveProperty("error");
+            expect(yield* w.send(alpha, "too-large", { type: "inc", text: "😀".repeat(6000) })).toMatchObject({
+              error: { data: { reason: "quota" } },
+            });
             expect(yield* w.facts("alpha:1/inbox")).toHaveLength(ordinary);
           }
 
@@ -388,7 +390,22 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
                 Schema.Array(Schema.Struct({ name: Schema.String, process: Schema.String })),
               )(yield* rpc(w.project, "info"));
               const successor = info.find((r) => r.name === "alpha:1")!.process;
-              expect(yield* w.send(successor, "excess", { type: "inc", text: "" })).toHaveProperty("error");
+              expect(yield* w.send(successor, "fill-cap", { type: "inc", text: "" })).toMatchObject({
+                result: { _tag: "accepted" },
+              });
+              yield* rpc(w.instance.process(successor), "restart", { id: "person-at-cap", build: w.build });
+              const restarted = yield* until(
+                w.facts("processes/alpha:1"),
+                (rows) => rows.filter((r) => r._tag === "restarted").length === 2,
+                "a checked person restart must complete at the program cap",
+              );
+              expect(restarted.filter((r) => r._tag === "restarted")).toHaveLength(2);
+              const current = Schema.decodeUnknownSync(
+                Schema.Array(Schema.Struct({ name: Schema.String, process: Schema.String })),
+              )(yield* rpc(w.project, "info")).find((r) => r.name === "alpha:1")!.process;
+              expect(yield* w.send(current, "excess", { type: "inc", text: "" })).toMatchObject({
+                error: { data: { reason: "quota" } },
+              });
             }
           }
 

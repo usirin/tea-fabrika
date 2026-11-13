@@ -1,7 +1,7 @@
 // P34c, next/. Node and live-object fixtures supply real runners and real stores to these laws.
 // The fixture may supply transport and an archive double. It must not implement quota decisions.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import type { Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { Appended } from "../coordination/index.ts";
@@ -52,8 +52,11 @@ export interface Local {
 }
 
 export interface World {
-  readonly runner: (name: string) => Effect.Effect<ProgramRunner["Service"]>;
+  readonly runner: (name: string) => Effect.Effect<ProgramRunner["Service"], unknown>;
   readonly input: (name: string, id: string, m: unknown) => Effect.Effect<unknown, unknown>;
+  readonly msg: (name: string, id: string, m: unknown) => Effect.Effect<unknown, unknown>;
+  readonly watch: (source: string, target: string, ref: string) => Effect.Effect<void, unknown>;
+  readonly alarm: (name: string) => Effect.Effect<number | null>;
   readonly program: (name: string) => Effect.Effect<Use, unknown>;
   readonly local: (name: string) => Effect.Effect<Local, unknown>;
   readonly projectRecovery: (name: string) => Effect.Effect<Local["recovery"], unknown>;
@@ -76,6 +79,14 @@ const required = <A>(value: A | undefined): A => Option.getOrThrow(Option.fromUn
 const Nat = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10_000 }));
 const Cell = Schema.Struct({ pick: Nat, amount: Nat, reopen: Schema.Boolean });
 const Tape = Schema.Array(Cell).check(Schema.isMinLength(5), Schema.isMaxLength(25));
+
+const History = Schema.Array(
+  Schema.Struct({
+    ...Cell.fields,
+    length: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1001 })),
+  }),
+).check(Schema.isMinLength(1), Schema.isMaxLength(3));
+
 const options = { timeout: 600_000, arbitrary: { seed: 119120, runs: 40, size: 100 } };
 const names = ["alpha:1", "alpha:2", "beta:1"];
 
@@ -213,30 +224,85 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
       ({ tape }) =>
         Effect.scoped(
           Effect.gen(function* () {
-            const w = yield* open({ ...defaults, writes: 2 });
+            yield* TestClock.setTime(1_000);
+            const w = yield* open(defaults);
+            const name = required(names[required(tape[0]).pick % 2]);
+            yield* w.watch("beta:1", name, "inbound");
+            yield* w.watch(name, "beta:1", "outbound");
+            const initial = yield* w.program("sample/alpha");
 
             for (const [n, c] of tape.entries()) {
-              yield* TestClock.setTime(1_000 + n * 60_001);
-              const name = required(names[c.pick % 2]);
-              expect(yield* w.input(name, `poison:${n}`, { type: "throw" })).toHaveProperty("_tag", "placed");
-              const full = yield* w.program("sample/alpha");
-              expect(full.writes).toBe(2);
-              w.cut(c.amount % 8);
-              yield* Effect.result(w.drain(name));
-              w.cut(null);
-              yield* w.reopen;
-              yield* w.drain(name);
+              expect(yield* w.msg(required(names[c.pick % 2]), `healthy:${n}`, { type: "inc" })).toHaveProperty(
+                "_tag",
+                "accepted",
+              );
+            }
+
+            const full = yield* w.program("sample/alpha");
+            expect(full.writes - initial.writes).toBe(2 * tape.length);
+            w.limits({ ...defaults, writes: full.writes });
+            let terminal = false;
+
+            for (const c of tape) {
+              const saved = Schema.decodeUnknownSync(Schema.NullOr(supervision))(yield* w.journal(name));
+
+              if (saved !== null && saved.journal._tag !== "idle") {
+                yield* w.drain(name);
+              } else if (!terminal) {
+                w.cut(c.amount % 8);
+                const result = yield* Effect.result(w.msg(name, "poison", { type: "throw" }));
+                w.cut(null);
+                terminal =
+                  result._tag === "Success" &&
+                  Schema.is(Schema.TaggedStruct("refused", { reason: Schema.Literal("dead") }))(result.success);
+              }
+
+              if (c.reopen) {
+                yield* w.reopen;
+              }
+
               expect((yield* w.program("sample/alpha")).writes).toBe(full.writes);
               expect((yield* w.local(name)).fault).toBeNull();
-              expect((yield* w.local(name)).recovery.total.writes).toBeGreaterThan(0);
-              expect((yield* w.projectRecovery(name)).total.writes).toBeGreaterThan(0);
-              const entries = yield* w.entries;
-              expect(entries.some((e) => e._tag === "exited")).toBe(true);
-              expect(entries.some((e) => e._tag === "restarted")).toBe(true);
-              expect(yield* w.checkpoint(name)).not.toBeNull();
-              expect(yield* w.input("beta:1", `other:${n}`, { type: "inc" })).toHaveProperty("_tag", "placed");
-              yield* w.drain("beta:1");
             }
+
+            // Finish the saved delivery limit after the generated cuts, then replay the accepted history.
+            for (let retry = 0; retry < 3 && !terminal; retry++) {
+              yield* w.drain(name);
+              const result = yield* Effect.result(w.msg(name, "poison", { type: "throw" }));
+              terminal =
+                result._tag === "Success" &&
+                Schema.is(Schema.TaggedStruct("refused", { reason: Schema.Literal("dead") }))(result.success);
+            }
+
+            yield* w.drain(name);
+            expect(terminal).toBe(true);
+            yield* w.restart(name, "person", true);
+            yield* w.drain(name);
+            expect((yield* w.program("sample/alpha")).writes).toBe(full.writes);
+            expect((yield* w.local(name)).fault).toBeNull();
+            expect((yield* w.local(name)).recovery.total.writes).toBeGreaterThan(0);
+            expect((yield* w.projectRecovery(name)).total.writes).toBeGreaterThan(0);
+            const entries = yield* w.entries;
+            expect(entries.some((e) => e._tag === "exited")).toBe(true);
+            expect(entries.some((e) => e._tag === "restarted")).toBe(true);
+            expect(
+              entries.some(
+                (e) =>
+                  e._tag === "send" &&
+                  e.stream === "beta:1/inbox" &&
+                  Schema.is(Schema.Struct({ m: Schema.Struct({ ref: Schema.Literal("inbound") }) }))(e.body),
+              ),
+            ).toBe(true);
+            expect(
+              entries.some(
+                (e) =>
+                  e._tag === "demonitored" && Schema.is(Schema.Struct({ ref: Schema.Literal("outbound") }))(e.body),
+              ),
+            ).toBe(true);
+            expect(entries.some((e) => typeof e.stream === "string" && e.stream.endsWith("/dead"))).toBe(true);
+            expect(yield* w.checkpoint(name)).not.toBeNull();
+            expect(yield* w.input("beta:1", "other", { type: "inc" })).toHaveProperty("_tag", "placed");
+            yield* w.drain("beta:1");
           }),
         ),
       options,
@@ -249,11 +315,31 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
         Effect.scoped(
           Effect.gen(function* () {
             const w = yield* open(defaults);
-            expect(yield* w.input("alpha:1", "pending", { type: "throw" })).toHaveProperty("_tag", "placed");
+            yield* TestClock.setTime(1_000);
+            expect(yield* w.msg("alpha:1", "healthy", { type: "inc" })).toHaveProperty("_tag", "accepted");
             const old = yield* w.program("sample/alpha");
-            const tight = { writes: 1, bytes: 1, letter: { writes: 50, bytes: 18_790 } };
-            w.limits({ ...defaults, recovery: { project: tight, process: tight } });
-            yield* Effect.result(w.drain("alpha:1"));
+            const location = required(tape[0]).pick % 3;
+            const resource = required(tape[0]).amount % 2 === 0 ? "writes" : "storage";
+            const tighten = (allowance: Limits["recovery"]["process"]) => ({
+              ...allowance,
+              ...(resource === "writes" ? { writes: 1 } : { bytes: 1 }),
+            });
+            w.limits({
+              ...defaults,
+              recovery: {
+                project: location === 0 ? defaults.recovery.project : tighten(defaults.recovery.project),
+                process: location === 1 ? defaults.recovery.process : tighten(defaults.recovery.process),
+              },
+            });
+            const failure = yield* Effect.result(w.msg("alpha:1", "pending", { type: "throw" }));
+            expect(failure).toHaveProperty("_tag", "Failure");
+            expect(failure).toHaveProperty("failure._tag", "QuotasError");
+            expect(failure).toHaveProperty("failure.reason._tag", "RecoveryReserveExhausted");
+            expect(failure).toHaveProperty("failure.reason.resource", resource);
+            expect(failure).toHaveProperty("failure.reason.location", location === 1 ? "project" : "process");
+            expect(failure).toHaveProperty("failure.reason.cause._tag", "ProgramDown");
+            expect(failure).toHaveProperty("failure.reason.cause.reason", "step");
+            expect(failure).toHaveProperty("failure.reason.cause.cause", expect.any(TypeError));
             const stopped = yield* w.local("alpha:1");
             expect(stopped.fault).toHaveProperty("_tag", "RecoveryReserveExhausted");
             const saved = yield* w.journal("alpha:1");
@@ -274,6 +360,10 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
               expect(yield* w.journal("alpha:1")).toEqual(saved);
               expect(yield* w.checkpoint("alpha:1")).toEqual(checkpoint);
               expect(yield* w.entries).toEqual(entries);
+              const repeated = yield* Effect.result(w.msg("alpha:1", "pending", { type: "throw" }));
+              expect(repeated).toHaveProperty("_tag", "Failure");
+              expect(repeated).toHaveProperty("failure._tag", "QuotasError");
+              expect(repeated).toHaveProperty("failure.reason._tag", "RecoveryReserveExhausted");
             }
 
             w.limits(defaults);
@@ -294,20 +384,22 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
 
     it.effect.prop(
       "Q18 accepted history brings replay room, independent of exhausted program and recovery windows",
-      { tape: Schema.Array(Cell).check(Schema.isMinLength(1), Schema.isMaxLength(3)) },
+      { tape: History },
       ({ tape }) =>
         Effect.scoped(
           Effect.gen(function* () {
+            yield* TestClock.setTime(1_000);
             const w = yield* open(defaults);
             const letters: string[] = [];
 
             for (const [n, c] of tape.entries()) {
               // Beyond the measured 350: generated histories include up to 1,001 accepted letters.
-              const length = 1 + (c.amount % 1001);
+              const length = c.length;
 
               for (let j = 0; j < length; j++) {
                 const id = `history:${n}:${j}`;
-                expect(yield* w.input("alpha:1", id, { type: "inc" })).toHaveProperty("_tag", "placed");
+                const m = j === length - 1 ? { type: "inc", text: "é😀".repeat(c.amount % 256) } : { type: "inc" };
+                expect(yield* w.input("alpha:1", id, m)).toHaveProperty("_tag", "placed");
                 letters.push(id);
               }
 
@@ -329,11 +421,13 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
               yield* w.restart("alpha:1", `restart:${n}`, true);
               yield* w.drain("alpha:1");
               expect((yield* w.local("alpha:1")).fault).toBeNull();
-              expect((yield* w.program("sample/alpha")).writes).toBe(full.writes);
+              expect(yield* w.program("sample/alpha")).toEqual(full);
+              expect(yield* w.checkpoint("alpha:1")).toHaveProperty("saved.model.count", letters.length);
               const before = yield* w.entries;
               yield* w.restart("alpha:1", `restart:${n}`, true);
               yield* w.drain("alpha:1");
               expect(yield* w.entries).toEqual(before);
+              expect(yield* w.program("sample/alpha")).toEqual(full);
               const after = yield* w.entries;
 
               for (const id of letters) {
@@ -343,7 +437,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
               }
 
               w.limits(defaults);
-              yield* TestClock.setTime((n + 1) * 60_001);
+              yield* TestClock.setTime((yield* Clock.currentTimeMillis) + 60_001);
             }
           }),
         ),
@@ -367,9 +461,11 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
               const saved = yield* w.checkpoint("alpha:1");
               const journal = yield* w.journal("alpha:1");
               const usage = yield* w.local("alpha:1");
+              yield* TestClock.setTime(at + 1);
 
               for (let attempt = 0; attempt < 2 + (c.amount % 5); attempt++) {
                 yield* call(w, "alpha:1", (r) => r.due(at + 1));
+                expect(yield* w.alarm("alpha:1")).toBeGreaterThan(at + 1);
 
                 if (c.reopen) {
                   yield* w.reopen;

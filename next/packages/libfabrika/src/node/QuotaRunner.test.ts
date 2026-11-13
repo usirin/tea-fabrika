@@ -1,15 +1,16 @@
 // P34c, next/. Only the Node runner imports the driver; all policy and recovery are real code.
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Effect, Layer, Schema } from "effect";
+import { Clock, Effect, Layer, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import { Writer } from "../access/SessionManager.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
-import { Row } from "../ledger/Log.ts";
+import { InputId, Row } from "../ledger/Log.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
-import { Owner, Recipient, Start } from "../processes/Process.ts";
+import { Down, Owner, Recipient, Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { Quotas } from "../processes/Quotas.ts";
 import * as QuotasSql from "../processes/QuotasSql.ts";
@@ -37,14 +38,21 @@ const from = () => ({
 });
 
 const person = Writer.cases.person.make({ key: "SHA256:input", for: "test-person" });
-const Model = Schema.Struct({ count: Schema.Int, replies: Schema.Int, wake: Schema.NullOr(Schema.Number) });
+
+const Model = Schema.Struct({
+  count: Schema.Int,
+  replies: Schema.Int,
+  wake: Schema.NullOr(Schema.Number),
+  text: Schema.String,
+});
 
 const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("inc") }),
+  Schema.Struct({ type: Schema.Literal("inc"), text: Schema.optionalKey(Schema.String) }),
   Schema.Struct({ type: Schema.Literal("throw") }),
   Schema.Struct({ type: Schema.Literal("work") }),
   Schema.Struct({ type: Schema.Literal("schedule"), at: Schema.Number }),
   Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number }),
+  Schema.Struct({ ...Down.fields, type: Schema.Literal("DOWN") }),
 ]);
 
 const work = Cmd.make("work", { input: Schema.Struct({}), ok: Schema.Null, err: ["failed"] });
@@ -53,15 +61,16 @@ const machine = Machine.make({
   model: Model,
   msg: Msg,
   cmds: [work],
-  init: (saved) => [saved ?? { count: 0, replies: 0, wake: null }, []],
+  init: (saved) => [saved ?? { count: 0, replies: 0, wake: null, text: "" }, []],
   update: {
-    inc: (s) => [{ ...s, count: s.count + 1 }, []],
+    inc: (s, m) => [{ ...s, count: s.count + 1, text: m.text ?? s.text }, []],
     throw: () => {
       throw new TypeError("quota recovery fixture");
     },
     work: (s) => [s, [work({})]],
     schedule: (s, m) => [{ ...s, wake: m.at }, []],
     timer: (s) => [{ ...s, count: s.count + 1, wake: null }, []],
+    DOWN: (s) => [s, []],
     work_ok: (s) => [{ ...s, replies: s.replies + 1 }, []],
     work_err: (s) => [{ ...s, replies: s.replies + 1 }, []],
   },
@@ -105,6 +114,7 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
   let limits = initial;
   let cut: number | null = null;
   let sequence = 0;
+  const deliveries = new Map<string, string>();
   const sqls = new Map<string, Sql>();
   const sql = (part: string): Sql => {
     const known = sqls.get(part);
@@ -116,14 +126,20 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
     const raw = store.sql(part);
     const wrapped: Sql = {
       exec: (query, ...params) => {
-        if (cut !== null && /^\s*(INSERT|UPDATE|DELETE|REPLACE)\b/i.test(query)) {
+        const result = raw.exec(query, ...params);
+
+        if (
+          cut !== null &&
+          /^\s*(INSERT|UPDATE|DELETE|REPLACE)\b/i.test(query) &&
+          Number(raw.exec("SELECT changes() AS count")[0]?.count) > 0
+        ) {
           if (cut-- === 0) {
             cut = null;
             throw new Error("SQLITE_FULL at a real write boundary");
           }
         }
 
-        return raw.exec(query, ...params);
+        return result;
       },
       transaction: (f) => raw.transaction(f),
       size: () => raw.size(),
@@ -195,6 +211,7 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
           Layer.succeed(Alarm, { set: (at) => store.alarms.set(name, at) }),
         ).pipe(Layer.provideMerge(base())),
       ),
+      Layer.provide(Digest.layerWebCrypto),
     );
     return QuotaRunner.guard(yield* ProgramRunner.pipe(Effect.provide(layer)), local);
   });
@@ -212,6 +229,42 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
   });
   return {
     runner,
+    watch: Effect.fnUntraced(function* (source: string, target: string, ref: string) {
+      const sender = yield* ProcessManager.use((m) => m.status(source)).pipe(Effect.provide(manager()));
+      const receiver = yield* ProcessManager.use((m) => m.status(target)).pipe(Effect.provide(manager()));
+      yield* ProcessManager.use((m) => m.monitor(ref, receiver.state.process, from())).pipe(
+        Effect.provide(
+          ProcessManager.layer(
+            { ...caller, recipient: Recipient.cases.process.make({ process: sender.state.process }) },
+            pid,
+          ).pipe(Layer.provideMerge(data())),
+        ),
+      );
+    }),
+    msg: Effect.fnUntraced(function* (name: string, id: string, m: unknown) {
+      const key = `${name}/${id}`;
+      let envelope = deliveries.get(key);
+
+      if (envelope === undefined) {
+        envelope = `input_0000000000e008${(++sequence).toString(16).padStart(12, "0")}`;
+        deliveries.set(key, envelope);
+      }
+
+      return yield* (yield* runner(name)).msg({
+        id,
+        envelope: {
+          id: Schema.decodeUnknownSync(InputId)(envelope),
+          by: person,
+          arrivedAt: yield* Clock.currentTimeMillis,
+          input: m,
+        },
+        sentAt: from().sentAt,
+        seen: 0,
+        span: { traceId: from().traceId, spanId: "00f067aa0ba902b7" },
+      });
+    }),
+    alarm: (name) =>
+      Effect.map(store.alarms.saved, (alarms) => alarms.find((alarm) => alarm.name === name)?.at ?? null),
     input: Effect.fnUntraced(function* (name, id, m) {
       // Admission only, so laws can inspect charges before the real step starts.
       return yield* Mailbox.use((mailbox) => mailbox.send(name, id, m, { ...from(), parent: null })).pipe(
@@ -241,7 +294,9 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
         schema: QuotaRunnerTest.supervision,
         accounting: accounting(name),
       }).load,
-    entries: Effect.sync(() => project.exec("SELECT * FROM entries ORDER BY rev").map(Schema.decodeUnknownSync(Row))),
+    entries: Effect.sync(() =>
+      project.exec("SELECT * FROM entries ORDER BY rev").map((row) => Schema.decodeUnknownSync(Row)(row)),
+    ),
     snapshot: Effect.sync(() => Object.fromEntries([...sqls].map(([name, db]) => [name, snapshot(db)]))),
     reopen: store.reopen,
     cut: (at) => {
@@ -259,16 +314,11 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
       });
     }),
     drain: Effect.fnUntraced(function* (name) {
-      yield* (yield* runner(name)).open("test");
+      // A cut can precede the alarm save. Re-enter through due to finish the saved journal first.
+      yield* (yield* runner(name)).due(yield* Clock.currentTimeMillis);
 
       // Move only to alarms the product saved. No sleep and no independent quota timer.
       for (let n = 0; n < 16; n++) {
-        const alarm = (yield* store.alarms.saved).find((a) => a.name === name);
-
-        if (alarm === undefined) {
-          break;
-        }
-
         const saved = yield* recoveryStore(sql(name), {
           name,
           capacity: 1_000_000_000,
@@ -276,14 +326,23 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
           accounting: accounting(name),
         }).load;
 
-        if (saved?.journal._tag === "idle") {
-          break;
+        if (saved === null || saved.journal._tag === "idle") {
+          yield* (yield* runner(name)).open("test");
+          return;
+        }
+
+        const alarm = (yield* store.alarms.saved).find((a) => a.name === name);
+
+        if (alarm === undefined) {
+          return yield* Effect.die("unfinished recovery has no saved alarm");
         }
 
         yield* store.alarms.take(alarm);
         yield* TestClock.setTime(alarm.at);
         yield* (yield* runner(name)).due(alarm.at);
       }
+
+      return yield* Effect.die("recovery did not finish within its saved alarms");
     }),
   } satisfies QuotaRunnerTest.World;
 });

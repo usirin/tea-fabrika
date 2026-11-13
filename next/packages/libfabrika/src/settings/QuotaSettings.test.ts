@@ -198,10 +198,10 @@ describe("P34c Q11 settings", () => {
           for (const location of ["project", "process"]) {
             for (const field of ["writes", "bytes"]) {
               const bad = structuredClone(encoded) as Record<string, Record<string, any>>;
-              bad[location][field] = field === "bytes" ? "0 B" : 0;
+              bad[location]![field] = field === "bytes" ? "0 B" : 0;
               expect(Schema.decodeUnknownResult(recovery.schema)(bad)._tag).toBe("Failure");
               const letter = structuredClone(encoded) as Record<string, Record<string, any>>;
-              letter[location].letter[field] = field === "bytes" ? "0 B" : 0;
+              letter[location]!.letter[field] = field === "bytes" ? "0 B" : 0;
               expect(Schema.decodeUnknownResult(recovery.schema)(letter)._tag).toBe("Failure");
             }
           }

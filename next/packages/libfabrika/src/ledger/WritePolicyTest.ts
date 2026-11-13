@@ -61,8 +61,10 @@ const size = (entry: Entry) =>
     ),
   ).length;
 
-// oxlint-disable-next-line fabrika/no-ledger-sql -- Independent SQL oracle checks committed rows and transaction rollback (Q3/Q4).
-const rows = (sql: Sql) => sql.exec("SELECT * FROM entries ORDER BY rev").map(Schema.decodeUnknownSync(Row));
+const rows = (sql: Sql) => {
+  // oxlint-disable-next-line fabrika/no-ledger-sql -- Independent SQL oracle checks committed rows and transaction rollback (Q3/Q4).
+  return sql.exec("SELECT * FROM entries ORDER BY rev").map((row) => Schema.decodeUnknownSync(Row)(row));
+};
 
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   describe("P34c ledger admission", () => {
