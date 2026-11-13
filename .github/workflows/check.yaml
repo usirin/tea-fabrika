@@ -295,6 +295,38 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
       - run: pnpm install --frozen-lockfile
+      # diag: do not merge. What the box meets on this image, before and after the bwrap profile is unloaded.
+      - name: diag
+        run: |
+          set +e
+          id
+          head -4 /etc/os-release
+          uname -r
+          sysctl kernel.apparmor_restrict_unprivileged_userns kernel.unprivileged_userns_clone user.max_user_namespaces
+          command -v bwrap; bwrap --version
+          echo "== apparmor files naming bwrap"
+          grep -l -r bwrap /etc/apparmor.d 2>/dev/null
+          echo "== loaded profiles naming bwrap"
+          sudo cat /sys/kernel/security/apparmor/profiles | grep -i -E "bwrap|unpriv"
+          for f in /etc/apparmor.d/*bwrap*; do echo "== $f"; grep -v -E '^\s*(#|$)' "$f"; done
+          SRT=$(ls -d node_modules/.pnpm/@anthropic-ai+sandbox-runtime@*/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js)
+          echo '{"network":{"allowedDomains":[],"deniedDomains":[]},"filesystem":{"denyRead":[],"allowRead":[],"allowWrite":[],"denyWrite":[]}}' > "$RUNNER_TEMP/srt.json"
+          probe() {
+            echo "== $1: label inside bwrap"
+            bwrap --ro-bind / / --dev /dev --proc /proc cat /proc/self/attr/current; echo "exit $?"
+            echo "== $1: srt"
+            node "$SRT" --settings "$RUNNER_TEMP/srt.json" -- sh -c 'echo inside the box; cat /proc/self/attr/current'; echo "exit $?"
+            sudo dmesg | grep -i -E 'apparmor="DENIED"' | tail -6
+          }
+          probe before
+          echo "== unload"
+          for f in /etc/apparmor.d/*bwrap*; do
+            [ -e "$f" ] || continue
+            sudo ln -s "$f" /etc/apparmor.d/disable/
+            sudo apparmor_parser -R "$f"; echo "unload $f exit $?"
+          done
+          sudo cat /sys/kernel/security/apparmor/profiles | grep -i -E "bwrap|unpriv"
+          probe after
       # Main runs every test. A pull request runs the tests that import what it
       # changed (vitest's `--changed`, its config's `forceRerunTriggers` for files
       # tests read without importing), then, on the first machine, the tests that
