@@ -4,6 +4,7 @@ import type { Plugin } from "@oxlint/plugins";
 import { doorIsLibrary } from "./door-is-library.ts";
 import { edgeComment } from "./edge-comment.ts";
 import { effectFunctions } from "./effect-functions.ts";
+import { isolateBoundary } from "./isolate-boundary.ts";
 import { lawShape } from "./law-shape.ts";
 import { modules } from "./modules.ts";
 import { noBareDisable } from "./no-bare-disable.ts";
@@ -32,6 +33,7 @@ import { noThrowInEffectGen } from "./no-throw-in-effect-gen.ts";
 import { noTypeAssertions } from "./no-type-assertions.ts";
 import { noWallClock } from "./no-wall-clock.ts";
 import { oneIdModule } from "./one-id-module.ts";
+import { oneMachinePerFile } from "./one-machine-per-file.ts";
 import { oneStoreHook } from "./one-store-hook.ts";
 import { outsideInputConstructor } from "./outside-input-constructor.ts";
 import { paddingLineBetweenStatements } from "./padding-line-between-statements.ts";
@@ -47,6 +49,7 @@ const plugin: Plugin = {
     "edge-comment": edgeComment,
     "effect-functions": effectFunctions,
     "law-shape": lawShape,
+    "isolate-boundary": isolateBoundary,
     modules,
     "no-bare-disable": noBareDisable,
     "no-bare-tell": noBareTell,
@@ -74,6 +77,7 @@ const plugin: Plugin = {
     "no-type-assertions": noTypeAssertions,
     "no-wall-clock": noWallClock,
     "one-store-hook": oneStoreHook,
+    "one-machine-per-file": oneMachinePerFile,
     "program-package-layout": programPackageLayout,
     "one-id-module": oneIdModule,
     "outside-input-constructor": outsideInputConstructor,

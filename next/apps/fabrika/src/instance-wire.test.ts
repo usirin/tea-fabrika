@@ -4,7 +4,7 @@
 // and the plan's --port. These are bootstrap settings, never a public signing capability.
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -12,7 +12,7 @@ import { DatabaseSync } from "node:sqlite";
 import { it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import { Entry, PAGE } from "@kampus/libfabrika/ledger/Log";
-import { Deferred, Effect, Fiber, Schema } from "effect";
+import { Clock, Deferred, Effect, Fiber, Schema } from "effect";
 import { afterEach, describe, expect } from "vitest";
 import { heldPort } from "./port.test-support.ts";
 import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
@@ -131,7 +131,12 @@ const unusedPort = async (held: Held) => {
 
 type Saved = { key: ReturnType<typeof identity>; home: string; port: number };
 
-const launch = async (held: Held, saved?: Saved) => {
+const launch = async (
+  held: Held,
+  saved?: Saved,
+  rateLimit = { limit: 100_000, window: 60_000 },
+  source: "flags" | "env" | "file" = "flags",
+) => {
   readFileSync(join(APP, "dev.ts"), "utf8");
   const key = saved?.key ?? identity();
   const home = saved?.home ?? mkdtempSync(join(tmpdir(), "p12-w-"));
@@ -142,6 +147,18 @@ const launch = async (held: Held, saved?: Saved) => {
   delete env.TYPESAFE_API_KEY;
   delete env.FABRIKA_FOREGROUND;
   delete env.CLOUDFLARE_API_TOKEN;
+  delete env.FABRIKA_GATEWAY_LIMIT;
+  delete env.FABRIKA_GATEWAY_WINDOW;
+
+  if (source === "env") {
+    env.FABRIKA_GATEWAY_LIMIT = String(rateLimit.limit);
+    env.FABRIKA_GATEWAY_WINDOW = String(rateLimit.window);
+  }
+
+  if (source === "file") {
+    writeFileSync(join(home, "fabrika.toml"), `[gateway]\nlimit = ${rateLimit.limit}\nwindow = ${rateLimit.window}\n`);
+  }
+
   const child = spawn(
     process.execPath,
     [
@@ -156,6 +173,9 @@ const launch = async (held: Held, saved?: Saved) => {
       key.line,
       "--window",
       key.raw,
+      ...(source === "flags"
+        ? ["--gateway.limit", String(rateLimit.limit), "--gateway.window", String(rateLimit.window)]
+        : []),
     ],
     { cwd: APP, env, stdio: ["ignore", "pipe", "pipe"] },
   );
@@ -230,7 +250,7 @@ type Frame = {
   method?: string;
   params?: any;
   result?: any;
-  error?: { data?: { reason: string }; message?: string };
+  error?: { data?: { reason: string; retryAfter?: number }; message?: string };
 };
 
 class Client {
@@ -354,6 +374,53 @@ const counter = async (c: Client) => {
 const send = (c: Client, pid: string, letter: string, m: unknown = { type: "inc" }, seen = 0) =>
   c.call("process.send", { pid, letter, m, sentAt: SENT, seen, traceId: TRACE });
 
+const ratePolicy = { limit: 4, window: 1000 };
+type Call = { sent: number; replied: number; reply: Frame };
+
+const timed = Effect.fnUntraced(function* (c: Client, pid: string, letter: string) {
+  const sent = yield* Clock.currentTimeMillis;
+  const reply = yield* Effect.promise(() => send(c, pid, letter));
+  return { sent, replied: yield* Clock.currentTimeMillis, reply };
+});
+
+const spent = Effect.fnUntraced(function* (c: Client, pid: string, letter: string) {
+  const allowed: Array<Call> = [];
+
+  for (let n = 0; n < 10 * ratePolicy.limit; n += ratePolicy.limit + 1) {
+    const sent = yield* Clock.currentTimeMillis;
+    // The socket is already open. Send the whole batch before waiting for any reply.
+    const pending = yield* Effect.sync(() =>
+      Array.from({ length: Math.min(ratePolicy.limit + 1, 10 * ratePolicy.limit - n) }, () => send(c, pid, letter)),
+    );
+    const calls = yield* Effect.forEach(
+      pending,
+      (reply) =>
+        Effect.gen(function* () {
+          const answer = yield* Effect.promise(() => reply);
+          return { sent, replied: yield* Clock.currentTimeMillis, reply: answer };
+        }),
+      { concurrency: "unbounded" },
+    );
+    // Drain every reply: calls after the first refusal can still spend a later window's budget.
+    allowed.push(...calls.filter((call) => !call.reply.error));
+    const refused = calls.find((call) => call.reply.error);
+
+    if (refused) {
+      const last = calls.reduce((last, call) => (call.replied > last.replied ? call : last), refused);
+      return { allowed, refused, last };
+    }
+  }
+
+  return yield* Effect.die(new Error(`no refusal in ${10 * ratePolicy.limit} sends`));
+});
+
+const retryAfter = (call: Call) => {
+  const delay = call.reply.error?.data?.retryAfter;
+  expect(delay).toBeGreaterThan(0);
+  expect(delay).toBeLessThanOrEqual(ratePolicy.window);
+  return delay!;
+};
+
 const placing = (r: Frame) => {
   expect(r.error).toBeUndefined();
   expect(r.result).toMatchObject({
@@ -393,6 +460,89 @@ const client = (s: Launched, tab: string) =>
     Effect.promise(() => connected(s, tab)),
     (c) => Effect.sync(() => c.close()),
   );
+
+// Only a real instance proves each settings source reaches the gateway across a reconnect.
+// The module properties carry the generated limit and window behavior with 50 runs each.
+it.live.each(["flags", "env", "file"] as const)(
+  "scenario: T843 instance settings from %s survive reconnect and recover the same letter after its delay",
+  (source) =>
+    Effect.gen(function* () {
+      const held: Held = { children: [], homes: [], ports: [] };
+      const s = yield* Effect.acquireRelease(
+        Effect.promise(() => launch(held, undefined, ratePolicy, source)),
+        () => Effect.promise(() => giveBack(held)),
+      );
+      const c = yield* client(s, "budget-one");
+      const pid = yield* Effect.promise(() => counter(c));
+      const letter = `t843-${source}`;
+      const settled = yield* spent(c, pid, letter);
+      expect(settled.allowed.length).toBeGreaterThan(0);
+      const accepted = settled.allowed[0]!.reply;
+      placing(accepted);
+      expect(settled.refused.reply.error?.data?.reason).toBe("rate_limited");
+      yield* Effect.sleep(retryAfter(settled.refused) + 5);
+      let previous = settled.last;
+      const rounds: Array<string> = [];
+      const times = ({ sent, replied, reply }: Call) => ({ sent, replied, retryAfter: reply.error?.data?.retryAfter });
+      const round = yield* Effect.gen(function* () {
+        for (;;) {
+          const { allowed, refused } = yield* spent(c, pid, letter);
+          const delay = retryAfter(refused);
+          const second = yield* client(s, "budget-two");
+          const again = yield* timed(second, pid, letter);
+          rounds.push(
+            JSON.stringify({
+              previous: times(previous),
+              allowed: allowed.map(times),
+              refused: times(refused),
+              again: times(again),
+            }),
+          );
+          expect(allowed.length).toBeGreaterThan(0);
+
+          // These bounds use the refusal's window, including the time spent waiting for each reply.
+          // The last earlier call must precede its start: a discarded round's second socket can spend the next budget.
+          if (
+            previous.replied < refused.sent + delay - ratePolicy.window &&
+            allowed[0]!.sent >= refused.replied + delay - ratePolicy.window &&
+            again.replied < refused.sent + delay
+          ) {
+            return { allowed, refused, second, again };
+          }
+
+          previous = again;
+          const last = again.reply.error?.data?.reason === "rate_limited" ? again : refused;
+          const until = last.replied + retryAfter(last);
+          yield* Effect.sleep(Math.max(0, until - (yield* Clock.currentTimeMillis)) + 5);
+          second.close();
+        }
+      }).pipe(
+        Effect.timeoutOrElse({
+          duration: WAIT,
+          orElse: () => Effect.die(new Error(`no single-window round in ${WAIT} ms; rounds: [${rounds.join(",")}]`)),
+        }),
+      );
+      expect(round.allowed).toHaveLength(ratePolicy.limit);
+
+      for (const call of round.allowed) {
+        expect(call.reply.error).toBeUndefined();
+        expect(call.reply.result).toEqual(accepted.result);
+      }
+
+      for (const refused of [round.refused, round.again]) {
+        expect(refused.reply.error?.data?.reason).toBe("rate_limited");
+        retryAfter(refused);
+      }
+
+      yield* Effect.logInfo(`T843 ${source}: ${rounds.length} rounds`, { rounds });
+      yield* Effect.sleep(retryAfter(round.again) + 5);
+      const recovered = yield* Effect.promise(() => send(round.second, pid, letter));
+      expect(recovered.error).toBeUndefined();
+      expect(recovered.result).toEqual(accepted.result);
+      const inbox = yield* Effect.promise(() => read(round.second, "counter:1/inbox"));
+      expect(inbox).toHaveLength(1);
+    }),
+);
 
 /** The same, once workerd is back: tries a new socket until the hello is answered. No hello in WAIT
  *  fails the test with the last error, so a workerd that never comes back is a failure, never a hang. */
@@ -713,7 +863,6 @@ describe("P12 real dev.ts wire", () => {
       const response = await c.call(method, {
         process: "counter:1",
         personOnly: false,
-        by: s.key.fingerprint,
       });
       expect(response.error?.data?.reason).toBe("unknown_method");
     }

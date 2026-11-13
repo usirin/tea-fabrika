@@ -20,7 +20,7 @@ interface Place {
 export const load = Effect.fnUntraced(function* (options: {
   readonly person: Place;
   /** A start that selects no repo reads none, and the repo's file counts as empty. */
-  readonly repo?: Place;
+  readonly repo?: { readonly name: string; readonly text: string | null };
   readonly flags: Readonly<Record<string, string>>;
   readonly env: Readonly<Record<string, string>>;
   /** The running fabrika's version, which the repo's `fabrika-version` is checked against. */
@@ -54,8 +54,22 @@ export const load = Effect.fnUntraced(function* (options: {
       ),
       Effect.map((document) => ({ file: place.name, document })),
     );
-  const repo =
-    options.repo === undefined ? { file: REPO, document: { value: {}, spans: [] } } : yield* read(options.repo);
+  const repo = {
+    file: options.repo?.name ?? REPO,
+    document:
+      options.repo?.text == null
+        ? { value: {}, spans: [] }
+        : yield* toml.parse(options.repo.text).pipe(
+            Effect.mapError(
+              (cause) =>
+                new Files.SettingsError({
+                  reason: "syntax",
+                  message: `${options.repo?.name ?? REPO}, line ${cause.line}: ${cause.message}\n  ${Files.STOP}`,
+                  cause,
+                }),
+            ),
+          ),
+  };
   // A repo that needs a newer fabrika is refused before the person's file is read.
   yield* Files.supported(repo, options.version);
   const person = yield* read(options.person);
@@ -72,5 +86,16 @@ export const load = Effect.fnUntraced(function* (options: {
     options.repo === undefined
       ? {}
       : { repo: { minimum: Predicate.isString(minimum) ? minimum : Declarations.version.default } };
-  return { values: resolved.values, snapshot: yield* Snapshot.make(Declarations.all, resolved), ...context };
+  const saved = yield* Snapshot.make(Declarations.all, resolved);
+  const checked = yield* Snapshot.read(Declarations.all, saved).pipe(
+    Effect.mapError(
+      (cause) =>
+        new Files.SettingsError({
+          reason: "invalid",
+          message: `The saved settings could not be checked.\n  ${Files.STOP}`,
+          cause,
+        }),
+    ),
+  );
+  return { ...checked, ...context };
 });

@@ -1,10 +1,6 @@
 // Today's lead tooling. The unlisted check's laws (0134): its edge cases on memory, each one a law
 // (pr/Unlisted.ts lists them), then the trial merge on real git in a temp folder. Nothing here asks
 // GitHub or touches the checkout.
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./PullRequests.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./command.ts?raw";
 import { spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";

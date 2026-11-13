@@ -1,0 +1,30 @@
+{
+  "name": "@kampus/chaos",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/program.ts",
+    "./RunnerTest": "./src/RunnerTest.ts",
+    "./TargetsTest": "./src/TargetsTest.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@demlik/tea": "catalog:",
+    "@kampus/libfabrika": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "fast-check": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "volta": {
+    "extends": "../../../package.json"
+  }
+}

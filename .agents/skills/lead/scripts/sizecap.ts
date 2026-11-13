@@ -1,29 +1,31 @@
-// sizecap.ts: decision 0087's cap on product lines, as advice. Today's lead tooling, run on our own
-// laptop; it is not product.
+// sizecap.ts: a pull request's size, recorded and printed. No number caps a pull request (0099,
+// which removed 0087's cap). Today's lead tooling, run on our own laptop; it is not product.
 //
-//   sizecap plan <plan.md>         at plan time: each slice's expected product lines against the cap
+//   sizecap plan <plan.md>         at plan time: the plan's expected product lines and its slices
 //   sizecap diff <base> <head>     at landing time: the changed product lines from the merge base of
-//                                  <base> and <head> to <head>, against the cap
+//                                  <base> and <head> to <head>, with one warning past ADVICE_LINES
 //
-// Both print and never refuse: 0087 says the cap advises until a replay on this repo's merged pull
-// requests measures its false alarms. Exit 0 when it ran, 2 when it could not.
+// Both print and never refuse: size picks who looks, never whether it lands (0099). Exit 0 when it
+// ran, 2 when it could not. `plan` checks no slice against a number; it only says when a slice
+// records no estimate, since 0099 keeps each slice's estimate on record.
 //
-// The cap is `[review] lines` in `.fabrika/fabrika.toml`, default 600 (0087). `diff` reads it at the
-// merge base and at the head and keeps the lower, so a change cannot raise its own cap, as 0079
-// reads `[review] governed` at both sides. `plan` reads the file in the folder it runs in.
+// 0099 says the warning's number comes from our own merged pull requests (the lean: larger than 95
+// of every 100 of them, without generated files and lockfiles). Nothing computes that yet, so
+// ADVICE_LINES is 0087's starting number, which no source favors; it is advice, never a limit.
 //
 // A product line is an added or deleted line, as `git diff --numstat` counts them with rename
 // detection, in a file under `next/`, `apps/`, `programs/` or `packages/` (AGENTS.md: product code
-// is `next/` and today's app) that is none of these, which are counted apart and not against the cap:
+// is `next/` and today's app) that is none of these, which are counted apart from product lines:
 //   test       a `.test.` or `.test-support.` file, anything under `fixtures/` or an `e2e/` folder,
-//              and an `e2e.ts` runner (0087 leans to tests not counting)
+//              an `e2e.ts` runner, and under `next/` a shared suite named `XTest.ts`, which a test
+//              file runs as `SinkTest.suite(nodeSql)` (0029, 0062) (0087 leans to tests not counting)
 //   docs       Markdown, and anything under `docs/`
 //   lock       `pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `*.lock`
 //   generated  a file `.gitattributes` marks `linguist-generated` at the head, as GitHub's diff
 //              hides it (0087 names it as the known way)
 //   binary     a file git cannot count lines in, such as a shot; counted in files
 // Every other changed line, lead tooling, CI and root settings included, is `other`. Whether those
-// pull requests are covered is open in 0087, so they are printed and not held to the cap.
+// pull requests are covered was open in 0087, so they are printed and not counted as product.
 //
 // A plan states its size in two places (the newest plan shape, the settings plan of ticket P38):
 //   - a files table with a "Product lines expected" column: each cell that starts with a whole
@@ -44,7 +46,22 @@
 //     dependency, three packages to add. The plan's tables are read as the plan skill's owner check reads them, so
 //     both checks see the same cells: fenced blocks skipped, rows split on unescaped pipes.
 //
+// A shared suite is told by its name, as `exam-paths.json`'s row `next/**/*Test.ts` tells it. That
+// file is not read here: it lists the exam, which also holds product and settings files (a compiler
+// check, `package.json`, the token files), so its rows cannot say what a test is.
+//
 // Edge cases, each with a law in sizecap.test.ts:
+//   - `CiTest.ts`, `fooTest.ts` and `XTest.tsx` under `next/` are suites: any character, then `Test`
+//     with a capital T, then `.ts` or `.tsx`. The exam row names `.ts` only; `.tsx` follows its
+//     `.test.tsx` row.
+//   - `Latest.ts` and `Contest.ts` are product: the t is lower-case.
+//   - `Test.ts` alone is product: a suite is read through its subject, as `SinkTest`, and this name
+//     has none. The exam row's glob does match it; no such file exists.
+//   - `src/Test/thing.ts` is product: only the file's own name is read, never a folder's.
+//   - `XTest.css` and `XTest.json` are product: a suite is TypeScript.
+//   - `packages/x/XTest.ts` is product, and `.agents/x/XTest.ts` stays other: the exam row and the
+//     two decisions cover `next/` only.
+//   - `x.test-support.ts` is a test wherever it stands, as before.
 //   - A renamed file counts only its changed lines, and is sorted by its new path.
 //   - A binary file has no lines; it is counted in files, never as zero lines of product.
 //   - A path with a space or a non-ASCII name is read whole (`-z`).
@@ -53,24 +70,32 @@
 //   - A cell like "**550**" or "1,200" is a number; "tests" or "generated" is none.
 //   - A numbered item outside `## Size` is no slice; a Size item with no "<n> lines" is a slice
 //     with no estimate, which is advice of its own.
-//   - A plan with no "Product lines expected" column and no slices says so: the cap cannot be read.
-//   - A cap that is not a whole number of at least 1 cannot be run: exit 2, with the reason.
+//   - A plan with no "Product lines expected" column and no slices says so: it records no size.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Exit, FileSystem, Option, Predicate, Result, Schema, Stream } from "effect";
+import { Console, Effect, Exit, FileSystem, Predicate, Schema, Stream } from "effect";
 import { Argument, Command } from "effect/cli";
 import { ChildProcess } from "effect/process";
-import { parse } from "smol-toml";
 
-/** 0087's starting number, used when the settings file leaves `[review] lines` out. */
-export const DEFAULT_CAP = 600;
+/**
+ * Past this many product lines, `diff` asks whether the pull request should have been sliced. Advice
+ * only (0099): 0087's starting number, kept until a count from our own merged pull requests replaces it.
+ */
+export const ADVICE_LINES = 600;
 
-/** Where a changed line belongs: only `product` counts toward the cap. */
+/** Where a changed line belongs: only `product` counts as product lines. */
 export const Kind = Schema.Literals(["product", "test", "docs", "lock", "generated", "other"]);
 export type Kind = typeof Kind.Type;
 
 const PRODUCT = ["next/", "apps/", "programs/", "packages/"];
 const LOCKS = new Set(["pnpm-lock.yaml", "package-lock.json", "yarn.lock"]);
+
+/** A file name that ends in `Test.ts` or `Test.tsx`, with a capital T and at least one character before it. */
+const SUITE = /.Test\.tsx?$/;
+
+/** Whether `path` is one of `next/`'s shared suites, read as `SinkTest.suite(nodeSql)` (0029, 0062). */
+export const isSharedSuite = (path: string): boolean =>
+  path.startsWith("next/") && SUITE.test(path.split("/").at(-1) ?? "");
 
 /** The kind of one changed file, from its path and whether the head marks it generated. */
 export const classify = (path: string, generated: boolean): Kind => {
@@ -88,6 +113,7 @@ export const classify = (path: string, generated: boolean): Kind => {
   if (
     /\.test(-support)?\./.test(name) ||
     name === "e2e.ts" ||
+    isSharedSuite(path) ||
     parts.slice(0, -1).includes("e2e") ||
     parts.slice(0, -1).includes("fixtures")
   ) {
@@ -145,15 +171,13 @@ export const countLines = (rows: ReadonlyArray<Row>, generated: ReadonlySet<stri
   return tally;
 };
 
-/** The one line `diff` prints. */
-export const diffLine = (tally: Tally, cap: number): string => {
-  const against =
-    tally.product > cap
-      ? `over the cap of ${cap} by ${tally.product - cap}`
-      : `within the cap of ${cap}, ${cap - tally.product} to spare`;
+/** The one line `diff` prints; past `advice` product lines it asks about slicing, and nothing more. */
+export const diffLine = (tally: Tally, advice: number): string => {
+  const warning =
+    tally.product > advice ? `, more than ${advice}: should it have been sliced? (advice only, 0099)` : "";
   const apart = `${tally.test} test, ${tally.docs} docs, ${tally.lock} lock, ${tally.generated} generated, ${tally.other} other lines, ${tally.binary} binary files`;
 
-  return `size: ${tally.product} product lines, ${against} (advice until the replay, 0087); not counted: ${apart}`;
+  return `size: ${tally.product} product lines${warning}; not counted: ${apart}`;
 };
 
 // The plan side.
@@ -281,114 +305,45 @@ export const readPlan = (text: string): PlanSize => {
   };
 };
 
-/** What the plan check advises, each a line the lead reads. */
+/** What the plan check advises, each a line the lead reads. None compares a size with a number (0099). */
 export const Advice = Schema.TaggedUnion({
-  over: { order: Schema.Int, name: Schema.String, lines: Schema.Int, cap: Schema.Int },
   unsized: { order: Schema.Int, name: Schema.String },
-  table_over: { lines: Schema.Int, cap: Schema.Int },
-  unsliced: { lines: Schema.Int, cap: Schema.Int },
   unknown: {},
 });
 export type Advice = typeof Advice.Type;
 
-export const advise = (size: PlanSize, cap: number): ReadonlyArray<Advice> => {
-  if (size.table === null && size.slices.length === 0) {
-    return [Advice.cases.unknown.make({})];
-  }
+export const advise = (size: PlanSize): ReadonlyArray<Advice> =>
+  size.table === null && size.slices.length === 0
+    ? [Advice.cases.unknown.make({})]
+    : size.slices.flatMap((slice): ReadonlyArray<Advice> =>
+        slice.lines === null ? [Advice.cases.unsized.make({ order: slice.order, name: slice.name })] : [],
+      );
 
-  const table: ReadonlyArray<Advice> =
-    size.table !== null && size.table > cap
-      ? [
-          size.slices.length === 0
-            ? Advice.cases.unsliced.make({ lines: size.table, cap })
-            : Advice.cases.table_over.make({ lines: size.table, cap }),
-        ]
-      : [];
-
-  return [
-    ...table,
-    ...size.slices.flatMap((slice): ReadonlyArray<Advice> =>
-      slice.lines === null
-        ? [Advice.cases.unsized.make({ order: slice.order, name: slice.name })]
-        : slice.lines > cap
-          ? [Advice.cases.over.make({ order: slice.order, name: slice.name, lines: slice.lines, cap })]
-          : [],
-    ),
-  ];
-};
-
-const ADVICE = "(advice until the replay, 0087)";
+const ADVICE = "(advice only, 0099)";
 
 export const adviceLine = (advice: Advice): string => {
   switch (advice._tag) {
-    case "over":
-      return `size: slice ${advice.order} (${advice.name}) expects ${advice.lines} product lines, over the cap of ${advice.cap}; cut it ${ADVICE}`;
     case "unsized":
       return `size: slice ${advice.order} (${advice.name}) gives no "<n> lines" estimate ${ADVICE}`;
-    case "table_over":
-      return `size: the files table expects ${advice.lines} product lines, over the cap of ${advice.cap} ${ADVICE}`;
-    case "unsliced":
-      return `size: the plan expects ${advice.lines} product lines and lists no slices; cut it into slices of at most ${advice.cap} under ## Size ${ADVICE}`;
     case "unknown":
-      return `size: no files table has a "Product lines expected" column and ## Size lists no slices, so the cap cannot be checked ${ADVICE}`;
+      return `size: no files table has a "Product lines expected" column and ## Size lists no slices, so the plan records no size ${ADVICE}`;
   }
 };
 
 /** The line `plan` prints first, before any advice. */
-export const planLine = (size: PlanSize, cap: number): string => {
+export const planLine = (size: PlanSize): string => {
   const largest = Math.max(0, ...size.slices.map((slice) => slice.lines ?? 0));
   const table = size.table === null ? "no product lines column" : `${size.table} product lines in the files table`;
   const slices = size.slices.length === 0 ? "no slices" : `${size.slices.length} slices, the largest ${largest}`;
 
-  return `size: ${table}, ${slices}, cap ${cap}`;
+  return `size: ${table}, ${slices}`;
 };
 
-// The cap, from the settings file.
-
-const SETTINGS = ".fabrika/fabrika.toml";
-
-/** The run could not finish: git, the plan file or the settings file failed it. */
+/** The run could not finish: git or the plan file failed it. */
 export class Failed extends Schema.TaggedError<Failed>()("Failed", {
-  reason: Schema.Literals(["git", "file", "cap"]),
+  reason: Schema.Literals(["git", "file"]),
   message: Schema.String,
 }) {}
-
-const Cap = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
-
-const SettingsFile = Schema.Struct({
-  review: Schema.optionalKey(Schema.Struct({ lines: Schema.optionalKey(Cap) })),
-});
-
-const parseToml = Option.liftThrowable((toml: string): unknown => parse(toml));
-const decodeSettings = Schema.decodeUnknownOption(SettingsFile);
-
-/** The cap one settings file sets: its `[review] lines`, the default when it leaves it out, or the problem. */
-export const readCap = (toml: string | null): Result.Result<number, string> => {
-  if (toml === null) {
-    return Result.succeed(DEFAULT_CAP);
-  }
-
-  const parsed = parseToml(toml);
-
-  if (Option.isNone(parsed)) {
-    return Result.fail("it is not TOML");
-  }
-
-  const file = decodeSettings(parsed.value);
-  return Option.isSome(file)
-    ? Result.succeed(file.value.review?.lines ?? DEFAULT_CAP)
-    : Result.fail("[review] lines is not a whole number of at least 1");
-};
-
-const capFrom = Effect.fnUntraced(function* (toml: string | null, place: string) {
-  const cap = readCap(toml);
-
-  if (Result.isFailure(cap)) {
-    return yield* new Failed({ reason: "cap", message: `${SETTINGS} at ${place}: ${cap.failure}` });
-  }
-
-  return cap.success;
-});
 
 // The edge: git through effect/process, the plan through FileSystem, the arguments through effect/cli.
 
@@ -416,12 +371,6 @@ const gitOk = Effect.fn("sizecap.gitOk")(function* (args: ReadonlyArray<string>)
   }
 
   return ran.out;
-});
-
-/** The cap at one commit: its settings file, or the default when it holds none. */
-const capAt = Effect.fn("sizecap.capAt")(function* (rev: string) {
-  const listed = yield* gitOk(["ls-tree", "--name-only", rev, "--", SETTINGS]);
-  return yield* capFrom(listed.trim() === "" ? null : yield* gitOk(["show", `${rev}:${SETTINGS}`]), rev);
 });
 
 /** The paths `.gitattributes` marks `linguist-generated` at `rev`. */
@@ -455,9 +404,8 @@ const diff = Command.make(
       head,
       rows.map((row) => row.path),
     );
-    const cap = Math.min(yield* capAt(from), yield* capAt(head));
 
-    yield* Console.log(diffLine(countLines(rows, generated), cap));
+    yield* Console.log(diffLine(countLines(rows, generated), ADVICE_LINES));
   }),
 );
 
@@ -466,16 +414,13 @@ const plan = Command.make(
   { file: Argument.String("plan") },
   Effect.fn("sizecap.plan")(function* ({ file }) {
     const fs = yield* FileSystem.FileSystem;
-    const read = (path: string) =>
-      fs
-        .readFileString(path)
-        .pipe(Effect.mapError(() => new Failed({ reason: "file", message: `cannot read ${path}` })));
-    const toml = (yield* fs.exists(SETTINGS).pipe(Effect.orElseSucceed(() => false))) ? yield* read(SETTINGS) : null;
-    const cap = yield* capFrom(toml, "the working tree");
-    const size = readPlan(yield* read(file));
+    const text = yield* fs
+      .readFileString(file)
+      .pipe(Effect.mapError(() => new Failed({ reason: "file", message: `cannot read ${file}` })));
+    const size = readPlan(text);
 
-    yield* Console.log(planLine(size, cap));
-    yield* Effect.forEach(advise(size, cap), (advice) => Console.log(adviceLine(advice)), {
+    yield* Console.log(planLine(size));
+    yield* Effect.forEach(advise(size), (advice) => Console.log(adviceLine(advice)), {
       concurrency: 1,
       discard: true,
     });

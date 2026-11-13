@@ -35,6 +35,7 @@ const valid = {
   founder: "ssh-ed25519 AAAA",
   window: null,
   port: 8787,
+  rateLimit: { limit: 100_000, window: 60_000 },
   build: "b-1",
 };
 

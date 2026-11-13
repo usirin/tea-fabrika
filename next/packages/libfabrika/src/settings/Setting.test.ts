@@ -21,6 +21,45 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const RUNS = 100;
 const check = { seed: SEED, numRuns: RUNS };
 
+it.effect.prop(
+  "T843 declarations: provider values reach the group and missing values use the declaration (50 runs)",
+  {
+    limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1000 })),
+    window: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100_000 })),
+  },
+  ({ limit, window }) =>
+    Effect.gen(function* () {
+      const values = yield* Declarations.all.parse(ConfigProvider.fromUnknown({ gateway: { limit, window } }));
+      expect(values).toMatchObject({ gatewayLimit: limit, gatewayWindow: window });
+      const defaults = yield* Declarations.all.parse(ConfigProvider.fromUnknown({}));
+      expect(defaults.gatewayLimit).toBe(Declarations.gatewayLimit.default);
+      expect(defaults.gatewayWindow).toBe(Declarations.gatewayWindow.default);
+
+      for (const setting of [Declarations.gatewayLimit, Declarations.gatewayWindow]) {
+        expect(setting.scope).toEqual(["person"]);
+        expect(setting.reload).toBe("restart");
+      }
+    }),
+  { arbitrary: { seed: SEED, runs: 50 } },
+);
+
+it("T843 declaration schemas reject disabled, fractional, nonfinite and unsafe budgets (50 runs)", () => {
+  fc.assert(
+    fc.property(
+      fc.oneof(
+        fc.integer({ max: 0 }),
+        fc.double({ min: 0.01, max: 1e6, noNaN: true }).filter((n) => !Number.isInteger(n)),
+        fc.constantFrom(Number.NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1),
+      ),
+      (bad) => {
+        expect(Schema.is(Declarations.gatewayLimit.schema)(bad)).toBe(false);
+        expect(Schema.is(Declarations.gatewayWindow.schema)(bad)).toBe(false);
+      },
+    ),
+    { seed: SEED, numRuns: 50 },
+  );
+});
+
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
 const DEFAULT = 18787;
 
@@ -226,4 +265,23 @@ describe("L4, a dotted declaration path reaches the nested value exactly once", 
       check,
     );
   });
+});
+
+it("scenario: T753 L1 a group's named declarations keep their decoded types", () => {
+  // scenario: the lead's compiler checks these assertions; no runtime shape check replaces them.
+  const group = Setting.group({
+    count: declare("a.count"),
+    label: Setting.make("a.label", {
+      schema: Schema.String,
+      default: "x",
+      doc: "A label.",
+      scope: ["repo"],
+      reload: "restart",
+      since: "1.2.3",
+    }),
+  });
+  expectTypeOf(group.settings.count.default).toEqualTypeOf<number>();
+  expectTypeOf(group.settings.label.default).toEqualTypeOf<string>();
+  expectTypeOf(group.settings.count.schema.Type).toEqualTypeOf<number>();
+  expectTypeOf(group.settings.label.schema.Type).toEqualTypeOf<string>();
 });

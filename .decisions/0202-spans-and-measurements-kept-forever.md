@@ -1,7 +1,7 @@
 ---
 id: 0202
 title: In next/, every span and every raw measurement is kept forever, spans outside a process go to record objects of their own, and old measurements move to R2 files each object uploads itself
-status: accepted
+status: amended-in-part by [0143](0143-a-refused-write-is-counted-never-a-row.md)
 date: 2026-11-07
 tags: [spans, measurement, r2, archive, retention, record-wide, next]
 ---

@@ -11,6 +11,12 @@ export const LATE = 86_400_000;
 
 const Name = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(80));
 
+/** The longest note an agent may leave on `check`: 256 characters, as a client's text in a brain
+ *  line (libfabrika's processes/internal/processTable.ts). A schema wall, as `Name`'s 80 is. */
+export const NOTE_MOST = 256;
+
+const Note = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(NOTE_MOST));
+
 /** An item's control state (0037). `since` is ms since 1970, from a timer's `at`. */
 const ItemState = Schema.TaggedUnion({
   new: {},
@@ -30,7 +36,7 @@ const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("add"), name: Name }),
   Schema.Struct({ type: Schema.Literal("rename"), name: Name, to: Name }),
   Schema.Struct({ type: Schema.Literal("remove"), name: Name }),
-  Schema.Struct({ type: Schema.Literal("check"), name: Name }),
+  Schema.Struct({ type: Schema.Literal("check"), name: Name, note: Schema.optionalKey(Note) }),
   Schema.Struct({ type: Schema.Literal("uncheck"), name: Name }),
   // Only the runner sends it, when the alarm `wake` asked for fires.
   Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int }),
@@ -65,7 +71,7 @@ export const checklistMachine = Machine.make({
     rename: (m, msg) => [{ items: m.items.map((i) => (i.name === msg.name ? { ...i, name: msg.to } : i)) }, []],
     remove: (m, msg) => [{ items: m.items.filter((i) => i.name !== msg.name) }, []],
     check: (m, msg) => [
-      each(m, msg.name, (s) => (s._tag === "checked" ? s : ItemState.cases.checked.make({ note: null }))),
+      each(m, msg.name, (s) => (s._tag === "checked" ? s : ItemState.cases.checked.make({ note: msg.note ?? null }))),
       [],
     ],
     uncheck: (m, msg) => [each(m, msg.name, (s) => (s._tag === "checked" ? fresh : s)), []],
@@ -117,22 +123,29 @@ const shown = (i: Item) => ({
   note: i.state._tag === "checked" ? i.state.note : null,
 });
 
+type View = { readonly items: ReadonlyArray<ReturnType<typeof shown>>; readonly left: number };
+
 export const checklist = Program.make({
   name: "fabrika/checklist",
   machine: checklistMachine,
   state: { v: 1, upgrades: [] },
-  view: (m) => ({ items: m.items.map(shown), left: m.items.filter(open).length }),
+  view: (m): View => ({ items: m.items.map(shown), left: m.items.filter(open).length }),
   refuse,
   inputs: {
     add: { description: "Add an item", personOnly: true },
     rename: { description: "Rename an item", personOnly: true },
     remove: { description: "Remove an item", personOnly: true },
-    check: "Check the item called `name`",
+    check: "Check the item called `name`, with an optional short `note`; a checked item keeps its first note",
     uncheck: "Uncheck the item called `name`",
     left: Input.cases.read.make({
       schema: Schema.Null,
       description: "How many items are left",
-      answer: (view: { readonly left: number }) => view.left,
+      answer: (view: View) => view.left,
+    }),
+    items: Input.cases.read.make({
+      schema: Schema.Null,
+      description: "Every item: its name, its state and its note",
+      answer: (view: View) => view.items,
     }),
   },
   outputs: { done: Done },

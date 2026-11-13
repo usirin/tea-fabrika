@@ -11,7 +11,7 @@
 # Version 3, the one a draft must carry, also needs one `Estimate: <n> steps, $<d>` line ending the
 # Size section in draft and approved modes; plans approved at version 2 keep passing. Legacy plans keep their owner checks. Fixed inputs need one of the four labels in
 # five-steps-for-every-check.md. Paths are read as the repo reads them: `./package.json` is
-# `package.json`. Draft mode also prints sizecap.ts's size advice (0087), which never changes the exit,
+# `package.json`. Draft mode also prints sizecap.ts's size line (0099), which never changes the exit,
 # and fails a files-table path that is no repo path: one with a `:`, or a word with no `/` or `.`.
 # A versioned plan also gets `advice:` lines, which never change the exit: a type or lint law with
 # an fc. generator, a test law with an fc. generator and no run count, and a Validation section that
@@ -22,12 +22,20 @@ case ${1:-} in --draft) draft=1; shift;; --approved) draft=approved; shift;; --o
 [ "$#" = 1 ] || { echo "usage: plancheck.sh [--draft|--approved] <plan.md>" >&2; exit 1; }
 here=$(cd "$(dirname "$0")" && pwd -P)
 plan=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
-cd "$here/../../../.."
+# A lane runs this script from a pin: a copy of `.agents/` at one commit, which is no git checkout
+# (ticket 835). The plan is checked against the repo, so from a pin the repo is MAIN, the main
+# checkout the pinned process was started with.
+root="$here/../../../.."
+if ! git -C "$root" rev-parse --show-toplevel >/dev/null 2>&1; then
+    root=${MAIN:-}
+    [ -n "$root" ] || { echo "plancheck: this script is outside a git checkout and MAIN is not set" >&2; exit 1; }
+fi
+cd "$root"
 if [ "$draft" != owners ]; then
     sh "$here/../../lead/scripts/leakgrep.sh" --text "$plan" >&2
 fi
-# Draft mode also prints 0087's size advice: each slice over `[review] lines`. It never fails the
-# check until a replay on merged pull requests lets it block.
+# Draft mode also prints the plan's size and names each slice with no estimate. Advice only: no
+# number caps a pull request (0099), so it never fails the check.
 if [ "$draft" = 1 ]; then
     node "$here/../../lead/scripts/sizecap.ts" plan "$plan" || echo "size: not checked"
 fi

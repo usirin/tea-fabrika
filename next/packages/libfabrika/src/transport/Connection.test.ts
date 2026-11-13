@@ -2,7 +2,7 @@
 // its busy state and waits (0037, 0046). Callbacks only: no database, no runtime. Each walk reads
 // the saved attachment and the pending callbacks before it picks the next move (0093).
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Result, Schema } from "effect";
+import { Deferred, Effect, Result, Schema, Tracer } from "effect";
 import * as fc from "fast-check";
 import { connection } from "./Connection.ts";
 import { Answer, Attached, Wait } from "./Wire.ts";
@@ -74,7 +74,7 @@ const harness = (first: Saved) => {
   const waits: Array<Pending<Waited> & { readonly stream: string; readonly after: number }> = [];
   const calls: Array<Pending<typeof Answer.Type>> = [];
   const reentrant = new Set<string>();
-  let ring: (stream: string, rev: number) => Effect.Effect<void> = () => Effect.void;
+  let ring: ReturnType<typeof connection>["ring"] = () => Effect.void;
   const c = connection<unknown>({
     reader: READER,
     session: SESSION,
@@ -152,6 +152,96 @@ const admits = (saved: Saved, wait: W) => {
 
 const answers = (log: ReadonlyArray<Event>, from: number) =>
   log.slice(from).flatMap((e) => (e._tag === "send" ? [e.frame] : []));
+
+it.effect.prop(
+  "T843 frame: ordinary and parked-read replies retain the delay, tag their ended frame, and keep the socket online (50 runs)",
+  {
+    retryAfter: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_000_000 })),
+    picks: Schema.Array(Schema.Boolean).check(Schema.isMinLength(2), Schema.isMaxLength(15)),
+  },
+  ({ retryAfter, picks }) =>
+    Effect.gen(function* () {
+      const spans: Array<Tracer.NativeSpan> = [];
+      const tracer = Tracer.make({
+        span: (options) => {
+          const span = new Tracer.NativeSpan(options);
+          spans.push(span);
+          return span;
+        },
+      });
+      const h = harness(online());
+
+      for (const [id, pick] of picks.entries()) {
+        const now = h.saved();
+        expect(now._tag).toBe("online");
+        const method = now._tag === "online" && !now.busy && pick ? "ledger.wait" : "process.send";
+        yield* h
+          .run(h.c.frame(JSON.stringify({ jsonrpc: "2.0", id, method, params: { stream: "events", after: 0 } })))
+          .pipe(Effect.withTracer(tracer));
+
+        if (method === "ledger.wait") {
+          expect(h.waits.at(-1)).toBeDefined();
+          yield* Deferred.fail(h.waits.at(-1)!.reply, { reason: "rate_limited", retryAfter });
+        } else {
+          expect(h.calls.at(-1)).toBeDefined();
+          yield* Deferred.succeed(h.calls.at(-1)!.reply, {
+            ...Answer.cases.refused.make({ reason: "rate_limited" }),
+            retryAfter,
+          });
+        }
+
+        yield* settle;
+        const reply = answers(h.log, 0).at(-1)!;
+        expect(reply.error).toMatchObject({ message: "rate_limited", data: { reason: "rate_limited", retryAfter } });
+        expect(h.saved()._tag).toBe("online");
+        expect(h.log.filter((e) => e._tag === "close")).toEqual([]);
+        const frame = spans.filter((span) => span.name === "connection.frame").at(-1)!;
+        expect(frame.status._tag).toBe("Ended");
+        expect(frame.attributes.get("fab.gateway.refused")).toBe("rate_limited");
+      }
+    }),
+  { arbitrary: { seed: SEED, runs: 50 } },
+);
+
+it.effect.prop(
+  "0140 frame: only a reserved answer tags the enclosing frame for counting instead of saving",
+  {
+    kind: Schema.Literals(["reserved", "bad_input", "ok"]),
+    id: Schema.String,
+    params: Schema.Json,
+  },
+  ({ kind, id, params }) =>
+    Effect.gen(function* () {
+      const spans: Array<Tracer.NativeSpan> = [];
+      const tracer = Tracer.make({
+        span: (options) => {
+          const span = new Tracer.NativeSpan(options);
+          spans.push(span);
+          return span;
+        },
+      });
+      const h = harness(online());
+      yield* h
+        .run(h.c.frame(JSON.stringify({ jsonrpc: "2.0", id, method: "process.send", params })))
+        .pipe(Effect.withTracer(tracer));
+      expect(h.calls).toHaveLength(1);
+      const answer =
+        kind === "ok" ? Answer.cases.ok.make({ result: params }) : Answer.cases.refused.make({ reason: kind });
+      yield* Deferred.succeed(h.calls[0]!.reply, answer);
+      yield* settle;
+      expect(answers(h.log, 0)).toEqual([kind === "ok" ? { jsonrpc: "2.0", id, result: params } : no(id, kind).frame]);
+      expect(h.saved()).toEqual(online());
+      const frames = spans.filter((span) => span.name === "connection.frame");
+      expect(frames).toHaveLength(1);
+      expect(frames[0]!.status._tag).toBe("Ended");
+      expect(frames[0]!.attributes.has("fab.gateway.refused")).toBe(kind === "reserved");
+
+      if (kind === "reserved") {
+        expect(frames[0]!.attributes.get("fab.gateway.refused")).toBe("reserved");
+      }
+    }),
+  { arbitrary: { seed: SEED, runs: 100 } },
+);
 
 describe("T703 connection driver laws", () => {
   it("save and callback order survives reentrant rings and delayed ordinary calls", async () => {

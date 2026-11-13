@@ -1,17 +1,42 @@
 import { type Brand, type Effect, Schema } from "effect";
 import { Session, SigningRefused } from "../access/SessionManager.ts";
 import type { LedgerCalls } from "../ledger/Ledger.ts";
-import { Appended } from "../ledger/Log.ts";
+import { Appended, Line } from "../ledger/Log.ts";
 import type { Connections } from "../presence/Connections.ts";
+import { type Child, ChildrenError, Started } from "../processes/Children.ts";
 import type { From, Letter } from "../processes/Mailbox.ts";
-import { ProcessError, type Activity, type Start } from "../processes/Process.ts";
+import { ProcessError, State, type Activity, type Start } from "../processes/Process.ts";
 import type { ProcessManager } from "../processes/ProcessManager.ts";
+import { type Delivery, MailRefusal } from "../processes/ProgramMail.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import type { Incoming } from "../runtime/Entry.ts";
+import type * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import type { Descriptor, ProgramRunner } from "../runtime/Runner.ts";
+import type { Publication } from "../runtime/WatcherManager.ts";
 import type { RecordCalls } from "../telemetry/Records.ts";
 import type { checkHello } from "../transport/Hello.ts";
 import type { Answer } from "../transport/Wire.ts";
+
+export const MailReplies = Schema.TaggedUnion({
+  ok: {
+    receipt: Schema.Struct({
+      id: Schema.String,
+      command: Schema.String,
+      source: Schema.Struct({ name: Schema.String, process: Schema.String }),
+      to: Schema.Struct({ name: Schema.String, state: State }),
+      m: Schema.Json,
+      ref: Schema.NullOr(Schema.String),
+      grant: Schema.Struct({ source: Schema.String, to: Schema.String }),
+      from: Line.mapFields(({ _tag, body, ...fields }) => fields),
+      arrivedAt: Schema.Number,
+      rev: Schema.Number,
+      pos: Schema.Number,
+    }),
+  },
+  refused: { reason: MailRefusal },
+});
+
+export type MailReply = typeof MailReplies.Type;
 
 export type ConnectionId = string & Brand.Brand<"ConnectionId">;
 
@@ -39,6 +64,12 @@ export const ProcessReplies = Schema.TaggedUnion({
 export type ProcessReply<A> =
   | (Omit<typeof ProcessReplies.cases.ok.Type, "value"> & { readonly value: A })
   | typeof ProcessReplies.cases.ProcessError.Type;
+
+/** A child start's answer over Project RPC (P42): `Started`, or its refusal as data. Storage fails the call. */
+export const ChildReplies = Schema.TaggedUnion({
+  ok: { value: Started },
+  ChildrenError: { reason: ChildrenError.fields.reason },
+});
 
 export interface GatewayCalls {
   readonly connect: () => Effect.Effect<ConnectionId>;
@@ -119,6 +150,7 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
         input: Omit<Parameters<DoorService["append"]>[0], "process">,
       ) => Effect.Effect<typeof CommitReply.Type>
     >;
+    mail: RemoteCall<(delivery: Delivery, trace?: { traceId: string; spanId: string }) => Effect.Effect<MailReply>>;
     inbox: RemoteCall<(pid: string, input: Incoming) => Effect.Effect<Appended>>;
     own: RemoteCall<
       (
@@ -129,7 +161,7 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
         trace?: { traceId: string; spanId: string },
       ) => Effect.Effect<Appended>
     >;
-    publish: RemoteCall<(client: string, update: unknown) => Effect.Effect<void>>;
+    publish: RemoteCall<(client: string, update: unknown) => Effect.Effect<typeof Publication.Type>>;
     brain: RemoteCall<(event: typeof BrainEvent.Type) => Effect.Effect<Appended>>;
     /** The registered name whose Process object holds this process ID's storage. */
     processObject: RemoteCall<(pid: string) => Effect.Effect<string>>;
@@ -143,11 +175,14 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
     processDemonitor: ProcessCall<Processes["demonitor"]>;
     processDown: ProcessCall<Processes["down"]>;
     processReceive: ProcessCall<(process: string, after: number) => Effect.Effect<ReadonlyArray<Letter>, ProcessError>>;
+    processChild: RemoteCall<(child: Child, from: From) => Effect.Effect<typeof ChildReplies.Encoded>>;
   };
 
 export type ProcessBinding = Rpc.DurableObjectBranded &
   Remote<Pick<Runner, "msg" | "open" | "due" | "restart">> & {
-    configure: RemoteCall<(descriptor: Descriptor) => Effect.Effect<void>>;
+    mailed: RemoteCall<(trace?: { traceId: string; spanId: string }) => Runner["mailed"]>;
+    configure: RemoteCall<(descriptor: Descriptor, drain?: boolean) => Effect.Effect<void>>;
+    usage: RemoteCall<typeof IsolateUsage.record>;
     descriptor: RemoteCall<() => Effect.Effect<Descriptor>>;
     activity: RemoteCall<(value: typeof Activity.Type) => Effect.Effect<void>>;
     recover: RemoteCall<() => Effect.Effect<unknown>>;

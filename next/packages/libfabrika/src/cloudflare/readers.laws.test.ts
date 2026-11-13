@@ -24,6 +24,7 @@ const config = {
   window: null,
   port: 18787,
   build: "test",
+  rateLimit: { limit: 100_000, window: 60_000 },
 };
 
 const malformed = (schema: Schema.Top) => fc.jsonValue().filter((value) => !Schema.is(schema)(value));

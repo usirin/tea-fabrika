@@ -1,86 +1,3 @@
-import "./catchup.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./freshmain.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./land.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./mutbox.ts?raw";
-import "./mutbox-entry.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./mutbox.Dockerfile?raw";
-import "../../mutation/scripts/run.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/limit.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/sample.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/scope.ts?raw";
-import "./loosening.sh?raw";
-import "./leakgrep.sh?raw";
-import "./skillscheck.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box/BoxGit.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box/BoxGitProcess.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box/Remove.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box/Runs.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box/RunsProcess.ts?raw";
-import "./keepruns.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./drive.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./runid.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./pgrep.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./agents.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./codexexec.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./boxnode.ts?raw";
-import "./fieldrow.py?raw";
-import "./runplan.sh?raw";
-import "./env.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./boxfiles.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./gc.ts?raw";
-import "./redact.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./botpush.mjs?raw";
-import "./clauderow.py?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./lane.ts?raw";
-import "../../plan/scripts/plancheck.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./sizecap.ts?raw";
-import "../../step-commit/scripts/exam.py?raw";
-import "../../step-commit/scripts/stepcommit.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./gcloop.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./flow/Beat.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./pr/Publish.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./pr/PullRequestsGh.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./pr/PushesProcess.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./publish.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./pr/PullRequests.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./pr/Pushes.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./pr/command.ts?raw";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -938,31 +855,107 @@ describe("loosening, today's tooling", () => {
     );
   });
 
-  // Plants: reject a clean new regular file or miss one shared-state entry in a new file.
-  it.each([0o644, 0o755])("T318 new regular test mode %i clears only without shared state", (mode) => {
+  // What a new file may hold that an existing file is hit for: shared state, a muted law, a helper.
+  const risky = (v: Input) => [
+    `vi.mock('./${v.extra}');`,
+    `process.env.${v.extra} = '${v.count}';`,
+    `globalThis.${v.extra} = ${v.count};`,
+    "beforeEach(() => {});",
+    "afterAll(() => {});",
+    `fc.configureGlobal({numRuns: ${v.count}});`,
+    `expect.extend({${v.extra}: () => ({pass: true})});`,
+    `import './${v.extra}';`,
+    `it.skip('${v.extra}-muted', () => expect(1).toBe(1));`,
+    `const helper_${v.extra} = (n) => n + ${v.count};`,
+  ];
+  const fresh = (v: Input) => `import {it, expect} from 'vitest';\nimport fc from 'fast-check';\n${source(v)}`;
+
+  // Plant: remove the added-file skip in loosening.sh, and a new file with shared state hits again.
+  it.each([0o644, 0o755])("an added regular exam file of mode %i gives no hit, whatever it holds", (mode) => {
     fc.assert(
       fc.property(input, (v) => {
-        const clean = `import {it, expect} from 'vitest';\nimport fc from 'fast-check';\n${source(v)}`;
-        expect(compare({}, { [file]: { content: clean, mode } }).code).toBe(0);
-
-        for (const shared of [
-          `vi.mock('./${v.extra}');`,
-          `process.env.${v.extra} = '${v.count}';`,
-          `globalThis.${v.extra} = ${v.count};`,
-          "beforeEach(() => {});",
-          "afterEach(() => {});",
-          "beforeAll(() => {});",
-          "afterAll(() => {});",
-          `fc.configureGlobal({numRuns: ${v.count}});`,
-          `expect.extend({${v.extra}: () => ({pass: true})});`,
-          `import './${v.extra}';`,
-        ]) {
-          const got = compare({}, { [file]: { content: clean + shared, mode } });
-          expect(got.code, `${shared}\n${got.text}`).toBe(1);
+        for (const extra of ["", ...risky(v)]) {
+          const got = compare({}, { [file]: { content: fresh(v) + extra, mode } });
+          expect(got.code, `${extra}\n${got.text}`).toBe(0);
+          expect(got.text.trim()).toBe("loosening: 0 hits in 1 exam files");
         }
+
+        // A new exam file that is no test file has no older law either.
+        expect(compare({}, { "skillscheck.sh": `# ${v.name}\n` }).code).toBe(0);
       }),
-      { seed: 31855, numRuns: 2, endOnFailure: true },
+      { seed: 119120, numRuns: 2, endOnFailure: true },
     );
+  });
+
+  // Plant: skip every regular file at head, added or not, and an addition to an existing file clears.
+  it("the same content as a change to an existing file still gives its hit", () => {
+    fc.assert(
+      fc.property(input, (v) => {
+        for (const extra of risky(v)) {
+          const got = compare({ [file]: fresh(v) }, { [file]: fresh(v) + extra });
+          expect(got.code, `${extra}\n${got.text}`).toBe(1);
+          expect(got.text).toContain(`${file}: unrecognized change:`);
+        }
+
+        // An empty file that existed is not a new file.
+        expect(compare({ [file]: "" }, { [file]: fresh(v) + risky(v)[0] }).code).toBe(1);
+      }),
+      { seed: 119120, numRuns: 2, endOnFailure: true },
+    );
+  });
+
+  // Plant: leave the added files out of `files`, and a mapped law weakened on its way to a new path
+  // reads as removed, never compared. `padded` keeps the file alike enough for git to pair the two
+  // paths as a rename; `whole` rewrites it, so git sees a delete and an add.
+  it.each(["padded", "whole"])("a %s rename with a weakened assertion still gives a hit", (kind) => {
+    fc.assert(
+      fc.property(input, (v) => {
+        const renamed = "checks/nested/renamed.test.ts";
+        const mapping = `| Removed | Replacement |\n| --- | --- |\n| ${v.name} | ${v.name} |`;
+        const padding =
+          kind === "padded"
+            ? Array.from({ length: 12 }, (_, i) => source(v, undefined, "", `${v.name}-kept-${i}`)).join("")
+            : "";
+
+        for (const [weak, hit] of [
+          [source(v, ""), "removed expect"],
+          [source(v, undefined, ".skip"), "moved law"],
+          [source(v).replace(`numRuns: ${v.count}`, `numRuns: ${v.count - v.delta}`), "fewer numRuns"],
+          ["", "removed law"],
+        ] as const) {
+          // With no mapping row the law is gone from its old path; with one it is compared.
+          const bare = compare({ [file]: padding + source(v) }, { [renamed]: padding + weak });
+          expect(bare.code, bare.text).toBe(1);
+          expect(bare.text).toContain(`${file}: removed law: ${v.name}`);
+          const got = compare({ [file]: padding + source(v) }, { [renamed]: padding + weak }, mapping);
+          expect(got.code, got.text).toBe(1);
+          expect(got.text).toContain(`${file}: ${hit}: ${v.name}`);
+        }
+
+        // A law that leaves an existing file for a new one is still a moved law, compared there.
+        const moved = compare(
+          { [file]: source(v) + source(v, undefined, "", `${v.name}-stays`) },
+          { [file]: source(v, undefined, "", `${v.name}-stays`), [renamed]: source(v, "") },
+          mapping,
+        );
+        expect(moved.code, moved.text).toBe(1);
+        expect(moved.text).toContain(`${file}: removed expect: ${v.name}`);
+      }),
+      { seed: 119120, numRuns: 2, endOnFailure: true },
+    );
+  });
+
+  // Plant: read the added files with --no-renames, and a rename's new path counts as an added file.
+  it("scenario: a renamed file is read at its new path as before, so shared state there hits", () => {
+    // scenario: git pairs the two paths (identical bytes but one line), so the new path is no add.
+    const v: Input = { name: "law", extra: "extra", title: "it", count: 50, delta: 1, space: " " };
+    const padding = Array.from({ length: 12 }, (_, i) => source(v, undefined, "", `kept-${i}`)).join("");
+    const got = compare(
+      { [file]: padding + source(v) },
+      { "checks/nested/renamed.test.ts": `${padding + source(v)}vi.mock('./x');\n` },
+    );
+    expect(got.code, got.text).toBe(1);
+    expect(got.text).toContain("checks/nested/renamed.test.ts: unrecognized change:");
   });
 
   // Plants: accept a title edit elsewhere on the line, a moved line, or a second raw edit.
@@ -1055,7 +1048,8 @@ describe("loosening, today's tooling", () => {
           "Only real loosening waits on the owner",
           "additions to an existing test file",
           "added code there can reach old laws' state",
-          "new test file can still touch the filesystem or the process outside the file",
+          "file the range adds gives no hit: a new file has no older law to loosen",
+          "renamed or copied file is not an added file",
         ]) {
           expect(usage.stderr).toContain(phrase);
         }

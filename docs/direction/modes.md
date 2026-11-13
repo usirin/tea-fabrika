@@ -50,7 +50,10 @@ escape   global, mode "info"        did {does: "desk.exit", ...}; info off; mode
 
 - **`next/`:** all of it. Tier 1 has one real mode, the notes tile's reading and editing
   ([Tier 1's detail](../plan/tier-1-detail.md)), and it is the first test. The desk, its info mode
-  and a resize mode arrive with the desk in Tier 2.
+  and a resize mode arrive with the desk in Tier 2. *Changed 2026-11-11
+  ([0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): the notes tile left Tier 1
+  with notes, Tier 2's first real app, so this first test moves to Tier 2; Tier 1's program is the
+  checklist.*
 - **Today's version (`apps/fabrika`):** not changed by this note. Its info mode is the running
   example, read on main. Four small fixes are offered at
   [a tryout in today's version](#a-tryout-in-todays-version), none filed.
@@ -299,7 +302,7 @@ desk.exit = ["escape", "q"]      # in every mode exit works in
 **Yes, lean 75%, and info mode is the test.**
 
 - **What it needs:** the desk as a program (Tier 2), a window-side machine that holds its mode
-  (Tier 1 already keeps focus in the window's machine), and step 3 above, so a window-wide mode
+  (Tier 1 already keeps focus in the window's machine; *2026-11-13: that stopgap ended with [0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md), and focus is the desk process's, per [0274](../../.decisions/0274-the-desktop-is-a-platform-free-core.md) and [0277](../../.decisions/0277-size-belongs-to-the-viewer.md)*), and step 3 above, so a window-wide mode
   wins over the focused tile.
 - **Resize** fits i3's binding mode: `h j k l` and arrows move an edge, Escape and Enter leave. In
   the file it is `[mode.desk.resize.keys]`. While it is on, the prefix still works.

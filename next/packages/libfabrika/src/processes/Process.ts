@@ -32,7 +32,7 @@ const RESERVED = `(?!(?:${PROCESSES}|gateway)$)`;
  * A process name is a stream name: no `/`, so `<name>` and `<name>/inbox` never meet another's,
  * no `client:` lead, so it never meets a client's inbox, and never `processes` or `gateway`.
  */
-const ProcessName = Text.check(Schema.isPattern(new RegExp(`^${RESERVED}(?!${CLIENTS})[a-z0-9][a-z0-9._:-]*$`)));
+export const ProcessName = Text.check(Schema.isPattern(new RegExp(`^${RESERVED}(?!${CLIENTS})[a-z0-9][a-z0-9._:-]*$`)));
 
 /** A client id has no `:`, the mark of a process name such as `counter:1`. */
 const ClientId = Text.check(Schema.isPattern(new RegExp(`^(?!${PROCESSES}$)[a-z0-9][a-z0-9._-]*$`)));
@@ -44,7 +44,7 @@ const eventStream = (name: string): string => `${PROCESSES}/${name}`;
 
 /**
  * The one rule for who may write what: only the brain's ProcessManager writes `processes` or any
- * stream under `processes/`, any ProcessEvent case, or any id in the signal id space. The gateway and
+ * stream under `processes/`, any ProcessEvent case, or any signal, runner or notice id. The gateway and
  * the mailbox refuse every such write.
  */
 export const brainOnly = (write: { readonly stream: string; readonly id: string; readonly tag: string }): boolean =>
@@ -54,6 +54,7 @@ export const brainOnly = (write: { readonly stream: string; readonly id: string;
   write.tag === "dead" ||
   Object.hasOwn(ProcessEvent.cases, write.tag) ||
   inSignalSpace(write.id) ||
+  inNoticeSpace(write.id) ||
   inRunnerSpace(write.id);
 
 /** Answer and alarm letters belong to the brain. Cmd write ids remain available to the signer. */
@@ -181,13 +182,19 @@ const isText = Schema.is(Text);
 /** A client's own inbox, `client:<id>/inbox`, where its DOWNs land; never a process's inbox. */
 export const clientInbox = (client: string): string => `${CLIENTS}${client}/inbox`;
 
-const SIGNAL_LEAD = JSON.stringify(["DOWN"]).slice(0, -1);
-
 const decodeIdParts = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Array(Schema.Unknown)));
 
+const led = (word: string) => {
+  const lead = JSON.stringify([word]).slice(0, -1);
+  return (id: string): boolean => id.startsWith(lead) || Option.exists(decodeIdParts(id), (parts) => parts[0] === word);
+};
+
 /** True for any id in the signal id space, a JSON array led by `"DOWN"`: only the brain writes one. */
-export const inSignalSpace = (id: string): boolean =>
-  id.startsWith(SIGNAL_LEAD) || Option.exists(decodeIdParts(id), (parts) => parts[0] === "DOWN");
+export const inSignalSpace = led("DOWN");
+
+/** Ids for what the brain tells a program. Only the brain writes one. */
+export const inNoticeSpace = led("notice");
+export const noticeId = (key: string): string => JSON.stringify(["notice", key]);
 
 /**
  * A disposable fold of the ledger. No process authority survives outside its events, and an event
@@ -231,7 +238,7 @@ export class ProcessTable {
       return denied("bad_text");
     }
 
-    const saved = [...this.#model.lives.values()].find((life) => life.request.id === request.id);
+    const saved = Option.getOrUndefined(this.saved(request.id));
 
     if (saved !== undefined) {
       if (!Equal.equals(saved.request, request) || saved.from.for !== from.for || saved.from.parent !== from.parent) {
@@ -247,6 +254,11 @@ export class ProcessTable {
     const name = this.#model.names.get(request.name);
 
     if (request._tag === "first") {
+      // A child's requester must still be live in the turn that would write its start (P42).
+      if (request.requester?._tag === "process" && !this.isLive(request.requester.process)) {
+        return denied("stale");
+      }
+
       return name === undefined ? Result.succeed(Option.none()) : denied("name_taken");
     }
 
@@ -267,6 +279,29 @@ export class ProcessTable {
     }
 
     return Result.succeed(Option.none());
+  }
+
+  /** The life a start id saved, under whichever name it started. */
+  saved(id: string): Option.Option<Life> {
+    return Option.fromUndefinedOr([...this.#model.lives.values()].find((life) => life.request.id === id));
+  }
+
+  /** OTP's `whereis`: the name's program and its current life. Public, so it checks no owner. */
+  whereis(name: string): Option.Option<{ readonly program: string; readonly state: typeof State.Type }> {
+    const registered = this.#model.names.get(name);
+    const life = this.#model.lives.get(this.#model.current.get(name) ?? "");
+    return registered === undefined || life === undefined
+      ? Option.none()
+      : Option.some({ program: registered.program, state: life.state });
+  }
+
+  /** The registered name that asked for this name's first life, when a child start wrote one (P42). */
+  starter(name: string): Option.Option<string> {
+    const first = [...this.#model.lives.values()].find((life) => life.name === name);
+    const requester = first?.request._tag === "first" ? first.request.requester : undefined;
+    return requester?._tag === "process"
+      ? Option.map(this.life(requester.process), (life) => life.name)
+      : Option.none();
   }
 
   collision(process: string): boolean {

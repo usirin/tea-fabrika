@@ -1,18 +1,15 @@
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./sizecap.ts?raw";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Result } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
   advise,
-  readCap,
-  DEFAULT_CAP,
+  ADVICE_LINES,
   diffLine,
   classify,
+  isSharedSuite,
   numberIn,
   readPlan,
   Row,
@@ -20,7 +17,8 @@ import {
   countLines,
 } from "./sizecap.ts";
 
-// Lead tooling for ticket 686: decision 0087's cap on product lines, as advice. The pure laws read
+// Lead tooling for ticket 686, changed for ticket 849: a pull request's size, printed as advice
+// only, since 0099 removed 0087's cap. The pure laws read
 // paths, numstat text and plan text; one scenario runs the command on a disposable git repository.
 const options = { seed: 119120, numRuns: 200 };
 const script = join(import.meta.dirname, "sizecap.ts");
@@ -62,6 +60,92 @@ describe("classify", () => {
       ),
       options,
     );
+  });
+
+  it("property: under next/ a shared suite named XTest.ts or XTest.tsx is a test at any depth (0029, 0062)", () => {
+    fc.assert(
+      fc.property(
+        folders,
+        fc.stringMatching(/^[A-Za-z][A-Za-z0-9]{0,7}$/),
+        fc.constantFrom(".ts", ".tsx"),
+        (inner, subject, ext) => {
+          const path = ["next", ...inner, `${subject}Test${ext}`].join("/");
+          expect(isSharedSuite(path)).toBe(true);
+          expect(classify(path, false)).toBe("test");
+          expect(classify(path, true)).toBe("generated");
+        },
+      ),
+      options,
+    );
+  });
+
+  it("property: outside next/ the same name is no suite, since exam-paths.json's row covers next/ only", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom("apps", "programs", "packages"),
+        fc.constantFrom(".agents", "oxlint-plugins", ".github", "scripts"),
+        folders,
+        word,
+        fc.constantFrom(".ts", ".tsx"),
+        (root, other, inner, subject, ext) => {
+          const below = [
+            ...inner.filter((part) => !["e2e", "fixtures", "docs"].includes(part)),
+            `${subject}Test${ext}`,
+          ];
+          expect(classify([root, ...below].join("/"), false)).toBe("product");
+          expect(classify([other, ...below].join("/"), false)).toBe("other");
+        },
+      ),
+      options,
+    );
+  });
+
+  it("property: under next/ a name that only looks like a suite is product", () => {
+    fc.assert(
+      fc.property(
+        folders,
+        word,
+        fc.constantFrom("lower", "bare", "folder", "style", "data"),
+        (inner, subject, shape) => {
+          const kept = inner.filter((part) => !["e2e", "fixtures", "docs"].includes(part));
+          const below = {
+            lower: [...kept, `${subject}test.ts`],
+            bare: [...kept, "Test.ts"],
+            folder: [...kept, `${subject}Test`, `${subject}.ts`],
+            style: [...kept, `${subject}Test.css`],
+            data: [...kept, `${subject}Test.json`],
+          }[shape];
+          const path = ["next", ...(below ?? [])].join("/");
+          expect(isSharedSuite(path)).toBe(false);
+          expect(classify(path, false)).toBe("product");
+        },
+      ),
+      options,
+    );
+  });
+
+  it("vector: the names the suite rule was written for, each a real or a near-miss name", () => {
+    const cases: ReadonlyArray<readonly [string, string]> = [
+      ["next/programs/pipeline/src/CiTest.ts", "test"],
+      ["next/packages/libfabrika/src/runtime/NemesisTest.ts", "test"],
+      ["next/src/fooTest.ts", "test"],
+      ["next/src/XTest.tsx", "test"],
+      ["next/XTest.ts", "test"],
+      ["next/src/x.test-support.ts", "test"],
+      ["packages/pipeline/src/x.test-support.ts", "test"],
+      ["next/src/Latest.ts", "product"],
+      ["next/src/Contest.ts", "product"],
+      ["next/src/Test.ts", "product"],
+      ["next/src/Test.tsx", "product"],
+      ["next/src/Test/thing.ts", "product"],
+      ["next/src/XTest.ts.bak", "product"],
+      ["packages/pipeline/src/XTest.ts", "product"],
+      [".agents/skills/lead/scripts/box/BoxTest.ts", "other"],
+    ];
+
+    for (const [path, kind] of cases) {
+      expect(classify(path, false), path).toBe(kind);
+    }
   });
 
   it("property: Markdown and anything under docs/ is docs; a marked file is generated, first of all", () => {
@@ -120,12 +204,12 @@ describe("parseNumstat", () => {
 });
 
 describe("countLines and diffLine", () => {
-  it("property: product lines are the sum of the product rows, and the line says over only past the cap", () => {
+  it("property: product lines are the sum of the product rows, and the line asks about slicing only past the advice", () => {
     fc.assert(
       fc.property(
         fc.array(fc.tuple(code, fc.nat(400), fc.boolean()), { maxLength: 10 }),
         fc.integer({ min: 1, max: 2000 }),
-        (files, cap) => {
+        (files, advice) => {
           const rows: Array<Row> = files.map(([[inner, name, ext], lines, binary], at) => {
             const path = [at % 2 === 0 ? "next" : ".agents", ...inner, `${name}${at}${ext}`].join("/");
             return binary ? Row.cases.binary.make({ path }) : Row.cases.text.make({ path, lines });
@@ -137,7 +221,9 @@ describe("countLines and diffLine", () => {
           );
           expect(tally.product).toBe(product);
           expect(tally.binary).toBe(rows.filter((row) => row._tag === "binary").length);
-          expect(diffLine(tally, cap).includes("over the cap")).toBe(product > cap);
+          const line = diffLine(tally, advice);
+          expect(line.includes("should it have been sliced?")).toBe(product > advice);
+          expect(line).not.toMatch(/\bcap\b/);
         },
       ),
       options,
@@ -156,7 +242,7 @@ const sizeSection = (slices: ReadonlyArray<number | null>) =>
   [
     "## Size",
     "",
-    "Seven pull requests, each below 600 expected product lines.",
+    "Seven pull requests, each one landing whole.",
     "",
     ...slices.map((lines, at) =>
       lines === null
@@ -198,28 +284,20 @@ describe("readPlan and advise", () => {
     );
   });
 
-  it("property: advice names exactly the slices over the cap and those with no estimate, never one within it", () => {
+  it("property: advice names exactly the slices with no estimate, whatever the others expect (0099)", () => {
     fc.assert(
-      fc.property(
-        fc.array(fc.option(fc.nat(1200), { nil: null }), { minLength: 1, maxLength: 7 }),
-        fc.integer({ min: 1, max: 1000 }),
-        (slices, cap) => {
-          const advice = advise(readPlan(sizeSection(slices)), cap);
-          const named = advice.flatMap((a) => (a._tag === "over" || a._tag === "unsized" ? [a.order] : []));
-          const expected = slices.flatMap((lines, at) => (lines === null || lines > cap ? [at + 1] : []));
-          expect(named).toEqual(expected);
-        },
-      ),
+      fc.property(fc.array(fc.option(fc.nat(100_000), { nil: null }), { minLength: 1, maxLength: 7 }), (slices) => {
+        const named = advise(readPlan(sizeSection(slices))).map((a) => (a._tag === "unsized" ? a.order : 0));
+        expect(named).toEqual(slices.flatMap((lines, at) => (lines === null ? [at + 1] : [])));
+      }),
       options,
     );
   });
 
-  it("property: a plan with no slices is advised only when its table is over the cap", () => {
+  it("property: a plan with a product lines column and no slices gets no advice, however large its table (0099)", () => {
     fc.assert(
-      fc.property(fc.array(cell, { minLength: 1, maxLength: 12 }), fc.integer({ min: 1, max: 3000 }), (cells, cap) => {
-        const total = cells.reduce((sum, c) => sum + c.lines, 0);
-        const advice = advise(readPlan(table(cells.map((c) => c.text))), cap);
-        expect(advice.map((a) => a._tag)).toEqual(total > cap ? ["unsliced"] : []);
+      fc.property(fc.array(cell, { minLength: 1, maxLength: 12 }), (cells) => {
+        expect(advise(readPlan(table(cells.map((c) => c.text))))).toEqual([]);
       }),
       options,
     );
@@ -236,7 +314,7 @@ describe("readPlan and advise", () => {
       "| a \\| b | 700 |",
     ].join("\n");
     expect(readPlan(fenced)).toEqual({ table: 700, slices: [] });
-    expect(advise(readPlan("## Files\n\n| File | Owner |\n|---|---|\n| a | build |"), 600).map((a) => a._tag)).toEqual([
+    expect(advise(readPlan("## Files\n\n| File | Owner |\n|---|---|\n| a | build |")).map((a) => a._tag)).toEqual([
       "unknown",
     ]);
   });
@@ -252,35 +330,14 @@ describe("readPlan and advise", () => {
   });
 });
 
-describe("readCap", () => {
-  const cap = readCap;
-
-  it("property: [review] lines sets the cap; a file that leaves it out keeps 0087's 600", () => {
-    fc.assert(
-      fc.property(fc.integer({ min: 1, max: 100_000 }), (lines) => {
-        expect(cap(`[review]\nrubrics = "r"\nlines = ${lines}\n`)).toEqual(Result.succeed(lines));
-      }),
-      options,
-    );
-    expect([cap(null), cap('[review]\nrubrics = "r"\n'), cap("")]).toEqual(
-      [600, 600, 600].map((n) => Result.succeed(n)),
-    );
-    expect(DEFAULT_CAP).toBe(600);
-  });
-
-  it("property: a cap below 1, a fraction, a string or a file that is not TOML cannot run", () => {
-    fc.assert(
-      fc.property(fc.constantFrom("0", "-3", "1.5", '"600"', "[600]"), (value) => {
-        expect(Result.isFailure(cap(`[review]\nlines = ${value}\n`))).toBe(true);
-      }),
-      options,
-    );
-    expect(Result.isFailure(cap("[review\nlines = 1"))).toBe(true);
+describe("ADVICE_LINES", () => {
+  it("pinned: 0087's starting number, as advice only, until a count from our merged pull requests replaces it (0099)", () => {
+    expect(ADVICE_LINES).toBe(600);
   });
 });
 
 describe("the command", () => {
-  it("scenario: diff counts a renamed product file's change only, keeps the lower cap of base and head, and plan prints its advice", () => {
+  it("scenario: diff counts a renamed product file's change only, reads no settings file, and plan names no slice by its size", () => {
     const dir = mkdtempSync(join(tmpdir(), "sc-"));
 
     try {
@@ -330,20 +387,13 @@ describe("the command", () => {
       const diff = run("diff", base, "HEAD");
       expect(diff.status, diff.stderr).toBe(0);
       expect(diff.stdout).toBe(
-        "size: 63 product lines, over the cap of 50 by 13 (advice until the replay, 0087); not counted: 500 test, 0 docs, 0 lock, 70 generated, 3 other lines, 0 binary files\n",
+        "size: 63 product lines; not counted: 500 test, 0 docs, 0 lock, 70 generated, 3 other lines, 0 binary files\n",
       );
 
       write("plan.md", [table(["450", "tests"]), "", sizeSection([450, 700])].join("\n"));
       const plan = run("plan", "plan.md");
       expect(plan.status, plan.stderr).toBe(0);
-      expect(plan.stdout).toContain("size: 450 product lines in the files table, 2 slices, the largest 700, cap 900\n");
-      expect(plan.stdout).not.toContain("slice 2");
-      write(".fabrika/fabrika.toml", "[review]\nlines = 0\n");
-      const bad = run("plan", "plan.md");
-      expect([bad.status, bad.stderr]).toEqual([
-        2,
-        "sizecap: .fabrika/fabrika.toml at the working tree: [review] lines is not a whole number of at least 1\n",
-      ]);
+      expect(plan.stdout).toBe("size: 450 product lines in the files table, 2 slices, the largest 700\n");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

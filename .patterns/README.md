@@ -48,3 +48,4 @@ Once the table passes about a dozen rows, split it into sections by area.
 | [effect-crypto-through-services.md](./effect-crypto-through-services.md) | next/ | Hashing, signing, an HMAC, random bytes or a random id |
 | [effect-pure-domain-returns-result.md](./effect-pure-domain-returns-result.md) | next/ domain code | Writing a rule, a fold or a tea `update` that can refuse |
 | [effect-differences-say-why.md](./effect-differences-say-why.md) | next/ | Doing something differently from Effect's own module or guide |
+| [settings.md](./settings.md) | next/ settings | Adding a setting, or reading or writing a settings file, a settings snapshot or the settings reference |

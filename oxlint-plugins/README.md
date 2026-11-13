@@ -15,6 +15,17 @@ They began as GritQL rules in the `biome-plugins/` folder of [kamp-us/phoenix](h
 
 Six rules only advise: `law-shape`, `no-effect-promise`, `no-raw-try-catch`, `prefer-schema-arbitrary`, and since ticket 737 oxlint's own `no-restricted-properties` (a bare `JSON.parse` in `next/`) and `service-id`. Their messages start with "Advice, does not block". Oxlint has no level below `warn`, so `lint.ts` runs oxlint once and decides: it prints every fire, and fails on any fire but these six. Experiment 125 found the first two wrong far too often to block: 8 of 8 and 21 of 21 fires kept their code. Under Biome the same two gave their diagnostics at `"info"`, which `pnpm lint` (`biome check --error-on-warnings`) printed and did not fail on.
 
+## Isolate boundary
+
+| Rule | Checks | Cannot see |
+|---|---|---|
+| `isolate-boundary` | U11: `TraceItem`, `Fetcher` and `ctx.exports` stay in libfabrika's `cloudflare/`; the app's `tail` and `usage` return one call | Aliased platform names, dynamic property keys, or logic hidden inside the call |
+
+Enabled for all of `next/`, including tests. Comments and strings pass. Optional reads and
+literal computed `exports` reads are checked. The rule uses oxlint's syntax visitors; a type
+checker cannot keep these names in one module. Main at `4359ea84` has zero hits. A temporary
+`TraceItem` use in the app entrypoint produced one blocking hit and was restored.
+
 ## Decode and service-ID advice
 
 Ticket 737 builds decision 0023 in `next/`: input is decoded with Effect Schema, and a service ID carries the package and its file's path, as Effect's own guide asks. Two guards keep it so, both advice until their false alarms are counted.
@@ -556,3 +567,63 @@ below were of the first count's findings.
 The laws are in `no-question-word-key.test.ts`, the last describe of `modules.test.ts`,
 `no-wall-clock.test.ts` and `after-hooks.test.ts`, each through the real config at generated paths.
 
+
+## One machine per file, decision 0046
+
+`fabrika/one-machine-per-file` blocks in `next/` and `.agents/`. Tests and shared law suites
+are left out by `*.test.ts`, `*.test.tsx`, `*Test.ts` and `*.test-support.ts` under `next/`,
+and `*.test.ts` under `.agents/`.
+
+It counts exported tea `Machine.make` calls, including one inside an exported factory, object or
+program. A second call fires. A private top-level helper used inside another machine's arguments
+passes; a private machine wrapped by an exported program counts. Two calls in one exported factory
+count twice. Named and namespace imports from `@demlik/tea` and `@demlik/tea/effect`, renamed
+imports and literal `["make"]` access are recognized. Local shadows and type-only imports pass.
+
+For each reached call, an imported value or imported member used directly as `model`, `msg` or
+`update` fires. A local value, inline expression or schema built from imported fields passes.
+Effect's `Schema.Never` as `msg` passes too: it says the machine has no messages, as approved
+in plan amendment A1. Other imported Schema members still fire, and `Schema.Never` used as
+`model` or `update` still fires.
+Every file with a machine call, even a private call, also refuses imports from the closed I/O
+list in the rule. That list covers the named Effect runtime, clock, storage and stream modules,
+Effect's process/http/cli/unstable subpaths, `@effect/*`, `node:`, tea runners, and the platform
+imports named in 0042. Pure `effect/encoding` and `effect/crypto` imports pass. Type-only imports
+pass, both whole declarations and individual specifiers.
+
+The approved plan measured 13 files with exported machines or factories and expected zero hits.
+The first replay on 2026-11-11 found one false alarm, `msg: Schema.Never` in lead tooling's
+`flow/machine.ts:101`. Amendment A1 allows that exact case. The corrected replay finds **0 hits**
+over `next/` and `.agents/`, and all 13 measured file copies pass. Each copy with a second
+exported call fires once for that added call. No disable or ledger entry hides a hit. This
+zero-hit measurement says nothing about the false-alarm rate of forms not yet written.
+
+Review keeps these parts of 0046:
+
+- Whether changing data is control state and must be a tea machine.
+- Input or output through relative/workspace imports, globals or dynamic imports.
+- Building or editing another file's Model by hand.
+- Whether a factory returns its machine and whether its config carries a service.
+
+The syntax rule misses aliases of `Machine.make`, destructuring, re-exports and imported helpers
+that make machines. Each new written form needs review. It has no type information.
+
+### Plant replay, 2026-11-11
+
+Ticket 509 replayed these temporary breaks against the existing laws. Each change was restored
+by copying its saved original before the next run. No planted implementation remains.
+Paths below are relative to `oxlint-plugins/`, except `.oxlintrc.json`.
+
+| Law and check | Injected break | Observed result |
+|---|---|---|
+| L1, `one-machine-per-file.test.ts:59` and `:80` | In `one-machine-per-file.ts:192`, count private calls too; separately, at `:194`, count only one call per export | Both L1 properties fail for each break. The reduced cases contain a private helper, or a factory with two calls. |
+| L2, `one-machine-per-file.test.ts:112` | At `one-machine-per-file.ts:223`, accept imported models; separately, reject calls that build a schema from imported fields | L2 fails on an imported model, then on `Schema.Struct({ f: Imported })`. |
+| L3, `one-machine-per-file.test.ts:206` | At `one-machine-per-file.ts:234`, require an exported call before checking imports; separately, at `:239`, check type-only declarations too | L3 fails on a private machine with a `workerd` import, then on a type-only import. |
+| L4, `one-machine-per-file.test.ts:247` | Remove `next/**/*Test.ts` from `.oxlintrc.json`'s shared-test override | L4 gets line 3 for `next/ExampleTest.ts`, where it expects no fire. |
+| L5, `one-machine-per-file.test.ts:290` | At `one-machine-per-file.ts:102`, skip `.agents/`; separately, at `:141`, ignore exports whose declaration is a factory | L5 misses the added second export in the flow machine, then in `processTable.ts`. |
+| L6, `plants.test.ts:628` | Add this rule to `lint.ts:14`'s `ADVICE` set | L6 gets exit 0 instead of exit 1 for its second-machine input. |
+| L7, registration lint | Remove the import and registration from `index.ts:35` and `:78` | `lint.ts` exits 2 because the configured rule is missing. `pnpm lint:dead` stays green, contrary to the plan's prediction; it does not enforce registration here. |
+| A1, `one-machine-per-file.test.ts:112` | At `one-machine-per-file.ts:124`, allow every imported Schema member as `msg`; separately, at `:224`, remove the exception, or allow `Schema.Never` in every part | L2 fails on `msg: Schema.String`, the pinned `msg: Schema.Never`, or `update: Schema["Never"]`, respectively. |
+
+All property replays used seed 119120. Every replay ran on Node 26.13.0 with one Vitest worker.
+The box refused `nice`'s priority change, so subsequent test commands ran without it.

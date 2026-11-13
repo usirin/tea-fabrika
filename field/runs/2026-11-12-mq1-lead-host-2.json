@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-12",
+  "run": "2026-11-12-mq1-lead-host-2",
+  "ticket": "usirin/tea-fabrika#765",
+  "pr": "usirin/tea-fabrika#1030",
+  "started": "2026-11-12T03:27:00-08:00",
+  "ended": "2026-11-12T03:40:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": "claude-fable-5-2",
+  "effort": null,
+  "outcome": "fail",
+  "why": "next/ version. The lead's second host checks for ticket 765, P43 slice 1 (the merger), at head ead92b772018c72bc1b27305d15efc0536536d67 merged with main at bc60d9fdc614c497a0d618edb1846bfb9d276c71 (clean merge, no conflict, not committed), after the rename away from the three xOf names and the move of the service errors to 0119. By hand, not this repo's machine and not today's fabrika. Each file ran alone on Node 26.13.0 with one worker. Eight passed: ci/Ci.test.ts 1 of 1, codehost/CodeHost.test.ts 2 of 2, Change.test.ts 2 of 2, Settings.test.ts 1 of 1, handlers.test.ts 1 of 1, Merger.laws.test.ts 9 of 9, node/runner.laws.test.ts 4 of 4, and settings/Setting.test.ts 8 of 8. Two exam files failed, as CI's next jobs did on the same head. apps/fabrika/src/exam/layers.test.ts 16 of 19 (it passes 19 of 19 on main alone): its part table has no row for next-ci and next-codehost, its pinned layer list does not name them, a program may import only the bare library entry while the pack's five product files and RunnerTest.ts import library subpaths (37 faults in all), and the two new rows shift a fixed-seed property onto a case where two made-up names are equal, which its sort does not expect. apps/fabrika/src/exam/deps.test.ts 15 of 16: node/runner.laws.test.ts imports @effect/platform-node, which the pack's package.json does not list. pnpm format changed nothing and pnpm lint passed. pnpm typecheck failed, and CI's typecheck failure on this head is the same real failure, not a dead runner: the 23 `@stability experimental` tags in Ci.ts and CodeHost.ts raise 127 experimentalApiUsage warnings (TS377135), and a warning fails tsc; the rest of next/ says `@stability unstable`, whose rule is off. That failure stops the run before the pack is checked, so the pack's own typecheck was run alone: 35 errors, among them Change.test.ts importing picomatch/posix without its extension, Merger.ts line 186 (a state that may still be open given to the closed reply), handlers.test.ts lines 43 and 44, and 21 in RunnerTest.ts. So L7, the compiler law, has not passed anywhere yet. Hand check of the 9 loosening hits found no loosening: the three rule files only gain rows for the two new modules and the pack, no rule is off, the four test files and the tsconfig are new, and the lockfile adds only the pack with picomatch 4.0.7 and @types/picomatch 4.0.3. Six lint disables were added, all in test files with a reason, none for fabrika/no-of. The glossary's four rows now say Change.kind, Change.verdict and Settings.key, and the Kubernetes table's Settings.ts line cite was corrected. The times are estimates. No token or dollar figure was reported.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 13,
+  "note": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null
+}

@@ -54,7 +54,9 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      the law generates flows: made-up words, keys and passes, operation orders, refusals and
      failures. Check every named output, including encoded URL forms, and a leak planted in each.
      A scenario only supplements the property. Report a missing marker or flow law as a defect.
-   - Screenshots in the program's `docs/` folder when the plan asks for them, at its layouts.
+   - Shots on the pull request when the plan asks for them, at its layouts: the brief names the
+     comment that holds them. A shot committed only to show the pull request running is a defect
+     ([0160](../../../.decisions/0160-pr-shots-are-never-committed.md)).
    - Anything else the brief names for this round. A lane has no mutation step
      ([0066](../../../.decisions/0066-mutation-runs-on-a-schedule.md)); a lane that finished one
      started before 0066 names its added laws here.

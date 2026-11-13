@@ -250,7 +250,7 @@ const exec = Effect.fn("gcloop.exec")(function* (command: string, args: Readonly
 }, Effect.scoped);
 
 /** MAIN and BOXES from env.sh, as every lead script finds them. */
-const paths = Effect.fn("gcloop.paths")(
+export const paths = Effect.fn("gcloop.paths")(
   function* () {
     const path = yield* Path.Path;
     const env = path.join(import.meta.dirname, "env.sh");
@@ -274,10 +274,13 @@ const freeKb = Effect.fn("gcloop.freeKb")(
 );
 
 const alive = (pid: number) =>
-  Effect.try({ try: () => process.kill(pid, 0), catch: (e) => e }).pipe(
-    Effect.as(true),
+  Effect.try({
+    try: () => process.kill(pid, 0),
     // EPERM: the process exists and is someone else's.
-    Effect.catch((e) => Effect.succeed(Predicate.hasProperty(e, "code") && e.code === "EPERM")),
+    catch: (e) => Predicate.hasProperty(e, "code") && e.code === "EPERM",
+  }).pipe(
+    Effect.as(true),
+    Effect.catch((owned) => Effect.succeed(owned)),
   );
 
 /** A holder counts while its process lives and its lock is younger than `stale`: a pid the system

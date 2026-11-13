@@ -1,7 +1,7 @@
 ---
 id: 0279
 title: In next/, Tuval is the @kampus/tuval package drawn from fabrika's logic, the desk is tezgah's program arriving in Tier 2, and Tier 1 has one fixed layout, focus per window and no desk process
-status: accepted
+status: amended-in-part by [0159](0159-fabsh-pipes-summon-join-first.md)
 date: 2026-11-01
 tags: [desktop, tuval, tezgah, packages, tier-1, tier-2, next]
 ---
@@ -29,3 +29,7 @@ Changed for `next/` on 2026-11-01, from Tier 1's plan, in
 ## Consequences
 
 - Tier 1's windows do not wait on the window manager.
+
+## Amendments
+
+- 2026-11-13: The Tier 1 clause "one fixed layout at wiring, each window keeps its own focus, and there is no desk process" ended with [0159](0159-fabsh-pipes-summon-join-first.md). The desk program comes now, and focus and layout live in its process in the brain, one focus per workspace ([0274](0274-the-desktop-is-a-platform-free-core.md), [0277](0277-size-belongs-to-the-viewer.md)). The rest of this file still holds: Tuval is the `@kampus/tuval` package, and the desk is `fabrika/tezgah`.

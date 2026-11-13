@@ -51,6 +51,7 @@ Three words to know. **Plan-115** is [ticket 115's plan](./ticket-115.md): laws 
 18. **`@kampus/libfabrika`'s top level holds only the app layer's names.** Lower layers are on subpaths that only named importers may use. Why: with one top level, an import name could not tell a program reaching `app` from one reaching `transport`, and the strict one-layer-down rule would have nothing to read. It also keeps a program's box small. Cost: three more lines in an `exports` map, and a law. Sure: 80%. The doubt is how many names the app layer ends up saying again.
 19. **Fabrika is the logic, and Tuval is the projection of it.** Settled by the owner. `@kampus/tuval` holds everything a client does. `next/apps/fabrika` is only wiring and the deploy stack. Tuval may import `@kampus/libfabrika`, and never the other way. Why: a client's logic then has one home, and the library can't come to lean on a screen. Cost: tuval holds Electron code, on a subpath, and its `electron` row needs two named exceptions. Sure: 85%. The doubt is what counts as "dialing": see [Packages](#packages).
 20. **Tier 1 has no desk process.** Settled by the owner: the desk is a program, and it arrives in Tier 2 with split and close. Tier 1 has one fixed layout at wiring, and each window keeps its own focus. Why: nothing in Tier 1 moves a tile, so a process would only hold one constant. Cost: PR 223 mirrors focus between two windows, and that goes away until Tier 2. Sure: 85%.
+    *2026-11-13: this Tier 1 stopgap ended with [0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md). Focus is the desk process's, per [0274](../../.decisions/0274-the-desktop-is-a-platform-free-core.md) and [0277](../../.decisions/0277-size-belongs-to-the-viewer.md).*
 21. **`Backend` becomes `Host`, and `has` carries what the host can do.** Settled by the owner, in `brain-hands-window-agent.md`. Why: old hellos can never get the list back, so it goes in now, even with nothing reading it. Cost: 60 to 100 product lines, and one more field in each grant. Sure: 70%, as that note says. The doubt is capabilities that change, since a hello is said once.
 22. **The hello's `backend` becomes `platform`, and so does the `Host` field that holds it.** My call. Why: it is a plain field, not a tag, and `{platform: "browser", has: ["screen"]}` reads out loud. The hello and the service carry the same value, so they use one word. Cost: one word, and no fact has been written with the old one. Sure: 80%.
 23. **The tag key is `_tag`, and Effect Schema writes it.** Settled by the owner. Why: `Schema.TaggedUnion` gives makers, `match` and guards, and `catchTag` reads the same key, so data and errors share one word. Cost: the slice's `kind` and `is` move, and one new lint rule. Sure: 90%. See [Tags](#tags).
@@ -220,6 +221,8 @@ crash  nothing: launchd keeps the brain, and the next open finds it
 
 ## Notes
 
+*Moved 2026-11-11 (owner, [0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): the notes program leaves Tier 1 and is Tier 2's first real app. Tier 1's program is the checklist ([Tier 1's P44](./tier-1.md#the-pull-requests-one-at-a-time)). P13 keeps only its two platform slices, durable terminal replies and safe input recording. This text stays for Tier 2.*
+
 **The answer:** a list of notes, each with a raw Markdown body, drawn when read and a plain text box when edited. A save comes after a short pause, on leaving the box, or from an agent's tool. Full history is kept, and everything reads back after a restart. It is a sealed program in the same box as the counter, with no network and no binding. It lands as PR D, for the reason in biggest call 10.
 
 ```ts
@@ -380,6 +383,8 @@ const Box = Schema.TaggedUnion({
 
 ## Drawing a note
 
+*Moved 2026-11-11 (owner, [0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): drawing a note leaves Tier 1 with notes, and P22 goes to Tier 2. In Tier 1, a checklist item's note is drawn as plain text. This text stays for Tier 2.*
+
 **The answer:** a note opens drawn. `e` or an Edit button shows the plain text box, and saving goes back to drawn. The fact keeps the raw `body`. Blocks are derived, never stored. The drawing comes from today's `programs/markdown`, copied by a named exception.
 
 ```ts
@@ -440,6 +445,8 @@ Why: no module state, no function in a model, and the tile's laws run with no We
 
 ## Agents through MCP
 
+*Changed 2026-11-11 (owner, [0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): the agent's program in Tier 1 is the checklist, not notes. Its tools are `checklist_check` (with an optional `note`), `checklist_uncheck`, `checklist_left` and `checklist_items`; `add`, `rename` and `remove` are a person's and get no tool. The checklist's half is built in [PR 1019](https://github.com/usirin/tea-fabrika/pull/1019); P25 builds the tools. The notes example below stays for Tier 2.*
+
 **The answer:** an agent adds one line, and it has tools made from each program's inputs.
 
 ```text
@@ -465,7 +472,7 @@ agent client  --MCP over stdio-->  the bridge  --the same WebSocket and door--> 
                                    a headless client, `as: "agent"`
 ```
 
-MCP runs only between the agent client and the bridge. On the wire, the bridge is a client like any other, so a browser could be this client too. The bridge lives on `@kampus/libfabrika/mcp` and names no program. `next/apps/fabrika/mcp.ts` starts it and hands it `[notes]`, and `fabrika` is a one-line command that calls that. The instance comes from `instance.json`, so an agent writes where real notes live, and `--url` wins for one run.
+MCP runs only between the agent client and the bridge. On the wire, the bridge is a client like any other, so a browser could be this client too. The bridge lives on `@kampus/libfabrika/mcp` and names no program. `next/apps/fabrika/mcp.ts` starts it and hands it `[checklist]` (*changed 2026-11-11, [0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md): it said `[notes]`*), and `fabrika` is a one-line command that calls that. The instance comes from `instance.json`, so an agent writes where real notes live, and `--url` wins for one run.
 
 **Let in once.** The first time a name is used, the bridge makes a key file in the app's home (`<home>/agents/<name>.key`, mode 0600) and knocks with `{label: "claude", as: "agent"}`. The menu bar shows the usual row: "Agent claude, this Mac, says code 482 109". **How often: once per agent name, one click on Approve with the same check as any row, never again.** The grant says `as: "agent"` and `for` the person, signed. Until then, every tool call answers in words:
 
@@ -557,6 +564,8 @@ export class Nemesis extends Context.Service<Nemesis, {
 	static readonly none: Layer.Layer<Nemesis>;
 }
 ```
+
+*Changed 2026-11-12, as P17b's slice 1 built it ([PR 1037](https://github.com/usirin/tea-fabrika/pull/1037)); the sketch above stays as it was written.* The schemas and the pure check are in `next/packages/libfabrika/src/runtime/Chaos.ts`, and the contract alone is in `runtime/Nemesis.ts` ([0095](../../.decisions/0095-a-service-file-holds-only-its-contract.md)). There is no static `none`: the off layer is `NemesisNone.layer`, and it fails both calls with `NemesisError`, whose `reason` is `Off`. `fire` takes a `Fire` (`{id, ordinal, target, fault}`) and `check` takes a `Target`, which names only `fabrika/checklist` ([0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)). Both fail with `NemesisError`, never `LedgerError`: its `reason` is `Off`, `BadTarget`, `NotGranted`, `Unreachable`, `BadRow` or `Storage`, each keeping its cause. `abort`'s targets are `connection`, `process` and `project`, since main has no separate gateway object. `runtime/` may not import `ledger/`, so `NemesisLedger.layer` reads history through `ProcessHistory` in `processes/`. `Report` holds `letters`, `doubled` and `gaps` with the two stream boundaries it read to and the restart facts it saw.
 
 - The box does not change: `globalOutbound: null`, no stub in its env. The isolate returns `cmds`. `ProgramRunner` in the process object reads them.
 - The wiring (`brain.ts`) holds one table: `{chaos: Nemesis}`. A `fire` from any other program is refused and logged as `bad_cmd`, and the letter stays.
@@ -656,6 +665,7 @@ export const layout: Split = {dir: "row", parts: [
 ]};
 // next/packages/tuval/src/desktop/layout.ts keeps Split, Tile, isTile and tilesIn. `fold` still reads them.
 // window/machine.ts: `focus` is in the window's model, and `opened` comes from tilesIn(layout), not from a DESK view.
+// 2026-11-13: this Tier 1 stopgap ended with 0159. Focus is the desk process's, per 0274 and 0277.
 ```
 
 Nothing is lost. A focus move was never kept for its own sake, and PR 223's `desk:owner` log holds no one's real data. The desk's first letter in Tier 2 starts its own log.
@@ -1630,7 +1640,7 @@ export class GatewayManager extends Context.Service<GatewayManager, {
 }>()("@kampus/libfabrika/GatewayManager") { static readonly layer: (sql: Sql, adapter: {probe, admitted}) => Layer.Layer<GatewayManager> }
 ```
 
-- **One writer rule.** Only the brain's `ProcessManager` writes `processes`, any stream under `processes/`, any `ProcessFact` case, or any id in the signal id space. `brainOnly` says so, and three doors use it: the door refuses such an append, `Mailbox.send` answers `refused forbidden`, and the session signer answers `SigningRefused signal` for a signal id before it reads or writes, so the parent stays free for a real write.
+- **One writer rule.** Only the brain's `ProcessManager` writes `processes`, any stream under `processes/` or any `ProcessFact` case. Signal, runner and notice ids are brain-only too. `brainOnly` says so, and three doors use it: the door refuses such an append, `Mailbox.send` answers `refused forbidden`, and the session signer answers `SigningRefused signal` for those ids before it reads or writes, so the parent stays free for a real write. The brain appends notice letters directly with `letterLine` under `noticeId(key)`, in a ledger transaction.
 - **The brain signs its own facts.** Every line `ProcessManager` writes has the brain's key as `by`, and keeps the caller's key in the body as `asked`. The fold counts a fact only when `by` is the brain, and never reads `asked`.
 - **A `DOWN` is a signal only under its signal id,** `["DOWN", to, ref, round]`, written by the brain, with a watch of that recipient, ref and target. `round` counts that watch's `monitored` facts, so a watch renewed after a cancel gets a fresh id, and an earlier round's signal is dropped. Anything else shaped like a `DOWN` is plain mail.
 - **Inboxes.** A process's `DOWN` lands in its name's inbox, a client's in `client:<id>/inbox`. A name never starts with `client:`, has no `/`, and is never `processes` or `door`.
@@ -1802,7 +1812,7 @@ The prepared step in 6 is a check: what is installed is the fold of the landed l
 **How a wake works.** A runner loads on its first call, and catches up at the start of every turn after.
 
 - **Load.** The loader gives the stepper. A missing checkpoint boots with `init(null)`. As built, the stepper drops the Cmds `init` returns; from 2026-11-08 they run once per process start, never on a wake or a hot reload ([init's Cmds run once per process start](../direction/init-runs-once-per-process.md)). A saved one decodes its dispatched Cmds, climbs through `Saved.upgrade`, boots with `init(model)`, and records `state.upgraded {program, from, to, ran, build}` when it climbed. Dispatched writes are kept to retry in the next turn, under the same id; a handler Cmd is never fired again, so one with no answer stays visible as dispatched.
-- **Catch up.** It reads `Mailbox.read(name, after)`. A letter counts as accepted when it is the runner's own (an answer or a timer), this call's letter, the saved prepared turn's id, or a placing the store kept. An accepted letter folds with its parent stamped back on; a fold that fails is `ProgramDown saved_letter`, and every letter stays. Any other letter is mail: it takes the fresh checks (a write port that is not person-only, no `parent`, its schema) and a refusal or a throw just skips it. Each folded letter records `stepped`; its Cmds are saved as dispatched, but only this call's letter's Cmds run now.
+- **Catch up.** It reads `Mailbox.read(name, after)`. A letter counts as accepted when it is the runner's own (an answer or a timer), this call's letter, the saved prepared turn's id, or a placing the store kept. An accepted letter folds with its parent stamped back on; a fold that fails is `ProgramDown saved_letter`, and every letter stays. Any other letter is mail: it takes the fresh checks (a write port that is not person-only, no `parent`, its schema) and a refusal or a throw just skips it. A fresh letter in the notice id space skips only the port and admission checks: `step` still decodes its Msg and runs `refuse`, and a `parent` is still refused. A refused or throwing notice is skipped, with a `fab.runner.notices.skipped` count on the span and no extra ledger row. Accepted notices fold on later reads. Each folded letter records `stepped`; its Cmds are saved as dispatched, but only this call's letter's Cmds run now.
 - **`stepping`.** The runner writes `Activity stepping {process, letter, build}` before every fresh step and every fold of an accepted letter, and `idle` after, success or failure. Mail checked in a catch up gets no marker. On workerd's storage it calls `put`, then `storage.sync()`, then steps, since [experiment 231](../../experiments/231-process-wakes.md) found `await put()` returns before the marker is on disk. On Node, the SQL commit is the flush. If writing `idle` fails after a failed step, the step's failure is the one kept.
 - **Reading the marker.** `recoverActivity` reads it: a marker never written is `idle`; `idle` is `idle`; `stepping` is `interrupted {process, letter, build, why: "interrupted"}`; anything else is `LedgerError bad_row`. The law: an abort right after the step starts wakes as `interrupted`, never `idle`. The runner does not call it yet.
 
@@ -2213,7 +2223,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **instance** is th
 **p67, the door stamps every input (scenario of P10).** `new`, node. s4, s7. `transport/Answer.ts`, door. *Added 2026-11-05 (owner), from [inputs carry their sender](../direction/inputs-carry-their-sender.md).*
 - *Changed 2026-11-08 (owner, [question 20](./tier-1.md#open-questions)): `id` is a TypeID, `input_<26 chars>`, and the door's process and count are their own fields on the entry. Below is the law as first written; a build pull request moves p67 and p68 to the new shape.*
 - Every input past the door becomes one `Envelope` `{id, by, arrivedAt, input}`, made in memory there. `id` is an `InputId`, `in-<run>-<n>`: only the door makes one, the `<run>` part, which names the door's start ([question 20](./tier-1.md#open-questions)), is fresh at each start of the door's object, and no id is made twice across any number of starts. `by` is the checked key's writer, whatever the params say. `arrivedAt` is the referee's clock.
-- A frame that names its own `id` or `by` is refused in words, and the refusal is recorded. Nothing it asked for happens.
+- A frame that names its own `id` or `by` is refused in words, counted, and nothing of it is kept. Nothing it asked for happens. *Changed 2026-11-12 (owner, [0140](../../.decisions/0140-gateway-refuses-client-id-and-by.md) and [0143](../../.decisions/0143-a-refused-write-is-counted-never-a-row.md); built by ticket 844, PR 1027): it said "and the refusal is recorded". The gateway refuses a write that carries `id`, `by`, `for` or `arrivedAt`, at the top of its params or of a `process.send`'s `m`, with the reason `reserved`, before it makes an input id. It writes no ledger entry, no span row and no measurement row. Each span around the call (`gateway.route`, `runtime.rpc`, `connection.frame`) is tagged `fab.gateway.refused` and adds one to its piece's hourly sum. After N refusals in one hour, every table holds the same rows as after 1, and the sum says N.*
 - Each envelope is logged in the brain's own log: who sent it and where it went. Never a raw key's text, and a `Redacted` value logs hidden.
 - Why: who sent each input exists only at the door, and the note decided to record it first. Plants: an `id` taken from the frame; `by` read from params; a client-sent `by` dropped silently instead of refused; a raw key in the log line; a start part reused after a restart.
 
@@ -2466,6 +2476,7 @@ No fact is lost by waiting on any of these. Each adds a kind of fact, and old sa
 - A tile can start from a saved line. Records no fact from Tier 1's time; nothing lost.
 - Split, close and prefix keys, since `tracker | ticket` beside `fabsh` needs them. They arrive with the desk.
 - The desk, `next/programs/desk`, built in as `fabrika/desk`. Layout and focus move into it, on the same Cmds as any program, with a grant for any start or monitor power it needs. Focus mirrors between windows again, and `ps` lists tiles. *Changed 2026-11-07 (owner): it said `runs`.* Tier 1 keeps no layout or focus as facts, and has none to lose.
+  *2026-11-13: this Tier 1 stopgap ended with [0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md). Focus is the desk process's, per [0274](../../.decisions/0274-the-desktop-is-a-platform-free-core.md) and [0277](../../.decisions/0277-size-belongs-to-the-viewer.md).*
 - `keep`, as a proposal: the tracker's filter is the first thing that needs it. Filters stay in the window's machine until then; nothing lost.
 - Topic, as a proposal: `tracker | ticket` is the first case that may need to read outside an inbox. A later Topic reads the same streams; nothing lost.
 
