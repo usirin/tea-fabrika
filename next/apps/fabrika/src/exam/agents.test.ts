@@ -29,11 +29,10 @@ const json = (depth: number): Schema.Codec<Schema.Json> =>
 
 const AgentCalls = Arbitrary.schema(
   Schema.Struct({
-    name: text(1, 96),
-    other: text(1, 96),
-    body: text(0, 4096),
+    name: text(1, 80),
+    other: text(1, 80),
+    note: text(1, 256),
     input: json(4),
-    version: int(0, 64),
   }),
 );
 
@@ -47,27 +46,35 @@ type Tool = {
 
 type InputDeclaration = {
   readonly name: string;
-  readonly schema: Schema.Struct<Schema.Struct.Fields>;
+  readonly schema: Schema.Struct<Schema.Struct.Fields> | Schema.Null;
   readonly readOnly: boolean;
   readonly personOnly: boolean;
 };
 
 const standard: ReadonlyArray<InputDeclaration> = [
-  { name: "list", schema: Schema.Struct({}), readOnly: true, personOnly: false },
-  { name: "read", schema: Schema.Struct({ note: Schema.String }), readOnly: true, personOnly: false },
   {
-    name: "save",
-    schema: Schema.Struct({ note: Schema.String, base: Schema.Number, body: Schema.String }),
+    name: "check",
+    schema: Schema.Struct({
+      name: text(1, 80),
+      note: Schema.optionalKey(text(1, 256)),
+    }),
     readOnly: false,
     personOnly: false,
   },
+  { name: "uncheck", schema: Schema.Struct({ name: text(1, 80) }), readOnly: false, personOnly: false },
+  { name: "left", schema: Schema.Null, readOnly: true, personOnly: false },
+  { name: "items", schema: Schema.Null, readOnly: true, personOnly: false },
+  { name: "add", schema: Schema.Struct({ name: text(1, 80) }), readOnly: false, personOnly: true },
   {
-    name: "person_input",
-    schema: Schema.Struct({ body: Schema.String }),
+    name: "rename",
+    schema: Schema.Struct({ name: text(1, 80), to: text(1, 80) }),
     readOnly: false,
     personOnly: true,
   },
+  { name: "remove", schema: Schema.Struct({ name: text(1, 80) }), readOnly: false, personOnly: true },
 ];
+
+const personInputs = standard.filter((d) => d.personOnly);
 
 const DeclarationCases = Arbitrary.array(
   Arbitrary.schema(
@@ -94,11 +101,11 @@ const DeclarationCases = Arbitrary.array(
 );
 
 // All four sets run on every case, including zero inputs and a nonempty hidden-only set.
-// Each set has at most 16 inputs. Standard notes inputs still run with generated extras.
+// Generated extras keep their original reach. Standard checklist inputs still run with generated extras.
 const declarationSets = (inputs: ReadonlyArray<InputDeclaration>) => [
   [],
   inputs,
-  [standard[3]!, ...inputs.slice(0, 15).map((d) => ({ ...d, personOnly: true }))],
+  [...personInputs, ...inputs.slice(0, 15).map((d) => ({ ...d, personOnly: true }))],
   [...standard, ...inputs.slice(0, 12)],
 ];
 
@@ -107,7 +114,7 @@ const inputSchema = (input: InputDeclaration) =>
 
 const tools = (actual: ReadonlyArray<Tool>, declarations: ReadonlyArray<InputDeclaration> = standard) => {
   const publicInputs = declarations.filter((d) => !d.personOnly);
-  expect(actual.map((t) => t.name)).toEqual(["ps", ...publicInputs.map((d) => `notes_${d.name}`)]);
+  expect(actual.map((t) => t.name)).toEqual(["ps", ...publicInputs.map((d) => `checklist_${d.name}`)]);
   expect(actual[0]?.inputSchema).toEqual({ type: "object", additionalProperties: false });
   expect(actual[0]?.annotations?.readOnlyHint).toBe(true);
 
@@ -129,6 +136,15 @@ const unknownTool = (actual: { words: string; letters: ReadonlyArray<string> }, 
   expect(actual.letters).toEqual([]);
 };
 
+const personRefusalControls = () => {
+  for (const d of personInputs) {
+    const name = `checklist_${d.name}`;
+    unknownTool({ words: `unknown tool ${name}`, letters: [] }, name);
+    expect(() => unknownTool({ words: `accepted ${name}`, letters: [] }, name)).toThrow();
+    expect(() => unknownTool({ words: `unknown tool ${name}`, letters: ["planted"] }, name)).toThrow();
+  }
+};
+
 const letters = (actual: ReadonlyArray<string>) => {
   for (const letter of actual) {
     Schema.decodeUnknownSync(Id.Letter)(letter);
@@ -139,13 +155,13 @@ const letters = (actual: ReadonlyArray<string>) => {
 
 const visible = (
   a: { readonly saved: string; readonly shown: string; readonly by: string; readonly for: string },
-  body: string,
+  note: string,
   agent: { readonly key: string; readonly for: string },
 ) => {
-  expect(a).toEqual({ saved: body, shown: body, by: agent.key, for: agent.for });
+  expect(a).toEqual({ saved: note, shown: note, by: agent.key, for: agent.for });
 };
 
-const waitingTools = ["ps", "notes_list", "notes_read", "notes_save"] as const;
+const waitingTools = ["ps", "checklist_check", "checklist_uncheck", "checklist_left", "checklist_items"] as const;
 
 type Waiting = {
   readonly code: string;
@@ -172,14 +188,14 @@ type Bridge = {
     input: Schema.Json,
     declarations: ReadonlyArray<InputDeclaration>,
   ) => Effect.Effect<{ readonly words: string; readonly letters: ReadonlyArray<string> }>;
-  // The binding reads code from the real waiting handshake, then calls all four tools.
+  // The binding reads code from the real waiting handshake, then calls all five tools.
   readonly waiting: (call: Call) => Effect.Effect<Waiting>;
   readonly approved: (call: Call) => Effect.Effect<{
     readonly afterRestart: boolean;
     readonly otherName: boolean;
     readonly drives: number;
   }>;
-  readonly save: (call: Call) => Effect.Effect<{
+  readonly check: (call: Call) => Effect.Effect<{
     readonly letters: ReadonlyArray<string>;
     readonly result: Parameters<typeof visible>[0];
     readonly agent: { readonly key: string; readonly for: string };
@@ -187,27 +203,36 @@ type Bridge = {
   readonly malformed: (
     call: Call,
   ) => Effect.Effect<{ readonly refused: boolean; readonly letters: ReadonlyArray<string> }>;
-  readonly stale: (call: Call) => Effect.Effect<{
+  readonly missing: (call: Call) => Effect.Effect<{
     readonly reason: string;
-    readonly now: number;
     readonly letters: ReadonlyArray<string>;
   }>;
 };
 
-type Law = "tools" | "waiting" | "approved" | "save" | "malformed";
+const refusePersonInputs = Effect.fnUntraced(function* (b: Pick<Bridge, "hidden">, c: Call) {
+  for (const d of personInputs) {
+    const name = `checklist_${d.name}`;
+    const value = d.name === "rename" ? { name: c.name, to: c.other } : { name: c.name };
+    unknownTool(yield* b.hidden(name, { value }, standard), name);
+  }
+});
+
+type Law = "tools" | "waiting" | "approved" | "check" | "malformed";
 
 const paths = {
   tools: "../../../../packages/libfabrika/src/mcp/Tools.ts",
   waiting: "../../../../packages/libfabrika/src/mcp/Server.ts",
   approved: "../../../../packages/libfabrika/src/node/transport/ClientKeyFile.ts",
-  save: "../mcp-demo.laws.test.ts",
+  check: "../mcp-demo.laws.test.ts",
   malformed: "../../../../packages/libfabrika/src/mcp/Bridge.ts",
 } as const;
 
-const notes = (inputs: ReadonlyArray<InputDeclaration>) => {
+const declared = (inputs: ReadonlyArray<InputDeclaration>) => {
   const writes = inputs.filter((d) => !d.readOnly || d.personOnly);
   const msg = Schema.Union([
-    ...writes.map((d) => Schema.Struct({ type: Schema.Literal(d.name), ...d.schema.fields })),
+    ...writes.map((d) =>
+      Schema.Struct({ type: Schema.Literal(d.name), ...("fields" in d.schema ? d.schema.fields : {}) }),
+    ),
     Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int }),
   ]);
   const machine = Machine.make({
@@ -218,7 +243,7 @@ const notes = (inputs: ReadonlyArray<InputDeclaration>) => {
     update: Object.fromEntries([...writes.map((d) => [d.name, (m: null) => [m, []]]), ["timer", (m: null) => [m, []]]]),
   });
   return Programs.Program.make({
-    name: "fabrika/notes",
+    name: "fabrika/checklist",
     machine,
     state: { v: 1, upgrades: [] },
     view: () => null,
@@ -249,12 +274,12 @@ const bindTools = Effect.fnUntraced(function* () {
   const binding: Pick<Bridge, "tools" | "hidden"> = {
     tools: (inputs) =>
       Effect.gen(function* () {
-        const result = toolsModule.list([notes(inputs)]);
+        const result = toolsModule.list([declared(inputs)]);
         return yield* Effect.fromResult(result);
       }).pipe(Effect.orDie),
     hidden: (name, input, declarations) =>
       Effect.sync(() => {
-        const call = toolsModule.read([notes(declarations)], name, { value: input });
+        const call = toolsModule.read([declared(declarations)], name, { value: input });
         expect(call).toEqual({ _tag: "refused", reason: "unknown_tool" });
         return { words: `unknown tool ${name}`, letters: [] };
       }),
@@ -287,7 +312,7 @@ const presence = <A extends Partial<Bridge>>(files: ReadonlySet<string>, law: La
 
   const binding = load();
   const methods: ReadonlyArray<keyof Bridge> =
-    law === "tools" ? ["tools", "hidden"] : law === "malformed" ? ["malformed", "stale"] : [law];
+    law === "tools" ? ["tools", "hidden"] : law === "malformed" ? ["malformed", "missing"] : [law];
 
   for (const name of methods) {
     if (typeof binding[name] !== "function") {
@@ -334,11 +359,13 @@ it.effect.prop(
     Effect.gen(function* () {
       const b = yield* targetTools(ctx);
 
+      yield* refusePersonInputs(b, { name: "item", other: "renamed", note: "checked", input });
+
       for (const inputs of declarationSets(declarations)) {
         tools(yield* b.tools(inputs), inputs);
 
         for (const d of inputs.filter((d) => d.personOnly)) {
-          const name = `notes_${d.name}`;
+          const name = `checklist_${d.name}`;
           unknownTool(yield* b.hidden(name, input, inputs), name);
         }
       }
@@ -354,6 +381,7 @@ it.effect.prop(
       const b = yield* target(ctx, "waiting"),
         a = yield* b.waiting(c);
       waiting(a);
+      yield* refusePersonInputs(b, c);
     }).pipe(Effect.provide(platform)),
   options,
 );
@@ -366,34 +394,37 @@ it.effect.prop(
       const b = yield* target(ctx, "approved"),
         a = yield* b.approved(c);
       expect(a).toEqual({ afterRestart: true, otherName: false, drives: 0 });
+      yield* refusePersonInputs(b, c);
     }).pipe(Effect.provide(platform)),
   options,
 );
 
 it.effect.prop(
-  "not built: P25 / SDK save is visible with the real checked writer; repeated saves reuse one TypeID",
+  "not built: P25 / SDK check with a note is visible with the real checked writer; repeated checks reuse one TypeID",
   { c: AgentCalls },
   ({ c }, ctx) =>
     Effect.gen(function* () {
-      const b = yield* target(ctx, "save"),
-        a = yield* b.save(c);
+      const b = yield* target(ctx, "check"),
+        a = yield* b.check(c);
       expect(a.letters.length).toBeGreaterThan(0);
       letters(a.letters);
-      visible(a.result, c.body, a.agent);
+      visible(a.result, c.note, a.agent);
+      yield* refusePersonInputs(b, c);
     }).pipe(Effect.provide(platform)),
   options,
 );
 
 it.effect.prop(
-  "not built: P25 / malformed calls and stale saves write no letters and preserve refusal fields",
+  "not built: P25 / malformed calls and checks of missing items write no letters and preserve refusal fields",
   { c: AgentCalls },
   ({ c }, ctx) =>
     Effect.gen(function* () {
       const b = yield* target(ctx, "malformed"),
         malformed = yield* b.malformed(c),
-        stale = yield* b.stale(c);
+        missing = yield* b.missing(c);
       expect(malformed).toEqual({ refused: true, letters: [] });
-      expect(stale).toEqual({ reason: "changed_elsewhere", now: c.version, letters: [] });
+      expect(missing).toEqual({ reason: "missing", letters: [] });
+      yield* refusePersonInputs(b, c);
     }).pipe(Effect.provide(platform)),
   options,
 );
@@ -403,7 +434,7 @@ const cleanTools = (declarations: ReadonlyArray<InputDeclaration> = standard): R
   ...declarations
     .filter((d) => !d.personOnly)
     .map((d) => ({
-      name: `notes_${d.name}`,
+      name: `checklist_${d.name}`,
       inputSchema: inputSchema(d),
       annotations: { readOnlyHint: d.readOnly },
     })),
@@ -421,21 +452,23 @@ const checkDeclarations = (
 it.prop(
   "checker clean control: tool contract and checked-writer senderTest",
   {
-    c: Arbitrary.schema(Schema.Struct({ name: text(1, 96), body: text(0, 4096) })),
+    c: Arbitrary.schema(Schema.Struct({ name: text(1, 96), note: text(1, 256) })),
     declarations: DeclarationCases,
   },
   ({ c, declarations }) => {
+    personRefusalControls();
+
     for (const inputs of declarationSets(declarations)) {
-      expect(Result.isSuccess(Schema.decodeUnknownResult(Programs.Program.schema)(notes(inputs)))).toBe(true);
+      expect(Result.isSuccess(Schema.decodeUnknownResult(Programs.Program.schema)(declared(inputs)))).toBe(true);
     }
 
     checkDeclarations(cleanTools, declarations);
-    unknownTool({ words: "unknown tool notes_person_input", letters: [] }, "notes_person_input");
+    unknownTool({ words: "unknown tool checklist_add", letters: [] }, "checklist_add");
     const id = "letter_0000000000e008000000000001",
       parent = "input_0000000000e008000000000001";
     const agent = { key: `SHA256:agent-${c.name}`, for: "person_0000000000e008000000000001" };
     letters([id, id]);
-    visible({ saved: c.body, shown: c.body, by: agent.key, for: agent.for }, c.body, agent);
+    visible({ saved: c.note, shown: c.note, by: agent.key, for: agent.for }, c.note, agent);
     senderTest({
       inputs: [{ parent, by: agent }],
       expected: [{ id, by: agent }],
@@ -449,9 +482,11 @@ it.prop(
 
 it.prop(
   "checker plants: hidden tools, trusted params, new retry ID and forged writer fail",
-  { c: Arbitrary.schema(Schema.Struct({ body: text(0, 4096) })) },
+  { c: Arbitrary.schema(Schema.Struct({ note: text(1, 256) })) },
   ({ c }) => {
-    for (const name of ["notes_approve", "notes_remove", "grant", "chaos_fire", "notes_hidden"]) {
+    personRefusalControls();
+
+    for (const name of ["checklist_approve", "checklist_remove", "grant", "chaos_fire", "checklist_hidden"]) {
       expect(() => tools([...cleanTools(), { name, inputSchema: {} }])).toThrow();
     }
 
@@ -460,10 +495,10 @@ it.prop(
     expect(() => letters(["p8-01"])).toThrow();
     const agent = { key: "SHA256:checked-agent", for: "person_0000000000e008000000000001" };
     expect(() =>
-      visible({ saved: c.body, shown: `${c.body}!`, by: agent.key, for: agent.for }, c.body, agent),
+      visible({ saved: c.note, shown: `${c.note}!`, by: agent.key, for: agent.for }, c.note, agent),
     ).toThrow();
     expect(() =>
-      visible({ saved: c.body, shown: c.body, by: "params.person", for: agent.for }, c.body, agent),
+      visible({ saved: c.note, shown: c.note, by: "params.person", for: agent.for }, c.note, agent),
     ).toThrow();
     expect(() =>
       senderTest({
@@ -482,6 +517,8 @@ it.prop(
   "checker plants: empty schemas, missing fields, changed types and callable hidden inputs fail",
   { declarations: DeclarationCases },
   ({ declarations: inputs }) => {
+    personRefusalControls();
+
     for (const declarations of declarationSets(inputs)) {
       const clean = cleanTools(declarations);
       tools(clean, declarations);
@@ -520,7 +557,12 @@ it.prop(
       }
     }
 
-    expect(() => unknownTool({ words: "saved notes_person_input", letters: [] }, "notes_person_input")).toThrow();
+    const withoutNote = standard.map((d) =>
+      d.name === "check" ? { ...d, schema: Schema.Struct({ name: text(1, 80) }) } : d,
+    );
+    expect(() => tools(cleanTools(withoutNote))).toThrow();
+
+    expect(() => unknownTool({ words: "saved checklist_add", letters: [] }, "checklist_add")).toThrow();
   },
   options,
 );
@@ -529,6 +571,7 @@ it.prop(
   "checker plants: extra argument, value and field constraints fail for every public tool",
   { declarations: DeclarationCases },
   ({ declarations }) => {
+    personRefusalControls();
     const object = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown));
 
     for (const inputs of declarationSets(declarations)) {
@@ -561,8 +604,8 @@ it.prop(
             });
           }
 
-          // Confirm the field-level plant reaches notes_read.note as well as generated fields.
-          expect(tool.name).toBe(`notes_${publicInputs[i - 1]!.name}`);
+          // Confirm the field-level plant reaches checklist_check.note as well as generated fields.
+          expect(tool.name).toBe(`checklist_${publicInputs[i - 1]!.name}`);
         }
 
         for (const inputSchema of mutations) {
@@ -595,12 +638,19 @@ it.prop(
   "checker plants: each waiting tool must include its approval code and write no letter",
   { code: Arbitrary.schema(text(1, 96)) },
   ({ code }) => {
+    personRefusalControls();
     const approval = `approval-${code}`,
       reply = { words: `Waiting for approval. Code: ${approval}`, letters: [] };
     const clean: Waiting = {
       code: approval,
       tools: cleanTools(),
-      replies: { ps: reply, notes_list: reply, notes_read: reply, notes_save: reply },
+      replies: {
+        ps: reply,
+        checklist_check: reply,
+        checklist_uncheck: reply,
+        checklist_left: reply,
+        checklist_items: reply,
+      },
     };
     waiting(clean);
 
@@ -623,6 +673,7 @@ it.prop(
   "presence checker controls: no source is pending; partial/failed imports fail",
   { message: Arbitrary.schema(text(0, 128)) },
   ({ message }) => {
+    personRefusalControls();
     const failed = (): Bridge => {
       throw new Error(`failed import: ${message}`);
     };
@@ -646,9 +697,9 @@ it.prop(
       hidden: () => Effect.succeed({ words: "unknown tool", letters: [] }),
       waiting: () => Effect.die("control only"),
       approved: () => Effect.die("control only"),
-      save: () => Effect.die("control only"),
+      check: () => Effect.die("control only"),
       malformed: () => Effect.die("control only"),
-      stale: () => Effect.die("control only"),
+      missing: () => Effect.die("control only"),
     };
 
     for (const law of Object.keys(paths) as ReadonlyArray<Law>) {

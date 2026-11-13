@@ -49,6 +49,11 @@
       "paths": ["next/packages/libfabrika/src/mcp"]
     },
     {
+      "name": "next-schedules",
+      "layer": 6,
+      "paths": ["next/packages/libfabrika/src/schedules"]
+    },
+    {
       "name": "next-door",
       "layer": 6,
       "paths": ["next/packages/libfabrika/src/gateway"]
@@ -106,6 +111,11 @@
       "name": "next-transport",
       "layer": 2,
       "paths": ["next/packages/libfabrika/src/transport"]
+    },
+    {
+      "name": "next-repositories",
+      "layer": 2,
+      "paths": ["next/packages/libfabrika/src/repositories"]
     },
     {
       "name": "next-settings",

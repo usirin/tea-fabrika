@@ -27,6 +27,7 @@ import {
   brainOnly,
   type From,
   type History,
+  inNoticeSpace,
   inRunnerSpace,
   inSignalSpace,
   LedgerError,
@@ -56,6 +57,7 @@ import { ExitReason } from "../processes/ExitReason.ts";
 import { ProcessName } from "../processes/Process.ts";
 import { MailRefusal } from "../processes/ProgramMail.ts";
 import * as Chaos from "./Chaos.ts";
+import type { WatcherManager } from "./Entry.ts";
 import {
   Alarm,
   CheckedWriter,
@@ -65,7 +67,6 @@ import {
   ProgramLoader,
   Recording,
   type View,
-  WatcherManager,
 } from "./Entry.ts";
 import { fromFailure } from "./internal/exitReason.ts";
 import { Failure, Policy } from "./internal/recovery.ts";
@@ -79,6 +80,9 @@ import * as RepliesSql from "./RepliesSql.ts";
 import { Queued, SendInput } from "./Send.ts";
 import { ExitInput, StartChildInput } from "./StartChild.ts";
 import { StepFault } from "./StepFault.ts";
+import type { WatchersError } from "./Watchers.ts";
+import { Watchers } from "./Watchers.ts";
+import * as WatchersSql from "./WatchersSql.ts";
 
 export { defaultPolicy, Supervision } from "./internal/supervisor.ts";
 
@@ -266,6 +270,9 @@ export class ProgramRunner extends Context.Service<
     readonly mailed: Effect.Effect<void, RunnerFailure>;
     /** The object's alarm fired at `at`: the program's timer, if it asked for one by then. */
     readonly due: (at: number) => Effect.Effect<void, RunnerFailure>;
+    /** The new process's first turn, OTP's init/1: loads the program and arms its alarm. Safe to
+     *  call again: a live runner only catches up. */
+    readonly init: () => Effect.Effect<void, RunnerFailure>;
     readonly restart: (request: { readonly id: string; readonly build: string }) => Effect.Effect<void, RunnerFailure>;
   }
 >()("@kampus/libfabrika/ProgramRunner") {
@@ -304,7 +311,7 @@ export class ProgramRunner extends Context.Service<
         let woke = false;
         const mailbox = yield* Mailbox;
         const checked = yield* CheckedWriter;
-        const watchers = yield* WatcherManager;
+        const watches = yield* Watchers.pipe(Effect.provide(WatchersSql.layer(options.recovery.sql, initial)));
         const alarm = yield* Alarm;
         const recording = yield* Recording;
         const sessions = yield* Effect.serviceOption(SessionManager);
@@ -327,7 +334,6 @@ export class ProgramRunner extends Context.Service<
         let alarmAt: number | null | undefined;
         /** Writes left dispatched by an earlier process life: retried once loaded. */
         let retry: ReadonlyArray<Dispatched> = [];
-        const clients = new Set<string>();
 
         const now = Effect.map(DateTime.now, DateTime.formatIso);
         /** The current trace: every runner call runs inside its own span. */
@@ -826,6 +832,44 @@ export class ProgramRunner extends Context.Service<
           return yield* step._tag === "stepped" ? Effect.succeed(step) : Effect.fail(new ProgramDown({ reason }));
         });
 
+        /** A throw in the program's init is supervision's, as a step's is: observed, then the wait.
+         *  The journal takes the attempt, under the letter `<pid>/init`, only once init has thrown,
+         *  so a load whose init returns leaves the journal and its counts as they were. */
+        const booted = (init: Effect.Effect<Step, ProgramDown>): Effect.Effect<Step, RunnerFailure> =>
+          init.pipe(
+            Effect.catchIf(
+              (down: ProgramDown) => supervision !== null && down.source === undefined,
+              Effect.fnUntraced(function* (down: ProgramDown): Effect.fn.Return<never, RunnerFailure> {
+                const { at } = yield* (yield* coordinator).status(process.name);
+                const letter = `${process.id}/init`;
+                yield* complete({
+                  type: "begin",
+                  process: process.id,
+                  letter,
+                  build: process.build,
+                  phase: "saved",
+                  at,
+                });
+                const j = supervision?.journal;
+
+                if (j?._tag !== "stepping" || j.attempt.letter !== letter) {
+                  return yield* new LedgerError({ reason: "bad_row", cause: down });
+                }
+
+                const { phase: _phase, at: _at, ...attempt } = j.attempt;
+                const error = down.errorClass;
+                const failure = Failure.cases.saved.make({ ...attempt, error });
+                const meta = yield* from(null, yield* traceId);
+                yield* observed(
+                  { type: "threw", seq: attempt.seq, error, reason: fromFailure(failure), from: meta },
+                  attempt.process,
+                  { failure, content: Object.hasOwn(down, "cause") ? down.cause : down },
+                ).pipe(Effect.mapError(() => down));
+                return yield* down;
+              }),
+            ),
+          );
+
         /** Loads the program and its checkpoint, climbing saved state through its upgrades. */
         const load = Effect.fnUntraced(function* () {
           const loaded = yield* loader.load(process.program, process.build);
@@ -838,7 +882,7 @@ export class ProgramRunner extends Context.Service<
           const saved = yield* store.load;
 
           if (saved === null) {
-            const boot = yield* stepped(yield* loaded.execution.init(null), "load");
+            const boot = yield* stepped(yield* booted(loaded.execution.init(null)), "load");
             const fresh: Live = {
               loaded,
               model: boot.model,
@@ -860,7 +904,7 @@ export class ProgramRunner extends Context.Service<
 
           const cmds = decoded.success;
           const { saved: next, ran } = yield* loaded.execution.upgrade(saved.saved);
-          const boot = yield* stepped(yield* loaded.execution.init(next.model), "saved_state");
+          const boot = yield* stepped(yield* booted(loaded.execution.init(next.model)), "saved_state");
           const upgraded = saved.saved.v !== next.v || ran.length > 0;
 
           if (upgraded) {
@@ -911,14 +955,12 @@ export class ProgramRunner extends Context.Service<
           if (after.pos !== before.pos) {
             const patch = diff(before.view, after.view);
 
-            for (const client of clients) {
-              yield* watchers.publish(client, {
-                type: "patch",
-                base: before.pos,
-                rev: after.pos,
-                patch,
-              });
-            }
+            yield* watches.publish({
+              type: "patch",
+              base: before.pos,
+              rev: after.pos,
+              patch,
+            });
           }
 
           yield* setAlarm();
@@ -970,6 +1012,7 @@ export class ProgramRunner extends Context.Service<
           const drain: Array<Dispatched> = [];
           let alive: boolean | undefined;
           let stop = letters.length;
+          let skippedNotices = 0;
 
           for (const [index, letter] of letters.entries()) {
             const signal = inSignalSpace(letter.id);
@@ -1019,9 +1062,13 @@ export class ProgramRunner extends Context.Service<
                   yield* step("saved_letter", letter.id, () => state.loaded.execution.fold(model, m)),
                   "saved_letter",
                 )
-              : yield* receive(state, model, letter.m);
+              : yield* receive(state, model, letter.id, letter.m);
 
             if (folded._tag === "refused") {
+              if (inNoticeSpace(letter.id)) {
+                skippedNotices++;
+              }
+
               continue;
             }
 
@@ -1068,6 +1115,10 @@ export class ProgramRunner extends Context.Service<
             }
           }
 
+          if (skippedNotices > 0) {
+            yield* Effect.annotateCurrentSpan(tag("notices.skipped"), skippedNotices);
+          }
+
           const last = letters.slice(0, stop).at(-1);
           const next: Live = {
             ...state,
@@ -1085,15 +1136,22 @@ export class ProgramRunner extends Context.Service<
           return { state: next, fresh: fresh as ReadonlyArray<Dispatched>, mine };
         });
 
-        const receive = Effect.fnUntraced(function* (state: Live, model: unknown, m: unknown) {
-          const port = inputPort(state, m);
+        const receive = Effect.fnUntraced(function* (state: Live, model: unknown, id: string, m: unknown) {
+          const refused = Step.cases.refused.make({ reason: "bad_msg" });
 
-          if (port === undefined || !port.write || port.personOnly || hasParent(m)) {
-            return Step.cases.refused.make({ reason: "bad_msg" });
+          if (hasParent(m)) {
+            return refused;
           }
 
-          const refused = Step.cases.refused.make({ reason: "bad_msg" });
-          return yield* state.loaded.execution.admit(m).pipe(
+          if (!inNoticeSpace(id)) {
+            const port = inputPort(state, m);
+
+            if (port === undefined || !port.write || port.personOnly) {
+              return refused;
+            }
+          }
+
+          return yield* (inNoticeSpace(id) ? Effect.succeed(true) : state.loaded.execution.admit(m)).pipe(
             Effect.flatMap((admitted) => (admitted ? state.loaded.execution.step(model, m) : Effect.succeed(refused))),
             Effect.catchIf(
               (error) => error.reason === "step" && error.source === undefined,
@@ -1582,6 +1640,7 @@ export class ProgramRunner extends Context.Service<
         const open = call("runner.open");
         const msg = call("runner.step");
         const due = call("runner.due");
+        const init = call("runner.init");
         const restart = call("runner.restart.request");
 
         return {
@@ -1603,18 +1662,7 @@ export class ProgramRunner extends Context.Service<
                   return yield* new RunnerError({ reason: "bad_client" });
                 }
 
-                clients.delete(client);
-
-                if (clients.size >= 1024) {
-                  const oldest = clients.values().next();
-
-                  if (!oldest.done) {
-                    clients.delete(oldest.value);
-                  }
-                }
-
-                clients.add(client);
-                yield* watchers.publish(client, {
+                yield* watches.open(client, {
                   type: "whole",
                   rev: state.pos,
                   view: state.view,
@@ -1724,6 +1772,22 @@ export class ProgramRunner extends Context.Service<
                 ),
               ),
               time,
+            ),
+          init: () =>
+            init(
+              Effect.gen(function* () {
+                if (!recovering(supervision)) {
+                  // A program that throws in init is supervision's: once it holds the crash, the start answers.
+                  yield* ready().pipe(
+                    Effect.catchIf(
+                      (error) => error._tag === "ProgramDown" && recovering(supervision),
+                      () => Effect.void,
+                    ),
+                  );
+                }
+
+                return { answer: undefined, jobs: [] };
+              }),
             ),
           restart: (request: { readonly id: string; readonly build: string }) =>
             restart(
@@ -1923,7 +1987,15 @@ export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError"
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
-type RunnerFailure = LedgerError | ProgramDown | RunnerError | SinkError | ProcessError | NotGranted | RepliesError;
+type RunnerFailure =
+  | LedgerError
+  | ProgramDown
+  | RunnerError
+  | SinkError
+  | ProcessError
+  | NotGranted
+  | RepliesError
+  | WatchersError;
 
 const cmdType = (job: Dispatched): string =>
   Option.match(decodeTyped(job.cmd), { onNone: () => "", onSome: (c) => c.type });

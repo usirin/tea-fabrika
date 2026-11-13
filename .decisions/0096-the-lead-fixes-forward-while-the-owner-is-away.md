@@ -1,7 +1,7 @@
 ---
 id: 0096
 title: While the owner is away, the lead restarts a lane its budget stopped and builds its lean as an open pull request, never a list of questions
-status: accepted
+status: amended-in-part by [0162](0162-no-friction-before-a-merge.md)
 date: 2026-11-11
 tags: [lead, lane, budget, owner, overnight, pull-request]
 ---

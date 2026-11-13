@@ -114,6 +114,27 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: NoInfer<A>[], law: (a: A
 const json = fc.jsonValue();
 
 describe("P33, only the owning runner writes its answers", () => {
+  it.effect.prop(
+    "B2: notice ids, including whitespace and reserved prefixes, require the brain and refuse public mail",
+    [Schema.String, Schema.Literals(["", " ", "\n", "\t"]), Schema.Json],
+    ([key, space, m]) =>
+      Effect.gen(function* () {
+        // JSON whitespace changes the spelling, never ownership of the id space.
+        for (const id of [
+          JSON.stringify(["notice", key]),
+          `${space}[${space}"notice",${JSON.stringify(key)}]${space}`,
+          '["notice"',
+        ]) {
+          expect(brainOnly({ stream: "notes:1/inbox", id, tag: "send" })).toBe(true);
+          expect(yield* send("notes:1", id, m)).toEqual({ _tag: "refused", reason: "forbidden" });
+        }
+
+        expect(yield* inbox("notes:1")).toEqual([]);
+        expect(yield* send("notes:1", `plain:${key}`, m)).toMatchObject({ _tag: "placed" });
+      }).pipe(Effect.provide(mail())),
+    { arbitrary: { seed: SEED } },
+  );
+
   // Process ids come from processIds: exact UUIDv7 TypeIDs, not any 26 base32 characters.
   const Nat = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }));
   const props = { arbitrary: { seed: SEED, runs: 40 } };

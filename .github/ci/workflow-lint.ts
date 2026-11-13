@@ -41,7 +41,7 @@ const compact = (value: unknown) => {
 };
 
 const env = {
-  BASE: `\${{ github.event.pull_request.base.sha || github.event.before }}`,
+  BASE: `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}`,
   HEAD: `\${{ github.event.pull_request.head.sha || github.sha }}`,
   EVENT: `\${{ github.event_name }}`,
 };
@@ -87,18 +87,22 @@ export const lintWorkflow = (text: string): string[] => {
     }
   };
   const push = map(on["push"]),
-    pr = map(on["pull_request"]);
+    pr = map(on["pull_request"]),
+    queue = map(on["merge_group"]);
   require("pull_request" in on &&
     "push" in on &&
     JSON.stringify(push["branches"]) === '["main"]', "run every PR and main push");
 
-  for (const trigger of [on, push, pr]) {
+  for (const trigger of [on, push, pr, queue]) {
     require(!["paths", "paths-ignore", "branches-ignore", "tags", "tags-ignore"].some(
       (key) => key in trigger,
     ), "no workflow path or branch exclusions");
   }
 
   require(!("branches" in pr), "all PR bases remain enabled");
+  // A merge queue takes a required check only from a `merge_group` run, so without this trigger
+  // `ci-required` never reports there and nothing can merge.
+  require(JSON.stringify(queue["types"]) === '["checks_requested"]', "the merge queue's group runs the checks");
   const types = pr["types"];
   require(Array.isArray(types) &&
     types.length === TYPES.length &&

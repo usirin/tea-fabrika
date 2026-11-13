@@ -243,6 +243,7 @@ const rowParts: Readonly<Record<string, string>> = {
   "next-ledger": "data",
   "next-ci": "data",
   "next-codehost": "data",
+  "next-repositories": "data",
   "next-settings": "data", // T664: layer 2 beside the ledger, and node/settings/ imports it
   "next-processes": "coordination",
   "next-presence": "coordination",
@@ -253,6 +254,7 @@ const rowParts: Readonly<Record<string, string>> = {
   "next-runtime": "app",
   "next-mcp": "mcp",
   "next-door": "door",
+  "next-schedules": "door", // T762: layer 6 beside the door; it imports only tea and effect today
   "next-node": "node",
   "next-workers": "workers",
 };
@@ -1036,6 +1038,30 @@ describe("layers", () => {
   const root = (files: Readonly<Record<string, string>>) =>
     plant({ "package.json": { name: "plant", private: true }, ...files });
 
+  // scenario: L12 uses the actual repository row and real tool to refuse peers and platform code.
+  it("scenario: T878 L12 repositories cannot import a peer, packs or Node wiring", () => {
+    const tree = root({
+      "next/packages/libfabrika/src/repositories/Repositories.ts": lines(
+        'import {setting} from "../settings/Setting.ts";',
+        'import {open} from "../packs/Open.ts";',
+        'import {git} from "../node/repositories/RepositoriesGit.ts";',
+        'import {id} from "../Id.ts";',
+        "export {setting, open, git, id};",
+      ),
+      "next/packages/libfabrika/src/settings/Setting.ts": lines("export const setting = 1;"),
+      "next/packages/libfabrika/src/packs/Open.ts": lines("export const open = 1;"),
+      "next/packages/libfabrika/src/node/repositories/RepositoriesGit.ts": lines("export const git = 1;"),
+      "next/packages/libfabrika/src/Id.ts": lines("export const id = 1;"),
+    });
+    const run = runTool(tree, REAL);
+    expect(run.edges).toEqual([
+      "next-repositories -> next-node [upward]",
+      "next-repositories -> next-packs [upward]",
+      "next-repositories -> next-settings [sideways]",
+    ]);
+    expect(run.status).toBe(1);
+  });
+
   // scenario: a planted tree of four rows on three layers, with one upward, two sideways (one each
   // way) and two downward imports, since the law is about the tool's answer on a known tree. `mid1`
   // and `mid2` share layer 1.
@@ -1144,6 +1170,7 @@ describe("layers", () => {
       "next-libfabrika-entry": 7,
       "next-mcp": 6,
       "next-door": 6,
+      "next-schedules": 6,
       "next-runtime": 5,
       "next-access": 4,
       "next-processes": 3,
@@ -1152,6 +1179,7 @@ describe("layers", () => {
       "next-packs": 3,
       "next-ci": 2,
       "next-codehost": 2,
+      "next-repositories": 2,
       "next-ledger": 2,
       "next-transport": 2,
       "next-settings": 2, // T664's approved plan: settings sits on layer 2, above telemetry

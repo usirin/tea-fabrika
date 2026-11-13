@@ -197,6 +197,7 @@ export const open = Effect.gen(function* () {
     );
     const live = Context.get(context, ProgramRunner);
     const runner = ProgramRunner.of({
+      init: () => live.init().pipe(Effect.withTracer(tracer)),
       open: (client) => live.open(client).pipe(Effect.withTracer(tracer)),
       msg: (input) => live.msg(input).pipe(Effect.withTracer(tracer)),
       due: (at) => live.due(at).pipe(Effect.withTracer(tracer)),

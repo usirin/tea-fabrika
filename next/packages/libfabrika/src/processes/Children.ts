@@ -49,4 +49,4 @@ export class ChildrenError extends Schema.TaggedError<ChildrenError>()("Children
 export class Children extends Context.Service<
   Children,
   { readonly start: (child: Child, from: From) => Effect.Effect<Started, ChildrenError> }
->()("@kampus/libfabrika/Children") {}
+>()("@kampus/libfabrika/processes/Children") {}

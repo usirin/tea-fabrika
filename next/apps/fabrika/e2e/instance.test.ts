@@ -318,6 +318,8 @@ describe("P12 real browser protocol", () => {
     expect(started.body.program).toBe("fabrika/counter");
     const pid = started.body.process;
     expect((await rpc(a, "view.open", { pid })).result).toEqual({ rev: 0, view: { count: 0 } });
+    // W8 scenario: only a real clock can let the local runtime evict an idle Process.
+    await a.waitForTimeout(15_000);
     const waiting = rpc(b, "ledger.wait", { stream: "counter:1/inbox", after: 0 });
     const accepted = await rpc(a, "process.send", {
       pid,
@@ -328,6 +330,11 @@ describe("P12 real browser protocol", () => {
     });
     expect(accepted.result).toMatchObject({ _tag: "accepted", pos: 1 });
     expect((await waiting).result).toMatchObject({ rev: accepted.result.rev });
+    // The original connection must receive the patch before a reload or another view.open.
+    await a.waitForFunction(() => window.p12.frames.some((f: any) => f.method === "view.patch"));
+    const idlePatch = (await state(a)).find((f: any) => f.method === "view.patch");
+    expect(idlePatch.params).toMatchObject({ base: 0, rev: accepted.result.pos });
+    expect(await a.evaluate(() => window.p12.connections())).toBe(1);
     const reloaded = await driver(a, s.url, "tab-a");
     expect(reloaded.fingerprint).toBe(first.fingerprint);
     expect(reloaded.first.error).toBeUndefined();
