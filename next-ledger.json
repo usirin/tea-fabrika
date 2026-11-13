@@ -11,19 +11,9 @@
 			"code": "afterEach(async () => {"
 		},
 		{
-			"file": "next/apps/fabrika/src/build-command.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterEach(() => {"
-		},
-		{
 			"file": "next/apps/fabrika/src/build.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterEach(() => {"
-		},
-		{
-			"file": "next/apps/fabrika/src/door-recovery.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
@@ -36,26 +26,6 @@
 			"code": "afterAll(() => rmSync(TOP, { recursive: true, force: true }));"
 		},
 		{
-			"file": "next/apps/fabrika/src/exam/deps.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
-		},
-		{
-			"file": "next/apps/fabrika/src/exam/edges.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => rmSync(repo, { recursive: true, force: true }));"
-		},
-		{
-			"file": "next/apps/fabrika/src/exam/laws-scan.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => rmSync(root, { recursive: true, force: true }));"
-		},
-		{
-			"file": "next/apps/fabrika/src/exam/layers.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
-		},
-		{
 			"file": "next/apps/fabrika/src/instance-one-file.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterEach(() => {"
@@ -64,11 +34,6 @@
 			"file": "next/apps/fabrika/src/instance-wire.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterEach(async () => {"
-		},
-		{
-			"file": "next/apps/fabrika/src/local-instance.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterEach(() => {"
 		},
 		{
 			"file": "next/apps/fabrika/src/runtime-recovery.laws.test.ts",
@@ -272,16 +237,6 @@
 		},
 		{
 			"file": "next/packages/libfabrika/src/node/build/css.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterEach(() => {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/node/dev/local-dev.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterEach(() => {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/node/dev/local-dev.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterEach(() => {"
 		},
