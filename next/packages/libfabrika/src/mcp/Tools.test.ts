@@ -423,8 +423,9 @@ const fieldSchema = (field: typeof Field.Type, name: string) => {
   }
 };
 
-// A-Wire's odd member: one more port, `odd`, whose single field has no JSON form.
-const OddField = Schema.Literals(["map", "set", "declared"]);
+// A-Wire's odd member: one more port, `odd`, whose single field has no JSON form, or is free JSON.
+// A free JSON field lists as `{}`, an open schema, and an agent is handed a closed one (0210).
+const OddField = Schema.Literals(["map", "set", "declared", "unknown", "json"]);
 const Odd = Schema.Struct({ field: OddField, personOnly: Schema.Boolean });
 
 const oddSchema = (field: typeof OddField.Type) =>
@@ -432,7 +433,11 @@ const oddSchema = (field: typeof OddField.Type) =>
     ? Schema.instanceOf(Map)
     : field === "set"
       ? Schema.instanceOf(Set)
-      : Schema.declare((u): u is () => unknown => Predicate.isFunction(u), { expected: "a function" });
+      : field === "unknown"
+        ? Schema.Unknown
+        : field === "json"
+          ? Schema.Json
+          : Schema.declare((u): u is () => unknown => Predicate.isFunction(u), { expected: "a function" });
 
 const makeForm = (form: Declaration & { readonly odd?: typeof Odd.Type }) => {
   const members = form.members.map((member, i) => {
@@ -1125,7 +1130,7 @@ it.effect.prop(
 );
 
 it.prop(
-  "W4: a visible port with a field that has no JSON form fails the list by name, and no call is read",
+  "W4: a visible port with a field that has no JSON form, or is free JSON, fails the list by name, and no call is read",
   { sample: Forms.Odd },
   ({ sample: { description, odd, stranger } }) => {
     const form = makeForm({ ...description, odd });
