@@ -3,7 +3,7 @@
 // would, and never runs a Cmd: the runner does that, after the input is saved.
 import { applyCell, msgKeysOf, type AnyCmdDef } from "@demlik/tea";
 import { Effect, Option, Predicate, Result, Schema, type SchemaIssue } from "effect";
-import * as SchemaAST from "effect/SchemaAST";
+import * as SchemaTransformation from "effect/SchemaTransformation";
 import { ParentText } from "../coordination/index.ts";
 import { Deliveries, Policy } from "./internal/recovery.ts";
 
@@ -360,98 +360,45 @@ type PortSchema<P extends typeof Declaration.Type, K extends string> = string ex
         : Schema.Codec<PortFields<P["msg"]["Type"], K>, unknown>
     : Declared;
 
-// Message checks still see their discriminator even though a port's value omits it.
-const portCheck = (check: SchemaAST.Check<unknown>, key: string): SchemaAST.Check<unknown> =>
-  check._tag === "FilterGroup"
-    ? new SchemaAST.FilterGroup(
-        [portCheck(check.checks[0], key), ...check.checks.slice(1).map((c) => portCheck(c, key))],
-        check.annotations,
-      )
-    : new SchemaAST.Filter(
-        (value, ast, options) => check.run(Predicate.isObject(value) ? { ...value, type: key } : value, ast, options),
-        check.annotations,
-        check.aborted,
-      );
+const Payload = Schema.Record(Schema.String, Schema.Json).check(
+  Schema.makeFilter((value) => !Object.hasOwn(value, "type")),
+);
 
-const writePortSchema = (ast: SchemaAST.AST, key: string): Option.Option<Declared> => {
-  if (SchemaAST.isSuspend(ast)) {
-    return writePortSchema(ast.thunk(), key);
-  }
+const Fields = Schema.Record(Schema.String, Schema.Unknown);
 
-  const checks =
-    ast.checks === undefined
-      ? undefined
-      : ([portCheck(ast.checks[0], key), ...ast.checks.slice(1).map((check) => portCheck(check, key))] as const);
+// Keep the Msg's codecs and checks intact. Only add and remove the port's discriminator.
+const writePortCodec = (msg: Declared, key: string) =>
+  Payload.pipe(
+    Schema.decodeTo(
+      Schema.toCodecJson(msg),
+      SchemaTransformation.transform<Schema.Json, Readonly<Record<string, Schema.Json>>>({
+        decode: (value) => ({ ...value, type: key }),
+        encode: (wire) => {
+          if (!Predicate.isObject(wire)) {
+            return {};
+          }
 
-  // A struct codec can rename encoded fields. Project both sides of every link.
-  let encoding: SchemaAST.Encoding | undefined;
-
-  if (ast.encoding !== undefined) {
-    const project = (link: SchemaAST.Link) =>
-      Option.map(writePortSchema(link.to, key), (schema) => new SchemaAST.Link(schema.ast, link.transformation));
-    const [first, ...rest] = ast.encoding;
-    const links = Option.all([project(first), Option.all(rest.map(project))]);
-
-    if (Option.isNone(links)) {
-      return Option.none();
-    }
-
-    encoding = [links.value[0], ...links.value[1]];
-  }
-
-  if (SchemaAST.isUnion(ast)) {
-    const [first, ...rest] = ast.types.flatMap((member) => Option.toArray(writePortSchema(member, key)));
-
-    if (first === undefined) {
-      return Option.none();
-    }
-
-    if (rest.length === 0 && encoding === undefined) {
-      const schema = ast.annotations === undefined ? first : first.annotate(ast.annotations);
-      return Option.some(checks === undefined ? schema : schema.check(...checks));
-    }
-
-    return Option.some(
-      Schema.make<Declared>(
-        new SchemaAST.Union(
-          [first.ast, ...rest.map((schema) => schema.ast)],
-          ast.options,
-          ast.annotations,
-          checks,
-          encoding,
-          ast.context,
-          ast.encodingChecks,
-        ),
-      ),
-    );
-  }
-
-  if (
-    !SchemaAST.isObjects(ast) ||
-    !ast.propertySignatures.some(
-      (p) => p.name === "type" && Schema.is(Schema.toType(Schema.make<Declared>(p.type)))(key),
-    )
-  ) {
-    return Option.none();
-  }
-
-  const schema = Schema.make<Declared>(
-    new SchemaAST.Objects(
-      ast.propertySignatures.filter((p) => p.name !== "type"),
-      ast.indexSignatures,
-      ast.annotations,
-      checks,
-      encoding,
-      ast.context,
-      ast.encodingChecks,
+          const { type: _, ...value } = wire;
+          return value;
+        },
+      }),
+    ),
+    Schema.decodeTo(Fields.check(Schema.makeFilter((m) => m.type === key))),
+    Schema.decodeTo(
+      Fields,
+      SchemaTransformation.transform({
+        decode: (m) => {
+          const { type: _, ...fields } = Predicate.isObject(m) ? m : {};
+          return fields;
+        },
+        encode: (fields) => ({ ...fields, type: key }),
+      }),
     ),
   );
-  return Option.some(schema);
-};
 
 /**
  * Returns a read port's schema or a write message's fields without its `type`.
- * A missing port or message member has no schema.
+ * A missing port has no schema; a write is decoded by the Msg's own JSON codec.
  *
  * @stability unstable
  * @category getters
@@ -471,7 +418,7 @@ export function port(program: typeof Declaration.Type, key: string): Option.Opti
     return Option.some(input.schema);
   }
 
-  return writePortSchema(program.msg.ast, key);
+  return Option.some(writePortCodec(program.msg, key));
 }
 
 /** A JSON object: an event as it travels inside a write. Its declared schema gives its `_tag`. */
