@@ -387,6 +387,8 @@ export const merger = (settings: Values) => {
       merge_err: reduce,
       send_ok: reduce,
       send_err: reduce,
+      exit_ok: (s) => [s, []],
+      exit_err: (s) => [s, []],
     },
   });
   return Program.make({
