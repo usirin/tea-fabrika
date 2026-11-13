@@ -66,6 +66,7 @@ const requiredAt = Effect.fn("Queue.requiredAt")(function* (oid: string, wait: W
       () => new Pending(),
     ),
     Effect.retry({ schedule: Schedule.spaced(Duration.seconds(wait.every)) }),
+    Effect.catchTag("Pending", () => Effect.sync(() => last)),
     Effect.timeoutOption(Duration.minutes(wait.minutes)),
   );
   return Option.getOrElse(yield* ended, () => last);

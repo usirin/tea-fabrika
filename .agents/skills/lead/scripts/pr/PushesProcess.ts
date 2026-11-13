@@ -34,45 +34,53 @@ export const layer = (scripts: string): Layer.Layer<Pushes, never, ChildProcessS
         ),
       );
 
-      const refusedToStart = Effect.catchTag("PlatformError", (e: { readonly message: string }) =>
-        Effect.fail(new LeakGrepRefused({ reason: `the leak grep could not start: ${e.message}` })),
+      const leakChange = Effect.fn("PushesProcess.leakChange")(
+        function* (dir: string, head: string) {
+          const fetched = yield* ran("git", ["-C", dir, "fetch", "-q", "origin", "main", head], dir);
+
+          if (fetched.code !== 0) {
+            return yield* new LeakGrepRefused({
+              reason: `main and ${head} could not be fetched: ${lastLine(fetched)}`,
+            });
+          }
+
+          // The diff is read whole before the grep starts, so a diff that fails is never an empty pass.
+          const range = `origin/main...${head}`;
+          const diff = yield* ran(
+            "git",
+            ["-C", dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=0", range],
+            dir,
+          );
+
+          if (diff.code !== 0) {
+            return yield* new LeakGrepRefused({ reason: `the diff ${range} does not read: ${lastLine(diff)}` });
+          }
+
+          const grep = yield* ran("sh", [`${scripts}/leakgrep.sh`], dir, `${diff.out}\n`);
+
+          if (grep.code !== 0) {
+            return yield* new LeakGrepRefused({ reason: `leakgrep.sh exited ${grep.code}: ${lastLine(grep)}` });
+          }
+        },
+        Effect.catchTag("PlatformError", (e) =>
+          Effect.fail(new LeakGrepRefused({ reason: `the leak grep could not start: ${e.message}` })),
+        ),
       );
 
-      const leakChange = Effect.fn("PushesProcess.leakChange")(function* (dir: string, head: string) {
-        const fetched = yield* ran("git", ["-C", dir, "fetch", "-q", "origin", "main", head], dir);
+      const leakText = Effect.fn("PushesProcess.leakText")(
+        function* (dir: string, text: string) {
+          const grep = yield* ran("sh", [`${scripts}/leakgrep.sh`, "--text", "/dev/stdin"], dir, text);
 
-        if (fetched.code !== 0) {
-          return yield* new LeakGrepRefused({ reason: `main and ${head} could not be fetched: ${lastLine(fetched)}` });
-        }
-
-        // The diff is read whole before the grep starts, so a diff that fails is never an empty pass.
-        const range = `origin/main...${head}`;
-        const diff = yield* ran(
-          "git",
-          ["-C", dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=0", range],
-          dir,
-        );
-
-        if (diff.code !== 0) {
-          return yield* new LeakGrepRefused({ reason: `the diff ${range} does not read: ${lastLine(diff)}` });
-        }
-
-        const grep = yield* ran("sh", [`${scripts}/leakgrep.sh`], dir, `${diff.out}\n`);
-
-        if (grep.code !== 0) {
-          return yield* new LeakGrepRefused({ reason: `leakgrep.sh exited ${grep.code}: ${lastLine(grep)}` });
-        }
-      }, refusedToStart);
-
-      const leakText = Effect.fn("PushesProcess.leakText")(function* (dir: string, text: string) {
-        const grep = yield* ran("sh", [`${scripts}/leakgrep.sh`, "--text", "/dev/stdin"], dir, text);
-
-        if (grep.code !== 0) {
-          return yield* new LeakGrepRefused({
-            reason: `leakgrep.sh --text exited ${grep.code}: ${lastLine(grep)}`,
-          });
-        }
-      }, refusedToStart);
+          if (grep.code !== 0) {
+            return yield* new LeakGrepRefused({
+              reason: `leakgrep.sh --text exited ${grep.code}: ${lastLine(grep)}`,
+            });
+          }
+        },
+        Effect.catchTag("PlatformError", (e) =>
+          Effect.fail(new LeakGrepRefused({ reason: `the leak grep could not start: ${e.message}` })),
+        ),
+      );
 
       const step = Effect.fn("PushesProcess.step")(function* (cmd: string, args: ReadonlyArray<string>, dir: string) {
         const pushed = yield* ran(cmd, args, dir);
