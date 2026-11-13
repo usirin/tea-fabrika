@@ -96,40 +96,71 @@ describe("saved view membership, next/", () => {
         expect(state).toStrictEqual(Model.cases.empty.make({}));
       }
 
-      let [state] = watchers.init(bounded, {});
-      let expected = [...clients(bounded)];
+      const exercise = (saved: typeof Model.Type, drainAll: boolean) => {
+        let [state] = watchers.init(saved, {});
+        let expected = [...clients(saved)];
+        const touched = new Set<string>();
+        const kinds = new Set<number>();
 
-      // Every run first evicts at the bound, refreshes a held client, then ends
-      // a held client. Keep the entire generated walk after these guided moves.
-      const guided = [0, 1, 2].map((pick) => [pick, nth(walk, pick)[1]] as const);
+        const step = (msg: { type: "open"; watch: typeof Client.Type } | { type: "end"; client: string }) => {
+          [state] = applyCell(watchers, state, msg);
+          expected =
+            msg.type === "end"
+              ? expected.filter((c) => c.client !== msg.client)
+              : [...expected.filter((c) => c.client !== msg.watch.client), msg.watch].slice(-1024);
 
-      for (const [pick, fresh] of [...guided, ...walk]) {
-        const held = clients(state);
-        let client = held.length && pick % 3 ? nth(held, pick).client : fresh.client;
+          expect(clients(state)).toEqual(expected);
+          expect(new Set(clients(state).map((c) => c.client)).size).toBe(clients(state).length);
+          expect(clients(state).length).toBeLessThanOrEqual(1024);
+          expect(state).toStrictEqual(expected.length ? { _tag: "watching", clients: expected } : { _tag: "empty" });
+        };
 
-        // A fresh move must really be absent, even if generated text collides.
-        if (pick % 3 === 0) {
-          let suffix = 0;
+        const move = (pick: number, fresh: typeof Client.Type) => {
+          const held = clients(state);
+          let client = held.length && pick % 3 ? nth(held, pick).client : fresh.client;
 
-          while (held.some((c) => c.client === client)) {
-            client = `fresh-${suffix++}`;
+          // A fresh move must really be absent, even if generated text collides.
+          if (pick % 3 === 0) {
+            let suffix = 0;
+
+            while (held.some((c) => c.client === client)) {
+              client = `fresh-${suffix++}`;
+            }
+          }
+
+          kinds.add(pick % 3);
+          touched.add(client);
+          step(pick % 3 === 2 ? { type: "end", client } : { type: "open", watch: { ...fresh, client } });
+        };
+
+        // Preserve every generated history as a prefix, including refresh/end
+        // against the untouched full state. Supplement only missing move kinds.
+        for (const [pick, fresh] of walk) {
+          move(pick, fresh);
+        }
+
+        for (const pick of [0, 1, 2]) {
+          if (!kinds.has(pick)) {
+            move(pick, nth(walk, pick)[1]);
           }
         }
 
-        if (pick % 3 === 2) {
-          [state] = applyCell(watchers, state, { type: "end", client });
-          expected = expected.filter((c) => c.client !== client);
-        } else {
-          const watch = { ...fresh, client };
-          [state] = applyCell(watchers, state, { type: "open", watch });
-          expected = [...expected.filter((c) => c.client !== client), watch].slice(-1024);
+        // At the bound, check ends of all touched clients, newest first, without
+        // repeatedly draining the fixed fill. The small replay below drains all
+        // generated/refreshed membership through the last-client transition.
+        for (const c of [...expected].reverse()) {
+          if (drainAll || touched.has(c.client)) {
+            step({ type: "end", client: c.client });
+          }
         }
 
-        expect(clients(state)).toEqual(expected);
-        expect(new Set(clients(state).map((c) => c.client)).size).toBe(clients(state).length);
-        expect(clients(state).length).toBeLessThanOrEqual(1024);
-        expect(state).toStrictEqual(expected.length ? { _tag: "watching", clients: expected } : { _tag: "empty" });
-      }
+        if (drainAll) {
+          expect(state).toStrictEqual(Model.cases.empty.make({}));
+        }
+      };
+
+      exercise(bounded, false);
+      exercise(watchers.init(null, {})[0], true);
     },
     { arbitrary: { seed: 119120, runs: 100 } },
   );
