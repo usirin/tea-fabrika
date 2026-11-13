@@ -712,6 +712,177 @@ describe("p98, a span that ends is never dropped", () => {
   );
 });
 
+// A-Sink's frame shapes are edge inputs; each carries its expected text independently of the sink.
+const FrameWord = Schema.String.check(Schema.isPattern(/^[a-z]{3,16}$/));
+const FramePosition = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 2147483647 }));
+
+const FrameInput = Schema.Struct({
+  word: FrameWord,
+  rootKind: Schema.Literals(["posix", "url", "windows", "bracket"]),
+  frames: Schema.Array(
+    Schema.Struct({
+      shape: Schema.Literals([
+        "url",
+        "posix",
+        "windows",
+        "windowsUrl",
+        "node",
+        "bundle",
+        "bare",
+        "anonymous",
+        "async",
+        "unnamed",
+        "eval",
+      ]),
+      name: FrameWord,
+      line: FramePosition,
+      column: FramePosition,
+    }),
+  ).check(Schema.isMinLength(1), Schema.isMaxLength(12)),
+});
+
+const frameCases = Arbitrary.schema(FrameInput).pipe(
+  Arbitrary.map(({ word, rootKind, frames }) => {
+    const root = {
+      posix: `/sink-${word}/private`,
+      url: `file:///sink-${word}/private`,
+      windows: `C:\\sink-${word}\\private`,
+      bracket: `/sink ${word} (private)/folder`,
+    }[rootKind];
+    return {
+      root,
+      frames: frames.map(({ shape, name, line, column }) => {
+        const file = `${name}.ts:${line}:${column}`;
+        const location = `${root}/nested/${file}`;
+
+        switch (shape) {
+          case "url":
+            return { raw: `at ${name} (file:///${location})`, kept: `at ${name} (${file})` };
+          case "posix":
+            return { raw: `at ${name} (/${location})`, kept: `at ${name} (${file})` };
+          case "windows":
+            return { raw: `at ${name} (C:\\${root}\\nested\\${file})`, kept: `at ${name} (${file})` };
+          case "windowsUrl":
+            return { raw: `at ${name} (file:///C:/${location})`, kept: `at ${name} (${file})` };
+          case "node":
+            return {
+              raw: `at ${name} (node:internal/process/task_queues:${line}:${column})`,
+              kept: `at ${name} (node:internal/process/task_queues:${line}:${column})`,
+            };
+          case "bundle":
+            return { raw: `at ${name} (file:///bundle/${file})`, kept: `at ${name} (${file})` };
+          case "bare":
+            return { raw: `at ${name}`, kept: `at ${name}` };
+          case "anonymous":
+            return { raw: "at Array.map (<anonymous>)", kept: "at Array.map (<anonymous>)" };
+          case "async":
+            return { raw: `at async Promise.all (index ${line})`, kept: `at async Promise.all (index ${line})` };
+          case "unnamed":
+            return { raw: `at ${location}`, kept: `at ${file}` };
+          default:
+            return {
+              raw: `at eval (eval at ${name} (${location}), <anonymous>:1:1)`,
+              kept: `at eval (${file}), <anonymous>:1:1)`,
+            };
+        }
+      }),
+    };
+  }),
+);
+
+const storedFrames = Effect.fnUntraced(function* (
+  sample: typeof frameCases extends Arbitrary.Arbitrary<infer A> ? A : never,
+) {
+  const { sql } = yield* walkHome;
+  return yield* Effect.gen(function* () {
+    const inner = new Error("inner message /message/path stays");
+    inner.stack = [`Error: ${inner.message}`, ...sample.frames.map(({ raw }) => `    ${raw}`)].join("\n");
+    const outer = new Error("outer message C:\\message\\path stays", { cause: inner });
+    outer.stack = [`Error: ${outer.message}`, ...sample.frames.map(({ raw }) => `    ${raw}`)].join("\n");
+    const fail = Effect.fn("sink.frames")(function* () {
+      return yield* Effect.sync(() => {
+        // oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- A-Sink exercises a thrown Error and its nested cause
+        throw outer;
+      });
+    });
+    const exit = yield* Effect.exit(fail());
+    expect(Exit.isFailure(exit)).toBe(true);
+
+    if (!Exit.isFailure(exit)) {
+      return yield* Effect.die("expected the generated throw");
+    }
+
+    const pretty = Cause.pretty(exit.cause);
+    yield* flush;
+    const rows = yield* recorded(spans);
+    expect(rows.filter((row) => row.name === "sink.frames")).toHaveLength(1);
+    const row = rows.find((row) => row.name === "sink.frames");
+    const content = yield* RecordManager.use((records) => records.content(spans, row?.spanId ?? ""));
+    expect(Option.isSome(content) && content.value._tag === "kept").toBe(true);
+    const message = Option.isSome(content) && content.value._tag === "kept" ? content.value.message : "";
+    return { pretty, message };
+  }).pipe(Effect.provide(world(sql)));
+});
+
+describe("A-Sink, stored error frames keep no machine folders", () => {
+  it.effect.prop(
+    "S1 [secrets]: every stored frame loses folders, including nested causes and encoded roots",
+    { sample: frameCases },
+    ({ sample }) =>
+      Effect.gen(function* () {
+        const { message } = yield* storedFrames(sample);
+
+        for (const root of [
+          sample.root,
+          JSON.stringify(sample.root).slice(1, -1),
+          encodeURI(sample.root),
+          encodeURIComponent(sample.root),
+        ]) {
+          expect(message.includes(root), "stored content copied a generated root").toBe(false);
+        }
+
+        for (const line of message.split("\n").filter((line) => /^\s*at /.test(line))) {
+          const withoutNode = line.replace(/node:[^)]*/g, "");
+          expect(withoutNode, "a stored frame names a folder").not.toMatch(/[/\\]/);
+        }
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
+
+  it.effect.prop(
+    "S2: frame order, names, file positions and every non-frame byte survive",
+    { sample: frameCases },
+    ({ sample }) =>
+      Effect.gen(function* () {
+        const { pretty, message } = yield* storedFrames(sample);
+        const before = pretty.split("\n");
+        const after = message.split("\n");
+        expect(after).toHaveLength(before.length);
+
+        for (const [index, line] of before.entries()) {
+          const frame = /^(\s*)at (.*)$/.exec(line);
+
+          if (frame === null) {
+            expect(after[index]).toBe(line);
+            continue;
+          }
+
+          const generated = sample.frames.find(({ raw }) => raw === `at ${frame[2]}`);
+
+          if (generated !== undefined) {
+            expect(after[index]).toBe(`${frame[1]}${generated.kept}`);
+          } else {
+            // Effect.fn contributes its own real frame, beside the generated Error stacks.
+            const own = /^(\s*at sink\.frames(?: \(definition\))? \().*[/\\]([^/\\]+:\d+:\d+\)(?: \{)?)$/.exec(line);
+            expect(own, `unexpected Effect.fn frame: ${line}`).not.toBeNull();
+            expect(after[index]).toBe(`${own?.[1]}${own?.[2]}`);
+          }
+        }
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
+});
+
 const SECRET = "sk-p99-secret";
 const NOTE = "note-body-p99";
 const NOTE_TWO = "note-two-p99";
