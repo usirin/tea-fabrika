@@ -75,6 +75,8 @@ const draftTile = Machine.make({
   update: {
     typed: (_s, m) => [{ draft: m.text }, []],
     submit: (s) => (s.draft === "" ? [s, []] : [{ draft: "" }, [press({ m: { type: "add", name: s.draft } })]]),
+    press_ok: (s) => [s, []],
+    press_err: (s) => [s, []],
   },
 });
 
@@ -87,6 +89,8 @@ const tallyTile = Machine.make({
   update: {
     bump: (s) => [{ n: s.n + 1 }, []],
     go: (s) => [{ n: 0 }, [press({ m: { type: "check", name: `item ${s.n}` } })]],
+    press_ok: (s) => [s, []],
+    press_err: (s) => [s, []],
   },
 });
 
@@ -442,8 +446,9 @@ const fold = (list: ReadonlyArray<Choice>, each: (e: Event) => void): World => {
       w.old.push(...(lost === undefined ? [] : [lost]));
     }
 
-    if ("id" in m && typeof m.id === "number") {
-      const answered = w.flights.find((f) => f.id === m.id && f.dial === m.dial);
+    if ("id" in m && typeof m.id === "number" && "dial" in m) {
+      const answer = m;
+      const answered = w.flights.find((f) => f.id === answer.id && f.dial === answer.dial);
 
       if (answered !== undefined) {
         w.flights = w.flights.filter((f) => f !== answered);
@@ -676,11 +681,14 @@ describe("L8: the window parent's connection", () => {
 
             for (const c of failures) {
               const flight = state.flight.find((f) => f.call._tag === "open" && f.call.pid === pid);
-              const view = [
-                { items: null, left: 0 },
-                { ...(shown.view as ListView), left: c.word },
-                { items: [{ name: c.word, state: "invalid" }], left: 1 },
-              ][c.aux % 3];
+              const index = c.aux % 3;
+              const view = (
+                [
+                  { items: null, left: 0 },
+                  { ...(shown.view as ListView), left: c.word },
+                  { items: [{ name: c.word, state: "invalid" }], left: 1 },
+                ] satisfies readonly [Schema.Json, Schema.Json, Schema.Json]
+              )[index === 0 ? 0 : index === 1 ? 1 : 2];
               const value = { rev: shown.rev + 1, view };
               const m: WindowMsg =
                 flight === undefined
@@ -836,13 +844,15 @@ describe("L8: the window parent's connection", () => {
     fc.assert(
       fc.property(walks, (list) => {
         fold(list, ({ prev, m, next, world }) => {
+          const answer = m;
           const flight =
-            "id" in m && typeof m.id === "number"
-              ? prev.flight.find((f) => f.id === m.id && f.dial === m.dial)
+            "id" in answer && typeof answer.id === "number" && "dial" in answer
+              ? prev.flight.find((f) => f.id === answer.id && f.dial === answer.dial)
               : undefined;
+          const call = flight?.call;
           const refusedLetter =
-            m.type === "send_ok" && flight?.call._tag === "send" && m.value._tag === "refused"
-              ? prev.client.pending.find((p) => p._tag === "ready" && p.letter === flight.call["letter"])
+            m.type === "send_ok" && call?._tag === "send" && m.value._tag === "refused"
+              ? prev.client.pending.find((p) => p._tag === "ready" && p.letter === call["letter"])
               : undefined;
           const owner = refusedLetter === undefined ? undefined : world.from.get(refusedLetter.n);
           const made = next.client.pending.filter((p) => p.n >= prev.client.written);

@@ -77,7 +77,11 @@ it("pinned: L20 windowMachineFor checks the registration's decoder and tile pres
     msg: Schema.Struct({ type: Schema.Literal("submit") }),
     cmds: [wrongPress],
     init: () => [{}, []],
-    update: { submit: (s) => [s, [wrongPress({ m: { type: "unrelated" } })]] },
+    update: {
+      submit: (s) => [s, [wrongPress({ m: { type: "unrelated" } })]],
+      press_ok: (s) => [s, []],
+      press_err: (s) => [s, []],
+    },
   });
   // @ts-expect-error the parent may not erase an incompatible tile's press Msg to AnyTile
   windowMachineFor<typeof checklist>({ tile: () => wrongTile });
@@ -520,7 +524,9 @@ describe("L13: notices name their process", () => {
             Effect.gen(function* () {
               const w = yield* world();
               expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit()))).toBe(true);
-              const [, [pid]] = yield* placings(w);
+              const [, [pid]] = Schema.decodeUnknownSync(
+                Schema.Tuple([Schema.Array(Schema.String), Schema.Array(Schema.String)]),
+              )(yield* placings(w));
               const client = yield* admit(w);
               yield* call(w, (p) => p.route(client, "view.open", { pid }));
               let model = checklistMachine.init(null, {})[0];
@@ -586,7 +592,9 @@ describe("L13: notices name their process", () => {
               Effect.gen(function* () {
                 const w = yield* world();
                 expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit()))).toBe(true);
-                const [, [pid]] = yield* placings(w);
+                const [, [pid]] = Schema.decodeUnknownSync(
+                  Schema.Tuple([Schema.Array(Schema.String), Schema.Array(Schema.String)]),
+                )(yield* placings(w));
                 const client = yield* admit(w);
                 const opened = yield* call(w, (p) => p.route(client, "view.open", { pid }));
                 expect(opened, "view.open answered").toBeDefined();

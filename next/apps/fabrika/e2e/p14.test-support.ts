@@ -388,7 +388,7 @@ export const grant = (h: Home, w: Waiting, key = h.key) =>
       const sent = wire
         .split("\n")
         .filter((line) => line !== "")
-        .map(Schema.decodeUnknownSync(Schema.fromJsonString(GrantWire)));
+        .map((line) => Schema.decodeUnknownSync(Schema.fromJsonString(GrantWire))(line));
       const seen: GrantSeen = {
         urls: sent.map((row) => row.url),
         signatures: sent.flatMap((row) => (row.signature === undefined ? [] : [row.signature])),

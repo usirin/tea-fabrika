@@ -126,8 +126,8 @@ describe("L22: the checklist tile", () => {
   });
 
   it("the Model round-trips its schema at every step", () => {
-    const decode = Schema.decodeUnknownSync(tile.model);
-    const encode = Schema.encodeSync(tile.model);
+    const decode = Schema.decodeUnknownSync(Schema.toType(tile.model));
+    const encode = Schema.encodeSync(Schema.toType(tile.model));
     fc.assert(
       fc.property(walks, (list) => {
         walk(list, (_prev, _m, next) => {

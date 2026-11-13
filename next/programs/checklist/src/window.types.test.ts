@@ -32,7 +32,11 @@ const wrongTile = Machine.make({
   msg: Schema.Struct({ type: Schema.Literal("submit") }),
   cmds: [wrongPress],
   init: () => [{ draft: "" }, []],
-  update: { submit: (s) => [s, [wrongPress({ m: { type: "plus" } })]] },
+  update: {
+    submit: (s) => [s, [wrongPress({ m: { type: "plus" } })]],
+    press_ok: (s) => [s, []],
+    press_err: (s) => [s, []],
+  },
 });
 
 describe("L20: the checklist window's contract", () => {

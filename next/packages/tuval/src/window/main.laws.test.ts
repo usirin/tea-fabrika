@@ -197,7 +197,7 @@ const identity = Effect.gen(function* () {
     line,
     found: "reused" as const,
     sign: (bytes: Uint8Array) =>
-      Effect.promise(() => crypto.subtle.sign("Ed25519", pair.privateKey, bytes)).pipe(
+      Effect.promise(() => crypto.subtle.sign("Ed25519", pair.privateKey, new Uint8Array(bytes))).pipe(
         Effect.map((b) => new Uint8Array(b)),
       ),
   };
