@@ -12,6 +12,7 @@ import { expect, it } from "vitest";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
+import * as RecordWireTest from "./record-wire.test-support.ts";
 
 const PROGRAM = "p13/recording";
 const NAME = "recording:1";
@@ -152,15 +153,17 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
         }
       }),
   );
-  const instance = yield* localInstance(built, {
-    home,
-    name: "p13-recording",
-    person: PERSON,
-    founder: line,
-    window: raw.toString("base64url"),
-    port: held.port,
-    rateLimit: { limit: 100_000, window: 60_000 },
-  });
+  const instance = yield* localInstance(
+    built,
+    RecordWireTest.startupFixture({
+      home,
+      name: "p13-recording",
+      person: PERSON,
+      founder: line,
+      window: raw.toString("base64url"),
+      port: held.port,
+    }),
+  );
   const project = instance.project("p13-recording");
   const fingerprint = `SHA256:${createHash("sha256").update(raw).digest("base64").replace(/=+$/, "")}`;
   const from = {
