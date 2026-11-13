@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-p11-paging-scenario-near-its-time-limit",
+  "date": "2026-11-13",
+  "by": "build",
+  "model": "claude-fable-5-2",
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/apps/fabrika/src/instance-wire.test.ts",
+    "line": 699
+  },
+  "says": "The p11 paging scenario sends 259 letters in sequence and runs at 48 to 59 s of its 60 s limit in main's CI; each send also reads the target's whole inbox from rev 0 in Gateway.ts recordInput.",
+  "proof": "main check runs 43493284227, 43493274994, 43491011722, 43482262695: 48077ms, 59148ms, 49194ms, 51847ms; branch runs 43317440643, 43336915353, 43496175895: Test timed out in 60000ms",
+  "cost": "Any slice that adds work per send turns next (3) red on a time limit, not on a broken law.",
+  "head": "6b617f61f03d249ab81f1a4e72ba949f85d7f921",
+  "ticket": "kamp-us/tea-fabrika#281",
+  "pr": "kamp-us/tea-fabrika#1044"
+}
