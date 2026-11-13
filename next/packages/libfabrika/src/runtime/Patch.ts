@@ -1,6 +1,9 @@
-// View patches, next/: the RFC 6902 operations that turn one JSON view into the next (Tier 1, P11,
-// law p22). A watcher gets the whole view once, then a patch per step. Pure, and it never changes
-// its inputs.
+/**
+ * View patches: the RFC 6902 operations that turn one JSON view into the next. A watcher gets the
+ * whole view once, then a patch per step. Pure, and it never changes its inputs.
+ *
+ * @stability unstable
+ */
 
 /** One RFC 6902 operation. `add`, `remove` and `replace` are all a view diff needs. */
 export type Patch =
