@@ -48,7 +48,7 @@ describe("watcher delivery evidence, next/", () => {
           let rpc: "ok" | "throw" | "malformed" = "ok";
           const context = yield* Layer.build(
             WatcherManagerRemote.layer((client, update) =>
-              Effect.suspend(() => {
+              Effect.suspend((): Effect.Effect<unknown, Error> => {
                 if (rpc === "throw") {
                   return Effect.fail(new Error("RPC unreachable"));
                 }

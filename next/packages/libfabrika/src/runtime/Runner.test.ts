@@ -45,6 +45,7 @@ import { type Update as WatcherUpdate } from "./Entry.ts";
 import type { Execution } from "./Execution.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Input, Program, ProgramDown } from "./Program.ts";
+import type { WatchersError } from "./Watchers.ts";
 
 const SEED = 119120;
 const PROCESS = Effect.runSync(processId);
@@ -238,7 +239,7 @@ type Incoming = {
   readonly span: { readonly traceId: string; readonly spanId: string };
 };
 
-type Failure = { readonly _tag: string; readonly reason: string } | NotGranted;
+type Failure = { readonly _tag: string; readonly reason: string } | NotGranted | WatchersError;
 
 type Sent =
   | { readonly _tag: "accepted"; readonly rev: number; readonly pos: number }
