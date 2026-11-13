@@ -221,20 +221,43 @@ const NAMED = ["type", "enum", "const", "anyOf", "oneOf", "$ref"];
 const CHILDREN = ["items", "prefixItems", "additionalProperties", "anyOf", "oneOf"];
 const KEYED = ["properties", "patternProperties", "$defs"];
 
-/** True when `node` and every schema under it names what it takes. One that names nothing takes any JSON. */
-const named = (node: unknown): boolean => {
-  if (Array.isArray(node)) {
-    return node.every(named);
+const takes = (node: { readonly [key: string]: unknown }, type: string) =>
+  node.type === type || (Array.isArray(node.type) && node.type.includes(type));
+
+/**
+ * True when no place in `node`, at any depth, takes any JSON. Naming a type does not close a node:
+ * JSON Schema is open wherever a keyword is absent. So an array says what its items are, or is a
+ * tuple that ends at its listed places, an object says what its other keys hold, itself or in an
+ * `allOf` member, and every schema under the node holds to the same. A `true` schema, and one that
+ * names nothing it takes, are open. An `allOf` `member` only narrows the node that holds it, so
+ * it need not name a type of its own.
+ */
+const named = (node: unknown, member = false): boolean => {
+  if (!Predicate.isObject(node) || Array.isArray(node)) {
+    return false;
   }
 
-  if (!Predicate.isObject(node)) {
-    return true;
+  const all: ReadonlyArray<unknown> = Array.isArray(node.allOf) ? node.allOf : [];
+  const tuple =
+    Array.isArray(node.prefixItems) && Predicate.isNumber(node.maxItems) && node.maxItems <= node.prefixItems.length;
+  const rest = [node, ...all].some((part) => Predicate.isObject(part) && Object.hasOwn(part, "additionalProperties"));
+
+  if (
+    (!member && !NAMED.some((key) => Object.hasOwn(node, key))) ||
+    (takes(node, "array") && !Object.hasOwn(node, "items") && !tuple) ||
+    (takes(node, "object") && !rest)
+  ) {
+    return false;
   }
 
+  // `false` under `items` or `additionalProperties` takes nothing more, so it is closed.
+  const children = CHILDREN.map((key) => node[key])
+    .filter((held) => held !== undefined && held !== false)
+    .flatMap((held): ReadonlyArray<unknown> => (Array.isArray(held) ? held : [held]));
   const keyed = KEYED.map((key) => node[key])
     .filter(Predicate.isObject)
     .flatMap((held) => Object.values(held));
-  return NAMED.some((key) => Object.hasOwn(node, key)) && [...CHILDREN.map((key) => node[key]), ...keyed].every(named);
+  return [...children, ...keyed].every((held) => named(held)) && all.every((part) => named(part, true));
 };
 
 const inputSchema = (program: AnyProgram, key: string, input: Program.Input, name: string) => {
@@ -264,7 +287,10 @@ const inputSchema = (program: AnyProgram, key: string, input: Program.Input, nam
   return Result.mapError(
     Result.flatMap(
       Result.flatMap(root, (schema) => definitions(schema, defs)),
-      Result.liftPredicate(named, (): Reason => "unsupported_schema"),
+      Result.liftPredicate(
+        (schema) => named(schema),
+        (): Reason => "unsupported_schema",
+      ),
     ),
     (reason) => new ToolsError({ reason, tool: name }),
   );
@@ -290,8 +316,10 @@ const ps = Tool.make({
  * Lists `ps` first, then one tool for each port an agent may call, in program and declaration
  * order, leaving out every person-only port. One bad port fails the whole list with a
  * `ToolsError`: a name that is too long or holds a character a tool name may not, a name two
- * ports share, or a schema that cannot be listed. A schema holding a field with no JSON form, or a
- * free JSON field, is one of those: it would take any JSON.
+ * ports share, or a schema that cannot be listed. A schema that takes any JSON at
+ * some place inside it, at any depth, is one of those: a value with no JSON form, free JSON, or an
+ * array, record or rest that does not say what it holds. So is one holding a field that can never
+ * have a value, or a nested struct with no fields.
  *
  * @stability unstable
  * @category getters
