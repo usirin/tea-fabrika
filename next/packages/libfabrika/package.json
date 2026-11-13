@@ -64,14 +64,15 @@
   },
   "dependencies": {
     "@alchemy.run/cloudflare": "catalog:",
-    "alchemy": "catalog:",
     "@alchemy.run/cloudflare-runtime": "2.0.0-beta.85",
+    "@decimalturn/toml-patch": "3.3.2",
     "@demlik/tea": "catalog:",
+    "alchemy": "catalog:",
     "effect": "catalog:",
-    "pure-rand": "8.4.2",
     "lightningcss": "catalog:",
     "oxc-parser": "catalog:",
     "oxc-transform-react": "catalog:",
+    "pure-rand": "8.4.2",
     "rolldown": "catalog:",
     "toml-eslint-parser": "catalog:"
   },
