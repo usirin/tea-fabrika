@@ -559,7 +559,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
   const decodeModel = Schema.decodeUnknownResult(program.state.schema);
   const encodeModel = Schema.encodeUnknownResult(program.state.schema);
   const encodeView = Schema.encodeUnknownResult(program.view.data);
-  const decodeMsg = Schema.decodeUnknownResult(program.msg);
+  const decodeMsg = Schema.decodeUnknownResult(Schema.toCodecJson(program.msg));
 
   /** A model as the program's own value, or ProgramDown with `reason`. */
   const model = (raw: unknown, reason: ProgramDown["reason"]): unknown => {
@@ -572,7 +572,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     return decoded.success;
   };
 
-  /** A Msg as the machine takes it: a settled Cmd Msg, or one the program's Msg schema decodes. */
+  /** A Msg as the machine takes it: a settled Cmd Msg, or one the Msg schema's JSON codec decodes. */
   const message = (raw: unknown, saved: boolean): Option.Option<Typed> => {
     const typed = decodeTyped(raw);
 

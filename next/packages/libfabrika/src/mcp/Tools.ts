@@ -72,7 +72,6 @@ export class ToolsError extends Schema.TaggedError<ToolsError>()("ToolsError", {
 type AnyProgram = typeof Program.Program.schema.Type;
 const closed = { onExcessProperty: "error" } as const;
 const PsArguments = Schema.Record(Schema.String, Schema.Never);
-const decodeJson = Schema.decodeUnknownResult(Schema.Json);
 type Reason = ToolsError["reason"];
 
 type Member = JsonSchema.JsonSchema & {
@@ -218,6 +217,26 @@ const definitions = (schema: JsonSchema.JsonSchema, defs: JsonSchema.Definitions
   return Result.succeed(Object.keys(reached).length === 0 ? schema : { ...schema, $defs: reached });
 };
 
+const NAMED = ["type", "enum", "const", "anyOf", "oneOf", "$ref"];
+const CHILDREN = ["items", "prefixItems", "additionalProperties", "anyOf", "oneOf"];
+const KEYED = ["properties", "patternProperties", "$defs"];
+
+/** True when `node` and every schema under it names what it takes. One that names nothing takes any JSON. */
+const named = (node: unknown): boolean => {
+  if (Array.isArray(node)) {
+    return node.every(named);
+  }
+
+  if (!Predicate.isObject(node)) {
+    return true;
+  }
+
+  const keyed = KEYED.map((key) => node[key])
+    .filter(Predicate.isObject)
+    .flatMap((held) => Object.values(held));
+  return NAMED.some((key) => Object.hasOwn(node, key)) && [...CHILDREN.map((key) => node[key]), ...keyed].every(named);
+};
+
 const inputSchema = (program: AnyProgram, key: string, input: Program.Input, name: string) => {
   const document = Result.try({
     try: () =>
@@ -243,7 +262,10 @@ const inputSchema = (program: AnyProgram, key: string, input: Program.Input, nam
           }),
         );
   return Result.mapError(
-    Result.flatMap(root, (schema) => definitions(schema, defs)),
+    Result.flatMap(
+      Result.flatMap(root, (schema) => definitions(schema, defs)),
+      Result.liftPredicate(named, (): Reason => "unsupported_schema"),
+    ),
     (reason) => new ToolsError({ reason, tool: name }),
   );
 };
@@ -268,7 +290,8 @@ const ps = Tool.make({
  * Lists `ps` first, then one tool for each port an agent may call, in program and declaration
  * order, leaving out every person-only port. One bad port fails the whole list with a
  * `ToolsError`: a name that is too long or holds a character a tool name may not, a name two
- * ports share, or a schema that cannot be listed.
+ * ports share, or a schema that cannot be listed. A schema holding a field with no JSON form, or a
+ * free JSON field, is one of those: it would take any JSON.
  *
  * @stability unstable
  * @category getters
@@ -316,12 +339,13 @@ export const list = (programs: ReadonlyArray<AnyProgram>): Result.Result<Readonl
 };
 
 const refused = Call.cases.refused.make;
-const decodeWire = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Json));
 
 /**
  * Decodes a tool call's arguments with the named port's schema and returns the `Call` to send. A
- * name the list does not hold, a person-only port's included, is refused as `unknown_tool`, and
- * arguments the schema rejects as `bad_input`. It never throws.
+ * `write` holds the Msg, and a `query` the read port's input, as its schema's JSON codec encodes
+ * it: the form a letter stores and the runner decodes. A name the list does not hold, a
+ * person-only port's included, is refused as `unknown_tool`, and arguments the schema rejects as
+ * `bad_input`. It never throws.
  *
  * @stability unstable
  * @category decoding
@@ -365,7 +389,7 @@ export const read = (programs: ReadonlyArray<AnyProgram>, name: string, args: un
     }
 
     if (input._tag === "read") {
-      const query = decodeJson(value.success.value);
+      const query = Schema.encodeUnknownResult(Schema.toCodecJson(input.schema))(value.success.value);
       return Result.isFailure(query)
         ? refused({ reason: "bad_input" })
         : Call.cases.query.make({ program: program.name, name: key, query: query.success });
@@ -375,13 +399,10 @@ export const read = (programs: ReadonlyArray<AnyProgram>, name: string, args: un
       return refused({ reason: "bad_input" });
     }
 
-    const message = Result.flatMap(
-      Schema.encodeUnknownResult(program.msg)({ ...value.success.value, type: key }),
-      (wire) => decodeWire(JSON.stringify(wire)),
-    );
-    return Result.isFailure(message)
+    const m = Schema.encodeUnknownResult(Schema.toCodecJson(program.msg))({ ...value.success.value, type: key });
+    return Result.isFailure(m)
       ? refused({ reason: "bad_input" })
-      : Call.cases.write.make({ program: program.name, m: message.success });
+      : Call.cases.write.make({ program: program.name, m: m.success });
   });
 
   return Result.isFailure(decoded) ? refused({ reason: "bad_input" }) : decoded.success;
