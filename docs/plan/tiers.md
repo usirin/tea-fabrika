@@ -3,6 +3,12 @@
 **Tier 1 approved 2026-11-01. Tiers 2 to 7 proposed. Order of work set 2026-11-01.** Walked when
 Tier 2 starts (owner, 2026-11-08): the first proposed tier's plan.
 
+**Changed 2026-11-13 ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)): the next thing built is `fabsh`, pipes, `summon` and `join`, working
+for real, with whatever they need, so fabrika is built inside fabrika.** The tiers below still show
+the order from before that day: `fabsh` and pipes in Tier 2, agents in Tier 5, rooms in no tier,
+and thin slices in Tier 1. The changed Tier 1 follows in its own pull request. Until it lands,
+0159 wins wherever this page differs.
+
 All the work on `next/` is one plan of seven tiers. Each tier is one pass across all five layers
 and across fabrika's six core ideas, and each ends with something a person can use. No layer and no
 core idea gets finished alone, and none waits for the tier that finishes it: every core idea gets a
@@ -33,7 +39,7 @@ Tier 7 others   ---------------------------------------------->  someone else ca
 Only Tier 1 is committed. It started 2026-11-05 with its exam. `next/` does not wait on today's
 pipeline, which is paused: the lead session's agents build Tier 1 by hand, with the pipeline's steps
 for each pull request, one [Tier 1 row](./tier-1.md#the-pull-requests-one-at-a-time) at a time.
-Tier 1 has 43 rows. How many are on main, and where the rest stand, is in
+Tier 1 has 44 rows. How many are on main, and where the rest stand, is in
 [the plan's state](./README.md#where-we-are-now). A tier is a project. The approval of 2026-11-01
 covers what Tier 1 builds, not its breakdown.
 
@@ -391,3 +397,6 @@ Git history keeps the old wording.
   and of programs working together.
 - 2026-11-11, [0111](../../.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md): the merge
   queue's first stage joins Tier 1 as P43, and Tier 6 hardens it.
+- 2026-11-13, [0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md): the next thing built is `fabsh`, pipes, `summon` and
+  `join`, working for real, with whatever they need. Tier 1 changes to put them first, in its own
+  pull request; no tier table above is changed yet.

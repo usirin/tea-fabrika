@@ -1,7 +1,7 @@
 ---
 id: 0279
 title: In next/, Tuval is the @kampus/tuval package drawn from fabrika's logic, the desk is tezgah's program arriving in Tier 2, and Tier 1 has one fixed layout, focus per window and no desk process
-status: accepted
+status: amended-in-part by [0159](0159-fabsh-pipes-summon-join-first.md)
 date: 2026-11-01
 tags: [desktop, tuval, tezgah, packages, tier-1, tier-2, next]
 ---

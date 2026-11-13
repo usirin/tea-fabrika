@@ -32,6 +32,7 @@ import { Incoming } from "../runtime/Entry.ts";
 import { type ProgramDown } from "../runtime/Program.ts";
 import { type RepliesError } from "../runtime/Replies.ts";
 import { type RunnerError, Sent } from "../runtime/Runner.ts";
+import { type WatchersError } from "../runtime/Watchers.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SinkError, SpanSink } from "../telemetry/Sink.ts";
@@ -269,7 +270,15 @@ type Options<A, RNext, RDeliver, RNotify> = {
     incoming: Incoming,
   ) => Effect.Effect<
     Sent | void,
-    LedgerError | SinkError | SigningRefused | NotGranted | ProgramDown | RunnerError | ProcessError | RepliesError,
+    | LedgerError
+    | SinkError
+    | SigningRefused
+    | NotGranted
+    | ProgramDown
+    | RunnerError
+    | ProcessError
+    | RepliesError
+    | WatchersError,
     RDeliver
   >;
   readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError, RNotify>;

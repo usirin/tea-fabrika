@@ -112,4 +112,4 @@ on 600 runs, but of stand-in children; a week on real lanes would settle it.
 
 ## What it cannot tell us
 
-Nothing is built. No job has run.
+2026-11-11: stage 1 is built in `next/` as `schedules/ScheduledJob.make`, a machine factory over the existing program wake and Process alarm path; real Cloudflare hibernation remains unverified.

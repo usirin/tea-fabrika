@@ -3,6 +3,7 @@
 // No class from brain.ts, and the only fake is the box's platform base class: the services are what the classes hand off to.
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
+import { inspect } from "node:util";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { it as effect } from "@effect/vitest";
 import { counter } from "@kampus/counter";
@@ -97,7 +98,7 @@ const processObject = (ctx: DurableObjectState, env: Env) => {
   const run = <A, E>(use: (p: ProcessCalls) => Effect.Effect<A, E>) => runtime.runPromise(ProcessService.use(use));
   return {
     runtime,
-    configure: (descriptor: Descriptor) => Effect.runPromise(configureProcess(ctx, descriptor)),
+    configure: (descriptor: Descriptor) => Effect.runPromise(configureProcess(ctx, descriptor, runtime)),
     descriptor: () => Effect.runPromise(processDescriptor(ctx)),
     open: (client: string) => run((p) => p.open(client)),
     msg: (input: unknown) => run((p) => p.msg(input)),
@@ -943,25 +944,56 @@ const world = (
 describe("P12 Project configure recovery", () => {
   for (const fault of ["failed", "interrupted", "healthy"] as const) {
     it(`pinned: ${fault} configure restores the descriptor after an interrupted start`, async () => {
+      // A2/A4: the build never waits on its bootstrap's delivery, so it answers whatever the delivery does.
+      const logged = [vi.spyOn(console, "log"), vi.spyOn(console, "error"), vi.spyOn(console, "warn")];
       const w = world(fault);
       const first = w.project.info().then(
         (value) => ({ value }),
         (error: unknown) => ({ error }),
       );
       await w.entered;
+      const result = await first;
+      expect("value" in result).toBe(true);
+      const descriptor = w.attempts[0]!;
+      const row = () => w.db.prepare("SELECT value, pending FROM dev_descriptors WHERE process=?").get(descriptor.id)!;
 
       if (fault === "interrupted") {
         await w.interrupt();
       }
 
-      const result = await first;
-      expect("value" in result).toBe(fault === "healthy");
-      const descriptor = w.attempts[0]!;
-      const saved = w.db.prepare("SELECT value FROM dev_descriptors WHERE process=?").get(descriptor.id);
-      expect(JSON.parse(String(saved!.value))).toEqual(descriptor);
+      if (fault !== "healthy") {
+        // The failed or cut delivery is seen: a log line naming the pid (and a failure's tag), never a silent drop.
+        await vi.waitFor(
+          () =>
+            expect(
+              logged.some((spy) =>
+                spy.mock.calls.some((call) => {
+                  const text = inspect(call, { depth: 8 });
+                  return text.includes(descriptor.id) && (fault === "interrupted" || text.includes("LedgerError"));
+                }),
+              ),
+              `the ${fault} delivery of ${descriptor.id} is logged`,
+            ).toBe(true),
+          { timeout: 2_000 },
+        );
+      }
+
+      if (fault === "healthy") {
+        await vi.waitFor(() => expect(Number(row().pending)).toBe(0), { timeout: 2_000 });
+      }
+
+      expect(Number(row().pending)).toBe(fault === "healthy" ? 0 : 1);
+      expect(JSON.parse(String(row().value))).toEqual(descriptor);
+
+      for (const spy of logged) {
+        spy.mockRestore();
+      }
+
       expect(await w.reopen()).toMatchObject([
         { process: descriptor.id, name: "counter:1", program: "fabrika/counter" },
       ]);
+      // The next reopen delivers the same descriptor once and clears pending.
+      await vi.waitFor(() => expect(Number(row().pending)).toBe(0), { timeout: 2_000 });
       expect(w.attempts).toHaveLength(fault === "healthy" ? 1 : 2);
 
       for (const attempt of w.attempts) {

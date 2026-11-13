@@ -1,7 +1,7 @@
 ---
 id: 0407
 title: In this repo every agent commit, the lead's own included, is authored by fabrikalfa[bot] with the owner as co-author on a fabrikalfa branch, and pull requests open as the owner
-status: accepted
+status: amended-in-part by [0164](0164-the-bot-stays-without-signing.md)
 date: 2026-11-08
 tags: [lead, git, github, bot]
 ---
