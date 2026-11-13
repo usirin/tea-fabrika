@@ -1,10 +1,21 @@
-// The built-in Send command, next/ (P41 slice 1): a program asks the host to mail JSON to a
-// registered name. Its only operands are the name and the message; the runner binds who sends it.
-// `queued` means the letter is saved and its recipient scheduled, never that it was answered.
+/**
+ * The built-in Send command: a program asks the host to mail JSON to a registered name. Its only
+ * operands are the name and the message; the runner binds who sends it. `queued` means the letter
+ * is saved and its recipient scheduled, never that it was answered.
+ *
+ * @stability unstable
+ */
 import { Cmd } from "@demlik/tea/effect";
 import { Schema } from "effect";
 import { MailRefusal } from "../processes/ProgramMail.ts";
 
+/**
+ * Schema for the Send command's operands: `to`, the registered name to mail, and `m`, the JSON
+ * message. A program gives nothing else; the runner binds who sends it.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const SendInput = Schema.Struct({ to: Schema.NonEmptyString, m: Schema.Json });
 
 /** The delivery receipt: the saved letter's ID. */

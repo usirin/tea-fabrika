@@ -1,3 +1,9 @@
+/**
+ * The `Watchers` layer that keeps view membership in the process's own SQL: one row per registered
+ * name in the `process_watchers` table, read and written through the watchers machine.
+ *
+ * @stability unstable
+ */
 import { applyCell } from "@demlik/tea";
 import { Clock, Effect, Layer, Result, Schema } from "effect";
 import type { Sql } from "../Sql.ts";
