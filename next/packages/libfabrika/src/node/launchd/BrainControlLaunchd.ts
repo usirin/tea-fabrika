@@ -246,6 +246,23 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
     const before = yield* existing;
 
     if (before === null) {
+      // An empty path is not yet "removed": an earlier removal may hold an entry it could not put
+      // back. That entry is somebody's, so this removal refuses too, until a person has taken it.
+      for (const name of yield* fs.readDirectory(spec.home).pipe(Effect.mapError(storage))) {
+        if (!name.startsWith(".brain-")) {
+          continue;
+        }
+
+        const entry = yield* fs.lstat(path.join(spec.home, name, "brain.plist")).pipe(
+          Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(null)),
+          Effect.mapError(storage),
+        );
+
+        if (entry !== null) {
+          return yield* conflict("captured entry held from a failed removal");
+        }
+      }
+
       return;
     }
 
@@ -290,7 +307,16 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
       }
 
       if (stat.type === "SymbolicLink") {
-        yield* fs.symlink(yield* fs.readLink(captured), plist);
+        const target = yield* fs.readLink(captured);
+
+        // The target is read as text, and bytes that are not UTF-8 come back as U+FFFD. Writing that
+        // would put a different link at the path, so the captured link stays in its folder instead.
+        // A target that really holds U+FFFD stays too: kept as it is, never a wrong link.
+        if (target.includes("\uFFFD")) {
+          return yield* conflict("symlink target is not text");
+        }
+
+        yield* fs.symlink(target, plist);
         yield* fs.remove(captured);
       } else if (stat.type === "Directory") {
         yield* fs.makeDirectory(plist);
