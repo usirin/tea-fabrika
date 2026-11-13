@@ -33,6 +33,7 @@ export const guard = (runner: ProgramRunner["Service"], accounting: Accounting):
     msg: (input) => checked(runner.msg(input)),
     due: (at) => automatic(runner.due(at)),
     mailed: automatic(runner.mailed),
+    init: () => checked(runner.init()),
     restart: (request) => checked(runner.restart(request)),
   };
 };

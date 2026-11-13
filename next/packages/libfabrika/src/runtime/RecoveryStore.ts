@@ -16,10 +16,10 @@ type Journal<S extends Kept> = Schema.Codec<S, unknown> & {
 };
 
 type Store<S extends Kept> = {
-  readonly load: Effect.Effect<S | null, LedgerError | QuotasError>;
+  readonly load: Effect.Effect<S | null, LedgerError>;
   readonly save: (value: unknown) => Effect.Effect<void, LedgerError | QuotasError>;
-  readonly input: (letter: string) => Effect.Effect<Schema.Json | null, LedgerError | QuotasError>;
-  readonly receipt: (letter: string) => Effect.Effect<Receipt | null, LedgerError | QuotasError>;
+  readonly input: (letter: string) => Effect.Effect<Schema.Json | null, LedgerError>;
+  readonly receipt: (letter: string) => Effect.Effect<Receipt | null, LedgerError>;
 };
 
 const decodeReceipt = Schema.decodeUnknownSync(Schema.fromJsonString(Receipt));
@@ -61,19 +61,31 @@ export const recoveryStore = <S extends Kept>(
   };
   const encode = Schema.encodeUnknownSync(Row);
   const check = Schema.decodeUnknownSync(options.schema);
+  const tables = () => {
+    for (const query of TABLES) {
+      sql.exec(query);
+    }
+  };
+  const failed = (error: unknown) =>
+    error instanceof LedgerError
+      ? error
+      : new LedgerError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", cause: error });
+  // A read changes no row, so it is charged nothing and fails only as the ledger does.
+  const read = <A>(f: () => A) =>
+    Effect.try({
+      try: () => {
+        tables();
+        return f();
+      },
+      catch: failed,
+    });
   const stored = <A>(f: () => A) =>
     Effect.try({
       try: () => {
-        for (const query of TABLES) {
-          sql.exec(query);
-        }
-
+        tables();
         return options.accounting === undefined ? f() : options.accounting.protect(f);
       },
-      catch: (error) =>
-        error instanceof LedgerError || error instanceof QuotasError
-          ? error
-          : new LedgerError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", cause: error }),
+      catch: (error) => (error instanceof QuotasError ? error : failed(error)),
     });
   const snapshot = () => {
     const [row] = sql.exec("SELECT value FROM process_recovery WHERE name=?", options.name);
@@ -90,7 +102,7 @@ export const recoveryStore = <S extends Kept>(
 
     return saved;
   };
-  const load = stored(() => {
+  const load = read(() => {
     const saved = snapshot();
 
     if (saved === null) {
@@ -110,7 +122,7 @@ export const recoveryStore = <S extends Kept>(
     return check({ ...saved, receipts: [...receipts.values()] });
   });
   const receipt = Effect.fn("recovery.receipt")(function* (letter: string) {
-    return yield* stored(() => {
+    return yield* read(() => {
       const [row] = sql.exec("SELECT value FROM process_receipts WHERE name=? AND letter=?", options.name, letter);
 
       // Read old single-row snapshots until their next atomic save splits the receipts.

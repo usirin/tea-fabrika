@@ -62,11 +62,11 @@ const encodeRecord = Schema.encodeSync(RuntimeRecord);
 
 type ProcessStorage = {
   readonly select: (process: string) => Effect.Effect<ProcessStorage>;
-  readonly readActivity: Effect.Effect<typeof Activity.Type | undefined, LedgerError | QuotasError>;
+  readonly readActivity: Effect.Effect<typeof Activity.Type | undefined, LedgerError>;
   /** Makes the activity marker durable before the runner starts or finishes a step. */
   readonly activity: (value: typeof Activity.Type) => Effect.Effect<void, LedgerError | QuotasError>;
   /** The saved checkpoint, or null before the first save. */
-  readonly load: Effect.Effect<Checkpoint | null, LedgerError | QuotasError>;
+  readonly load: Effect.Effect<Checkpoint | null, LedgerError>;
   /** Replaces the checkpoint and adds `placed` to the letter index, in one transaction. */
   readonly save: (
     value: {
@@ -77,15 +77,15 @@ type ProcessStorage = {
     placed?: ReadonlyArray<Placed>,
   ) => Effect.Effect<void, LedgerError | QuotasError>;
   /** An accepted letter's first placing, or null when this process never accepted it. */
-  readonly placed: (id: string) => Effect.Effect<Placed | null, LedgerError | QuotasError>;
+  readonly placed: (id: string) => Effect.Effect<Placed | null, LedgerError>;
   /**
    * A letter's first placing by any life in this store, or null. One object's store holds one
    * registered name, so this is every life of that name: a successor keeps its predecessors'
    * accepted history without copying their rows (P34).
    */
-  readonly placedByAny: (id: string) => Effect.Effect<Placed | null, LedgerError | QuotasError>;
+  readonly placedByAny: (id: string) => Effect.Effect<Placed | null, LedgerError>;
   /** Appends one RuntimeRecord to the process's stream. A retry answers its first placing. */
-  readonly record: (id: string, event: unknown, from: From) => Effect.Effect<unknown, LedgerError | QuotasError>;
+  readonly record: (id: string, event: unknown, from: From) => Effect.Effect<unknown, LedgerError>;
 };
 
 export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>()(
@@ -101,7 +101,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
         | {
             readonly put: (key: string, value: unknown) => Effect.Effect<void, LedgerError | QuotasError>;
             readonly sync: () => Effect.Effect<void, LedgerError | QuotasError>;
-            readonly get?: (key: string) => Effect.Effect<unknown, LedgerError | QuotasError>;
+            readonly get?: (key: string) => Effect.Effect<unknown, LedgerError>;
           }
         | undefined;
     },
@@ -112,28 +112,42 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
         const ledger = yield* Ledger;
         const quotas = Option.getOrUndefined(yield* Effect.serviceOption(Quotas));
         let ready = false;
+        const tables = () => {
+          if (!ready) {
+            for (const query of TABLES) {
+              sql.exec(query);
+            }
+          }
+
+          ready = true;
+        };
+        const failed = (error: unknown) =>
+          error instanceof LedgerError
+            ? error
+            : new LedgerError({
+                reason: Schema.isSchemaError(error) ? "bad_row" : "storage",
+                cause: error,
+              });
+        // A read changes no row, so it is charged nothing and fails only as the ledger does.
+        const read = Effect.fnUntraced(function* <A>(step: () => A) {
+          return yield* Effect.try({
+            try: () => {
+              tables();
+              return step();
+            },
+            catch: failed,
+          });
+        });
         const stored = Effect.fnUntraced(function* <A>(step: (at: number) => A) {
           return yield* Effect.clockWith((clock) =>
             Effect.try({
               try: () => {
-                if (!ready) {
-                  for (const query of TABLES) {
-                    sql.exec(query);
-                  }
-                }
-
-                ready = true;
+                tables();
                 return options.accounting === undefined
                   ? step(clock.currentTimeMillisUnsafe())
                   : options.accounting.protect(() => step(clock.currentTimeMillisUnsafe()));
               },
-              catch: (error) =>
-                error instanceof LedgerError || error instanceof QuotasError
-                  ? error
-                  : new LedgerError({
-                      reason: Schema.isSchemaError(error) ? "bad_row" : "storage",
-                      cause: error,
-                    }),
+              catch: (error) => (error instanceof QuotasError ? error : failed(error)),
             }),
           );
         });
@@ -158,7 +172,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
                         }),
                   ),
                 )
-              : stored(() => {
+              : read(() => {
                   const [row] = sql.exec("SELECT activity FROM process_activity WHERE process=?", options.process);
                   return row === undefined
                     ? undefined
@@ -199,7 +213,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
               yield* options.storage.sync();
             }
           }),
-          load: stored(() => {
+          load: read(() => {
             const [row] = sql.exec("SELECT checkpoint FROM process_state WHERE process=?", options.process);
 
             if (row === undefined) {
@@ -309,7 +323,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
               });
             }),
           placed: (id) =>
-            stored(() => {
+            read(() => {
               const [row] = sql.exec(
                 "SELECT id, rev, pos FROM process_letters WHERE process=? AND id=?",
                 options.process,
@@ -318,7 +332,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
               return row === undefined ? null : decodePlaced(row);
             }),
           placedByAny: (id) =>
-            stored(() => {
+            read(() => {
               const [row] = sql.exec("SELECT id, rev, pos FROM process_letters WHERE id=? ORDER BY rev LIMIT 1", id);
               return row === undefined ? null : decodePlaced(row);
             }),
