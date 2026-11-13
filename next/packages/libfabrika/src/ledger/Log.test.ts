@@ -15,8 +15,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterAll, describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Effect, Layer, Schema, Stream } from "effect";
+import { describe, expect, expectTypeOf, it } from "@effect/vitest";
+import { Effect, Layer, Schema, type Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import { inputParents, processId } from "../Id.test-support.ts";
 import * as Id from "../Id.ts";
@@ -83,30 +83,40 @@ const badParents = (good: string): ReadonlyArray<string> => [
   `in-process_0${"0".repeat(26)}-1`,
 ];
 
-// Every ledger is a fresh node:sqlite file in one temp folder, removed after.
-const folder = mkdtempSync(join(tmpdir(), "p6-log-"));
-const opened: Array<DatabaseSync> = [];
-let files = 0;
+// Every ledger is a fresh node:sqlite file in its own temp folder. The layer's scope closes the
+// connection, then removes the folder (0061).
+const folder = Effect.acquireRelease(
+  Effect.sync(() => mkdtempSync(join(tmpdir(), "p6-log-"))),
+  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+);
 
-const fresh = (): Sql => {
-  const db = new DatabaseSync(join(folder, `ledger-${++files}.db`));
-  opened.push(db);
-  return nodeSql(db);
-};
+const openDb = (path: string) =>
+  Effect.acquireRelease(
+    Effect.sync(() => new DatabaseSync(path)),
+    (db) =>
+      Effect.sync(() => {
+        if (db.isOpen) {
+          db.close();
+        }
+      }),
+  );
 
-afterAll(() => {
-  for (const db of opened.splice(0)) {
-    if (db.isOpen) {
-      db.close();
-    }
-  }
+const fresh = () =>
+  folder.pipe(
+    Effect.flatMap((path) => openDb(join(path, "ledger.db"))),
+    Effect.map(nodeSql),
+  );
 
-  rmSync(folder, { recursive: true, force: true });
-});
+// Each takes the store as a scoped Effect, so the layer's own scope holds the open file.
+type Store = Effect.Effect<Sql, never, Scope.Scope>;
 
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
-const onReferee = (sql: Sql) => RefereeSql.layer(sql).pipe(Layer.provide(quiet));
-const onLedger = (sql: Sql) => LedgerSql.layer(sql, { reader: READER }).pipe(Layer.provide(quiet));
+
+const onReferee = (sql: Store) =>
+  Layer.unwrap(sql.pipe(Effect.map((sql) => RefereeSql.layer(sql).pipe(Layer.provide(quiet)))));
+
+const onLedger = (sql: Store) =>
+  Layer.unwrap(sql.pipe(Effect.map((sql) => LedgerSql.layer(sql, { reader: READER }).pipe(Layer.provide(quiet)))));
 
 const full: Line = {
   by: "SHA256:writer-a",
