@@ -66,7 +66,7 @@ jobs:
       - run: node oxlint-plugins/gitignore.mjs
         if: ${{ !cancelled() }}
 
-  # Start beside changes and commits. No workspace setup for Markdown alone.
+  # Start beside changes. No workspace setup for Markdown alone.
   # Filtered install uses the root lockfile and all workspace supply-chain rules.
   # The proof PR measures this path's cold install and cache cost.
   field:
@@ -439,8 +439,7 @@ jobs:
   # and decisions 0061, 0092 and 0404). It needs every other job here, and runs even when one failed
   # or the run was canceled: a skipped required check counts as passed on GitHub, so this job never
   # skips. required.mjs passes a job's skip only when changes said that job need not run, from the
-  # same output its `if:` reads. `commits` is commits.yaml's own job, from `pull_request_target`, and
-  # stays required beside this one: folding it in here would judge it from the pull request's copy.
+  # same output its `if:` reads.
   # No install and no setup: the runner's own Node runs required.mjs, as it runs changes.mjs.
   # On a draft it is named `ci-required (draft)`: GitHub makes a job's check run only when its needs
   # end, so for the whole ready run the draft's green `ci-required` on the same head would be the

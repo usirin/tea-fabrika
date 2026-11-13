@@ -92,7 +92,7 @@ This step also runs on its own for a screen already being built in today's app, 
 request opens, even when no study is running (owner, 2026-11-08).
 
 - Build **3 or 4 distinct designs** for real in today's app, on a local branch, with the real
-  tokens (`apps/fabrika/src/themes.ts`) and the real chassis around them. Each is a different
+  tokens (`packages/fabrika-design/src/themes.ts`) and the real chassis around them. Each is a different
   answer to the same job, such as a list, a card, a panel or inline, not a small change to one
   design. Keys and mouse both work in each, as the guidelines say. Read today's code for which
   jobs exist, not for how they look
@@ -296,7 +296,7 @@ study ends here.
 - **Today's version is in scope.** A page about today's app, or one whose tryout the owner took,
   is the owner's pick by that yes; it needs no second ask before it is planned.
 - **Bring it to the owner as one yes or no:** approve the plan? On a yes, the test writer starts
-  as soon as a slot is free (AGENTS.md's caps), then the build, mutation and one review, as every
+  as soon as a slot is free (AGENTS.md's caps), then the build and one review, as every
   pull request does. File the build as a tracker ticket with `from` set to the page's pull request.
 - **A `next/`-only page** gets its plan written too, filed against the tier it lands in, so the
   build is waiting when that tier opens.
