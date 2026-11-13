@@ -69,7 +69,10 @@ export const Entry = Schema.Struct({
 });
 export type Entry = typeof Entry.Type;
 
-/** Canonical UTF-8 storage charge for a complete committed entry.
+/**
+ * Returns the bytes an entry is charged for: the UTF-8 length of the whole encoded entry as
+ * JSON, its identifiers, clocks and body included.
+ *
  * @stability unstable
  * @category encoding
  */

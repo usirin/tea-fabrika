@@ -1,4 +1,8 @@
-/** SQL-backed quota candidates commit with the data they charge.
+/**
+ * The quota accounts on any `Sql`: the Project's admission policy with its account reads, and one
+ * name's own accounting port. Each charge is saved in the transaction that commits the data it
+ * charges.
+ *
  * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
@@ -47,7 +51,18 @@ const use = (model: Quota.Model): Use => ({
   total: model.total,
 });
 
-/** Install the Project's admission policy and account reads over one store.
+/**
+ * Creates the layer that provides `Quotas` and the ledger's `WritePolicy` over the Project's
+ * store.
+ *
+ * **Details**
+ *
+ * Admission finds an entry's owning program in the committed process history and charges that
+ * program's account. A recovery write, and a write a process's own runtime makes, is charged to
+ * the name's recovery account instead, except a step record whose charge was taken ahead with
+ * its letter. Infrastructure writes are not charged. Entries committed before accounting existed
+ * are charged to their owners first, whatever the limits.
+ *
  * @stability unstable
  * @category layers
  */
@@ -372,7 +387,10 @@ const faultDecode = Schema.decodeUnknownSync(Schema.fromJsonString(Fault));
 
 class Stopped extends Schema.TaggedError<Stopped>()("Stopped", { pending: Pending, fault: RecoveryReserveExhausted }) {}
 
-/** Account name-local writes in the same synchronous transaction as their rows.
+/**
+ * Creates the accounting port for one name's own store. It keeps the name's local account, its
+ * recovery account and one fault slot in that store's own tables.
+ *
  * @stability unstable
  * @category constructors
  */

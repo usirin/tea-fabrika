@@ -77,7 +77,9 @@ const RecoveryAllowance = Schema.Struct({
   letter: Schema.Struct({ writes: Positive, bytes: Bytes }),
 });
 
-/** Calibrated program ledger writes per rolling minute.
+/**
+ * Setting for the most ledger writes one program may commit per rolling minute.
+ *
  * @stability unstable
  * @category settings
  */
@@ -90,7 +92,9 @@ export const writes = Setting.make("limits.writes", {
   since: "0.0.0",
 });
 
-/** Attributable program storage, including steps charged ahead.
+/**
+ * Setting for the most encoded ledger bytes one program may keep.
+ *
  * @stability unstable
  * @category settings
  */
@@ -107,7 +111,10 @@ export const storage = Setting.make("limits.storage", {
   since: "0.0.0",
 });
 
-/** Separate measured recovery windows and per-letter replay room.
+/**
+ * Setting for the recovery allowance of each storage location: its writes and bytes per rolling
+ * minute, and the room one replayed letter may take.
+ *
  * @stability unstable
  * @category settings
  */

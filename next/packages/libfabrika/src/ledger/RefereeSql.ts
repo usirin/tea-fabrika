@@ -6,9 +6,12 @@ import { Doorbell } from "./Ledger.ts";
 import { Referee } from "./Referee.ts";
 import { WritePolicy, RuntimeWrite } from "./WritePolicy.ts";
 
-/** Read committed entries for first-install accounting inside the caller's transaction.
+/**
+ * Returns every committed entry in `sql`, oldest first, or none before the ledger's table
+ * exists. Accounting reads them to find each entry's owner.
+ *
  * @stability unstable
- * @category constructors
+ * @category getters
  */
 export const accountingEntries = (sql: Sql) => committedEntries(sql);
 

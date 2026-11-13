@@ -1,11 +1,17 @@
-/** The strict settings handoff to a Worker.
+/**
+ * The quota settings as a Worker reads them from a settings snapshot.
+ *
  * @stability unstable
  */
 import * as Effect from "effect/Effect";
 import * as Declarations from "../settings/Declarations.ts";
 import * as Snapshot from "../settings/Snapshot.ts";
 
-/** Read a complete, hash-checked snapshot through the declarations' codecs.
+/**
+ * Reads the quota limits from a settings snapshot: the program's writes and storage, and the
+ * recovery allowances. The whole snapshot is checked against the declared settings and its hash
+ * first.
+ *
  * @stability unstable
  * @category constructors
  */

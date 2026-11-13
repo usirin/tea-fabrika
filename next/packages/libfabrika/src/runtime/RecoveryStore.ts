@@ -232,7 +232,10 @@ export class RecoveryStore extends Context.Service<RecoveryStore, Store<Kept>>()
   ): Layer.Layer<RecoveryStore> => Layer.succeed(RecoveryStore, recoveryStore(sql, options));
 }
 
-/** Read only the saved journal's control fields; receipts are stored separately.
+/**
+ * Checks whether a saved journal is in recovery: its state is neither `idle` nor `stepping`. A
+ * value that is not a journal is not in recovery.
+ *
  * @stability unstable
  * @category predicates
  */
@@ -247,7 +250,9 @@ export const recoveryState = (value: unknown): boolean => {
   return journal._tag !== "idle" && journal._tag !== "stepping";
 };
 
-/** The store's committed recovery position, read inside the data transaction.
+/**
+ * Checks whether the journal saved in `sql` is in recovery. A store with no journal is not.
+ *
  * @stability unstable
  * @category predicates
  */
