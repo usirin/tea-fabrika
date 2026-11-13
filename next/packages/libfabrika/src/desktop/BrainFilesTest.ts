@@ -7,6 +7,12 @@ import type { BrainSpec } from "./BrainSpec.ts";
 
 export type Fault = "none" | "compile" | "sync" | "publish" | "directory-sync";
 
+export const Replacement = Schema.Struct({
+  checkpoint: Schema.Literals(["before-backup-link", "before-unlink"]),
+  bytes: Schema.String,
+});
+export type Replacement = typeof Replacement.Type;
+
 type Files = {
   readonly control: BrainControl["Service"];
   readonly spec: BrainSpec;
@@ -18,7 +24,7 @@ type Files = {
   readonly failDirectorySync: Effect.Effect<void>;
 };
 
-export type Open = (fault: Fault) => Effect.Effect<Files, unknown, Scope.Scope>;
+export type Open = (fault: Fault, replacement?: Replacement) => Effect.Effect<Files, unknown, Scope.Scope>;
 
 export const suite = (open: Open) =>
   describe("P19 shared atomic publication laws", () => {
@@ -51,6 +57,36 @@ export const suite = (open: Open) =>
         }),
       { arbitrary: { seed: 119120, runs: 100 } },
     );
+
+    for (const checkpoint of ["before-backup-link", "before-unlink"] as const) {
+      it.effect.prop(
+        `L2/L6 removal preserves a competing plist ${checkpoint}`,
+        [Schema.String, Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 3 })), Schema.Boolean],
+        ([tail, installs, syncFailure]) =>
+          Effect.gen(function* () {
+            const bytes = `foreign-job-${tail}`;
+            const disk = yield* open("none", { checkpoint, bytes });
+
+            for (let n = 0; n < installs; n++) {
+              yield* disk.control.install;
+            }
+
+            expect(yield* disk.read).not.toBeNull();
+
+            if (syncFailure) {
+              yield* disk.failDirectorySync;
+            }
+
+            const exit = yield* Effect.scoped(disk.control.remove).pipe(Effect.exit);
+            expect(disk.events.filter((event) => event === `replace:${checkpoint}`)).toHaveLength(1);
+            expect({ failed: Exit.isFailure(exit), bytes: yield* disk.read }).toEqual({ failed: true, bytes });
+            yield* disk.recover;
+            expect(Exit.isFailure(yield* Effect.scoped(disk.control.remove).pipe(Effect.exit))).toBe(true);
+            expect(yield* disk.read).toBe(bytes);
+          }),
+        { arbitrary: { seed: 119120, runs: 100 } },
+      );
+    }
 
     it.effect.prop(
       "L6 a directory-sync failure keeps matching bytes and retry confirms durability",

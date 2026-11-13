@@ -36,6 +36,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
   },
   input: Partial<BrainSpec> = {},
   directoryName = "",
+  replacement?: BrainFilesTest.Replacement,
 ) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
@@ -43,6 +44,10 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
   const folder = directoryName === "" ? temporary : path.join(temporary, directoryName);
   yield* fs.makeDirectory(folder, { recursive: true });
   const home = yield* fs.realPath(folder);
+  const plist = path.join(home, "brain.plist");
+  const competing = yield* replacement === undefined
+    ? Effect.succeed(null)
+    : fs.makeTempFileScoped({ directory: home, prefix: ".competing-" });
   let failing = true;
   let directoryFault = fault === "directory-sync";
   const events: Array<string> = [],
@@ -144,6 +149,17 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
       }),
     ),
   );
+  const replace = Effect.fnUntraced(function* (checkpoint: BrainFilesTest.Replacement["checkpoint"]) {
+    if (replacement?.checkpoint !== checkpoint || competing === null) {
+      return;
+    }
+
+    // Rename a distinct inode, so an existing backup still holds the old job's bytes.
+    yield* fs.writeFileString(competing, replacement.bytes, { mode: 0o600 });
+    yield* fs.chmod(competing, 0o600);
+    yield* fs.rename(competing, plist);
+    events.push(`replace:${checkpoint}`);
+  });
   const disk = Layer.succeed(FileSystem.FileSystem, {
     ...fs,
     open: (file, options) =>
@@ -178,7 +194,12 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
       Effect.sync(() => {
         events.push("publish");
         events.push(`publish:${from}`);
-      }).pipe(Effect.andThen(fault === "publish" ? Effect.fail(failure("link")) : fs.link(from, to))),
+      }).pipe(
+        Effect.andThen(from === plist ? replace("before-backup-link") : Effect.void),
+        Effect.andThen(fault === "publish" ? Effect.fail(failure("link")) : fs.link(from, to)),
+      ),
+    remove: (file, options) =>
+      (file === plist ? replace("before-unlink") : Effect.void).pipe(Effect.andThen(fs.remove(file, options))),
     rename: (from, to) =>
       Effect.sync(() => {
         events.push("replaced");
@@ -213,4 +234,5 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
   };
 });
 
-export const nodeFiles: BrainFilesTest.Open = (fault) => open(fault).pipe(Effect.provide(NodeServices.layer));
+export const nodeFiles: BrainFilesTest.Open = (fault, replacement) =>
+  open(fault, undefined, undefined, undefined, replacement).pipe(Effect.provide(NodeServices.layer));
