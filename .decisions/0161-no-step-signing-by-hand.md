@@ -95,6 +95,7 @@ login. No step key signs it and no bot pushes it.
 - Owed, each as its own pull request:
   - CI: the `commits` workflow and the exam's commit check come out, or stop gating. They are exam
     paths, so the owner reads that pull request.
+    Done 2026-11-13: the workflow came out in https://github.com/kamp-us/tea-fabrika/pull/1134.
   - Main's ruleset: `commits` leaves the required checks. That is the owner's click.
   - The lead scripts that sign or push as the bot become plain: `stepcommit.sh`,
     `box.sh fetch --sign`, `botpush.mjs`, `publish.ts`, `land.ts` and `catchup.sh`.
