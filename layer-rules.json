@@ -48,6 +48,11 @@
       "paths": ["next/packages/libfabrika/src/mcp"]
     },
     {
+      "name": "next-schedules",
+      "layer": 6,
+      "paths": ["next/packages/libfabrika/src/schedules"]
+    },
+    {
       "name": "next-door",
       "layer": 6,
       "paths": ["next/packages/libfabrika/src/gateway"]

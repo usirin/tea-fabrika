@@ -5,7 +5,8 @@ import { Checks, Status } from "@kampus/libfabrika/ci/Ci";
 import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import { Change, Commit, Merged, Tree, Updated } from "@kampus/libfabrika/codehost/CodeHost";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
-import { ConfigProvider, Effect, Schema } from "effect";
+import { Saved } from "@kampus/libfabrika/runtime/State";
+import { Arbitrary, ConfigProvider, Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import * as ChangeKind from "./Change.ts";
 import * as Mail from "./Mail.ts";
@@ -28,6 +29,7 @@ const positive = fc.oneof(
 
 const world = fc.record({
   complete: fc.boolean(),
+  at: fc.integer({ min: 0, max: LAST }),
   ending: fc.constantFrom("merged", "checks", "merge"),
   size: fc.constantFrom(40, 64),
   ref: CiTest.word,
@@ -36,6 +38,7 @@ const world = fc.record({
   wait: positive,
   poll: positive,
   backoff: positive,
+  rounds: positive,
   empty: fc.tuple(fc.boolean(), fc.boolean(), fc.boolean()),
   paths: fc.option(
     fc.array(fc.constantFrom("rows/x.json", "docs/a.md", "src/a.ts", ".dot", "docs/a b.md", "docs/[x].md"), {
@@ -58,7 +61,7 @@ const settingsFor = (w: World) =>
               ["rows", "docs", "code"].map((kind, i) => [kind, w.empty[i] ? [] : [{ name: w.name, source: w.source }]]),
             ),
           },
-          merger: { wait: w.wait, poll: w.poll, backoff: w.backoff },
+          merger: { wait: w.wait, poll: w.poll, backoff: w.backoff, rounds: w.rounds },
         },
         { preserveEmptyStrings: true },
       ),
@@ -267,7 +270,7 @@ const guided = (p: Program, w: World) => {
           clock = Math.max(clock, model.step.at!);
           msg = Schema.decodeUnknownSync(p.msg)({ type: "timer", at: clock });
         } else {
-          const cmd = out.findLast((c) => c.type !== "send" && c.attempt === model.attempt);
+          const cmd = out.findLast((c) => service(c) && "attempt" in c && c.attempt === model.attempt);
 
           if (cmd === undefined) {
             break;
@@ -290,7 +293,7 @@ const guided = (p: Program, w: World) => {
   );
 };
 
-const service = (cmd: Command) => cmd.type !== "send";
+const service = (cmd: Command) => cmd.type !== "send" && cmd.type !== "exit";
 
 const stateCmd = (model: Model) =>
   model._tag === "reading"
@@ -313,6 +316,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
   let checkedHead: string | null = null;
   let checkedTree: string | null = null;
   let green = false;
+  let lastLook: string | null = null;
   let asks = 0;
 
   for (const { prev, msg, next, cmds } of folded.steps) {
@@ -331,6 +335,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
       checkedHead = null;
       checkedTree = null;
       green = false;
+      lastLook = null;
     }
 
     if (
@@ -340,6 +345,12 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
       msg.cmd.attempt === prev.attempt &&
       (msg.value._tag === "current" || msg.value._tag === "updated")
     ) {
+      lastLook = msg.value._tag === "current" && green && checkedHead === msg.value.head ? msg.value.head : null;
+
+      if (msg.value._tag === "updated") {
+        green = false;
+      }
+
       checkedHead = msg.value.head;
       checkedTree = msg.value.tree;
     }
@@ -359,7 +370,25 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
           reached = true;
           expect(green).toBe(true);
           expect(cmd.head).toBe(checkedHead);
+          expect(lastLook).toBe(cmd.head);
         }
+      }
+    }
+
+    if (law === "L16") {
+      reached ||= sent.length > 0;
+
+      if (sent.length > 0) {
+        expect(cmds.map((c) => c.type)).toEqual(["send", "exit"]);
+
+        for (const cmd of sent) {
+          if (cmd.type === "send") {
+            expect(Schema.is(Mail.Reply)(cmd.m)).toBe(true);
+            expect(cmd.m).toMatchObject({ type: "reply" });
+          }
+        }
+      } else {
+        expect(cmds.filter((c) => c.type === "exit")).toEqual([]);
       }
     }
 
@@ -582,7 +611,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
 };
 
 describe("the merger, next/", () => {
-  for (const law of ["L1", "L2", "L3", "L4", "L8", "L9", "L10", "L13"]) {
+  for (const law of ["L1", "L2", "L3", "L4", "L8", "L9", "L10", "L13", "L16"]) {
     it(`${law}: generated worlds obey the merger's contract at every prefix`, () => {
       const walks = world.chain((w) => {
         const p = merger(settingsFor(w));
@@ -624,12 +653,10 @@ describe("the merger, next/", () => {
                 check: () => true,
                 run: (m, { p, w }) => {
                   const prev = m.model;
-                  const active = m.current.find(
-                    (c) => c.type !== "send" && "attempt" in c && c.attempt === prev.attempt,
-                  );
+                  const active = m.current.find((c) => service(c) && "attempt" in c && c.attempt === prev.attempt);
                   const late = m.history.filter(
                     (c) =>
-                      c.type !== "send" &&
+                      service(c) &&
                       (prev._tag === "idle" ||
                         prev.step._tag !== "asking" ||
                         !("attempt" in c) ||
@@ -755,3 +782,191 @@ describe("the merger, next/", () => {
     );
   });
 });
+
+// This walk answers only the current request. Every update may discover another main.
+const roundWalk = (p: Program, w: World) => {
+  const ok = (cmd: Command, value: unknown): Msg =>
+    Schema.decodeUnknownSync(p.msg)({ type: `${cmd.type}_ok`, cmd, value, at: w.at });
+  return arbGuidedSequence(
+    p.machine,
+    ctx,
+    {
+      outside: { land: fc.constant(land(w)) },
+      answers: {
+        change: {
+          draw: fc.constant(null),
+          make: (cmd: Extract<Command, { type: "change" }>) =>
+            ok(
+              cmd,
+              Change.cases.found.make({
+                change: cmd.change,
+                head: cmd.type === "change" ? land(w).head : id(w, "a"),
+                state: "open",
+                paths: ["src/a.ts"],
+              }),
+            ),
+        },
+        update: {
+          draw: fc.boolean(),
+          make: (cmd: Extract<Command, { type: "update" }>, moved: boolean) =>
+            ok(
+              cmd,
+              moved
+                ? Updated.cases.updated.make({
+                    head: Schema.decodeUnknownSync(Commit)((cmd.attempt + 16).toString(16).padStart(w.size, "0")),
+                    tree: tree(w, "e"),
+                    main: id(w, "d"),
+                  })
+                : Updated.cases.current.make({ head: cmd.head, tree: tree(w, "e"), main: id(w, "d") }),
+            ),
+        },
+        checks: {
+          draw: fc.constant(null),
+          make: (cmd: Extract<Command, { type: "checks" }>) => ok(cmd, [runAt(w, 7)]),
+        },
+        merge: {
+          draw: fc.constant(null),
+          make: (cmd: Extract<Command, { type: "merge" }>) =>
+            ok(cmd, Merged.cases.merged.make({ commit: id(w, "f"), tree: tree(w, "e") })),
+        },
+      },
+    },
+    { maxLength: 180, size: "max" },
+  );
+};
+
+it("L15: updated heads spend the round budget; behind names the newest head and main", () => {
+  let bounded = 0;
+  fc.assert(
+    fc.property(
+      world.chain((drawn) => {
+        const w = { ...drawn, empty: [false, false, false] as [boolean, boolean, boolean] };
+        const p = merger(settingsFor(w));
+        return roundWalk(p, w).map((msgs) => ({ p, w, msgs }));
+      }),
+      ({ p, w, msgs }) => {
+        expect.hasAssertions();
+        let rounds = 0;
+
+        for (const { prev, msg, next, cmds } of foldEvents(p.machine, ctx, null, msgs).steps) {
+          if (prev._tag === "idle" && msg.type === "land") {
+            rounds = 0;
+          }
+
+          const updated =
+            prev._tag === "updating" &&
+            msg.type === "update_ok" &&
+            prev.step._tag === "asking" &&
+            msg.cmd.attempt === prev.attempt &&
+            msg.value._tag === "updated";
+
+          if (updated && msg.type === "update_ok" && msg.value._tag === "updated") {
+            if (rounds === w.rounds) {
+              bounded++;
+              expect(next._tag).toBe("idle");
+              expect(cmds.filter(service)).toEqual([]);
+              expect(cmds.find((c) => c.type === "send")).toMatchObject({
+                m: {
+                  type: "reply",
+                  _tag: "behind",
+                  head: msg.value.head,
+                  main: msg.value.main,
+                  rounds: w.rounds,
+                },
+              });
+            } else {
+              rounds++;
+              expect(next).toMatchObject({ _tag: "checking", round: rounds, head: msg.value.head });
+              expect(cmds).toContainEqual(
+                expect.objectContaining({ type: "checks", head: msg.value.head, start: true }),
+              );
+            }
+          }
+
+          if (next._tag === "updating" || next._tag === "checking") {
+            expect(next.round).toBe(rounds);
+          }
+
+          if (
+            prev._tag === "updating" &&
+            msg.type === "update_ok" &&
+            msg.value._tag === "current" &&
+            next._tag === "checking"
+          ) {
+            expect(cmds).toContainEqual(
+              expect.objectContaining({ type: "checks", head: msg.value.head, start: false }),
+            );
+          }
+        }
+      },
+    ),
+    { seed: 119120, numRuns: 200 },
+  );
+  expect(bounded, "walks reach the budget").toBeGreaterThan(0);
+});
+
+// pinned: these are the v1 fields PR 1030 saved. Do not derive them from the new model.
+const OldCount = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
+const OldStep = Schema.TaggedUnion({
+  asking: { tries: OldCount, at: Schema.Number },
+  waiting: {
+    tries: OldCount,
+    at: Schema.Number,
+    reason: Schema.Literals([
+      "unavailable",
+      "rate_limited",
+      "refused",
+      "handler_failed",
+      "bad_cmd",
+      "ci_silent",
+      "ci_lost",
+      "no_answer",
+      "pending",
+    ]),
+  },
+});
+
+const OldJob = Schema.Struct({
+  ref: Schema.NonEmptyString,
+  change: Schema.Int.check(Schema.isGreaterThan(0)),
+  head: Commit,
+  reply: Schema.NonEmptyString,
+});
+
+const oldCounts = { attempt: OldCount, late: OldCount };
+const oldWorking = { ...oldCounts, job: OldJob, step: OldStep };
+const oldPrepared = { ...oldWorking, kind: ChangeKind.Kind, checks: Schema.NonEmptyArray(ChangeKind.Check) };
+
+const OldModel = Schema.TaggedUnion({
+  idle: oldCounts,
+  reading: {
+    ...oldWorking,
+    step: Schema.Union([OldStep, Schema.TaggedStruct("asking", { tries: Schema.Literal(0), at: Schema.Null })]),
+  },
+  updating: oldPrepared,
+  checking: { ...oldPrepared, head: Commit, tree: Tree, until: Schema.Number },
+  merging: { ...oldWorking, head: Commit, tree: Tree },
+});
+
+it.prop(
+  "pinned: L17 every saved slice 1 state loads with its job and retry step intact",
+  // Saved.model is JSON. Keep the pinned v1 schema, but draw only values its store could save.
+  { old: Arbitrary.schema(OldModel).pipe(Arbitrary.filter(Schema.is(Schema.Json))) },
+  ({ old }) => {
+    const p = merger(Effect.runSync(Settings.all.parse(ConfigProvider.fromUnknown({}))));
+    const result = Saved.upgrade({ v: 1, build: "slice-1", model: old, after: 0 }, p.state, "slice-2");
+    const model = Schema.decodeUnknownSync(p.state.schema)(result.saved.model);
+    expect(result.saved.v).toBe(2);
+    expect(model).toMatchObject(old);
+
+    if (model._tag === "updating") {
+      expect(model).toMatchObject({ head: old._tag === "updating" ? old.job.head : null, round: 0, checked: null });
+    }
+
+    if (model._tag === "checking") {
+      expect(model.round).toBe(0);
+    }
+  },
+  { arbitrary: { seed: 119120, runs: 200 } },
+);
