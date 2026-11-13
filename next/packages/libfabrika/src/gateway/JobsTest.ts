@@ -69,13 +69,16 @@ const field = (a: string | Uint8Array) => {
   return join(u32(bytes.length), bytes);
 };
 
-const fail = (cause: unknown) => new Error("test crypto failed", { cause });
+// A shared suite is not a `*.test.ts` file, so its failures are tagged like product code's.
+class CryptoFailed extends Schema.TaggedError<CryptoFailed>()("CryptoFailed", { cause: Schema.Defect() }) {}
+
+const fail = (cause: unknown) => new CryptoFailed({ cause });
 
 const key = Effect.fnUntraced(function* () {
   const s = crypto.subtle;
   const ed = "Ed25519";
   const sign: KeyUsage[] = ["sign"];
-  const uses: KeyUsage[] = ["sign", "verify"];
+  const uses = ["sign", "verify"] as const;
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto generates test keys
   const pair = yield* Effect.tryPromise({ try: () => s.generateKey(ed, true, uses), catch: fail });
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto exports the generated public key
@@ -887,7 +890,8 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
         spans: w.spans.map((span) => ({
           name: span.name,
           attributes: [...span.attributes],
-          events: span.events,
+          // The `Span` contract names no `events`; the native span keeps them, so read them when there.
+          events: "events" in span ? span.events : undefined,
           status: span.status,
         })),
         measurements: [],

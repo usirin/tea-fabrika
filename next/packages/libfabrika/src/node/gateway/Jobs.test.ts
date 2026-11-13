@@ -64,7 +64,8 @@ const open = Effect.gen(function* () {
       Archive.memory,
       Id.Generator.layer,
     );
-    return Gateway.layer(options).pipe(Layer.provideMerge(services));
+    // The suite's contract names no ledger error: a store that cannot open is a broken test, a defect.
+    return Gateway.layer(options).pipe(Layer.provideMerge(services), Layer.orDie);
   };
   return { sql, reopen, gateway } satisfies TestSuite.Store;
 });
