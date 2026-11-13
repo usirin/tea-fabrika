@@ -8,8 +8,10 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import { nodeExecution } from "../runtime/Execution.ts";
 import { Input, Program } from "../runtime/Program.ts";
 import * as Programs from "../runtime/Program.ts";
+import * as Wire from "../runtime/WireTest.ts";
 import * as Tools from "./Tools.ts";
 
 const options = (runs: number) => ({ arbitrary: { seed: 119120, runs, size: 4096 } });
@@ -421,7 +423,18 @@ const fieldSchema = (field: typeof Field.Type, name: string) => {
   }
 };
 
-const makeForm = (form: Declaration) => {
+// A-Wire's odd member: one more port, `odd`, whose single field has no JSON form.
+const OddField = Schema.Literals(["map", "set", "declared"]);
+const Odd = Schema.Struct({ field: OddField, personOnly: Schema.Boolean });
+
+const oddSchema = (field: typeof OddField.Type) =>
+  field === "map"
+    ? Schema.instanceOf(Map)
+    : field === "set"
+      ? Schema.instanceOf(Set)
+      : Schema.declare((u): u is () => unknown => Predicate.isFunction(u), { expected: "a function" });
+
+const makeForm = (form: Declaration & { readonly odd?: typeof Odd.Type }) => {
   const members = form.members.map((member, i) => {
     const fields = Object.fromEntries(
       member.fields.map((field, n) => {
@@ -466,6 +479,10 @@ const makeForm = (form: Declaration) => {
     );
   }
 
+  if (form.odd !== undefined) {
+    parts.push(Schema.Struct({ type: Schema.Literal("odd"), held: oddSchema(form.odd.field) }));
+  }
+
   parts.push(Schema.Struct({ type: Schema.Literal("timer"), internal_timer: Schema.Int }));
 
   for (const nested of form.nest) {
@@ -485,7 +502,11 @@ const makeForm = (form: Declaration) => {
         : plain;
   // The negative forms deliberately contain wire values outside tea's Msg type.
   const msg = schema as Schema.Codec<Message, unknown>;
-  const keys = [...new Set([...form.members.flatMap((m) => m.tags), ...(outside === undefined ? [] : ["a"])])];
+  const hidden: ReadonlyArray<string> = [...form.personOnly, ...(form.odd?.personOnly === true ? ["odd"] : [])];
+  const keys = [
+    ...new Set([...form.members.flatMap((m) => m.tags), ...(outside === undefined ? [] : ["a"])]),
+    ...(form.odd === undefined ? [] : ["odd"]),
+  ];
   const machine = Machine.make({
     model: Schema.Null,
     msg,
@@ -500,10 +521,7 @@ const makeForm = (form: Declaration) => {
     view: () => null,
     refuse: () => null,
     inputs: Object.fromEntries(
-      keys.map((key) => [
-        key,
-        form.personOnly.includes(key as typeof Key.Type) ? { description: key, personOnly: true as const } : key,
-      ]),
+      keys.map((key) => [key, hidden.includes(key) ? { description: key, personOnly: true as const } : key]),
     ),
     outputs: {},
     writes: {},
@@ -514,7 +532,7 @@ const makeForm = (form: Declaration) => {
     msg,
     members,
     keys,
-    visible: keys.filter((key) => !form.personOnly.includes(key as typeof Key.Type)),
+    visible: keys.filter((key) => !hidden.includes(key)),
     exact: form.whole !== "filter" && form.members.every((m) => m.wrap !== "filter"),
   };
 };
@@ -554,6 +572,12 @@ const sent = (description: typeof Supported.Type) => {
 
 const Forms = {
   Declaration: Arbitrary.schema(Declaration),
+  // A supported declaration and the odd port to add to it, with a name no tool has.
+  Odd: Arbitrary.all({
+    description: Arbitrary.schema(Supported),
+    odd: Arbitrary.schema(Odd),
+    stranger: Arbitrary.schema(Schema.String),
+  }),
   Sent: visibleForm.pipe(Arbitrary.flatMap(sent)),
   Outside: visibleForm.pipe(
     Arbitrary.flatMap((description) =>
@@ -1026,3 +1050,127 @@ it.prop(
   },
   options(200),
 );
+
+// Ticket 888, Amendment A-Wire, next/: one JSON codec at every boundary. These are the agent's half.
+const wireTool = (program: Parameters<typeof Tools.list>[0][number], key: string) => {
+  const result = Tools.list([program]);
+  expect(Result.isSuccess(result), "the Wire program lists").toBe(true);
+
+  if (Result.isFailure(result)) {
+    throw new Error(`Listing failed: ${result.failure.reason} on ${result.failure.tool}`);
+  }
+
+  const tool = result.success.find((tool) => tool.name === `wire_${key}`);
+  expect(tool, `wire_${key} is listed`).toBeDefined();
+  return tool!;
+};
+
+/** Sends `value` to the Wire program's `key` tool and returns the one Msg `update` was handed. */
+const throughTool = Effect.fn("throughTool")(function* (key: string, value: unknown) {
+  const { program, taken } = Wire.make();
+  expect(validator(wireTool(program, key).inputSchema)({ value }), "the listed schema accepts the value").toBe(true);
+  const call = Tools.read([program], `wire_${key}`, { value });
+  expect(call, "the call is a write").toMatchObject({ _tag: "write", program: program.name });
+
+  if (call._tag !== "write") {
+    return { m: undefined, taken };
+  }
+
+  expect(Schema.is(Schema.Json)(call.m), "m is JSON").toBe(true);
+  const execution = nodeExecution(program);
+  expect(yield* execution.admit(jsonTrip(call.m)), "admit").toBe(true);
+  const start = yield* execution.init(null);
+  expect(start._tag).toBe("stepped");
+
+  if (start._tag === "stepped") {
+    expect((yield* execution.step(start.model, jsonTrip(call.m)))._tag, "step").toBe("stepped");
+  }
+
+  expect(taken, "update is handed one Msg").toHaveLength(1);
+  return { m: call.m, taken };
+});
+
+it.effect.prop(
+  "W2: a tool call's m is the Msg's JSON form, the same letter a person sends, and update is handed an equal Msg",
+  { sample: Wire.Sent, q: Wire.Asked },
+  ({ sample, q }) =>
+    Effect.gen(function* () {
+      const same = Schema.toEquivalence(Wire.Msg);
+
+      for (const x of [sample.drawn, sample.edge]) {
+        const letter = Wire.letter(x);
+        const { m, taken } = yield* throughTool(x.type, withoutType(letter));
+        expect(m, "m equals the letter a person's window sends for the same Msg").toStrictEqual(letter);
+
+        for (const got of taken) {
+          expect(same(got, x), "update takes a Msg equal to the one sent").toBe(true);
+        }
+      }
+
+      const { program } = Wire.make();
+      const value = Wire.asked(q);
+      expect(validator(wireTool(program, "find").inputSchema)({ value }), "the read port accepts the value").toBe(true);
+      const call = Tools.read([program], "wire_find", { value });
+      expect(call, "the call is a query").toMatchObject({ _tag: "query", program: program.name, name: "find" });
+
+      if (call._tag === "query") {
+        const back = Schema.decodeUnknownResult(Schema.toCodecJson(Wire.Query), closed)(jsonTrip(call.query));
+        expect(
+          Result.isSuccess(back) && Schema.toEquivalence(Wire.Query)(back.success, q),
+          "the query decodes with the port's JSON codec to an equal value",
+        ).toBe(true);
+      }
+    }),
+  options(300),
+);
+
+it.prop(
+  "W4: a visible port with a field that has no JSON form fails the list by name, and no call is read",
+  { sample: Forms.Odd },
+  ({ sample: { description, odd, stranger } }) => {
+    const form = makeForm({ ...description, odd });
+    const result = Tools.list([form.program]);
+
+    if (odd.personOnly) {
+      expect(Result.isSuccess(result), "the same field on a person-only port lists").toBe(true);
+
+      if (Result.isSuccess(result)) {
+        expect(result.success.map((t) => t.name)).toEqual(["ps", ...form.visible.map((key) => `drawn_${key}`)]);
+        expect(form.visible).not.toContain("odd");
+      }
+
+      return;
+    }
+
+    failure(result, "unsupported_schema", "drawn_odd");
+
+    for (const name of ["ps", ...form.keys.map((key) => `drawn_${key}`), stranger]) {
+      for (const args of [{}, { value: {} }, { value: { held: {} } }]) {
+        expect(Tools.read([form.program], name, args)).toEqual({ _tag: "refused", reason: "unknown_tool" });
+      }
+    }
+  },
+  options(200),
+);
+
+const probes: ReadonlyArray<readonly [name: string, value: Readonly<Record<string, string>>, expected: Wire.Msg]> = [
+  ["Schema.BigInt", { n: "123" }, { type: "big", n: 123n }],
+  ["Schema.Uint8Array", { body: "AQID" }, { type: "bytes", body: new Uint8Array([1, 2, 3]) }],
+  ["Schema.Date", { at: "2026-11-12T16:47:00.000Z" }, { type: "date", at: new Date("2026-11-12T16:47:00.000Z") }],
+  ["Schema.Number NaN", { x: "NaN" }, { type: "number", x: Number.NaN }],
+  ["Schema.Number Infinity", { x: "Infinity" }, { type: "number", x: Infinity }],
+  ["Schema.Number -Infinity", { x: "-Infinity" }, { type: "number", x: -Infinity }],
+];
+
+for (const [name, value, expected] of probes) {
+  // vector: each is one of review 5's four probes, kept by name so a regression points at its review.
+  it.effect(`vector: W5 review 5's ${name} probe lists, is accepted and reaches update`, () =>
+    Effect.gen(function* () {
+      const { taken } = yield* throughTool(expected.type, value);
+
+      for (const got of taken) {
+        expect(Schema.toEquivalence(Wire.Msg)(got, expected), `update takes ${name}'s own value`).toBe(true);
+      }
+    }),
+  );
+}
