@@ -400,8 +400,9 @@ const writePortCodec = (msg: Declared, key: string) =>
   );
 
 /**
- * Returns a read port's schema or a write message's fields without its `type`.
- * A missing port has no schema; a write is decoded by the Msg's own JSON codec.
+ * Returns the schema of one of a program's ports, or none when the program declares no port by
+ * that name. A read port gives its own schema. A write port gives a codec for its Msg's fields
+ * without `type`, which decodes and checks them with the Msg's own JSON codec.
  *
  * @stability unstable
  * @category getters

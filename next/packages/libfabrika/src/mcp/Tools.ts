@@ -1,5 +1,6 @@
 /**
- * MCP tools derived from a program's declared ports, without a transport.
+ * MCP tools made from the ports a program declares: the list an agent sees, and the call an
+ * agent's arguments decode to. It holds no transport and sends nothing.
  *
  * @stability unstable
  */
@@ -11,7 +12,8 @@ import * as Schema from "effect/Schema";
 import * as Program from "../runtime/Program.ts";
 
 /**
- * Schema for the tool description shown to an agent.
+ * Schema for one tool as an agent sees it: its name, its description, the JSON Schema of its
+ * arguments, and a read-only hint on a tool that changes nothing.
  *
  * @stability unstable
  * @category models
@@ -24,7 +26,7 @@ export const Tool = Schema.Struct({
 });
 
 /**
- * A tool description shown to an agent.
+ * One tool as an agent sees it, the type of {@link Tool}.
  *
  * @stability unstable
  * @category models
@@ -32,7 +34,9 @@ export const Tool = Schema.Struct({
 export type Tool = typeof Tool.Type;
 
 /**
- * Schema for a decoded tool call or a refusal before anything is sent.
+ * Schema for what a tool call decodes to: `ps`, a `write` holding the program's name and the Msg
+ * as JSON, a `query` holding the program's name, the read port's name and its JSON input, or
+ * `refused` with the reason.
  *
  * @stability unstable
  * @category models
@@ -45,7 +49,7 @@ export const Call = Schema.TaggedUnion({
 });
 
 /**
- * A decoded tool call or a refusal before anything is sent.
+ * What a tool call decodes to, the type of {@link Call}.
  *
  * @stability unstable
  * @category models
@@ -53,7 +57,8 @@ export const Call = Schema.TaggedUnion({
 export type Call = typeof Call.Type;
 
 /**
- * A declaration cannot be offered as an unambiguous tool list.
+ * Error that says why a set of programs cannot be listed as tools: `reason` names the fault and
+ * `tool` the tool it was found on.
  *
  * @stability unstable
  * @category errors
@@ -260,8 +265,10 @@ const ps = Tool.make({
 });
 
 /**
- * Lists `ps` first, then visible ports in program and declaration order.
- * Invalid names, collisions and missing message schemas fail the whole list.
+ * Lists `ps` first, then one tool for each port an agent may call, in program and declaration
+ * order, leaving out every person-only port. One bad port fails the whole list with a
+ * `ToolsError`: a name that is too long or holds a character a tool name may not, a name two
+ * ports share, or a schema that cannot be listed.
  *
  * @stability unstable
  * @category getters
@@ -312,7 +319,9 @@ const refused = Call.cases.refused.make;
 const decodeWire = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Json));
 
 /**
- * Decodes outside arguments with the named port's schema, refusing hidden or unknown tools.
+ * Decodes a tool call's arguments with the named port's schema and returns the `Call` to send. A
+ * name the list does not hold, a person-only port's included, is refused as `unknown_tool`, and
+ * arguments the schema rejects as `bad_input`. It never throws.
  *
  * @stability unstable
  * @category decoding
