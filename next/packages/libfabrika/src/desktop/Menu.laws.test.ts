@@ -13,9 +13,14 @@ import * as PersonCheckTest from "./PersonCheckTest.ts";
 const options = (numRuns: number) => ({ seed: Test.seed, numRuns });
 
 const signed = (cmds: ReadonlyArray<Test.Command>) =>
-  cmds.filter((c) => c.type === "sign_grant" || c.type === "sign_revoke");
+  cmds.filter(
+    (c): c is Extract<Test.Command, { type: "sign_grant" | "sign_revoke" }> =>
+      c.type === "sign_grant" || c.type === "sign_revoke",
+  );
 
-const waiting = (s: Test.Model) => Menu.view(s).filter((i) => i._tag === "waiting");
+const waiting = (s: Test.Model) =>
+  Menu.view(s).filter((i): i is Extract<typeof Menu.Item.Type, { _tag: "waiting" }> => i._tag === "waiting");
+
 const safe = (s: string) => s.replace(/[\p{Cc}\p{Cf}]/gu, "");
 // pinned: amendment A-Lint uses the existing brain-line text cap, in UTF-16 code units.
 const labelLimit = 256;
@@ -30,7 +35,7 @@ const hasLabel = (words: string, raw: string) => {
   const shown = displayed(raw);
   const next = clean.codePointAt(shown.length);
   return (
-    words.isWellFormed() &&
+    !/[\uD800-\uDFFF]/u.test(words) &&
     words.includes(shown) &&
     (next === undefined || !words.includes(shown + String.fromCodePoint(next)))
   );
@@ -49,7 +54,7 @@ it("L1: signatures follow the matching check; no check failure or Enter writes",
         return "init signed without a checked person";
       }
 
-      const pending = new Set(initCmds.filter((c) => c.type === "check").map((c) => c.cmd));
+      const pending = new Set(initCmds.flatMap((c) => (c.type === "check" ? [c.cmd] : [])));
 
       for (const { prev, msg, next, cmds } of steps) {
         if (msg.type === "enter" && (!Test.same(prev, next) || cmds.length > 0)) {
@@ -325,7 +330,7 @@ it("L6: only a matching opened reply creates a pass, live passes sign once, expi
             }
           }
 
-          const actual = cmds.filter((c) => c.type === "sign_grant").map((c) => ({ key: c.key, as: c.as, saw: c.saw }));
+          const actual = cmds.flatMap((c) => (c.type === "sign_grant" ? [{ key: c.key, as: c.as, saw: c.saw }] : []));
 
           if (!Test.same(actual, expected) || cmds.some((c) => c.type === "check")) {
             return "a missing, spent or expired pass signed, or a live pass asked for a finger";
@@ -421,7 +426,7 @@ it("L8: equal models give ordered unique items, empty is explicit, and state is 
     (steps, final) => {
       for (const state of [Test.machine.init(null, Test.ctx)[0], ...steps.map((s) => s.next), final]) {
         const items = Menu.view(state);
-        const clone = Schema.decodeUnknownSync(Schema.fromJsonString(Test.machine.model))(Test.encoded(state));
+        const clone = Schema.decodeUnknownSync(Test.modelJson)(Test.encoded(state));
 
         if (!Test.same(items, Menu.view(clone)) || !Test.same(items, Menu.view(state))) {
           return "equal models rendered differently";
@@ -601,7 +606,7 @@ describe("browser link start switch", () => {
       const machine = Menu.machine({ linkTtl: Test.ttl, browserLink: enabled });
       const initial = machine.init(null, Test.ctx)[0];
       expect(Menu.view(initial).some((i) => i._tag === "action" && i.id === "open_browser")).toBe(enabled);
-      const msgs: ReadonlyArray<typeof machine.msg.Type> = [{ type: "open_browser", cmd: Test.cmdId(3) }];
+      const msgs: ReadonlyArray<Test.Msg> = [{ type: "open_browser", cmd: Test.cmdId(3) }];
       const trace = foldEvents(machine, Test.ctx, null, msgs);
       expect(trace.steps.flatMap((s) => s.cmds).filter((c) => c.type === "open")).toHaveLength(enabled ? 1 : 0);
     },
@@ -637,7 +642,7 @@ it.effect.prop(
           answers: {
             open: {
               draw: fc.constant("loaded-digest"),
-              make: (pending, digest) => ({ type: "opened", cmd: pending.cmd, digest, at: 0 }),
+              make: (pending, digest): Test.Msg => ({ type: "opened", cmd: pending.cmd, digest, at: 0 }),
             },
           },
         },

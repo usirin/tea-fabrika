@@ -12,7 +12,7 @@ export const ttl = 137;
 export const ctx = stubCtxThrowingProxy<unknown>();
 export const machine = Menu.machine({ linkTtl: ttl, browserLink: true });
 export type Model = ReturnType<typeof machine.init>[0];
-export type Msg = typeof machine.msg.Type;
+export type Msg = Parameters<(typeof machine.update)[keyof typeof machine.update]>[1];
 export type Command = ReturnType<typeof machine.init>[1][number];
 export type Row = typeof Menu.Row.Type;
 type Client = typeof Menu.Client.Type;
@@ -93,14 +93,14 @@ const proposals = arbGuidedSequence(
     answers: {
       check: {
         draw: fc.constantFrom("touch", "click", "declined", "unavailable"),
-        make: (pending, answer) =>
+        make: (pending, answer): Msg =>
           answer === "touch" || answer === "click"
             ? { type: "checked", cmd: pending.cmd, check: answer }
             : { type: "not_checked", cmd: pending.cmd, reason: answer },
       },
       open: {
         draw: digest,
-        make: (pending, digest) => ({ type: "opened", cmd: pending.cmd, digest, at: 0 }),
+        make: (pending, digest): Msg => ({ type: "opened", cmd: pending.cmd, digest, at: 0 }),
       },
     },
   },
@@ -136,4 +136,5 @@ export const walks = proposals.map((messages): ReadonlyArray<Msg> => {
   return output;
 });
 
-export const encoded = (model: Model) => Schema.encodeSync(Schema.fromJsonString(machine.model))(model);
+export const modelJson = Schema.fromJsonString(Schema.toType(machine.model));
+export const encoded = (model: Model) => Schema.encodeSync(modelJson)(model);
