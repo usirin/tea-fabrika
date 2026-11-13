@@ -74,7 +74,7 @@ membership preserves recipients, not delivery receipts.
 
 A memory Set works across calls in a Node test but disappears on object sleep. Deterministic laws
 must close the first runner's scope and reopen its database and every layer before publishing
-(`next/packages/libfabrika/src/runtime/RunnerWatchersTest.ts:69`). The real browser scenario waits
+(`next/packages/libfabrika/src/runtime/RunnerWatchersTest.ts:135`). The real browser scenario waits
 past the local idle interval (`next/apps/fabrika/e2e/instance.test.ts`); that scenario needs the
 host or CI and cannot prove production eviction timing.
 
