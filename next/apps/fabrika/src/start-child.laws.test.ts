@@ -8,8 +8,8 @@ import { Writer } from "@kampus/libfabrika/access/SessionManager";
 import { letterLine } from "@kampus/libfabrika/processes/Mailbox";
 import { Recipient } from "@kampus/libfabrika/processes/Process";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
-import { configureProcess, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
-import { Effect, Exit, Logger, Result, Schema, Scope } from "effect";
+import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
+import { Effect, Exit, Layer, Logger, ManagedRuntime, Result, Schema, Scope } from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, it, vi } from "vitest";
 import {
@@ -824,15 +824,43 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
       build: "p42-alarm",
       owner: Writer.cases.person.make({ key: "SHA256:test", for: "person_01m6v5270hf3c8x2q7w9z4k5mn" }),
     };
-    const first = await Effect.runPromise(Effect.result(configureProcess(ctx, descriptor, true)));
-    expect(first._tag).toBe("Failure");
-    const wake = await Effect.runPromise(savedAlarm(ctx));
-    expect(wake).toBeTypeOf("number");
-    expect(armed).toBeUndefined();
-    await Effect.runPromise(configureProcess(ctx, descriptor, true));
-    expect(armed, "L10: retry arms the first wake even though its saved value already exists").toBe(wake);
-    expect(values.get("descriptor")).toEqual(descriptor);
-    expect(await Effect.runPromise(savedAlarm(ctx))).toBe(wake);
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const unused = () => Effect.die("unexpected process service call");
+          const runtime = yield* Effect.acquireRelease(
+            Effect.sync(() =>
+              ManagedRuntime.make(
+                Layer.succeed(ProcessService, {
+                  usage: unused,
+                  msg: unused,
+                  mailed: unused,
+                  open: unused,
+                  due: unused,
+                  init: () => Effect.void,
+                  restart: unused,
+                  alarm: unused,
+                  activity: unused,
+                  recover: unused,
+                }),
+              ),
+            ),
+            (runtime: ManagedRuntime.ManagedRuntime<ProcessService, never>) => runtime.disposeEffect,
+          );
+          yield* Effect.promise(async () => {
+            const first = await Effect.runPromise(Effect.result(configureProcess(ctx, descriptor, runtime, true)));
+            expect(first._tag).toBe("Failure");
+            const wake = await Effect.runPromise(savedAlarm(ctx));
+            expect(wake).toBeTypeOf("number");
+            expect(armed).toBeUndefined();
+            await Effect.runPromise(configureProcess(ctx, descriptor, runtime, true));
+            expect(armed, "L10: retry arms the first wake even though its saved value already exists").toBe(wake);
+            expect(values.get("descriptor")).toEqual(descriptor);
+            expect(await Effect.runPromise(savedAlarm(ctx))).toBe(wake);
+          });
+        }),
+      ),
+    );
   });
 
   // scenario: L9. Only the real project holds the client list a notify would reach, so one real

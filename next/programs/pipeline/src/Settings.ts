@@ -45,6 +45,22 @@ export const all = Setting.group({
     reload: "restart",
     since: "0.0.0",
   }),
+  rounds: Setting.make("merger.rounds", {
+    schema: Positive,
+    default: 5,
+    doc: "New heads checked before a landing replies behind because main keeps moving.",
+    scope: ["repo"],
+    reload: "restart",
+    since: "0.0.0",
+  }),
+  most: Setting.make("queue.most", {
+    schema: Positive,
+    default: 256,
+    doc: "Maximum entries waiting in the merge queue's line.",
+    scope: ["repo"],
+    reload: "restart",
+    since: "0.0.0",
+  }),
 });
 
 export type Values = typeof all extends Setting.Group<infer A> ? A : never;

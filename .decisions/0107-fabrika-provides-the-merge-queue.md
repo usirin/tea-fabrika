@@ -1,7 +1,7 @@
 ---
 id: 0107
 title: fabrika provides the merge queue as its own primitive, in its official pipeline pack, and the code host only holds the code and performs the merge it is told to
-status: accepted
+status: amended-in-part by [0162](0162-no-friction-before-a-merge.md)
 date: 2026-11-11
 tags: [merge-queue, ship, code-host, queue, primitive, github]
 ---

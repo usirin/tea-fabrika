@@ -20,6 +20,7 @@ const methods = {
     "route",
     "grant",
     "read",
+    "append",
     "wait",
     "start",
     "exit",

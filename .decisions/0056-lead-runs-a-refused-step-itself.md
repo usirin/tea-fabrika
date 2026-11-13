@@ -1,7 +1,7 @@
 ---
 id: 0056
 title: When the permission check refuses a step agent's lead sign, its normal push or its merge of a passing test-only or rows-only PR, the lead session runs that same step itself, and every other refusal goes to the owner
-status: accepted
+status: amended-in-part by [0161](0161-no-step-signing-by-hand.md)
 date: 2026-11-10
 tags: [lead, permissions, refusal, sign, push, botpush, merge, catchup, field-rows, keys]
 ---
