@@ -13,7 +13,7 @@ const encode = Schema.encodeSync(Schema.fromJsonString(Saved));
 const stored = <A>(f: () => A) =>
   Effect.try({
     try: f,
-    catch: (cause) => (cause instanceof WatchersError ? cause : new WatchersError({ reason: new Storage({ cause }) })),
+    catch: (cause) => (Schema.is(WatchersError)(cause) ? cause : new WatchersError({ reason: new Storage({ cause }) })),
   });
 
 const load = (sql: Sql, name: string) => {
