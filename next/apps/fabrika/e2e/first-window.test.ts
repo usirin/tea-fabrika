@@ -605,7 +605,8 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   accessBodies.set(JSON.stringify(body), JSON.stringify({ ...body, signed }));
                   return ["access record", JSON.stringify({ ...entry, body: { ...body, signed } })];
                 });
-                const disk = yield* stored(h.dir, accessBodies);
+                const proofs = [...[...h.grants, ...stranger.grants].flatMap((g) => g.signatures), revoked.armored];
+                const disk = yield* stored(h.dir, accessBodies, proofs);
                 const outputs: ReadonlyArray<readonly [string, string]> = [
                   ...snapshots,
                   ...(yield* look(t.page, t.seen)),
@@ -686,9 +687,10 @@ const percentDecoded = (text: string): string => {
   }
 };
 
-/** Check every file and SQLite cell. Only a verified access entry's signed.armored is omitted.
+/** Check every file and SQLite cell. Two places keep a signature on purpose, and only its `armored`
+ *  text is omitted there: a verified access entry's signed.armored, and the gateway's replay rows.
  *  Checking cells too catches a copy of that entire body in another table or stream. */
-const stored = (dir: string, accessBodies: ReadonlyMap<string, string>) =>
+const stored = (dir: string, accessBodies: ReadonlyMap<string, string>, proofs: ReadonlyArray<string>) =>
   Effect.scoped(
     Effect.gen(function* () {
       const files = readdirSync(dir, { recursive: true, encoding: "utf8" })
@@ -755,6 +757,27 @@ const stored = (dir: string, accessBodies: ReadonlyMap<string, string>) =>
               cells = { ...row, body: replacement };
             }
 
+            // The gateway's replay rows keep a whole signed change on purpose, since P10, to answer a
+            // repeated change id: `changePending/<id>` and `change/<id>` in `gateway_state`. The parent
+            // plan lets a grant's signature stay "only in the ledger locations that deliberately preserve
+            // that public evidence", and this is one. A signature is public evidence, not a secret, and
+            // the access entry above holds the same one. Only `armored` is left out, and only when it is
+            // a proof this run really sent: anything else there is checked like any cell. The row's other
+            // fields are checked too, and the raw file below is still checked whole for a private key
+            // and for every credential.
+            if (name === "gateway_state" && /^(?:changePending|change)\//.test(String(row.name))) {
+              const value = Schema.decodeUnknownSync(Schema.String)(row.value);
+              const { armored, ...rest } = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Json))(
+                JSON.parse(value),
+              );
+
+              if (typeof armored === "string" && proofs.includes(armored)) {
+                const replacement = JSON.stringify(rest);
+                allowed.set(value, replacement);
+                cells = { ...row, value: replacement };
+              }
+            }
+
             for (const [column, value] of Object.entries(cells)) {
               outputs.push([
                 `${label} table ${name} ${key} column ${column}`,
@@ -768,7 +791,9 @@ const stored = (dir: string, accessBodies: ReadonlyMap<string, string>) =>
       for (let n = 0; n < files.length; n++) {
         const file = files[n]!;
         const [label, bytes] = raw[n]!;
-        // SQLite's journal repeats the same cells. No other file gets this exception.
+        // SQLite's journal repeats the same cells. No other file gets this exception. The raw bytes are
+        // still scanned: only the exact text of an omitted cell is swapped for its checked form, so a
+        // signature anywhere else in the file, under another key or in another table, is still found.
         const database = file.replace(/-(?:wal|shm|journal)$/, "");
         let checked = bytes;
 
