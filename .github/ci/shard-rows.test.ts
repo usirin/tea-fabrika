@@ -2,10 +2,11 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { it, expect } from "@effect/vitest";
 import * as fc from "fast-check";
+import { createVitest } from "vitest/node";
 import { testConfig } from "../../vitest.config.ts";
 import { measured } from "../../vitest.shards.ts";
 import { main, nextFiles, unmeasured } from "./shard-rows.ts";
@@ -35,7 +36,7 @@ it("L2: missing rows are exactly absent own keys, sorted in either input order",
   );
 });
 
-it("scenario: L3 the real config finds TSX tests and excludes e2e, node_modules and dist", () => {
+it("scenario: L3 the real config finds TSX tests and excludes e2e, node_modules and dist", async () => {
   // This law is about the file set selected by today's real Vitest config.
   const files = nextFiles(root);
   expect(files).toContain("next/apps/fabrika/src/exam/markdown.test.tsx");
@@ -54,7 +55,24 @@ it("scenario: L3 the real config finds TSX tests and excludes e2e, node_modules 
       writeFileSync(join(folder, path), "");
     }
 
-    expect(nextFiles(folder)).toEqual(selected);
+    const vitest = await createVitest("test", {
+      root: folder,
+      config: false,
+      watch: false,
+      include: testConfig.test.include,
+      exclude: testConfig.test.exclude,
+    });
+
+    try {
+      const actual = (await vitest.globTestSpecifications())
+        .map((spec) => relative(vitest.config.root, spec.moduleId))
+        .toSorted();
+      expect(nextFiles(folder)).toEqual(actual);
+      expect(actual).toEqual(selected);
+    } finally {
+      await vitest.close();
+    }
+
     // New next/ globs in the config must be read on every call.
     const added = "next/extra/fresh.test.tsx";
     mkdirSync(dirname(join(folder, added)), { recursive: true });
