@@ -528,7 +528,11 @@ brief carries these caps. Each one came from a laptop that became unusable.
   picks only the tests that reach them. What a test's scripts read is derived from the scripts, never
   written in the test (`oxlint-plugins/script-reads.mjs`; `pnpm lint` fails on a script no test reaches).
   Other Markdown that a program or skill reads counts as code.
-  Anything else, and every push to main, runs all jobs, so the full suite runs after the merge. A merge queue's
+  Anything else runs `check`, `typecheck`, `test` and `next`. Today's own checks (today's tests, `e2e`, and `check`'s
+  promises gate and build) start only when a file of today's version changed (`apps/`, `programs/`, `packages/`,
+  `fixtures/`), on every event; without one, `test` runs only the tooling tests (CI's own, the lint plugins, the root
+  and skill scripts). Every push to main runs lint, typecheck, every `next` shard and the tooling tests, so a break in
+  `next/` shows right after the merge ([0175](./.decisions/0175-old-checks-follow-old-files.md)). A merge queue's
   run picks its jobs from its changed paths, as a ready pull request does ([0174](./.decisions/0174-a-queue-run-follows-its-paths.md)). A run that
   needs what CI lacks (Electron shots, a stage with workerd) still runs here. With two or more code agents running:
   `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at the very end. `tsgo` takes
