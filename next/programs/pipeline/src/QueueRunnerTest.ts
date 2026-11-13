@@ -1,6 +1,4 @@
 import { describe, expect, it } from "@effect/vitest";
-import type * as CiTest from "@kampus/libfabrika/ci/CiTest";
-import type * as CodeHostTest from "@kampus/libfabrika/codehost/CodeHostTest";
 import { Arbitrary, Cause, Effect, Exit, Fiber, Logger, Redacted, Schema, type Scope, type Tracer } from "effect";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -8,6 +6,11 @@ import * as Mail from "./Mail.ts";
 import type { queue } from "./Queue.ts";
 
 type QueueModel = ReturnType<typeof queue>["machine"]["model"]["Type"];
+
+type Fault<R> =
+  | { readonly kind: "fault"; readonly reason: R }
+  | { readonly kind: "defect" }
+  | { readonly kind: "interrupt" };
 
 export type Snapshot = {
   readonly model: QueueModel | null;
@@ -37,8 +40,18 @@ export type World = {
   readonly step: Effect.Effect<void, unknown>;
   readonly green: (change: number) => Effect.Effect<void>;
   readonly snapshot: Effect.Effect<Snapshot, unknown>;
-  readonly host: CodeHostTest.Control["Service"];
-  readonly ci: CiTest.Control["Service"];
+  readonly host: {
+    readonly fail: (
+      method: "update" | "merge",
+      fault: Fault<"unavailable" | "rate_limited" | "refused">,
+    ) => Effect.Effect<void>;
+    readonly calls: () => ReadonlyArray<{ readonly method: string; readonly change: number }>;
+    readonly read: (change: number) => Effect.Effect<{ readonly head: string } | undefined>;
+  };
+  readonly ci: {
+    readonly fail: (method: "start" | "at", fault: Fault<"unavailable" | "rate_limited">) => Effect.Effect<void>;
+    readonly starts: () => ReadonlyArray<string>;
+  };
   readonly moveMain: Effect.Effect<void>;
   readonly moveBeforeMerge: Effect.Effect<void>;
   readonly allowStart: (allowed: boolean) => Effect.Effect<void>;
@@ -105,6 +118,9 @@ const cell = fc.record({
 });
 
 type Cell = typeof cell extends fc.Arbitrary<infer A> ? A : never;
+
+const q5Runs = 200;
+const s2Runs = 40;
 
 // Effect Arbitrary has no command-list generator. A generated seed draws fast-check's tape.
 const tapes = Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 2 ** 31 - 1 }))).pipe(
@@ -173,7 +189,9 @@ export const suite = (driver: Driver) =>
           expect(replies(landed, change)[0]).toHaveProperty("ref", ref);
           allNormal(landed);
         }).pipe(Effect.scoped),
-      { arbitrary: { seed: 119120, runs: 200 } },
+      // 200 isolated worlds each refuse a real start, then start and finish a real merger.
+      // Measured 23.5 s locally; 500 ms per world gives about four times that total.
+      { timeout: q5Runs * 500, arbitrary: { seed: 119120, runs: q5Runs } },
     );
     it.effect.prop(
       "QR5: each start is answered and folded once across reopens",
@@ -502,6 +520,8 @@ export const suite = (driver: Driver) =>
             }).pipe(Effect.withTracer(capture.tracer), Effect.provide(Logger.layer([logger])));
           }),
         ),
-      { arbitrary: { seed: 119120, runs: 40, size: 24 } },
+      // Each world finishes a faulted landing, then walks up to 24 moves, including store reopens.
+      // Measured 35.3 s for 40 worlds locally; 3 s per world covers that counted work.
+      { timeout: s2Runs * 3_000, arbitrary: { seed: 119120, runs: s2Runs, size: 24 } },
     );
   });
