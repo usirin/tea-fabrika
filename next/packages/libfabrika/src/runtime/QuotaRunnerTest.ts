@@ -320,9 +320,14 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
             const old = yield* w.program("sample/alpha");
             const location = required(tape[0]).pick % 3;
             const resource = required(tape[0]).amount % 2 === 0 ? "writes" : "storage";
+            // A limit of N admits N writes, as Q17's cap of 2 admits a letter that counts 2. So the room
+            // left is drawn. With none, the call's first recovery write runs out. With one at the
+            // Project alone, the call's recovery writes there may fit, and then a later one, on a
+            // saved alarm, runs out.
+            const spare = required(tape[1]).pick % 2;
             const tighten = (allowance: Limits["recovery"]["process"]) => ({
               ...allowance,
-              ...(resource === "writes" ? { writes: 1 } : { bytes: 1 }),
+              ...(resource === "writes" ? { writes: spare } : { bytes: 1 }),
             });
             w.limits({
               ...defaults,
@@ -333,15 +338,40 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
             });
             const failure = yield* Effect.result(w.msg("alpha:1", "pending", { type: "throw" }));
             expect(failure).toHaveProperty("_tag", "Failure");
-            expect(failure).toHaveProperty("failure._tag", "QuotasError");
-            expect(failure).toHaveProperty("failure.reason._tag", "RecoveryReserveExhausted");
-            expect(failure).toHaveProperty("failure.reason.resource", resource);
-            expect(failure).toHaveProperty("failure.reason.location", location === 1 ? "project" : "process");
-            expect(failure).toHaveProperty("failure.reason.cause._tag", "ProgramDown");
-            expect(failure).toHaveProperty("failure.reason.cause.reason", "step");
-            expect(failure).toHaveProperty("failure.reason.cause.cause", expect.any(TypeError));
+            const fits = location === 1 && resource === "writes" && spare === 1;
+            const later = fits && (yield* w.local("alpha:1")).fault === null;
+
+            if (later) {
+              // Its recovery writes fit, so this call met no exhaustion: it fails with the step's own failure.
+              expect(failure).toHaveProperty("failure._tag", "ProgramDown");
+              expect(failure).toHaveProperty("failure.reason", "step");
+              expect(failure).toHaveProperty("failure.cause", expect.any(TypeError));
+
+              // Only the alarms the product saved move the clock, until one meets the full window.
+              for (let n = 0; n < 16 && (yield* w.local("alpha:1")).fault === null; n++) {
+                const at = yield* w.alarm("alpha:1");
+                expect(at).not.toBeNull();
+                yield* TestClock.setTime(required(at ?? undefined));
+                yield* Effect.result(call(w, "alpha:1", (r) => r.due(required(at ?? undefined))));
+              }
+
+              // The write that ran out was not charged: the window never passes its limit.
+              expect((yield* w.projectRecovery("alpha:1")).writes).toBeLessThanOrEqual(spare);
+            } else {
+              expect(failure).toHaveProperty("failure._tag", "QuotasError");
+              expect(failure).toHaveProperty("failure.reason._tag", "RecoveryReserveExhausted");
+              expect(failure).toHaveProperty("failure.reason.resource", resource);
+              expect(failure).toHaveProperty("failure.reason.location", location === 1 ? "project" : "process");
+              expect(failure).toHaveProperty("failure.reason.cause._tag", "ProgramDown");
+              expect(failure).toHaveProperty("failure.reason.cause.reason", "step");
+              expect(failure).toHaveProperty("failure.reason.cause.cause", expect.any(TypeError));
+            }
+
             const stopped = yield* w.local("alpha:1");
+            expect(stopped.fault).not.toBeNull();
             expect(stopped.fault).toHaveProperty("_tag", "RecoveryReserveExhausted");
+            expect(stopped.fault).toHaveProperty("resource", resource);
+            expect(stopped.fault).toHaveProperty("location", location === 1 ? "project" : "process");
             const saved = yield* w.journal("alpha:1");
             const checkpoint = yield* w.checkpoint("alpha:1");
             const entries = yield* w.entries;
