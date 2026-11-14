@@ -18,7 +18,7 @@ Agents kept asking the owner about things already decided, and stating things a 
 changed. Two causes were found on 2026-11-11. First, many decided rules sit only inside long notes
 under `docs/direction/`: [an inventory](../experiments/271-direction-notes-to-decision-files.md) found 85 decided or partly decided notes whose rules no
 decision file holds. A search that lists `.decisions/` never sees them. Second, "search what is
-settled first" is prose in [AGENTS.md](../AGENTS.md#before-you-design-anything), and prose is
+settled first" is prose in [AGENTS.md](../AGENTS.md#decision-discovery), and prose is
 skipped. [0001](0001-decisions-live-in-the-repo.md) and
 [0008](0008-decision-discovery-is-the-agents-md-contract.md) already say decisions live in
 `.decisions/` and are found by file name and frontmatter. This closes the gap between that rule and
