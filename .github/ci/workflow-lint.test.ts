@@ -44,7 +44,14 @@ const name = fc.string({ maxLength: 20 });
 // N is E4's, in vitest.shards.test.ts, so the generated workflows below vary it.
 const onE2e = "startsWith(matrix.shard, 'e2e-')";
 
-const e2eCommand = `node next/apps/fabrika/e2e.ts --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
+const e2eCommand = `node next/apps/fabrika/e2e.ts $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
+
+// On a pull request only: the merge queue and main run the whole suite.
+const changedOnPullRequests = `\${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
+
+// The vitest step's: also empty when changes' filter names the reader tests, which read files as
+// text, so the import graph would drop them (the plan for CI paths, slice 2).
+const changedUnlessReaders = `\${{ github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
 
 const nextLegs = (count: number) => [
   ...Array.from({ length: count }, (_, i) => `e2e-${i + 1}`),
@@ -165,9 +172,13 @@ const valid = (label: string, extra: string) => ({
       strategy: { "fail-fast": false, matrix: { shard: nextLegs(2) as (string | number)[] } },
       steps: [
         {
-          run: 'pnpm exec vitest run $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"',
+          run: 'pnpm exec vitest run $FILTER $CHANGED --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"',
           if: `!${onE2e}`,
-          env: { SHARD: `\${{ matrix.shard }}/5`, FILTER: `\${{ needs.changes.outputs.filter || 'next/' }}` },
+          env: {
+            SHARD: `\${{ matrix.shard }}/5`,
+            FILTER: `\${{ needs.changes.outputs.filter || 'next/' }}`,
+            CHANGED: changedUnlessReaders,
+          },
         },
         {
           name: "chromium",
@@ -176,7 +187,7 @@ const valid = (label: string, extra: string) => ({
             "sudo sh .github/ci/apt.sh update\n" +
             "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium\n",
         },
-        { run: e2eCommand, if: onE2e, env: { SHARD: `\${{ matrix.shard }}/2` } },
+        { run: e2eCommand, if: onE2e, env: { SHARD: `\${{ matrix.shard }}/2`, CHANGED: changedOnPullRequests } },
         {
           name: "edges",
           if: "matrix.shard == '1' && github.event_name == 'pull_request'",
@@ -912,6 +923,14 @@ const plants: [string, (workflow: Workflow) => void][] = [
     "next has no filter",
     (w) => {
       delete (w.jobs.next.steps[0]!.env as Record<string, string>)["FILTER"];
+    },
+  ],
+  // After PR 1230: under the reader filter, `--changed` would drop the reader tests, which reach a
+  // changed file by reading it, not by importing it. So the vitest step's CHANGED is empty there.
+  [
+    "next narrows the reader tests with --changed",
+    (w) => {
+      (w.jobs.next.steps[0]!.env as Record<string, string>)["CHANGED"] = changedOnPullRequests;
     },
   ],
   ...(["next", "filter"] as const).flatMap((key): [string, (w: Workflow) => void][] => [

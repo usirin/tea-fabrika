@@ -413,11 +413,18 @@ export const lintWorkflow = (text: string): string[] => {
   require(strategy["fail-fast"] === false, "next lets every shard finish");
   // The plan for CI paths, slice 2: the path is `filter` from changes, the reader tests or `next/`,
   // unquoted so each reader path is its own argument. A missing filter runs all of next/.
+  // On a pull request CHANGED is `--changed=<base> --passWithNoTests`, so only the tests a change
+  // reaches run; on the merge queue and main it is empty, so the whole suite runs as the backstop.
   const nextCommand =
-    'pnpm exec vitest run $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
+    'pnpm exec vitest run $FILTER $CHANGED --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
   // The leg `e2e-k` with SHARD `e2e-k/N` asks Vitest for shard `k/N` of the end-to-end files. It
-  // takes no filter, so under the reader filter the e2e legs still run every end-to-end file.
-  const e2eCommand = `node next/apps/fabrika/e2e.ts --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
+  // takes no filter, so under the reader filter the e2e legs still run every end-to-end file a
+  // pull request's change reaches, and every one in the queue and on main.
+  const e2eCommand = `node next/apps/fabrika/e2e.ts $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
+  const changedOnPullRequests = `\${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
+  // The vitest step's own: empty when the filter names the reader tests too. They read files as
+  // text, so `--changed`, which follows imports, would drop them; there the filter alone decides.
+  const changedUnlessReaders = `\${{ github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
   const adviceCommand = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"';
   // Only these whole scripts are allowed; shell aliases and alternate paths cannot add work.
   const allowed = [
@@ -453,6 +460,18 @@ export const lintWorkflow = (text: string): string[] => {
     new RegExp(`^\\$\\{\\{\\s*matrix\\.shard\\s*\\}\\}/${e2eCount}$`).test(
       e2eShard,
     ), "next's end-to-end step passes --shard <leg>/<the count of e2e legs>");
+
+  // Both test steps narrow to the changed files on a pull request only. Any other value could narrow
+  // the merge queue or main, where the whole suite is the backstop for what the import graph misses.
+  // The vitest step also leaves it empty when the filter names the reader tests.
+  for (const [step, name, expected] of [
+    [testStep, "vitest", changedUnlessReaders],
+    [e2eStep, "end-to-end", changedOnPullRequests],
+  ] as const) {
+    require(map(step?.["env"])["CHANGED"] ===
+      expected, `next's ${name} step narrows with --changed on pull requests only`);
+  }
+
   // E3. Both kinds of leg write next.json, so the advice comes after both test steps.
   const advice = nextSteps.find((s) => s["run"] === adviceCommand);
   require(testStep !== undefined &&

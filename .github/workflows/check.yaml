@@ -459,12 +459,20 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      # FILTER is unquoted, so each reader path is its own argument. A missing filter runs all of next/.
-      - run: pnpm exec vitest run $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
+      # FILTER is the path: the reader tests, or all of next/ (the plan for CI paths, slice 2). A
+      # missing filter runs all of next/. On a pull request whose filter is all of next/, only the
+      # tests whose imports reach a changed file run: Vitest's own `--changed`, which runs everything
+      # when a file in vitest.config.ts's forceRerunTriggers changed (configs, the lockfile, fixtures,
+      # .github). When the filter names the reader tests, CHANGED is empty: they read files as text,
+      # so the import graph would drop them, and the filter alone decides. The merge queue and main
+      # run the whole suite, so a test the import graph misses still runs before main moves. FILTER
+      # and CHANGED stay unquoted so each reader path and each flag is its own argument.
+      - run: pnpm exec vitest run $FILTER $CHANGED --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
         if: ${{ !startsWith(matrix.shard, 'e2e-') }}
         env:
           SHARD: ${{ matrix.shard }}/5
           FILTER: ${{ needs.changes.outputs.filter || 'next/' }}
+          CHANGED: ${{ github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}
       # `--with-deps` runs apt itself, with no limit. apt.sh refreshes the lists first, on a mirror
       # that answers, the same way as the test job's apt step.
       - name: chromium
@@ -473,10 +481,12 @@ jobs:
           sudo sh .github/ci/apt.sh update
           pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium
       # Leg `e2e-k` runs shard `k/2` of the end-to-end files: `${SHARD#e2e-}` drops the leg's prefix.
-      - run: node next/apps/fabrika/e2e.ts --shard "${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
+      # The same narrowing on a pull request as the vitest step above.
+      - run: node next/apps/fabrika/e2e.ts $CHANGED --shard "${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
         if: startsWith(matrix.shard, 'e2e-')
         env:
           SHARD: ${{ matrix.shard }}/2
+          CHANGED: ${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}
       # After both test steps, so a vitest leg and an e2e leg each feed it their own next.json.
       - name: shard times
         if: ${{ !cancelled() }}
