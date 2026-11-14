@@ -34,7 +34,17 @@ export class WatchersError extends Schema.TaggedError<WatchersError>()("Watchers
   reason: Schema.Union([Storage, BadRow]),
 }) {}
 
-/** Process-owned saved membership and fanout. Transport failures retain membership. */
+/**
+ * Service for a process's saved view membership and fanout. Transport failures retain membership.
+ *
+ * **Details**
+ *
+ * `open` saves a client and sends it the whole view; `publish` sends one patch to every saved
+ * client.
+ *
+ * @stability unstable
+ * @category services
+ */
 export class Watchers extends Context.Service<
   Watchers,
   {

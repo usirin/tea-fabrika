@@ -1,17 +1,20 @@
-// A program client's own rules, next/ (Tier 1, P14, laws p1 and p3). One tea machine, made by one
-// factory (decision 0046 and its 2026-11-10 amendments; plan A5 and A7): its Model is `Client`, its
-// Msgs are plain data, and it does no input or output. It is the same in a browser tab, in Electron
-// and in a headless client. It imports no transport and no window code; the window parent (Tuval)
-// steps it by hand, by sending it Msgs.
-//
-// Its states: each pending letter is `dating` or `ready`. `press` adds a `dating` letter, `dated`
-// moves `dating` to `ready`, and `reply` (accepted, or a program's refusal) removes a `ready` one.
-// `read` and `notice` move no letter.
-//
-// A press reserves a numbered slot first and captures what the person saw: the view revision shown
-// for that process and the ledger revision last read. Its time and letter id come later, from a
-// Cmd the window runs, and fill that same slot. A letter keeps its id and body on every resend, and
-// only its own terminal answer removes it.
+/**
+ * A program client's own rules. One tea machine, made by one factory (decision 0046 and its
+ * 2026-11-10 amendments): its Model is `Client`, its Msgs are plain data, and it does no input or
+ * output. It is the same in a browser tab, in Electron and in a headless client. It imports no
+ * transport and no window code; the window parent (Tuval) steps it by hand, by sending it Msgs.
+ *
+ * Its states: each pending letter is `dating` or `ready`. `press` adds a `dating` letter, `dated`
+ * moves `dating` to `ready`, and `reply` (accepted, or a program's refusal) removes a `ready` one.
+ * `read` and `notice` move no letter.
+ *
+ * A press reserves a numbered slot first and captures what the person saw: the view revision shown
+ * for that process and the ledger revision last read. Its time and letter id come later, from a
+ * Cmd the window runs, and fill that same slot. A letter keeps its id and body on every resend, and
+ * only its own terminal answer removes it.
+ *
+ * @stability unstable
+ */
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { Option, Result, Schema } from "effect";
 import { apply } from "./Patch.ts";
@@ -19,8 +22,14 @@ import { Sent } from "./Runner.ts";
 
 // --- The Model ----------------------------------------------------------------------------------
 
-/** One press on its way. `n` is the local queue position, never another letter id. `pid` is the
- *  tile's process: its id, or the registered name the client resolves on each dial. */
+/**
+ * Schema for one press on its way: `dating` until the window has given it a letter id and time,
+ * then `ready`. `n` is the local queue position, never another letter id. `pid` is the tile's
+ * process: its id, or the registered name the client resolves on each dial.
+ *
+ * @stability unstable
+ * @category models
+ */
 export const Pending = Schema.TaggedUnion({
   dating: {
     n: Schema.Int,
@@ -42,11 +51,22 @@ export const Pending = Schema.TaggedUnion({
 });
 export type Pending = typeof Pending.Type;
 
-/** A checked view as installed: the revision it was made at, and the value. */
+/**
+ * Schema for a checked view as installed: the revision it was made at, and the value.
+ *
+ * @stability unstable
+ * @category models
+ */
 export const Shown = Schema.Struct({ rev: Schema.Int, view: Schema.Json });
 export type Shown = typeof Shown.Type;
 
-/** Everything a program client keeps between messages: what it promised, and what it shows. */
+/**
+ * Schema for everything a program client keeps between messages: what it promised (`pending`), and
+ * what it shows (`views`, by process).
+ *
+ * @stability unstable
+ * @category models
+ */
 export const Client = Schema.Struct({
   /** Presses made so far: the next slot's number. */
   written: Schema.Int,
@@ -89,15 +109,25 @@ const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("notice"), pid: Schema.String, note: Schema.Unknown }),
 ]);
 
-/** A Msg the client machine takes. */
+/**
+ * A Msg the client machine takes: `press`, `dated`, `reply`, `read` or `notice`.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type ClientMsg = typeof Msg.Type;
 
 /** Ask for a whole view of `pid`: the last good one stays shown until it comes. The window turns
  *  it into its own move. */
 const ask = Cmd.make("ask", { input: Schema.Struct({ pid: Schema.String }), ok: Schema.Null, err: [] });
 
-/** What a client checks a view with: each program's own decoder, by pid. The factory captures it,
- *  so it is never in the Model, a Msg or a Cmd's input. */
+/**
+ * What a client checks a view with: each program's own decoder, by pid. The factory captures it, so
+ * it is never in the Model, a Msg or a Cmd's input.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type ClientChecks = { readonly decode?: (pid: string) => (view: unknown) => unknown };
 
 // --- The rules the update uses ------------------------------------------------------------------
@@ -223,8 +253,13 @@ const anyView = (view: unknown): unknown => view;
 
 // --- The machine --------------------------------------------------------------------------------
 
-/** The client machine, checking each view with `checks`: the program's own decoder for its pid,
- *  else any JSON view. */
+/**
+ * Makes the client machine, checking each view with `checks`: the program's own decoder for its pid,
+ * else any JSON view.
+ *
+ * @stability unstable
+ * @category machines
+ */
 export const clientMachineFor = (checks: ClientChecks) =>
   Machine.make({
     model: Client,
@@ -248,7 +283,13 @@ export const clientMachineFor = (checks: ClientChecks) =>
 type Ready = typeof Pending.cases.ready.Type;
 const isReady = (p: Pending): p is Ready => p._tag === "ready";
 
-/** The letters that may go now: ready ones ahead of the first slot still waiting for its time. */
+/**
+ * Returns the letters that may go now: ready ones ahead of the first slot still waiting for its
+ * time.
+ *
+ * @stability unstable
+ * @category getters
+ */
 export const sendable = (c: Client): ReadonlyArray<Ready> => {
   const out: Array<Ready> = [];
 
@@ -267,7 +308,7 @@ export const sendable = (c: Client): ReadonlyArray<Ready> => {
 
 /** What `resolveName` reads of a process entry as `ledger.read` sent it: one of the three cases it
  *  folds, its writer and its body. `app/` does not import `data/`, whose `Entry` this is a part of;
- *  an entry of any other case is not one of these, and is skipped as before. */
+ *  an entry of any other case is not one of these, and is skipped. */
 const Life = { by: Schema.String, body: Schema.Unknown };
 
 const decodeEntry = Schema.decodeUnknownOption(Schema.TaggedUnion({ started: Life, restarted: Life, exited: Life }));
@@ -277,9 +318,13 @@ const decodeLife = Schema.decodeUnknownOption(
 );
 
 /**
- * The live process a registered name points at, from its `processes/<name>` entries as read: the
- * newest start or restart by the brain's own writer, unless a later exit ended it. `by` is the
- * brain's writer, the one the client trusts for process facts.
+ * Returns the live process a registered name points at, from its `processes/<name>` entries as read:
+ * the newest start or restart by the brain's own writer, unless a later exit ended it. `by` is the
+ * brain's writer, the one the client trusts for process facts. It returns `null` when no such
+ * process is live.
+ *
+ * @stability unstable
+ * @category getters
  */
 export const resolveName = (
   entries: ReadonlyArray<unknown>,

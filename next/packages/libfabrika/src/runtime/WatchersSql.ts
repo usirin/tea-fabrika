@@ -43,7 +43,19 @@ const load = (sql: Sql, name: string) => {
   return watchers.init(saved.success.state, {})[0];
 };
 
-/** All membership transactions finish synchronously before any delivery starts. */
+/**
+ * Layer that provides `Watchers` over a process's own SQL, delivering through `WatcherManager`.
+ *
+ * **Details**
+ *
+ * `open` saves the client and then sends it the whole view; `publish` reads the saved clients and
+ * sends the patch to each, one after another. A client the manager reports `Gone` has its watch
+ * ended; one reported `Unreachable` keeps it. All membership transactions finish synchronously
+ * before any delivery starts.
+ *
+ * @stability unstable
+ * @category layers
+ */
 export const layer = (
   sql: Sql,
   descriptor: { readonly name: string; readonly build: string; readonly id?: string },

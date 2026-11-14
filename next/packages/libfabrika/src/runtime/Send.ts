@@ -18,8 +18,18 @@ import { MailRefusal } from "../processes/ProgramMail.ts";
  */
 export const SendInput = Schema.Struct({ to: Schema.NonEmptyString, m: Schema.Json });
 
-/** The delivery receipt: the saved letter's ID. */
+/**
+ * Schema for the delivery receipt: the saved letter's ID.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const Queued = Schema.TaggedStruct("queued", { id: Schema.NonEmptyString });
 
-/** The runner performs it itself; a caller-supplied handler never runs it. */
+/**
+ * The Send command. The runner performs it itself; a caller-supplied handler never runs it.
+ *
+ * @stability unstable
+ * @category commands
+ */
 export const send = Cmd.make("send", { input: SendInput, ok: Queued, err: MailRefusal.literals });

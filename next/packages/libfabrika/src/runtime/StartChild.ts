@@ -9,14 +9,25 @@ import { Cmd } from "@demlik/tea/effect";
 import { Schema } from "effect";
 import { Started } from "../processes/Children.ts";
 
-/** Plain strings, so their content is judged once, by the host: `no_program`, then `bad_name`. */
+/**
+ * Schema for the start_child operands: the `program`, the `name` and an optional `input`. They are
+ * plain strings, so their content is judged once, by the host: `no_program`, then `bad_name`.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const StartChildInput = Schema.Struct({
   program: Schema.String,
   name: Schema.String,
   input: Schema.optionalKey(Schema.Json),
 });
 
-/** Why a start is refused for good. Other clients decode these by name. */
+/**
+ * Schema for why a start is refused for good. Other clients decode these by name.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const StartRefusal = Schema.Literals([
   "no_program",
   "forbidden",
@@ -33,11 +44,26 @@ const Asked = Schema.declare<typeof StartChildInput.Type>(
   (value): value is typeof StartChildInput.Type => typeof value === "object" && value !== null,
 );
 
-/** The runner performs it itself; a caller-supplied handler never runs it. */
+/**
+ * The start_child command. The runner performs it itself; a caller-supplied handler never runs it.
+ *
+ * @stability unstable
+ * @category commands
+ */
 export const startChild = Cmd.make("start_child", { input: Asked, ok: Started, err: StartRefusal.literals });
 
-/** It takes no field: a program names no other process and no reason. */
+/**
+ * Schema for the exit operands. It takes no field: a program names no other process and no reason.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const ExitInput = Schema.Struct({});
 
-/** Ends this life with `normal`; nothing restarts it. */
+/**
+ * The exit command. It ends this life with `normal`; nothing restarts it.
+ *
+ * @stability unstable
+ * @category commands
+ */
 export const exit = Cmd.make("exit", { input: ExitInput, ok: Schema.Null, err: [] });
