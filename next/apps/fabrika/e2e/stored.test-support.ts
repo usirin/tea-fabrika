@@ -2,22 +2,46 @@
 // `stored.test.ts` can run it on a folder that a writer changes under it.
 import { DatabaseSync } from "node:sqlite"; // edge: inspect the instance's persisted SQLite cells, including records outside access history
 import { Row as LedgerRow } from "@kampus/libfabrika/ledger/Log";
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, FileSystem, Path, type PlatformError, Schema } from "effect";
 
 /** An instance's home, and the stop that ends every process that writes in it. */
 export type Instance<E> = { readonly dir: string; readonly stop: Effect.Effect<void, E> };
 
-/** Check every file and SQLite cell. Two places keep a signature on purpose, and only its `armored`
- *  text is omitted there: a verified access entry's signed.armored, and the gateway's replay rows.
- *  Checking cells too catches a copy of that entire body in another table or stream.
+/** Check every file and SQLite cell, twice: once while the instance runs, and once after its stop.
  *
- *  The scan stops the instance first. A running brain writes each file to `<name>.tmp` and renames
- *  it over `<name>` (`durableWrite` in libfabrika's `node/dev/local-dev.ts`), and SQLite adds and
- *  drops its journals, so a live folder changes between the listing and the reads: a listed file is
- *  gone, or a file read before a rename misses the bytes the rename brings. A stopped instance's
- *  folder holds every file it left, its stop's own writes included, and nothing changes it. */
+ *  Each pass needs the other. The running pass sees what only a running instance keeps on disk: the
+ *  span queue `brain.records.sqlite` is in WAL mode (libfabrika's `node/dev/dev-recording.ts`), and
+ *  a row queued and then deleted once delivered (`telemetry/Sink.ts`) stays in its `-wal` file only
+ *  until the clean stop's `db.close()` folds that file into the database and deletes it. The running
+ *  pass may pass over a listed file that is gone before it is read, since a running brain writes
+ *  each file to `<name>.tmp` and renames it over `<name>` (`durableWrite` in `node/dev/local-dev.ts`),
+ *  and any other error fails it. The stopped pass reads a home nothing writes to any more: every file
+ *  the instance left, its stop's own writes included, and any error fails it.
+ *
+ *  Two places keep a signature on purpose, and only its `armored` text is omitted there: a verified
+ *  access entry's signed.armored, and the gateway's replay rows. Checking cells too catches a copy of
+ *  that entire body in another table or stream. */
 export const stored = <E>(
   instance: Instance<E>,
+  accessBodies: ReadonlyMap<string, string>,
+  proofs: ReadonlyArray<string>,
+) =>
+  Effect.gen(function* () {
+    const running = yield* scan(instance.dir, "running", accessBodies, proofs);
+    yield* instance.stop;
+    const stopped = yield* scan(instance.dir, "stopped", accessBodies, proofs);
+    return {
+      outputs: [...running.outputs, ...stopped.outputs],
+      raw: [...running.raw, ...stopped.raw],
+      /** The files the running pass read, each by its path under the home, as `/brain.last.json`. */
+      running: running.files,
+    };
+  });
+
+/** One pass over the home. Its labels start with `home`, and the running pass's say so. */
+const scan = (
+  dir: string,
+  pass: "running" | "stopped",
   accessBodies: ReadonlyMap<string, string>,
   proofs: ReadonlyArray<string>,
 ) =>
@@ -25,27 +49,29 @@ export const stored = <E>(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem,
         path = yield* Path.Path;
-      const { dir } = instance;
-      yield* instance.stop;
+      // Only the running pass passes over a file renamed or deleted between its listing and its read.
+      const gone = (error: PlatformError.PlatformError) => pass === "running" && error.reason._tag === "NotFound";
       const keys = [path.join(dir, "person"), path.join(dir, "person.pub")];
-      const files: Array<string> = [];
+      const read: Array<{ readonly file: string; readonly label: string; readonly bytes: string }> = [];
 
       for (const name of yield* fs.readDirectory(dir, { recursive: true })) {
         const file = path.join(dir, name);
+        const info = yield* fs.stat(file).pipe(Effect.catchIf(gone, () => Effect.succeed(undefined)));
 
-        if ((yield* fs.stat(file)).type === "File" && !keys.includes(file)) {
-          files.push(file);
+        if (info === undefined || info.type !== "File" || keys.includes(file)) {
+          continue;
+        }
+
+        const bytes = yield* fs.readFile(file).pipe(Effect.catchIf(gone, () => Effect.succeed(undefined)));
+
+        if (bytes !== undefined) {
+          const label = `home${pass === "running" ? " (running)" : ""} ${file.slice(dir.length)}`;
+          read.push({ file, label, bytes: Buffer.from(bytes).toString("latin1") });
         }
       }
 
-      const read: Array<{ readonly file: string; readonly label: string; readonly bytes: string }> = [];
-
-      for (const file of files) {
-        const bytes = Buffer.from(yield* fs.readFile(file)).toString("latin1");
-        read.push({ file, label: `home ${file.slice(dir.length)}`, bytes });
-      }
-
       const raw = read.map(({ label, bytes }): readonly [string, string] => [label, bytes]);
+      const files = read.map(({ file }) => file.slice(dir.length));
       const outputs: Array<readonly [string, string]> = [];
       const retained = new Map<string, Map<string, string>>();
 
@@ -145,6 +171,6 @@ export const stored = <E>(
         outputs.push([label, checked]);
       }
 
-      return { outputs, raw };
+      return { outputs, raw, files };
     }),
   );

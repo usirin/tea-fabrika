@@ -605,11 +605,16 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   return ["access record", JSON.stringify({ ...entry, body: { ...body, signed } })];
                 });
                 const proofs = [...[...h.grants, ...stranger.grants].flatMap((g) => g.signatures), revoked.armored];
-                // The tabs' last look comes while the instance still runs; the scan then stops it, so it
-                // reads a home nothing writes to any more.
+                // The tabs' last look comes while the instance still runs. The scan reads the home once
+                // more while it runs, then stops it and reads a home nothing writes to any more.
                 const last = [...(yield* look(t.page, t.seen)), ...(yield* look(second.page, second.seen))];
                 const disk = yield* stored({ dir: h.dir, stop: dev.stop }, accessBodies, proofs).pipe(
                   Effect.provide(NodeServices.layer),
+                );
+                // The span queue's WAL holds rows deleted once delivered, and only while the instance
+                // runs, so the running pass must have read it.
+                expect(disk.running, "the running scan read the span queue's WAL").toContain(
+                  "/brain.records.sqlite-wal",
                 );
                 const outputs: ReadonlyArray<readonly [string, string]> = [
                   ...snapshots,
