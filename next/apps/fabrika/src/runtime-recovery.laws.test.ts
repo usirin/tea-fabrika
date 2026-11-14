@@ -502,6 +502,8 @@ const world = (
   } as unknown as DurableObjectState;
   // Keyed by the storage name the runtime asks for, so the runtime alone decides which IDs share one.
   const processes = new Map<string, Entry>(),
+    /** Each process object the platform stand-in made, by the name it was asked for, in order. */
+    madeObjects: Array<string> = [],
     attempts: Descriptor[] = [],
     deliveries: Array<Promise<"configured" | "failed">> = [],
     received: Incoming[] = [],
@@ -661,6 +663,7 @@ const world = (
           };
           entry = created;
           processes.set(storageKey, created);
+          madeObjects.push(storageKey);
           return created;
         };
         const current: Entry = processes.get(storageKey) ?? made();
@@ -879,6 +882,8 @@ const world = (
     },
     /** How many times a program's init ran: each is one process's first turn after a load. */
     inits: () => inits,
+    /** Every process object made so far, by name: a new one is cold and pays its own configure. */
+    made: () => [...madeObjects],
     process: processFor,
     /** Every process store's rows for one letter's delivery receipt. */
     receipts: (letter: string) =>
@@ -1085,6 +1090,15 @@ StartsTest.law(
         }
 
         const before = { ...costs };
+        // A boot entry the Project delivers later (fabsh:1, after counter:1 and checklist:1) makes its
+        // own object meanwhile. That object is cold: its configure is its own 1 settingsStart and 1 read.
+        // The law counts it by name, so the walked object calling again still shows.
+        const madeBefore = w.made().length;
+        const cold = () =>
+          w
+            .made()
+            .slice(madeBefore)
+            .filter((name) => name !== first!.name).length;
 
         if (move === "refuse") {
           const turns = w.inits();
@@ -1104,14 +1118,20 @@ StartsTest.law(
         expect(costs).toEqual({
           // 1 for the refused entry above, and 1 settingsStart for a cold object's entry. A built object
           // keeps its services (SettingsRuntime's cache holds a success for good), so it calls nothing.
-          calls: before.calls + (move === "refuse" ? 1 : 0) + (built ? 0 : 1),
+          calls: before.calls + (move === "refuse" ? 1 : 0) + (built ? 0 : 1) + cold(),
           // A cold entry's call is 1 read at the Project, the lookup that finds the saved start.
-          reads: before.reads + (built ? 0 : 1),
+          reads: before.reads + (built ? 0 : 1) + cold(),
           // The start was recorded by the Project's own build, so no entry appends.
           appends: before.appends,
         });
         built = true;
         const warm = { ...costs };
+        const madeWarm = w.made().length;
+        const coldSince = () =>
+          w
+            .made()
+            .slice(madeWarm)
+            .filter((name) => name !== first!.name).length;
 
         if (move === "step") {
           const answer = yield* Effect.promise(() =>
@@ -1141,8 +1161,13 @@ StartsTest.law(
           yield* Effect.promise(() => owner.object.alarm());
         }
 
-        // A step, an alarm, a successor and a second open all run on the built object: 0 calls, reads and appends.
-        expect(costs).toEqual(warm);
+        // A step, an alarm, a successor and a second open all run on the built object: 0 calls, reads and
+        // appends. Only another boot entry's object, made cold meanwhile, adds its own configure's 1 and 1.
+        expect(costs).toEqual({
+          calls: warm.calls + coldSince(),
+          reads: warm.reads + coldSince(),
+          appends: warm.appends,
+        });
       }
     }),
 );
@@ -1198,6 +1223,7 @@ describe("P12 Project configure recovery", () => {
       expect(await w.reopen()).toMatchObject([
         { process: descriptor.id, name: "counter:1", program: "fabrika/counter" },
         { process: expect.any(String), name: "checklist:1", program: "fabrika/checklist" },
+        { process: expect.any(String), name: "fabsh:1", program: "fabrika/fabsh" },
       ]);
       // The next reopen delivers the same descriptor once and clears pending.
       await vi.waitFor(() => expect(Number(row().pending)).toBe(0), { timeout: 2_000 });

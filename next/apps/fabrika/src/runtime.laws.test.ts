@@ -483,15 +483,18 @@ const bends: ReadonlyArray<(name: string) => string> = [
 // registered name, or tries a current name bent into a slashed one, which is refused.
 const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<number>) => {
   const names = ["counter:1"];
-  // P14 slice 2: the boot's second entry. The walk starts only the counter's code, so this stays
-  // the one process of another program, under its own name.
-  const other = { name: "checklist:1", program: "fabrika/checklist" };
+  // P14 slice 2: the boot's later entries, checklist:1 and (fabsh slice 1) fabsh:1. The walk starts
+  // only the counter's code, so these stay the processes of other programs, under their own names.
+  const rest = [
+    { name: "checklist:1", program: "fabrika/checklist" },
+    { name: "fabsh:1", program: "fabrika/fabsh" },
+  ];
   const others = (list: ReadonlyArray<{ readonly name: string; readonly program: string }>) =>
     list.filter((p) => p.program !== "fabrika/counter").map((p) => ({ name: p.name, program: p.program }));
   let refused = 0;
   expect(w.configured.map((d) => ({ name: d.name, program: d.program }))).toEqual([
     { name: "counter:1", program: "fabrika/counter" },
-    other,
+    ...rest,
   ]);
   const [started] = await w.run(w.p.read("processes/counter:1", 0, "audit"));
   expect(JSON.stringify(started)).toContain('"fabrika/counter"');
@@ -513,9 +516,9 @@ const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<nu
     }
 
     const info = await w.run(w.p.info);
-    expect(info.map((p) => p.name).sort()).toEqual([...names, other.name].sort());
-    expect(others(info)).toEqual([other]);
-    expect(others(w.configured)).toEqual([other]);
+    expect(info.map((p) => p.name).sort()).toEqual([...names, ...rest.map((r) => r.name)].sort());
+    expect(others(info)).toEqual(rest);
+    expect(others(w.configured)).toEqual(rest);
     expect(w.configured.every((d) => !d.name.includes("/"))).toBe(true);
   }
 
@@ -705,6 +708,7 @@ describe("P12 Project authority", () => {
     expect(w.statuses, "each boot entry's configure saw the Project answer its status").toMatchObject([
       { _tag: "ok", value: { name: "counter:1", state: { process: w.p.boot.process } } },
       { _tag: "ok", value: { name: "checklist:1" } },
+      { _tag: "ok", value: { name: "fabsh:1" } },
     ]);
   }, 15_000);
 
