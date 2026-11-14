@@ -63,7 +63,7 @@ const isStatic = (member: Member): boolean =>
 
 export const noStaticLayer: CreateRule = {
   create(context) {
-    const resolve = (node: ESTree.IdentifierReference): Variable | undefined => {
+    const resolve = (node: Node & { readonly name: string }): Variable | undefined => {
       let scope: Scope | null = context.sourceCode.getScope(node);
 
       while (scope !== null) {
