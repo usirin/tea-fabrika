@@ -53,16 +53,14 @@ const saved = (
   m: Schema.Json,
 ): Option.Option<Result.Result<Receipt, ProgramMailError>> => {
   const id = mailId(delivery.command);
-  const entry = [...turn.read(outbox(delivery.source.name), 0)].find((e) => e.id === id);
+  const entry = Option.getOrUndefined(turn.get(outbox(delivery.source.name), id));
 
   if (entry === undefined) {
     return Option.none();
   }
 
   const mailed = decodeMailed(valueFor(entry));
-  const letter = Option.flatMap(mailed, ({ to }) =>
-    Option.fromUndefinedOr([...turn.read(inbox(to.name), 0)].find((e) => e.id === id)),
-  );
+  const letter = Option.flatMap(mailed, ({ to }) => turn.get(inbox(to.name), id));
   const body = Option.flatMap(letter, (l) => decodeSent(l.body));
 
   if (
@@ -105,11 +103,7 @@ const saved = (
 
 /** The newest lifecycle rev of each name the send depends on: a change means look again. */
 const heads = (turn: LedgerTurn, names: ReadonlyArray<string>): string =>
-  JSON.stringify(
-    [ProcessTable.stream, ...names.map(ProcessTable.events)].map(
-      (stream) => [...turn.read(stream, 0)].at(-1)?.rev ?? 0,
-    ),
-  );
+  JSON.stringify([ProcessTable.stream, ...names.map(ProcessTable.events)].map((stream) => turn.head(stream)));
 
 /**
  * Layer that provides `ProgramMail` on the ledger, through `LedgerTransaction` and `ProcessManager`.
