@@ -1735,7 +1735,7 @@ export class ProjectService extends Context.Service<
   {
     // Code install (P15): the store's built programs, a saved program's install and a failed build.
     readonly code: (hash: string) => Effect.Effect<BuiltProgram | null, CodeStoreError>;
-    readonly codeInstall: (raw: unknown) => Effect.Effect<Installed, ProjectFailure>;
+    readonly codeInstall: (raw: unknown) => Effect.Effect<Installed, CodeStoreError | ProgramDown | ProjectFailure>;
     readonly codeFailed: (raw: unknown) => Effect.Effect<void, ProjectFailure>;
     readonly mail: (
       delivery: Delivery,
@@ -1790,7 +1790,12 @@ export class ProjectService extends Context.Service<
       reader: string,
     ) => Effect.Effect<ReadonlyArray<Entry>, ProjectFailure>;
     readonly wait: (stream: string, after: number, reader: string) => Effect.Effect<Waited, LedgerError>;
-    readonly append: (stream: string, id: string, line: unknown) => Effect.Effect<Appended, ProjectFailure>;
+    // A `code.swapped` line loads the build it names, so a program that does not load fails it.
+    readonly append: (
+      stream: string,
+      id: string,
+      input: unknown,
+    ) => Effect.Effect<Appended, ProgramDown | ProjectFailure>;
     // A process's own writes.
     readonly sign: (pid: string, id: string, parent: string, kind: string) => Effect.Effect<Session, unknown>;
     readonly commit: (
