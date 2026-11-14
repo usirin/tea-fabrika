@@ -19,6 +19,7 @@ import {
   type Envelope,
   NotGranted,
   SessionManager,
+  type SessionManagerError,
   SigningRefused,
   SignRequest,
   Writer,
@@ -37,6 +38,7 @@ import { ProcessId } from "../ProcessId.ts";
 import * as Audit from "../runtime/Audit.ts";
 import { Incoming } from "../runtime/Entry.ts";
 import { type ProgramDown } from "../runtime/Program.ts";
+import { type RecoveryStoreError } from "../runtime/RecoveryStore.ts";
 import { type RepliesError } from "../runtime/Replies.ts";
 import { type RunnerError, Sent } from "../runtime/Runner.ts";
 import { type WatchersError } from "../runtime/Watchers.ts";
@@ -287,6 +289,8 @@ type Options<A, RNext, RDeliver, RNotify> = {
   ) => Effect.Effect<
     Sent | void,
     | LedgerError
+    | SessionManagerError
+    | RecoveryStoreError
     | GatewayError
     | SinkError
     | SigningRefused
