@@ -152,6 +152,8 @@ const worldOn = (db: DatabaseSync, path: string, fail: boolean) => {
               observations.push({ turn: n, op: "read", stream, after, inside: db.isTransaction });
               return turn.read(stream, after);
             },
+            get: (stream, id) => turn.get(stream, id),
+            head: (stream) => turn.head(stream),
             append: (stream, id, value) => {
               observations.push({ turn: n, op: "append", stream, inside: db.isTransaction });
               return turn.append(stream, id, value);
