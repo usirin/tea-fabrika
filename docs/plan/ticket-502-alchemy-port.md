@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0041 and 0042; the owner answered its open question on 2026-11-13; the lead amended its files table on 2026-11-13, twice; body 7919f6dde83c
+Approved by the lead agent, builds 0041 and 0042; the owner answered its open question on 2026-11-13; the lead amended its files table on 2026-11-13, twice; body 655541285be2
 Plancheck-Version: 3
 
 # Ticket 502: the rest of the Alchemy port
@@ -435,7 +435,7 @@ write-up to main; its code stays on its branch
 | `next/apps/fabrika/src/instance-wire.test.ts` | tests | S1, S7 | tests | law 2, unchanged cases; law 12 |
 | `next/apps/fabrika/src/port-home.laws.test.ts` `fixtures/next/port-home` | tests | S1, then S2, S3, S5, S8 | tests | new: law 5 and its saved home |
 | `next/apps/fabrika/src/port-home.test-support.ts` `next/apps/fabrika/src/port-home-guard.test.ts` | tests | S1 | tests | new: the writer of law 5's home refuses a home that holds an absolute path under the person's home folder, the temp folder or the repo root, sqlite cells included, and its law (the lead's amendment of 2026-11-13) |
-| `next/packages/libfabrika/src/telemetry/Sink.test.ts` | tests | S1 | tests | [0186](../../.decisions/0186-stored-stack-frames-name-no-folder.md)'s law: no stored frame names a folder, and nothing else is lost (the lead's amendment of 2026-11-13; the same laws as pull request 1012) |
+| `next/packages/libfabrika/src/telemetry/Sink.test.ts` `next/packages/libfabrika/src/node/dev/supervision-spans.test.ts` | tests | S1 | tests | [0186](../../.decisions/0186-stored-stack-frames-name-no-folder.md)'s laws: no stored frame names a folder, nothing else is lost, and the supervision law reads each frame by its name, file name, line and column (the lead's amendment of 2026-11-13; the same laws as pull request 1012) |
 | `next/packages/libfabrika/src/cloudflare/ObjectService.test.ts` | tests | S1 | tests | new: law 3 |
 | `next/packages/libfabrika/src/cloudflare/connection.test.ts` | tests | S1, S6 | tests | its fake state follows the service in S6 |
 | `next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts` `next/apps/fabrika/src/scheduled-job-alarm.test.ts` `next/apps/fabrika/src/worker-supervision.test.ts` | tests | S2, S5 | tests | law 10 on the real `Process` |
