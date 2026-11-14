@@ -13,11 +13,12 @@ import * as Redacted from "effect/Redacted";
 import { admitted, MemberEvent, Saw } from "../access/Access.ts";
 import { foldAccess } from "../access/AccessFold.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
-import { ClientManager } from "../access/ClientManager.ts";
+import { ClientManager, type Written } from "../access/ClientManager.ts";
 import type * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
 import {
   type Envelope,
   NotGranted,
+  type Session,
   SessionManager,
   SigningRefused,
   SignRequest,
@@ -44,7 +45,7 @@ import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SinkError, SpanSink } from "../telemetry/Sink.ts";
 import { Chain, REFUSED } from "../telemetry/Trace.ts";
-import { checkHello } from "../transport/Hello.ts";
+import { type CheckedHello, checkHello, type WebCryptoError } from "../transport/Hello.ts";
 import { type Checked, KeyLine, verifySshsig } from "../transport/Sshsig.ts";
 import { PasskeyLine, passkeyRp } from "../transport/Webauthn.ts";
 import { Admission, Answer, Attached, Hello, RateCountFailure, RateRefusal } from "../transport/Wire.ts";
@@ -1797,6 +1798,11 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   };
 });
 
+/** What the ledger's `append` answers, read from its service: gateway/ imports no more of ledger/ (0043, rule 11). */
+type Appended = Ledger["Service"]["append"] extends (...args: Array<never>) => Effect.Effect<infer A, unknown>
+  ? A
+  : never;
+
 /**
  * Service that admits clients and routes their calls. `Gateway.layer(options)` builds it from the
  * project's Sql, its ledger and access services, a rate-limit budget and the callbacks that deliver
@@ -1817,9 +1823,89 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
  * @stability unstable
  * @category services
  */
-export class Gateway extends Context.Service<Gateway, Effect.Success<ReturnType<typeof make>>>()(
-  "@kampus/libfabrika/gateway/Gateway",
-) {
+export class Gateway extends Context.Service<
+  Gateway,
+  {
+    /** The waiting row with this code whose key has this fingerprint, or null. */
+    readonly target: (
+      name: string,
+      code: string,
+    ) => Effect.Effect<
+      { key: string; for: string; to: string; code: string; label: string } | null,
+      LedgerError | NotGranted
+    >;
+    readonly connect: () => Effect.Effect<ConnectionId>;
+    readonly challenge: (client: ConnectionId) => Effect.Effect<string, LedgerError>;
+    /** Answers the checked hello, or the door's own refusal before the hello is checked. */
+    readonly initialize: (
+      client: ConnectionId,
+      input: unknown,
+      trusted: { readonly url: string; readonly tab: string; readonly name: string },
+    ) => Effect.Effect<
+      typeof Answer.cases.refused.Type | typeof CheckedHello.Type,
+      LedgerError | NotGranted | SinkError | Cause.NoSuchElementError | WebCryptoError
+    >;
+    readonly knock: (
+      client: ConnectionId,
+      params: { readonly label: string; readonly pass?: string | null },
+    ) => Effect.Effect<typeof Answer.cases.ok.Type | typeof Answer.cases.refused.Type, LedgerError>;
+    readonly watch: (client: ConnectionId) => Effect.Effect<typeof WatchReply.Type, LedgerError>;
+    readonly disconnect: (client: ConnectionId) => Effect.Effect<void, LedgerError>;
+    /** Saves a passkey enrollment and answers its nonce. */
+    readonly enrollment: (binding: typeof Enrollment.Type) => Effect.Effect<string, LedgerError>;
+    readonly grant: (
+      input: unknown,
+    ) => Effect.Effect<typeof GrantReply.Type, LedgerError | NotGranted | SinkError | Cause.NoSuchElementError>;
+    readonly deny: (
+      client: ConnectionId,
+      input: unknown,
+    ) => Effect.Effect<typeof GrantReply.cases.refused.Type | Written, LedgerError | Cause.NoSuchElementError>;
+    readonly route: (
+      client: ConnectionId,
+      method: string,
+      params: unknown,
+      reader?: string,
+    ) => Effect.Effect<
+      typeof Answer.Type,
+      | LedgerError
+      | SinkError
+      | SigningRefused
+      | NotGranted
+      | ProgramDown
+      | RunnerError
+      | ProcessError
+      | RepliesError
+      | WatchersError
+      | Audit.AuditError
+      | Cause.NoSuchElementError
+    >;
+    readonly signer: (
+      parent: string,
+      process: string,
+      kind: string,
+    ) => Effect.Effect<Session, SigningRefused | NotGranted | LedgerError, SignRequest>;
+    readonly sign: (
+      process: string,
+      id: string,
+      parent: string,
+      kind: string,
+    ) => Effect.Effect<Session, SigningRefused | NotGranted | LedgerError>;
+    readonly retire: (process: string) => Effect.Effect<void, LedgerError>;
+    readonly checkDelivery: (
+      process: string,
+      input: Incoming,
+    ) => Effect.Effect<void, LedgerError | SigningRefused | NotGranted>;
+    readonly append: (a: {
+      readonly id: string;
+      readonly parent: string;
+      readonly process: string;
+      readonly kind: string;
+      readonly stream: string;
+      readonly event: unknown;
+    }) => Effect.Effect<Appended, LedgerError | SigningRefused | NotGranted>;
+    readonly accept: (input: Incoming) => Effect.Effect<Appended, LedgerError | NotGranted | ProcessError>;
+  }
+>()("@kampus/libfabrika/gateway/Gateway") {
   static readonly layer = <A, RNext, RDeliver, RNotify>(options: Options<A, RNext, RDeliver, RNotify>) =>
     Layer.effect(Gateway, make(options));
 }

@@ -12,9 +12,8 @@ import { type Finding, fingerprint, LEDGERS, outside, settle } from "./ledger.ts
 import { load, scriptReads } from "./script-reads.mjs";
 
 const ADVICE = new Set([
-  // Ticket 737: bare JSON.parse and service IDs advise until their false alarms are counted.
+  // Ticket 737: a bare JSON.parse advises until its false alarms are counted.
   "eslint(no-restricted-properties)",
-  "fabrika(service-id)",
   "fabrika(law-shape)",
   "fabrika(no-effect-promise)",
   "fabrika(no-raw-try-catch)",

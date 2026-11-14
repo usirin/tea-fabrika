@@ -7,7 +7,7 @@
 // id (p53's checklist form), L17 reads the saved letter's note and writer back (p52's checklist form).
 import { describe, expect, it } from "@effect/vitest";
 import type { ProgramRunner } from "@kampus/libfabrika";
-import { Arbitrary, Effect, Schema, type Scope } from "effect";
+import { Arbitrary, DateTime, Effect, Schema, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { checklist } from "./program.ts";
 
@@ -322,7 +322,7 @@ export const suite = (open: Open, fresh: Fresh) =>
             const alarms: Array<number | null> = [];
             const r = yield* start(checklist, alarms);
             const writer = side === "agent" ? agent : person;
-            const clock = new Date(BASE + skew).toISOString();
+            const clock = DateTime.formatIso(DateTime.makeUnsafe(BASE + skew));
             const view = r.open("watch").pipe(Effect.map((o) => shown(o.view)));
             const one = (state: string, n: string | null) => ({
               items: [{ name: "git", state, note: n }],

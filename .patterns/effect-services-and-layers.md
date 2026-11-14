@@ -22,7 +22,7 @@ flowchart LR
 ```
 
 ```ts
-// next/packages/libfabrika/src/ledger/Ledger.ts:33-42: the contract, its type written out.
+// next/packages/libfabrika/src/ledger/Ledger.ts:35-44: the contract, its type written out.
 export class Ledger extends Context.Service<
   Ledger,
   {
@@ -46,7 +46,7 @@ export const layer = (sql: Sql, caller: { readonly reader: string }): Layer.Laye
     }),
   ).pipe(Layer.provide(RefereeSql.layer(sql)));
 
-// next/packages/libfabrika/src/cloudflare/runtime.ts:338-342 and :740: callers read each by its module.
+// next/packages/libfabrika/src/cloudflare/runtime.ts:435-439 and :960: callers read each by its module.
 const ledgerLayer = Layer.mergeAll(
   LedgerSql.layer(sql, { reader: `project:${name}` }),
   LedgerTransactionSql.layer(sql),
@@ -57,8 +57,8 @@ const ledger = LedgerRemote.layer(stub, { reader: saved.id });
 
 A service is a class that extends `Context.Service`, with its type written out. Its file holds the
 contract and nothing that runs: the class, its own error, and the types and small ports it speaks
-in. `next/packages/libfabrika/src/ledger/Ledger.ts` is the model: `LedgerError` (`:10-18`), the
-`Doorbell` port (`:21-24`), the `LedgerCalls` platform port (`:27-31`) and `Ledger` (`:33-42`).
+in. `next/packages/libfabrika/src/ledger/Ledger.ts` is the model: `LedgerError` (`:10-20`), the
+`Doorbell` port (`:23-26`), the `LedgerCalls` platform port (`:29-33`) and `Ledger` (`:35-44`).
 It imports `Effect`, `Stream`, `Rev` and the log types as types only (`:6-8`), so a browser bundle
 of it holds `effect` and this one file, never `Referee` or the SQL store.
 
@@ -71,8 +71,8 @@ Promise stub at the service boundary, so no caller sees a Promise. Code both lay
 `internal/`: `pages` (`ledger/internal/ledgerPages.ts:9`) and the span keys `STREAM` and `tag`
 (`ledger/internal/ledgerTrace.ts:5-7`). A Layer asks for what it needs with `yield*` and is
 composed with `Layer.provide` and `Layer.mergeAll`. The whole graph is provided once, at the edge:
-on workerd, one `ManagedRuntime` per object instance (`next/apps/fabrika/src/runtime.ts:19-23`,
-held at `next/apps/fabrika/src/brain.ts:26`); on Node, `NodeRuntime.runMain`
+on workerd, one `ManagedRuntime` per object instance (`next/apps/fabrika/src/runtime.ts:22-26`,
+held at `next/apps/fabrika/src/brain.ts:28`); on Node, `NodeRuntime.runMain`
 (`next/apps/fabrika/grant.ts:129`).
 
 Rules:
@@ -87,9 +87,10 @@ Rules:
   (`oxlint-plugins/service-id.ts`).
 - **Write the service's type out.** The contract is the type, so it is never inferred from an
   implementation: no `make` option and no `Effect.Success<ReturnType<...>>` shape.
-- **No static layer on a service class.** A layer is a sibling file read through its module:
-  `import * as LedgerSql from "./LedgerSql.ts"`, then `LedgerSql.layer(...)`. A memory or test layer
-  is a sibling too.
+- **No static member on a service class.** Not a layer, not a `make`, not a helper: the class body
+  holds nothing static (`fabrika/no-static-layer`, `oxlint-plugins/no-static-layer.ts`). A layer is
+  a sibling file read through its module: `import * as LedgerSql from "./LedgerSql.ts"`, then
+  `LedgerSql.layer(...)`. A memory or test layer is a sibling too.
 - **A platform's adapter lives in its platform's folder.** `cloudflareSql`, which turns a Durable
   Object's storage into our `Sql`, is `next/packages/libfabrika/src/cloudflare/CloudflareSql.ts:3`.
 - **Compose, never build.** No `Layer.build` then `Context.get` then `Effect.provideContext` on each
@@ -107,14 +108,14 @@ Rules:
   missing one is a type error, not an `Effect.die` or an `Option.getOrThrow` deep in a call.
 - **Ordered setup is `Layer.unwrap`.** When a Layer depends on a value read first (settings, a
   saved descriptor), read it in an Effect and return the Layer from it
-  (`next/apps/fabrika/src/runtime.ts:20`, `ai-docs/src/01_effect/03_services/20_layer-unwrap.ts`).
+  (`next/apps/fabrika/src/runtime.ts:23`, `ai-docs/src/01_effect/03_services/20_layer-unwrap.ts`).
 - **Config at the edge.** On workerd the platform's config is a binding, so `env.STAGE` is decoded
-  once with Schema (`next/apps/fabrika/src/runtime.ts:13-17`). On Node it is `Config`; never mix
+  once with Schema (`next/apps/fabrika/src/runtime.ts:16-20`). On Node it is `Config`; never mix
   `process.env.X ??` with `Config` on one line.
 - **A resource lives in a Layer.** `Effect.acquireRelease` inside `Layer.effect`, so teardown runs
   when the runtime is disposed (`ai-docs/src/01_effect/05_resources/10_acquire-release.ts`).
 - **The object class stays thin.** Every method is one `this.runtime.runPromise(...)` under an edge
-  comment (`next/apps/fabrika/src/brain.ts:28-31`,
+  comment (`next/apps/fabrika/src/brain.ts:30-33`,
   [an object class stays thin](../docs/direction/object-classes-stay-thin.md)). A bare
   `Effect.runPromise` there gets none of the runtime's Layers, tracer included.
 
@@ -126,23 +127,41 @@ Every service and every runtime in `next/`. Stops at tea: a program's state live
 ## Services awaiting their slice
 
 `Ledger` (ticket 702, slice 1), `Referee` and `LedgerTransaction` (ticket 723, slice 3) are
-converted alongside ClientManager (ticket 731) so far. The rest still carry static layers, and each moves in its own slice. A search of
-`next/packages/libfabrika/src` outside tests finds 19 static Layer members, for example
-`Mailbox.layer` (`processes/Mailbox.ts:118`), `RecordManager.sql`, `.memory` and `.remote`
-(`telemetry/Records.ts:420-429`) and `Gateway.layer` (`gateway/Gateway.ts:1622`). The Node adapter,
+converted alongside ClientManager (ticket 731) so far. The rest still carry static members, and
+each module moves in its own slice. `fabrika/no-static-layer`, replayed over all of `next/` outside
+tests on 2026-11-14, fires 26 times, every fire real: 19 static layers on 15 classes and 7
+`static make`. The plan's hand count was 27; its 27th, `static sign` at `access/SessionManager.ts:63`,
+sits on a class that extends `Schema.Opaque`, so it is not a service class and stays. All paths are
+under `next/packages/libfabrika/src/`:
+
+| Module | Fires | Where |
+|---|---|---|
+| top | 1 | `Id.ts:153` |
+| `access` | 1 | `SessionManager.ts:102` |
+| `gateway` | 1 | `Gateway.ts:1696` |
+| `presence` | 1 | `Connections.ts:40` |
+| `processes` | 3 | `Mailbox.ts:168`, `ProcessIdGenerator.ts:28`, `ProcessManager.ts:132` |
+| `runtime` | 7 | `Entry.ts:115`, `:210`, `ProcessStore.ts:136`, `RecoveryStore.ts:220`, `Runner.ts:335`, `:345`, `Execution.ts:270` (`static make`) |
+| `telemetry` | 6 | `Archive.ts:40`, `:53`, `Records.ts:420`, `:424`, `:429`, `Sink.ts:246` |
+| `cloudflare` | 6 | `platform.ts:67`, `:188`, `:237`, `:258`, `:274`, `:305` (`static make`) |
+
+The rule is on for 13 folders where it found nothing (`.oxlintrc.json:947-969`), and each move
+adds its folder; `cloudflare/` closes when the Alchemy port (ticket 502) deletes `platform.ts`
+(`oxlint-plugins/README.md`, "No static member on a service class"). The Node adapter,
 `next/packages/libfabrika/src/ledger/NodeSqlite.ts`, still sits in `ledger/`; slice 2 moves it. New
 code follows this doc now.
 
-`Layer.build` is still used in product code: `cloudflare/runtime.ts:357` and `:752`,
-`cloudflare/connection.ts:18` and `node/dev/dev-recording.ts:31`, each followed by
+`Layer.build` is still used in product code: `cloudflare/runtime.ts:454` and `:965`,
+`cloudflare/connection.ts:19` and `node/dev/dev-recording.ts:31`, each followed by
 `Effect.provideContext` (ticket 442).
 
-A layer still provides inside its own body in `next/packages/libfabrika/src/runtime/Runner.ts:218-221`:
-`RecoveryStore` and `Replies` are built from `RecoveryStore.layer(...)` and `RepliesSql.layer(...)`
-in the body, so they are missing from the layer's requirements (`:206-209`). The same file finds
-`SessionManager` at run time with `Effect.serviceOption` (`:229`), then `Effect.die` (`:1169`) or
-`Option.getOrThrow` (`:1174`) when a caused write needs it. `runtime/Built.ts:16` provides
-`Digest.layerWebCrypto` inside `hash`, the same shape at function size.
+A layer still provides inside its own body in `next/packages/libfabrika/src/runtime/Runner.ts:364`
+and `:369`: `Replies` and `Watchers` are built from `RepliesSql.layer(...)` and
+`WatchersSql.layer(...)` with `Effect.provide` in the body, so they are missing from the layer's
+requirements (`:338-342`). The same file finds `SessionManager` at run time with
+`Effect.serviceOption` (`:372`), then `Effect.die` (`:1338`) or `Option.getOrThrow` (`:1343`) when a
+caused write needs it. `runtime/Built.ts:24` provides `Digest.layerWebCrypto` inside `hash`
+(`:22`), the same shape at function size.
 
 ## Why it is not obvious
 
@@ -183,10 +202,13 @@ Referee, RefereeSql, LedgerTransactionSql and ledgerStore.
 - Type test: `next/packages/libfabrika/src/ledger/Ledger.types.test.ts` holds the written-out
   service type, both layer types and the absence of `Ledger.sql` and `Ledger.remote`.
 - Lint, on: `fabrika/no-context-tag` (`.oxlintrc.json:28`); `fabrika/no-effect-run-outside-edge` and
-  `fabrika/edge-comment` in `next/` (`.oxlintrc.json:569-570`). `no-restricted-imports` keeps a
+  `fabrika/edge-comment` in `next/` (`.oxlintrc.json:634-635`). `no-restricted-imports` keeps a
   module's `internal/` private, and `layer-rules.json` keeps `ledger/` from importing `cloudflare/`.
-- Not yet a check: a lint rule that a `Context.Service` class has no static that returns a `Layer`
-  ([0095](../.decisions/0095-a-service-file-holds-only-its-contract.md) names it as later work).
+- Lint, on for the folders at zero: `fabrika/no-static-layer` (`oxlint-plugins/no-static-layer.ts`,
+  `.oxlintrc.json:947-969`) refuses every static member of a class that extends `Context.Service`,
+  as [0095](../.decisions/0095-a-service-file-holds-only-its-contract.md) was amended on
+  2026-11-13. Tests, shared suites and test support are left out. Its laws are in
+  `oxlint-plugins/no-static-layer.test.ts`.
 
 ## Decision
 

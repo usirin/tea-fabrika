@@ -27,6 +27,7 @@ import type * as Start from "./Start.ts";
  */
 export class RecordedStart extends Context.Service<
   RecordedStart,
+  // oxlint-disable-next-line fabrika/written-service-type -- `values` is the type of the declared settings list, as `typeof X.Type` is a schema's: each setting is declared once (0069), and no implementation is read
   {
     /** The start's input as the host handed it in, decoded. */
     readonly input: Start.Input;

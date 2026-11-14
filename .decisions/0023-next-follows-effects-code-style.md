@@ -104,6 +104,7 @@ stays only with a written reason in this file.**
 | Barrel | `index.ts` re-exports each module as a namespace, `export * as Deferred from "./Deferred.ts"`, each with its own doc block | `index.ts` re-exports names (`export {Door} from ...`) | | follow in libraries |
 | Options | inline in the signature, `readonly` fields, `\| undefined` on optional ones | mixed | | follow |
 | Doc comments | required on every public export, with `@stability`, `@category`, `@since` | 0 `@since` in `next/`; `pnpm jsdocs --check` finds 92 places in `libfabrika` | | follow, `.patterns/doc-comments.md` |
+| A type under its schema | every export has its own block, the type under its schema included | a type directly under its same-name schema (`export const Sent = ...` then `export type Sent = typeof Sent.Type;`) shares the schema's block, and `fabrika/jsdocs` reads the pair as one | owner, 2026-11-13 (ticket 913) | differs: the pair is one thing to a reader, and a second block would repeat the first |
 | Bare `of` | `Array.of`, `Chunk.of`, `Iterable.of`, `Request.of` exist | banned in `next/` (AGENTS.md) | owner, AGENTS.md | open: owner picks |
 | Plural service names | `Runners`, `Servers`, `Notifications`, `Dimensions` are services | never plural; `<Thing>Manager` (AGENTS.md) | owner, AGENTS.md | open: owner picks |
 | Tag key | `_tag` | `_tag` | AGENTS.md | same |
@@ -138,3 +139,12 @@ stays only with a written reason in this file.**
 - **Decided since:** a `curly` rule and blank lines around blocks, both differences from Effect
   ([0021](0021-a-blank-line-between-top-level-statements.md), ticket 439).
 - **Not decided here:** the open items above; `@since` values while `libfabrika` is `0.0.0`.
+
+## Amendments
+
+- 2026-11-13 (owner): a type directly under its same-name schema shares the schema's doc block. The
+  pair is one thing to a reader, and a second block would repeat the first. It is a kept
+  difference from Effect's doc comments, so the row "A type under its schema" was added to the
+  table above on 2026-11-14, after this file first landed. The docs rule `fabrika/jsdocs`
+  (`oxlint-plugins/jsdocs.ts`, ticket 913) reads the pair as one declaration. "Directly" means the
+  statement right before the type.
