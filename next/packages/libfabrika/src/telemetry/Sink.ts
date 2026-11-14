@@ -136,10 +136,49 @@ const summary = (error: unknown): unknown =>
       }
     : error;
 
-const place = (text: string): string =>
-  text.startsWith("node:") ? text : text.slice(Math.max(text.lastIndexOf("/"), text.lastIndexOf("\\")) + 1);
+/** A location without its folder: the file name with its line and column. A `node:` location is a
+ *  module name and stays whole. A URL's query and fragment come after its file name and can hold a
+ *  folder, so they go with the folder. */
+const place = (location: string): string => {
+  if (location.startsWith("node:")) {
+    return location;
+  }
 
-/** Only frame locations lose folders; messages and Effect's frame markers stay intact. */
+  const position = /(?::\d+){1,2}$/.exec(location)?.[0] ?? "";
+  const path = location.slice(0, location.length - position.length);
+  const file = /^[a-z][a-z\d+.-]*:\/\//i.test(path) ? (path.split(/[?#]/)[0] ?? path) : path;
+  return `${file.slice(Math.max(file.lastIndexOf("/"), file.lastIndexOf("\\")) + 1)}${position}`;
+};
+
+/** Where the parenthesized group that ends `text` opens, counting the pairs inside it; -1 if none. */
+const opening = (text: string): number => {
+  let depth = 0;
+
+  for (let at = text.length - 1; at >= 0; at -= 1) {
+    depth += text[at] === ")" ? 1 : text[at] === "(" ? -1 : 0;
+
+    if (depth <= 0) {
+      return depth === 0 && text[at] === "(" ? at : -1;
+    }
+  }
+
+  return -1;
+};
+
+/** A frame's location without folders. An eval origin, `eval at <name> (<location>), <location>`,
+ *  keeps its name and loses the folder of each location inside it, however deep the origins nest. */
+const located = (location: string): string => {
+  const origin = location.startsWith("eval at ") ? location.lastIndexOf("), ") : -1;
+  const open = origin === -1 ? -1 : opening(location.slice(0, origin + 1));
+  return open === -1
+    ? place(location)
+    : `${location.slice(0, open)}(${located(location.slice(open + 1, origin))}), ${place(location.slice(origin + 3))}`;
+};
+
+/** Only frame locations lose folders: a frame's name stays whole, as do messages and Effect's frame
+ *  markers. The location is the parenthesized group that ends the frame, so a name may hold spaces,
+ *  slashes and its own parentheses, as Effect's `(definition)` does. A frame with no such group is a
+ *  bare location when it reads as one, or else a bare name. */
 const portable = (line: string): string => {
   const frame = /^(\s*at )(.*?)( \{)?$/.exec(line);
 
@@ -148,11 +187,14 @@ const portable = (line: string): string => {
   }
 
   const [, at = "", body = "", ending = ""] = frame;
-  const definition = body.indexOf(" (definition)");
-  const open = body.indexOf(" (", definition === -1 ? 0 : definition + " (definition)".length);
-  return open === -1 || !body.endsWith(")")
-    ? `${at}${place(body)}${ending}`
-    : `${at}${place(body.slice(0, open))} (${place(body.slice(open + 2, -1))})${ending}`;
+  const open = opening(body);
+
+  if (open > 0) {
+    return `${at}${body.slice(0, open)}(${located(body.slice(open + 1, -1))})${ending}`;
+  }
+
+  const bare = /^(async )?((?:[a-z][a-z\d+.-]*:|[/\\]).*|.*(?::\d+){1,2})$/i.exec(body);
+  return bare === null ? line : `${at}${bare[1] ?? ""}${place(bare[2] ?? "")}${ending}`;
 };
 
 const cutContent = (text: string): string =>
