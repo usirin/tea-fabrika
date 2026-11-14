@@ -14,6 +14,8 @@
     "./telemetry/internal/*": null,
     "./ledger/*": "./src/ledger/*.ts",
     "./ledger/internal/*": null,
+    "./permissions/*": "./src/permissions/*.ts",
+    "./permissions/internal/*": null,
     "./processes/*": "./src/processes/*.ts",
     "./processes/internal/*": null,
     "./presence/*": "./src/presence/*.ts",
