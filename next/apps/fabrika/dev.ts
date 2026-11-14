@@ -5,10 +5,11 @@ import * as LedgerRemote from "@kampus/libfabrika/ledger/LedgerRemote";
 import * as OpenRepository from "@kampus/libfabrika/node/repositories/OpenRepository";
 import * as RepositoriesGit from "@kampus/libfabrika/node/repositories/RepositoriesGit";
 import * as Load from "@kampus/libfabrika/node/settings/Load";
+import { watchPrograms } from "@kampus/libfabrika/node/watch";
 import * as RepositoryTrustLedger from "@kampus/libfabrika/packs/RepositoryTrustLedger";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
-import { Config, Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Config, Effect, FileSystem, Layer, Path, Schema, Stream } from "effect";
 import { Command, Flag, Prompt } from "effect/cli";
 import { Digest, SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
@@ -190,6 +191,39 @@ const command = Command.make("dev", flags, (options) => {
             return yield* new InstanceError({ reason: "repository_refused" });
           }
         }
+
+        yield* Effect.forkScoped(
+          Stream.runForEach(
+            watchPrograms({ ...built.watch, install: instance.install, failed: instance.failed }).pipe(
+              Stream.provideContext(instance.recording),
+            ),
+            (answer) =>
+              Effect.sync(() => {
+                if (answer._tag === "same") {
+                  return;
+                }
+
+                if (answer._tag === "failed") {
+                  process.stdout.write(
+                    `${answer.program} did not load: ${answer.reason === "bundle" ? "syntax error" : answer.reason === "compiler" ? "compiler check failed" : answer.reason === "name" ? "the program name changed" : answer.reason === "too_large" ? "the bundle is too large" : "the module failed to load"}${answer.path === undefined ? "" : ` at ${answer.path}${answer.line === undefined ? "" : `:${answer.line}`}`}\n`,
+                  );
+                  return;
+                }
+
+                for (const { name, outcome } of answer.processes) {
+                  const text =
+                    outcome._tag === "swapped"
+                      ? `${name} runs ${answer.hash.slice(0, 8)} now`
+                      : outcome._tag === "refused"
+                        ? `${name} stays on ${outcome.was.slice(0, 8)}: ${outcome.reason === "shape" ? "the new code can't read its state" : outcome.reason === "newer" ? "its state has a newer version" : "the new code could not load"}`
+                        : outcome._tag === "not_now"
+                          ? `${name} will try the new code at the next brain start`
+                          : `${name} already runs this code`;
+                  process.stdout.write(`${text}\n`);
+                }
+              }),
+          ),
+        );
 
         process.stdout.write(
           `${JSON.stringify({ ready: `http://127.0.0.1:${loaded.values.port}`, build: built.build })}\n`,

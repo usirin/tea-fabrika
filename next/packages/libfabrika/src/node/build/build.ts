@@ -17,7 +17,15 @@ import { bundle, bundlePrograms } from "./bundle.ts";
 import { check, compile, Row } from "./compiler.ts";
 import { inlineStylesheet } from "./css.ts";
 
-export { BuildError } from "../../runtime/Built.ts";
+export {
+  /**
+   * Error for a build that stopped, re-exported from the runtime's build tables.
+   *
+   * @stability unstable
+   * @category errors
+   */
+  BuildError,
+} from "../../runtime/Built.ts";
 
 /**
  * One program an app selects for its build: its `pack/program` name, its package, and the export
@@ -391,6 +399,84 @@ const publish = Effect.fn("build.emit")(function* (
 });
 
 /**
+ * Builds every selected program as a sealed Worker Loader module, the same bundles a start and
+ * every saved-file rebuild use, and returns each program's built source by name.
+ *
+ * **Details**
+ *
+ * Every `.tsx` file a bundle reaches goes through the React Compiler check, against
+ * `options.ledger` or the root's `compiler-ledger.json` when one exists. A finding fails with a
+ * `BuildError` of reason `compiler` whose cause lists each finding's path and line. When given,
+ * `inputs` receives every module's text by its id, and `reached`, once the check passes, each
+ * checked `.tsx` file's text by its path from the root.
+ *
+ * @stability unstable
+ * @category constructors
+ */
+export const buildPrograms = Effect.fn("build.programs")(function* (
+  options: Pick<Options, "root" | "entry" | "programs" | "ledger">,
+  reached?: Map<string, string>,
+  inputs?: Map<string, string>,
+) {
+  const fs = yield* FileSystem.FileSystem,
+    path = yield* Path.Path;
+  const root = yield* fs.realPath(options.root).pipe(Effect.orElseSucceed(() => options.root));
+  const entry = yield* fs.realPath(options.entry).pipe(Effect.orElseSucceed(() => options.entry));
+  const files = new Map<string, string>();
+  const compiler: Plugin = {
+    name: "fabrika-program-compiler",
+    // Rolldown warnings can quote source. Reload reports only the checked build's result.
+    onLog() {
+      return false;
+    },
+    transform(code, id) {
+      inputs?.set(id, code);
+
+      if (!id.endsWith(".tsx")) {
+        return;
+      }
+
+      files.set(path.relative(root, id), code);
+      return { code: compile(id, code).code };
+    },
+  };
+  const ledgerFile = path.join(root, "compiler-ledger.json");
+  const ledger =
+    options.ledger ??
+    ((yield* fs.exists(ledgerFile))
+      ? yield* fs
+          .readFileString(ledgerFile)
+          .pipe(
+            Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Row)))),
+            Effect.mapError(fail("read")),
+          )
+      : []);
+  const programs = yield* bundlePrograms({
+    root: path.dirname(entry),
+    cwd: root,
+    plugins: [compiler],
+    programs: Object.fromEntries(options.programs.map((p) => [p.name, { module: p.package, name: p.export }])),
+  });
+  const findings = check(
+    files,
+    ledger.filter((row) => files.has(row.file)),
+  );
+
+  if (findings.length > 0) {
+    return yield* new BuildError({
+      reason: "compiler",
+      cause: findings.map(({ file, line }) => ({ path: file, line })),
+    });
+  }
+
+  for (const [file, text] of files) {
+    reached?.set(file, text);
+  }
+
+  return programs;
+});
+
+/**
  * Builds one brain file: bundles every selected program as a sealed Worker Loader module, every
  * window's scripts and stylesheets, and the tab's script and page when a tab is given, then bundles
  * the brain with all of them embedded as text.
@@ -470,12 +556,10 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
     }
   }
 
-  const programs = yield* bundlePrograms({
-    root: from,
-    cwd: root,
-    plugins: [compiler],
-    programs: Object.fromEntries(options.programs.map((p) => [p.name, { module: p.package, name: p.export }])),
-  });
+  const programs = yield* buildPrograms(
+    { root: options.root, entry: options.entry, programs: options.programs, ledger },
+    files,
+  );
   // A segment holds no `.`, so `pack.program` names one generated file per qualified name. The
   // window's entry keeps the whole name, so it is emitted at `/pack/program.js`.
   const generated = (name: string) => path.join(from, `window.${name.replace("/", ".")}.generated.ts`);

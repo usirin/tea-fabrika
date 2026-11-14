@@ -9,7 +9,7 @@ import { letterLine } from "@kampus/libfabrika/processes/Mailbox";
 import { Recipient } from "@kampus/libfabrika/processes/Process";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
-import { Effect, Exit, Layer, Logger, ManagedRuntime, Result, Schema, Scope } from "effect";
+import { Clock, Effect, Exit, Layer, Logger, ManagedRuntime, Result, Schema, Scope } from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, it, vi } from "vitest";
 import {
@@ -22,12 +22,19 @@ import {
   SENT,
 } from "./start-child.test-support.ts";
 
+// Each built-in program's hash is the SHA-256 of its source, as `BuiltProgram` requires.
+const CODE = vi.hoisted(() => ({
+  counter: { hash: "efe899c74558f20b08bbc19bf0228c0c25bddb7871d80bd34ac8b33c030b3698", source: "counter" },
+  checklist: { hash: "6da624dba5235ba1f3901c904a78ea41debbfb0d8a488aeba7063dba508d9211", source: "checklist" },
+  child: { hash: "ddc9e669194254cef019a29d3619a2c16592e5d52e1a81e98b01bd52319149a3", source: "child" },
+}));
+
 vi.mock("virtual:fabrika-built", () => ({
   programs: {
-    "fabrika/counter": { hash: "counter-test", source: "counter" },
+    "fabrika/counter": CODE.counter,
     // P14 slice 2: the app boots `checklist:1` after `counter:1`, so the table holds its program too.
-    "fabrika/checklist": { hash: "checklist-test", source: "checklist" },
-    "p42/child": { hash: "child-test", source: "child" },
+    "fabrika/checklist": CODE.checklist,
+    "p42/child": CODE.child,
   },
   assets: {},
 }));
@@ -41,6 +48,12 @@ type Fixture = Effect.Success<ReturnType<typeof childInstance>>;
 type Instance = Fixture["instance"] & Record<string, any>;
 
 const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
+
+/**
+ * A real 5 ms pause on Effect's live clock, whatever clock the law runs on: the test clock under
+ * `it.effect`, the live one inside a fast-check run.
+ */
+const realPause = Effect.sleep("5 millis").pipe(Effect.provideService(Clock.Clock, Clock.Clock.defaultValue()));
 
 /** Polls an observable fact. A timeout fails with the last observed state. */
 const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) => boolean, ms = WAIT): Promise<A> => {
@@ -273,7 +286,7 @@ const projectSecrets = Effect.fnUntraced(function* (
   let child = {
     id: `${project.boot.process}/1/0`,
     name: "child:secret",
-    code: { program: "p42/child", hash: "child-test" },
+    code: { program: "p42/child", hash: CODE.child.hash },
     requester: Recipient.cases.process.make({ process: project.boot.process }),
     input: { type: "inc" },
   };
@@ -490,7 +503,7 @@ const storageCall = Effect.fnUntraced(function* (
   const child = {
     id: `${project.boot.process}/1/0`,
     name: "child:storage",
-    code: { program: "p42/child", hash: "child-test" },
+    code: { program: "p42/child", hash: CODE.child.hash },
     requester: Recipient.cases.process.make({ process: project.boot.process }),
     input: { type: "inc" },
   };
@@ -526,6 +539,15 @@ const storageCall = Effect.fnUntraced(function* (
     rev = started.value.rev;
 
     if (path === "migration") {
+      // A table from before the pending column held delivered starts only: each start was
+      // configured before it answered. The boot's own start is delivered after the build (ticket
+      // 762), so wait for it, or the migration would mark an undelivered start as delivered.
+      // The pause is a real one, since this law runs on the test clock, which never moves by itself.
+      for (let tries = 0; fixture.undelivered() > 0; tries++) {
+        expect(tries, "L11: the boot's own start is delivered before the migration").toBeLessThan(1000);
+        yield* realPause;
+      }
+
       fixture.legacyDescriptors();
       yield* reopen;
     }
@@ -748,7 +770,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
           const child = {
             id: `${boot}/1/0`,
             name: "child:cut",
-            code: { program: "p42/child", hash: "child-test" },
+            code: { program: "p42/child", hash: CODE.child.hash },
             requester: Recipient.cases.process.make({ process: boot }),
             input: { type: "inc" },
           };
@@ -781,7 +803,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
                 id: Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(committed[0]?.body).process,
                 name: child.name,
                 program: "p42/child",
-                build: "child-test",
+                build: CODE.child.hash,
                 owner: fixture.configured[0]?.descriptor.owner,
               },
               wake: true,
@@ -836,6 +858,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
                 Layer.succeed(ProcessService, {
                   usage: unused,
                   msg: unused,
+                  swap: unused,
                   mailed: unused,
                   open: unused,
                   due: unused,

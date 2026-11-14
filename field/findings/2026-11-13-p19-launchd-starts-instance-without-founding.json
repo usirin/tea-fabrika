@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-p19-launchd-starts-instance-without-founding",
+  "date": "2026-11-13",
+  "by": "fix-round agent",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/apps/fabrika/e2e/node/P19Launchd.test-support.ts",
+    "line": 423
+  },
+  "says": "The P19 launchd host helper writes a script that calls localInstance with the old option shape (person, founder, window, rateLimit, port) and no founding or settings, so it hits the same TypeError at instance.ts reading options.founding.person that reload.test-support.ts hit after #1146.",
+  "proof": "The file is the same on main and on fabrikalfa/p15b-1 at 13b765c7f (git diff origin/main shows nothing). next/apps/fabrika/src/instance.ts line 28 reads options.founding.person, and every other e2e caller now builds its options with RecordWireTest.startupFixture or settingsFixture from next/apps/fabrika/src/record-wire.test-support.ts. Not run: it is an Electron and launchd host law.",
+  "cost": "The electron-launchd host law fails at instance start the next time it runs on a Mac, before it checks anything about launchd.",
+  "head": "13b765c7f",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1012"
+}

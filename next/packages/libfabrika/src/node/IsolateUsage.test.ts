@@ -45,6 +45,11 @@ import { REFUSED, SpanRow } from "../telemetry/Trace.ts";
 const PID = "process_0000000000e008000000000001";
 const NAME = "checklist:1";
 
+const CODE = {
+  hash: "f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d",
+  source: "fixture",
+};
+
 const FROM = {
   by: "SHA256:fixture",
   for: "person-test",
@@ -52,7 +57,7 @@ const FROM = {
   seen: 0,
   parent: null,
   traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
-  build: "fixture-build",
+  build: CODE.hash,
 };
 
 // T753: each object reads its start from INSTANCE and confirms it with its Project.
@@ -63,7 +68,7 @@ const START = StartsTest.fixture(
     founder: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     window: null,
     port: 18787,
-    build: "fixture-build",
+    build: CODE.hash,
   },
   (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
 );
@@ -130,7 +135,7 @@ const fixture = (executed: () => void) => {
   const Model = Schema.Struct({ sum: Schema.Int });
   const Msg = Schema.Struct({ type: Schema.Literal("add"), n: Schema.Int });
   return {
-    name: "usage-fixture",
+    name: "test/usage-fixture",
     machine: Machine.make({
       model: Model,
       msg: Msg,
@@ -156,8 +161,8 @@ const fixture = (executed: () => void) => {
 
 const invoke = (process: string) =>
   Effect.gen(function* () {
-    const loaded = yield* ProgramLoader.use((loader) => loader.load("usage-fixture", "fixture-build")).pipe(
-      Effect.provide(ProgramLoader.layer({ "usage-fixture": fixture(() => {}) }, {})),
+    const loaded = yield* ProgramLoader.use((loader) => loader.load("test/usage-fixture", CODE.hash)).pipe(
+      Effect.provide(ProgramLoader.layer({ "test/usage-fixture": fixture(() => {}) }, {})),
     );
     yield* loaded.execution
       .step({ sum: 0 }, { type: "add", n: 1 })
@@ -204,7 +209,7 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
     };
     // oxlint-disable-next-line fabrika/no-type-assertions -- only the platform loader and opaque tail fetcher are doubled
     const platform = { get: () => ({ getEntrypoint: () => rpc }) } as unknown as Parameters<typeof workerLoader>[0];
-    const loader = workerLoader(platform, { "usage-fixture": { hash: "fixture-build", source: "fixture" } });
+    const loader = workerLoader(platform, { "test/usage-fixture": CODE });
     const controller = yield* Effect.acquireRelease(
       Effect.sync(() => new AbortController()),
       (held) => Effect.sync(() => held.abort()),
@@ -228,7 +233,7 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
     const base = yield* Layer.build(coordination);
     yield* ProcessManager.use((manager) =>
       manager.start(
-        Start.cases.first.make({ id: "boot", name: NAME, code: { program: "usage-fixture", hash: "fixture-build" } }),
+        Start.cases.first.make({ id: "boot", name: NAME, code: { program: "test/usage-fixture", hash: CODE.hash } }),
         FROM,
       ),
     ).pipe(Effect.provideContext(base));
@@ -248,7 +253,7 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
     ).pipe(Layer.provideMerge(Layer.succeedContext(base)));
     const context = yield* Layer.build(
       ProgramRunner.withLoader(
-        { id: PID, name: NAME, program: "usage-fixture", build: "fixture-build", owner: OWNER },
+        { id: PID, name: NAME, program: "test/usage-fixture", build: CODE.hash, owner: OWNER },
         { load: (name) => loader.load(name, PID, bound) },
         {
           recovery: { sql: state.sql, name: NAME, capacity: 1024 ** 3 },
@@ -328,7 +333,7 @@ for (const accepted of [true, false]) {
         Effect.gen(function* () {
           const state = yield* open;
           const written: Array<SpanRow> = [];
-          const saved = { id: PID, name: NAME, program: "usage-fixture", build: "fixture-build", owner: OWNER };
+          const saved = { id: PID, name: NAME, program: "test/usage-fixture", build: CODE.hash, owner: OWNER };
           // oxlint-disable-next-line fabrika/no-type-assertions -- native storage handles only; the Process service and telemetry sink are real
           const ctx = {
             id: { name: JSON.stringify(["project-test", NAME]) },
@@ -479,7 +484,7 @@ it.effect(
                 Start.cases.first.make({
                   id: "boot",
                   name: NAME,
-                  code: { program: "usage-fixture", hash: "fixture-build" },
+                  code: { program: "test/usage-fixture", hash: CODE.hash },
                 }),
                 FROM,
               )
@@ -498,7 +503,7 @@ it.effect(
               publish: () => Promise.resolve(),
               settingsStart,
             };
-            const saved = { id: PID, name: NAME, program: "usage-fixture", build: "fixture-build", owner: OWNER };
+            const saved = { id: PID, name: NAME, program: "test/usage-fixture", build: CODE.hash, owner: OWNER };
             const values = new Map<string, unknown>([["descriptor", saved]]);
             const bound = new Map<object, IsolateUsageTest.Props>();
             const seen: Array<{ key: string; tails: ReadonlyArray<object> | undefined }> = [];
@@ -545,7 +550,7 @@ it.effect(
                     getEntrypoint: () => ({
                       describe: () =>
                         Promise.resolve({
-                          name: "usage-fixture",
+                          name: "test/usage-fixture",
                           v: 1,
                           inputs: { add: { write: true, personOnly: false } },
                           writes: {},
@@ -559,9 +564,7 @@ it.effect(
               },
             } as unknown as Env;
             const runtime = yield* Effect.acquireRelease(
-              Effect.sync(() =>
-                processRuntime(ctx, env, { "usage-fixture": { hash: "fixture-build", source: "fixture" } }),
-              ),
+              Effect.sync(() => processRuntime(ctx, env, { "test/usage-fixture": CODE })),
               (held) => Effect.promise(() => held.dispose()),
             );
             const service = yield* Effect.promise(() => runtime.runPromise(ProcessService));
@@ -569,7 +572,7 @@ it.effect(
 
             for (const [n, replace] of tape.entries()) {
               if (replace) {
-                yield* service.restart({ id: `restart-${n}`, build: "fixture-build" });
+                yield* service.restart({ id: `restart-${n}`, build: CODE.hash });
               }
 
               yield* service.open(`client-${n}`);
@@ -577,7 +580,7 @@ it.effect(
               expect(status.state._tag).toBe("live");
 
               if (status.state._tag === "live") {
-                expect(seen.at(-1)?.key).toBe(`fixture-build/${status.state.process}`);
+                expect(seen.at(-1)?.key).toBe(`${CODE.hash}/${status.state.process}`);
               }
             }
 
@@ -586,7 +589,7 @@ it.effect(
             for (const load of seen) {
               expect(load.tails).toHaveLength(1);
               expect(load.tails?.map((tail) => bound.get(tail))).toEqual([
-                { project: "project-test", name: NAME, process: load.key.slice("fixture-build/".length) },
+                { project: "project-test", name: NAME, process: load.key.slice(`${CODE.hash}/`.length) },
               ]);
             }
 
@@ -618,8 +621,12 @@ it.effect(
               ...env,
               PROCESS: {
                 getByName: (object: string) => ({
-                  configure: () => Promise.resolve(),
+                  configure: (descriptor: typeof saved) => {
+                    descriptors.set(object, descriptor);
+                    return Promise.resolve();
+                  },
                   descriptor: () => Promise.resolve(descriptors.get(object)),
+                  swap: () => Promise.resolve({ _tag: "same" }),
                 }),
               },
             } as unknown as Env;
@@ -627,8 +634,8 @@ it.effect(
               Effect.die("Project door not initialized");
             const beforeProject = seen.length;
             const projectOptions: ProjectOptions = {
-              programs: { "usage-fixture": { hash: "fixture-build", source: "fixture" } },
-              bootstrap: [{ name: "bootstrap:1", id: "bootstrap", program: "usage-fixture" }],
+              programs: { "test/usage-fixture": CODE },
+              bootstrap: [{ name: "bootstrap:1", id: "bootstrap", program: "test/usage-fixture" }],
               door: (options) =>
                 Effect.sync(() => {
                   policy = options.policy;
@@ -655,7 +662,7 @@ it.effect(
             expect(bootstrap.length).toBeGreaterThan(0);
 
             for (const load of bootstrap) {
-              expect(load.key.startsWith("fixture-build/project:")).toBe(true);
+              expect(load.key.startsWith(`${CODE.hash}/project:`)).toBe(true);
               expect(load.tails).toBeUndefined();
             }
 
@@ -678,7 +685,7 @@ it.effect(
                 Start.cases.first.make({
                   id: `first-${n}`,
                   name,
-                  code: { program: "usage-fixture", hash: "fixture-build" },
+                  code: { program: "test/usage-fixture", hash: CODE.hash },
                 }),
                 FROM,
               );
@@ -690,7 +697,7 @@ it.effect(
                   name,
                   after: first.process,
                   reason: "restart",
-                  code: { program: "usage-fixture", hash: "fixture-build" },
+                  code: { program: "test/usage-fixture", hash: CODE.hash },
                 }),
                 FROM,
               );
@@ -698,7 +705,7 @@ it.effect(
               descriptors.set(JSON.stringify(["project-test", name]), { ...saved, id: after, name });
               yield* policy(after);
               const load = seen.at(-1);
-              expect(load?.key).toBe(`fixture-build/${after}`);
+              expect(load?.key).toBe(`${CODE.hash}/${after}`);
               expect(load?.tails).toHaveLength(1);
               expect(load?.tails?.map((tail) => bound.get(tail))).toEqual([
                 { project: "project-test", name, process: after },
@@ -713,16 +720,16 @@ it.effect(
             const restored = yield* Layer.build(projectLayer(projectCtx, projectEnv, projectOptions));
             expect(yield* Context.get(restored, ProjectService).info).toEqual(live);
             const restoredLoads = seen.slice(beforeRestore);
-            const bootstrapLoads = restoredLoads.filter((load) => load.key.startsWith("fixture-build/project:"));
+            const bootstrapLoads = restoredLoads.filter((load) => load.key.startsWith(`${CODE.hash}/project:`));
             expect(bootstrapLoads).toHaveLength(1);
             expect(bootstrapLoads[0]?.tails).toBeUndefined();
-            const programLoads = restoredLoads.filter((load) => !load.key.startsWith("fixture-build/project:"));
+            const programLoads = restoredLoads.filter((load) => !load.key.startsWith(`${CODE.hash}/project:`));
             expect(programLoads.map((load) => load.key).sort()).toEqual(
-              live.map((process) => `fixture-build/${process.process}`).sort(),
+              live.map((process) => `${CODE.hash}/${process.process}`).sort(),
             );
 
             for (const process of live) {
-              const load = programLoads.find((load) => load.key === `fixture-build/${process.process}`);
+              const load = programLoads.find((load) => load.key === `${CODE.hash}/${process.process}`);
               expect(load?.tails).toHaveLength(1);
               expect(load?.tails?.map((tail) => bound.get(tail))).toEqual([
                 { project: "project-test", name: process.name, process: process.process },

@@ -1,3 +1,9 @@
+/**
+ * The local runtime's control entrypoint: a private, token-guarded way to call a fixed set of
+ * methods on the Project, a Process, the Record, the Worker Loader or the bucket.
+ *
+ * @stability unstable
+ */
 import { Effect, Equal, Redacted, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { httpContext } from "./fetch.ts";
@@ -41,6 +47,8 @@ const methods = {
     "leave",
     "online",
     "brain",
+    "codeInstall",
+    "codeFailed",
   ]),
   process: new Set(["msg", "open", "due", "restart", "abort", "activity", "recover", "savedAlarm"]),
   record: new Set(["write", "read", "content", "deleteContent"]),
@@ -117,6 +125,20 @@ const dispatch = Effect.fnUntraced(function* (
   return yield* target === "process" && method === "abort" ? answer.pipe(Effect.ignore) : rpc(answer);
 });
 
+/**
+ * Answers one control request: a JSON body naming a target, a project, a name, a method and its
+ * arguments.
+ *
+ * **Details**
+ *
+ * A request whose bearer token is not `token` gets a 403, and a body that does not decode gets a 400
+ * with reason `bad_input`. Only the listed methods of each target are called; another fails with
+ * reason `unknown_method`, and a Project `commit` that names its own `process` with reason
+ * `reserved`. A success answers `{ value }`, and a failure a 500 with `{ error: { reason } }`.
+ *
+ * @stability unstable
+ * @category combinators
+ */
 export const control = Effect.fn("runtime.control")(function* (
   request: globalThis.Request,
   env: Env,

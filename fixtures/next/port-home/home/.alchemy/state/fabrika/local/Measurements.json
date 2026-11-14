@@ -2,7 +2,7 @@
   "status": "created",
   "fqn": "Measurements",
   "logicalId": "Measurements",
-  "instanceId": "c8cfa2ff832c1faf0d84aee96f0aa466",
+  "instanceId": "33217507b7d0464f7603c8fcdcc0315a",
   "resourceType": "Cloudflare.R2.Bucket",
   "props": {
     "name": "fabrika-measurements",
@@ -10,7 +10,7 @@
     "locks": []
   },
   "attr": {
-    "bucketName": "dev:7ae131a3-5adb-4894-bd69-3d321a901a7f",
+    "bucketName": "dev:9098795a-d95d-454e-a194-721eb187a490",
     "storageClass": "Standard",
     "jurisdiction": "default",
     "accountId": "00000000000000000000000000000000",

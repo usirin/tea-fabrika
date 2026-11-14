@@ -208,6 +208,7 @@ export const open = Effect.gen(function* () {
       msg: (input) => live.msg(input).pipe(Effect.withTracer(tracer)),
       due: (at) => live.due(at).pipe(Effect.withTracer(tracer)),
       restart: (request) => live.restart(request).pipe(Effect.withTracer(tracer)),
+      swap: (request) => live.swap(request).pipe(Effect.withTracer(tracer)),
       mailed: live.mailed.pipe(Effect.withTracer(tracer)),
     });
     const recorded = Effect.gen(function* () {

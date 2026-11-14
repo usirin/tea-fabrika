@@ -41,6 +41,12 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
+// Each built-in program's hash is the SHA-256 of its source, as `BuiltProgram` requires.
+const CODE = {
+  counter: { hash: "efe899c74558f20b08bbc19bf0228c0c25bddb7871d80bd34ac8b33c030b3698", source: "counter" },
+  checklist: { hash: "6da624dba5235ba1f3901c904a78ea41debbfb0d8a488aeba7063dba508d9211", source: "checklist" },
+};
+
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
 vi.mock("./table.ts", () => table);
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
@@ -191,8 +197,8 @@ const world = (options: { readonly lacks?: string } = {}) =>
     Effect.sync(() => {
       // In place: the mocked modules hold this very object, so a new one would never reach them.
       Object.assign(table.programs, {
-        "fabrika/counter": { hash: "counter-a", source: "counter" },
-        "fabrika/checklist": { hash: "checklist-a", source: "checklist" },
+        "fabrika/counter": CODE.counter,
+        "fabrika/checklist": CODE.checklist,
       });
 
       if (options.lacks !== undefined) {
@@ -338,7 +344,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
         LOADER: {
           get: (id: string) => ({
             getEntrypoint: () => {
-              const Box = programBox(id.startsWith("checklist") ? checklist : counter, id);
+              const Box = programBox(id.startsWith(`${CODE.checklist.hash}/`) ? checklist : counter, id);
               return Reflect.construct(Box, []);
             },
           }),

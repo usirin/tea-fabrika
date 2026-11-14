@@ -18,7 +18,23 @@ import {
 import { BuildError, hash } from "../../runtime/Built.ts";
 import type { ProgramSource } from "../../runtime/Execution.ts";
 
-export { BuildError, hash } from "../../runtime/Built.ts";
+export {
+  /**
+   * Error for a build that stopped, re-exported from the runtime's build tables.
+   *
+   * @stability unstable
+   * @category errors
+   */
+  BuildError,
+  /**
+   * Computes the SHA-256 of a text's UTF-8 bytes as lowercase hex, re-exported from the runtime's
+   * build tables.
+   *
+   * @stability unstable
+   * @category combinators
+   */
+  hash,
+} from "../../runtime/Built.ts";
 
 /**
  * Which bundle of a build this is. It is recorded on the bundle's span, with no path or content,
@@ -73,6 +89,19 @@ export const bundle = Effect.fn("build.bundle")(function* (
   plugins: Array<Plugin>,
   options: Options = {},
 ) {
+  const path = yield* Path.Path.pipe(Effect.provide(Path.layer));
+  const root = options.cwd ?? path.resolve();
+  const relative = (file: string) => {
+    const url = URL.parse(file);
+    let local = file;
+
+    if (url?.protocol === "file:") {
+      // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Rolldown's onLog callback is synchronous
+      local = Effect.runSync(path.fromFileUrl(url).pipe(Effect.catch(() => Effect.succeed(url.pathname))));
+    }
+
+    return path.isAbsolute(local) ? path.relative(root, local) : local;
+  };
   // The installed tools' own versions, so a build report says what really ran.
   yield* Effect.annotateCurrentSpan({
     phase: options.phase ?? "bundle",
@@ -86,7 +115,20 @@ export const bundle = Effect.fn("build.bundle")(function* (
     // Rolldown notes each "use client" it drops; a bundle here has no server half.
     onLog: (level: LogLevel, log: RolldownLog, handler: LogOrStringHandler) => {
       if (log.code !== "MODULE_LEVEL_DIRECTIVE") {
-        handler(level, log);
+        let message = log.message;
+
+        // Rolldown has already embedded file names in the message before calling onLog.
+        for (const file of [log.id, log.loc?.file, log.exporter, log.reexporter, ...(log.ids ?? [])]) {
+          if (file !== undefined) {
+            message = message.replaceAll(file, relative(file));
+          }
+        }
+
+        handler(level, {
+          ...log,
+          message,
+          ...(log.loc?.file === undefined ? {} : { loc: { ...log.loc, file: relative(log.loc.file) } }),
+        });
       }
     },
     platform: "browser" as const,

@@ -53,7 +53,7 @@ export class Watchers extends Context.Service<
      * 1,024 clients are held: one more drops the client that opened longest ago.
      */
     readonly open: (client: string, whole: Extract<Update, { type: "whole" }>) => Effect.Effect<void, WatchersError>;
-    /** Sends one patch to every saved watcher, one after another. */
-    readonly publish: (patch: Extract<Update, { type: "patch" }>) => Effect.Effect<void, WatchersError>;
+    /** Sends one update to every saved watcher, one after another: a step's patch, or the whole view after a swap. */
+    readonly publish: (update: Update) => Effect.Effect<void, WatchersError>;
   }
 >()("@kampus/libfabrika/runtime/Watchers") {}

@@ -3098,57 +3098,59 @@ describe("P11 recovery gaps and durable installation", () => {
       );
     }),
   );
-  it.live("S3 plant, replace without recording: a successful upgrade records ran and the new build", () =>
-    onDisks(async (world) => {
-      const w = await world({ build: "new-build" });
-      const Legacy = Schema.Struct({ n: Schema.Int });
-      const Middle = Schema.Struct({ count: Schema.Int });
-      const upgrades = [
-        {
-          name: "n_to_count",
-          from: 1,
-          run: (raw: unknown) => ({ count: Schema.decodeUnknownSync(Legacy)(raw).n }),
-        },
-        {
-          name: "add_runtime",
-          from: 2,
-          run: (raw: unknown) => ({ ...initial, count: Schema.decodeUnknownSync(Middle)(raw).count }),
-        },
-      ];
-      Object.assign(w.p, Program.make({ ...authoring(w.p.name), state: { v: 3, upgrades } }));
-      const { ProcessStore } = await import("./ProcessStore.ts");
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const store = yield* ProcessStore;
-          yield* store.save({
-            saved: { v: 1, build: "old-build", after: 0, model: { n: 9 } },
-            turn: null,
-            cmds: [],
-          });
-        }).pipe(Effect.provide(ProcessStore.layer(w.store.sql, { process: PROCESS }).pipe(Layer.provide(w.base())))),
-      );
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const r: Runner = yield* w.ProgramRunner;
-          expect((yield* r.open("a")).view.count).toBe(9);
-          const rows = yield* read(PROCESS);
-          expect(rows.filter((row) => row._tag === "state.upgraded")).toMatchObject([
-            {
-              build: "new-build",
-              body: { program: "queue", from: 1, to: 3, ran: ["n_to_count", "add_runtime"] },
-            },
-          ]);
-        }).pipe(Effect.provide(w.layer())),
-      );
-      w.reopen();
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const r: Runner = yield* w.ProgramRunner;
-          expect((yield* r.open("b")).view.count).toBe(9);
-          expect((yield* read(PROCESS)).filter((row) => row._tag === "state.upgraded")).toHaveLength(1);
-        }).pipe(Effect.provide(w.layer())),
-      );
-    }),
+  it.live(
+    "S3 scenario: one v1 checkpoint woken by a v3 build; a successful wake upgrade records ran and the checkpoint's build (L6), which the plant that replaces without recording breaks",
+    () =>
+      onDisks(async (world) => {
+        const w = await world({ build: "new-build" });
+        const Legacy = Schema.Struct({ n: Schema.Int });
+        const Middle = Schema.Struct({ count: Schema.Int });
+        const upgrades = [
+          {
+            name: "n_to_count",
+            from: 1,
+            run: (raw: unknown) => ({ count: Schema.decodeUnknownSync(Legacy)(raw).n }),
+          },
+          {
+            name: "add_runtime",
+            from: 2,
+            run: (raw: unknown) => ({ ...initial, count: Schema.decodeUnknownSync(Middle)(raw).count }),
+          },
+        ];
+        Object.assign(w.p, Program.make({ ...authoring(w.p.name), state: { v: 3, upgrades } }));
+        const { ProcessStore } = await import("./ProcessStore.ts");
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const store = yield* ProcessStore;
+            yield* store.save({
+              saved: { v: 1, build: "old-build", after: 0, model: { n: 9 } },
+              turn: null,
+              cmds: [],
+            });
+          }).pipe(Effect.provide(ProcessStore.layer(w.store.sql, { process: PROCESS }).pipe(Layer.provide(w.base())))),
+        );
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const r: Runner = yield* w.ProgramRunner;
+            expect((yield* r.open("a")).view.count).toBe(9);
+            const rows = yield* read(PROCESS);
+            expect(rows.filter((row) => row._tag === "state.upgraded")).toMatchObject([
+              {
+                build: "old-build",
+                body: { program: "queue", from: 1, to: 3, ran: ["n_to_count", "add_runtime"] },
+              },
+            ]);
+          }).pipe(Effect.provide(w.layer())),
+        );
+        w.reopen();
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const r: Runner = yield* w.ProgramRunner;
+            expect((yield* r.open("b")).view.count).toBe(9);
+            expect((yield* read(PROCESS)).filter((row) => row._tag === "state.upgraded")).toHaveLength(1);
+          }).pipe(Effect.provide(w.layer())),
+        );
+      }),
   );
   it.effect.prop(
     "plant, accept an undeclared event: caller-supplied personOnly cannot authorize a write",

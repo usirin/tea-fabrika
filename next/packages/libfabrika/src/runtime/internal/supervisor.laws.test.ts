@@ -14,6 +14,7 @@
 //   due {at, program, from}, started {id, process, at}, checkpointed {after, process, restarts, at}
 //   adopted {process, build, restarts}, restart_requested {id, build, live, process, program, from}
 //   healthy {at}
+//   swapped {process, build} (P15 slice 1): the process took new code while idle
 // A completion whose identity does not match the open work changes nothing.
 //
 // Generator contract: a fast-check decision tape, folded through the current model and a small
@@ -173,8 +174,39 @@ const roomAt = (restarts: ReadonlyArray<number>, t: number, p: typeof Policy.Typ
   return candidates.find((c) => restarts.filter((r) => r >= c - p.periodMs).length + 1 <= p.intensity) ?? t;
 };
 
-/** The moves possible from the current journal and the fold's world. */
-const moves = (w: World, cell: Cell): ReadonlyArray<Move> => {
+/** The moves possible from the current journal and the fold's world, with P15's `swapped` when asked. */
+const moves = (w: World, cell: Cell, swaps = false): ReadonlyArray<Move> => {
+  const all = journalMoves(w, cell);
+
+  if (!swaps) {
+    return all;
+  }
+
+  // The runner begins a fresh step only for a letter not yet accepted; a compacted receipt was
+  // (finding 2026-11-11-supervisor-walk-begins-compacted-letter), so this walk does not offer it.
+  const base = all.filter(
+    (m) => m.name !== "begin_fresh" || w.model.receipts.some((r) => r.letter === m.msg.letter && r.input !== null),
+  );
+
+  // A swap names the process the journal holds, or one it does not, with a build the fold makes.
+  const j = w.model.journal;
+  const own =
+    j._tag === "idle"
+      ? j.process
+      : j._tag === "stepping"
+        ? j.attempt.process
+        : j._tag === "writing_exit"
+          ? j.process
+          : w.process;
+  const build = `build-swap-${cell.pick % 4}`;
+  return [
+    ...base,
+    { name: "swapped", weight: 3, msg: { type: "swapped", process: own, build } },
+    { name: "swapped_foreign", msg: { type: "swapped", process: FOREIGN, build } },
+  ];
+};
+
+const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
   const j = w.model.journal;
   const meta = from();
   const old = w.sent.filter((m) => COMPLETIONS.has(m.type) && !sameWork(j, m));
@@ -276,6 +308,8 @@ const moves = (w: World, cell: Cell): ReadonlyArray<Move> => {
         ...stale,
       ];
     }
+    case "swapping":
+      return [{ name: "swap_completed", msg: { type: "swap_completed", load: j.change.load } }, ...stale];
     case "checking":
       return [
         {
@@ -368,7 +402,7 @@ const moves = (w: World, cell: Cell): ReadonlyArray<Move> => {
 type Observer = (before: Model, move: Move, after: Model, w: World) => void;
 
 /** Folds one tape through the real machine, calling each observer after every step. */
-const walk = (p: typeof Policy.Type, tape: ReadonlyArray<Cell>, observe: Observer): World => {
+const walk = (p: typeof Policy.Type, tape: ReadonlyArray<Cell>, observe: Observer, swaps = false): World => {
   const w: World = {
     model: supervisor.init(null, ctx(p))[0],
     at: 0,
@@ -388,7 +422,7 @@ const walk = (p: typeof Policy.Type, tape: ReadonlyArray<Cell>, observe: Observe
   };
 
   for (const cell of tape) {
-    const options = weighted(moves(w, cell));
+    const options = weighted(moves(w, cell, swaps));
     const move = options[cell.move % options.length]!;
     const before = w.model;
     move.apply?.();
@@ -898,6 +932,63 @@ describe("P34c slice 2: one saved recovery journal", () => {
       { seed: SEED, numRuns: RUNS },
     );
     expect(seen.has("stale_completion")).toBe(true);
+  });
+
+  // L7 (P15 slice 1). `swapped` while idle on that process moves the journal's build, so a crash
+  // restart starts on the code the process runs now (P34, OTP's supervisor); in any other journal,
+  // or for another process, it changes nothing. The Model round-trips its schema at every step.
+  // Plant: leave `s.build` on the old hash; apply `swapped` while stepping.
+  it("L7: swapped while idle moves the build a crash restart starts on; in any other journal it changes nothing", () => {
+    const seen = new Set<string>();
+    fc.assert(
+      fc.property(policies, tapes, (p, tape) => {
+        // The fold's own account of the build the process runs now.
+        let build = BUILD;
+        walk(
+          p,
+          tape,
+          (before, move, after) => {
+            expect(valid(after), `reached ${after.journal._tag}`).toBe(true);
+            expect(decodes(roundTrip(after))).toBe(true);
+
+            if (move.msg.type === "swapped") {
+              const j = before.journal;
+
+              if (j._tag === "idle" && j.process === move.msg.process) {
+                expect(after).toEqual({ ...before, build: move.msg.build });
+                build = String(move.msg.build);
+                seen.add("swapped_idle");
+              } else {
+                expect(after, `swapped in ${j._tag} for ${move.name}`).toEqual(before);
+                seen.add(j._tag === "idle" ? "swapped_foreign" : "swapped_busy");
+              }
+            } else if (!move.stale && move.name === "checkpointed" && before.journal._tag === "checkpointing") {
+              const origin = before.journal.origin;
+              build = origin._tag === "manual" ? origin.request.build : build;
+            } else if (!move.stale && move.name === "adopted" && after !== before) {
+              build = String(move.msg.build);
+            }
+
+            expect(after.build, `after ${move.name}`).toBe(build);
+            const j = after.journal;
+
+            if (j._tag === "waiting_start" && j.origin._tag === "crash" && move.name !== "stale") {
+              expect(j.request.code.hash, "a crash restart starts on the code the process runs now").toBe(build);
+
+              if (build !== BUILD) {
+                seen.add("crash_after_swap");
+              }
+            }
+          },
+          true,
+        );
+      }),
+      { seed: SEED, numRuns: 300 },
+    );
+
+    for (const tag of ["swapped_idle", "swapped_busy", "swapped_foreign", "crash_after_swap"]) {
+      expect(seen.has(tag), `the fold reaches ${tag}`).toBe(true);
+    }
   });
 
   // J11. Saving at any prefix and resuming equals the fold that never stopped.

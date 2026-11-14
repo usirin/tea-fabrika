@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-watch-law-saw-two-rebuilds-for-one-save",
+  "date": "2026-11-13",
+  "by": "fix-round agent",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/packages/libfabrika/src/node/dev/watch.laws.test.ts",
+    "line": 433
+  },
+  "says": "The save-driven rebuild law (L17/L18) failed once and passed on the next run with no change to the watcher: after one save it found two watch.rebuild spans where it expects one.",
+  "proof": "Run on branch fabrikalfa/p15b-1 at 3a2047c74 (its watch.ts unchanged since 6c4312bc5), nice -n 19, --maxWorkers=1, on a busy laptop: property failed after 14 tests, seed 119120, path 13, counterexample [[0,2,1,43,\"AFJRTENACOZR\"]], expected length 1 but got 2, the file took 328689 ms. The same file passed 4 of 4 at 3f84e57d0, whose watch.ts differs only by doc comments.",
+  "cost": "A pull request that touches next/ can go red on this law for a file-event timing reason, not a broken watcher, so its lane waits on a rerun.",
+  "head": "3f84e57d0",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1012"
+}

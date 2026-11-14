@@ -1,3 +1,9 @@
+/**
+ * The app's brain Worker: its Durable Object classes, the private control entrypoint and the default
+ * `fetch`, each a thin handoff into libfabrika's Cloudflare runtime.
+ *
+ * @stability unstable
+ */
 import { makeDurableObjectBridge, makeWorkerBridge } from "@alchemy.run/cloudflare/Bridge";
 import type { SettingsStart } from "@kampus/libfabrika";
 import { type Incoming } from "@kampus/libfabrika";
@@ -15,6 +21,13 @@ import type { ConnectionId } from "./door.ts";
 import { Objects } from "./objects.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
+/**
+ * Durable Object for the Project: each RPC method runs the matching `ProjectService` call, and
+ * `settingsStart` and `settingsRead` run on the runtime's settings calls.
+ *
+ * @stability unstable
+ * @category objects
+ */
 export class Project extends DurableObject<Env> {
   readonly owner = projectRuntime(this.ctx, this.env);
   readonly runtime = settingsWire(this.owner.contextEffect);
@@ -149,6 +162,21 @@ export class Project extends DurableObject<Env> {
     return this.runtime.runPromise(ProjectService.use((p) => p.publish(client, update)));
   }
 
+  code(hash: string) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.code(hash)));
+  }
+
+  codeInstall(input: Parameters<ContextProject["codeInstall"]>[0]) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.codeInstall(input)));
+  }
+
+  codeFailed(input: Parameters<ContextProject["codeFailed"]>[0]) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.codeFailed(input)));
+  }
+
   brain(event: Parameters<ContextProject["brain"]>[0]) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.brain(event)));
@@ -231,14 +259,45 @@ const meta = {
 
 const Bridge = makeDurableObjectBridge(DurableObject, meta);
 
+/**
+ * Durable Object for the Record, bridged to Alchemy's object of that name.
+ *
+ * @stability unstable
+ * @category objects
+ */
 export class RecordPart extends Bridge("RecordPart") {}
 
+/**
+ * Durable Object for one connection at the door, bridged to Alchemy's object of that name.
+ *
+ * @stability unstable
+ * @category objects
+ */
 export class Connection extends Bridge("Connection") {}
 
+/**
+ * Durable Object for one registered name's processes, bridged to Alchemy's object of that name.
+ *
+ * @stability unstable
+ * @category objects
+ */
 export class Process extends Bridge("Process") {}
 
+/**
+ * Worker entrypoint that receives the program isolates' tail events, bridged to Alchemy's Worker.
+ *
+ * @stability unstable
+ * @category objects
+ */
 export class IsolateTail extends makeWorkerBridge(WorkerEntrypoint, meta) {}
 
+/**
+ * Worker entrypoint for the private local control socket: each request runs `control` with the
+ * token from its props.
+ *
+ * @stability unstable
+ * @category objects
+ */
 export class Control extends WorkerEntrypoint<Env, { token: string }> {
   fetch(request: Request) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the private local control socket enters Effect

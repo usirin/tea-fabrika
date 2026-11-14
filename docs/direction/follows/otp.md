@@ -54,6 +54,14 @@ Count: 37 rows, 13 same, 24 differ. Of the 24, 4 are not built yet (links, trap 
 four strategies, restart types), each waiting for Tier 4. One has no written reason yet: exit
 reasons (ticket 406). One is an open call: past the limit (ticket 404). One is decided and not built: a busy process (0020).
 
+The following rows add P15 slice 1's code loading in `next/`.
+
+| Behavior | What OTP does | What we do | Same or differs |
+|---|---|---|---|
+| Load new code | Keeps current and old module versions; a fully qualified call enters the current version ([code loading](https://www.erlang.org/doc/system/code_loading.html)) | Select a checked hash only after folding `code.loaded`, then push it to that program's live processes. A first start takes the selection under the Project's turn and keeps that choice for retries. A saved checkpoint loads its own hash (`runtime/Code.ts`, `cloudflare/runtime.ts`, `cloudflare/index.ts`) | differs: each process keeps its own isolate by hash until its swap succeeds |
+| Change a live model | Suspend, call `code_change/3`, resume on success ([sys](https://www.erlang.org/doc/apps/stdlib/sys.html)) | The runner's permit holds the swap between turns. The named upgrade chain and new schema read the kept model; a refusal leaves this process on its old code. The existing supervisor saves unfinished swap work before the checkpoint and finishes its facts and whole view before another turn (`runtime/Runner.ts`, `runtime/internal/supervisor.ts`) | same purpose; a refusal is a durable `code.refused` fact |
+| Restart after a code change | A restarted child calls the module's current code ([supervisor][supref]) | An idle supervisor takes `swapped` with the new build, so a later crash restarts on that build (`runtime/internal/supervisor.ts`) | same; a refused process keeps its old build |
+
 Coming: [0016](../../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)
 makes Tier 1's supervision OTP's top-level supervisor, built by P34c. The rows above say what is on
 main today. [0018](../../../.decisions/0018-one-application-per-program.md) amends it: each program is its own

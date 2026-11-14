@@ -16,6 +16,7 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
+import { programs } from "virtual:fabrika-built";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
@@ -345,7 +346,8 @@ export const childProject = Effect.fnUntraced(function* () {
           describe: () =>
             remote(
               Effect.sync(() => ({
-                name: id.startsWith("child-") ? "p42/child" : "fabrika/counter",
+                // The loader keys an isolate by `<hash>/<process>`, so the hash says which program it holds.
+                name: id.startsWith(`${programs["p42/child"]?.hash}/`) ? "p42/child" : "fabrika/counter",
                 v: 1,
                 writes: {},
                 inputs: { inc: { write: true, personOnly: false } },
@@ -378,6 +380,8 @@ export const childProject = Effect.fnUntraced(function* () {
     configured,
     recorded,
     legacyDescriptors: () => sql.exec("ALTER TABLE dev_descriptors DROP COLUMN pending"),
+    /** How many starts the Project has saved and not yet delivered to their objects. */
+    undelivered: () => sql.exec("SELECT process FROM dev_descriptors WHERE pending>0").length,
     monitor: (watcher: string, target: string, ref: string) =>
       ProcessManager.use((manager) => manager.monitor(ref, target, from)).pipe(
         Effect.provide(

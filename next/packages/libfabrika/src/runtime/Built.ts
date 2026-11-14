@@ -36,7 +36,13 @@ export const hash = Effect.fn("build.hash")((text: string) =>
   ),
 );
 
-const Hash = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/));
+/**
+ * Schema for a code hash: 64 lowercase hex characters, the form `hash` returns.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const Hash = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/));
 
 // A decoded value's hash must be its text's own: one program's hash beside another's source fails.
 const hashed = <S extends Schema.Struct<{ readonly hash: typeof Hash }>>(

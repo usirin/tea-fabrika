@@ -56,13 +56,20 @@ export type Placed = typeof Placed.Type;
 
 /**
  * Schema for the only events the runtime writes to a process's stream: a step it installed, a
- * Cmd's answer it saved there, and an upgrade it ran on saved state. A program never writes any of
- * them.
+ * Cmd's answer it saved there, an upgrade it ran on saved state, and a code change it made or
+ * refused. A program never writes any of them.
  *
  * @stability unstable
  * @category schemas
  */
 export const RuntimeRecord = Schema.TaggedUnion({
+  "code.swapped": { program: Schema.NonEmptyString, hash: Schema.NonEmptyString, was: Schema.NonEmptyString },
+  "code.refused": {
+    program: Schema.NonEmptyString,
+    hash: Schema.NonEmptyString,
+    was: Schema.NonEmptyString,
+    reason: Schema.Literals(["shape", "newer", "load"]),
+  },
   "cmd.answered": { m: Schema.Json, cmd: Schema.NonEmptyString, build: Schema.NonEmptyString },
   stepped: { input: Schema.NonEmptyString, pos: Rev, build: Schema.NonEmptyString },
   "state.upgraded": {

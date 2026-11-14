@@ -15,13 +15,22 @@ import { HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess } from "effect/process";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
+import { Installed, type Install } from "../../runtime/Code.ts";
+import type { CodeEvent } from "../../runtime/Code.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
 import { ControlPlugin } from "./ControlPlugin.ts";
 import { devRecording } from "./dev-recording.ts";
 import { address, devLife, latest, pending, target } from "./DevLife.ts";
 import { brainOutbox, checkMemory } from "./local-dev.ts";
 
-class ControlError extends Schema.TaggedError<ControlError>()("ControlError", {
+/**
+ * Error for a call on the local runtime that failed: its `reason` names how, such as `offline`,
+ * `unreachable`, `bad_row`, `start_timeout` or `install`.
+ *
+ * @stability unstable
+ * @category errors
+ */
+export class ControlError extends Schema.TaggedError<ControlError>()("ControlError", {
   reason: Schema.String,
   /** The failure this error translates, kept in memory for diagnosis. */
   cause: Schema.optional(Schema.Defect()),
@@ -434,6 +443,17 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
   const binding = (target: Target, project: string, name = "") =>
     proxy((method, args) => call(target, project, name, method, args), {});
   return {
+    recording,
+    install: (code: Install): Effect.Effect<Installed, ControlError> =>
+      recorded(
+        call("project", config.name, "", "codeInstall", [code]).pipe(
+          Effect.flatMap(Schema.decodeUnknownEffect(Installed)),
+        ),
+      ).pipe(Effect.mapError((cause) => new ControlError({ reason: "install", cause }))),
+    failed: (fact: (typeof CodeEvent.cases)["code.failed"]["Type"]): Effect.Effect<void, ControlError> =>
+      recorded(call("project", config.name, "", "codeFailed", [fact]).pipe(Effect.asVoid)).pipe(
+        Effect.mapError((cause) => new ControlError({ reason: "install", cause })),
+      ),
     url: `http://127.0.0.1:${config.port}`,
     project: (project: string) =>
       proxy((method, args) => call("project", project, "", method === "connect" ? "clientConnect" : method, args), {

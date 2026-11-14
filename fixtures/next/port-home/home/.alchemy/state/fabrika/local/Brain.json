@@ -2,7 +2,7 @@
   "status": "created",
   "fqn": "Brain",
   "logicalId": "Brain",
-  "instanceId": "7855e7f0d24f7d9f1e40626835e252b0",
+  "instanceId": "605f14473e79f24bb732d2cec91aaf04",
   "resourceType": "Cloudflare.Worker",
   "props": {
     "name": "port-home",
@@ -16,7 +16,7 @@
     },
     "dev": {
       "host": "127.0.0.1",
-      "port": 24109,
+      "port": 24683,
       "strictPort": true
     },
     "env": {
@@ -35,6 +35,11 @@
         "name": "Connection",
         "className": "Connection"
       },
+      "Connection": {
+        "kind": "Cloudflare.DurableObject",
+        "name": "Connection",
+        "className": "Connection"
+      },
       "RECORD": {
         "kind": "Cloudflare.DurableObject",
         "name": "RecordPart",
@@ -46,7 +51,7 @@
         "className": "RecordPart"
       },
       "MEASUREMENTS": {
-        "bucketName": "dev:7ae131a3-5adb-4894-bd69-3d321a901a7f",
+        "bucketName": "dev:9098795a-d95d-454e-a194-721eb187a490",
         "storageClass": "Standard",
         "jurisdiction": "default",
         "accountId": "00000000000000000000000000000000",
@@ -54,16 +59,16 @@
         "lifecycleRules": [],
         "cors": []
       },
-      "INSTANCE": "{\"settings\":{\"values\":{\"instance.port\":24109,\"fabrika-version\":\"0.0.0\",\"gateway.limit\":100000,\"gateway.window\":60000,\"desktop.brain-throttle\":2,\"desktop.brain-poll\":100,\"desktop.brain-start-timeout\":60000,\"desktop.brain-stop-timeout\":5000,\"desktop.link-ttl\":60000},\"origins\":{\"instance.port\":{\"_tag\":\"flag\",\"name\":\"--instance.port\"},\"fabrika-version\":{\"_tag\":\"default\"},\"gateway.limit\":{\"_tag\":\"flag\",\"name\":\"--gateway.limit\"},\"gateway.window\":{\"_tag\":\"flag\",\"name\":\"--gateway.window\"},\"desktop.brain-throttle\":{\"_tag\":\"default\"},\"desktop.brain-poll\":{\"_tag\":\"default\"},\"desktop.brain-start-timeout\":{\"_tag\":\"default\"},\"desktop.brain-stop-timeout\":{\"_tag\":\"default\"},\"desktop.link-ttl\":{\"_tag\":\"default\"}},\"hash\":\"24007941fb0f4323eaaafcdcfd6d988cf619ff7547dbc5f54f76ead11665d5a2\"},\"start\":\"process_01m7ccwwndf3qa4het73knqnhy\",\"build\":\"ea83d82ac6871323dc8d02bc0bb5cc86d78aae8e490bdb74c4cee79f884b768e\",\"repo\":null,\"founding\":{\"person\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"founder\":\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMVwy4GQL+573VjbmmU3DUGPXw01bp+8jH3Cep3fwsqZ\",\"window\":\"xXDLgZAv7nvdWNuaZTcNQY9fDTVun7yMfcJ6nd_Cypk\"},\"name\":\"port-home\",\"origin\":{\"by\":\"instance:process_01m7ccwwndf3qa4het73knqnhy\",\"for\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"sentAt\":\"2026-11-14T06:46:10.861Z\",\"seen\":0,\"parent\":null,\"traceId\":\"47d49e7c862f05b36813e593a04f6ce3\"}}"
+      "INSTANCE": "{\"settings\":{\"values\":{\"instance.port\":24683,\"fabrika-version\":\"0.0.0\",\"gateway.limit\":100000,\"gateway.window\":60000,\"desktop.brain-throttle\":2,\"desktop.brain-poll\":100,\"desktop.brain-start-timeout\":60000,\"desktop.brain-stop-timeout\":5000,\"desktop.link-ttl\":60000},\"origins\":{\"instance.port\":{\"_tag\":\"flag\",\"name\":\"--instance.port\"},\"fabrika-version\":{\"_tag\":\"default\"},\"gateway.limit\":{\"_tag\":\"flag\",\"name\":\"--gateway.limit\"},\"gateway.window\":{\"_tag\":\"flag\",\"name\":\"--gateway.window\"},\"desktop.brain-throttle\":{\"_tag\":\"default\"},\"desktop.brain-poll\":{\"_tag\":\"default\"},\"desktop.brain-start-timeout\":{\"_tag\":\"default\"},\"desktop.brain-stop-timeout\":{\"_tag\":\"default\"},\"desktop.link-ttl\":{\"_tag\":\"default\"}},\"hash\":\"f360cc796d2ebea54568780461e35183558dfff192be4218a07d2794560c5701\"},\"start\":\"process_01m7d9vbbefpptantwr0c9mzz0\",\"build\":\"3a66a10b35ed418bede3938ddb7c01148202dc54e336782ca38cae6404283c73\",\"repo\":null,\"founding\":{\"person\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"founder\":\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQcgBfMvyfxZjqg0tC5jAj9x5hiL3USTpnE9VNcGm6h\",\"window\":\"FByAF8y_J_FmOqDS0LmMCP3HmGIvdRJOmcT1U1wabqE\"},\"name\":\"port-home\",\"origin\":{\"by\":\"instance:process_01m7d9vbbefpptantwr0c9mzz0\",\"for\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"sentAt\":\"2026-11-14T15:12:09.070Z\",\"seen\":0,\"parent\":null,\"traceId\":\"a1ae752ff115c29cd8c4313262bf4f25\"}}"
     },
     "isExternal": true
   },
   "attr": {
     "workerId": "dev:port-home",
     "workerName": "port-home",
-    "url": "http://localhost:24109",
+    "url": "http://localhost:24683",
     "urls": [
-      "http://localhost:24109"
+      "http://localhost:24683"
     ],
     "tags": [],
     "durableObjectNamespaces": {
@@ -90,13 +95,25 @@
       }
     },
     {
+      "sid": "Connection",
+      "data": {
+        "bindings": [
+          {
+            "type": "durable_object_namespace",
+            "name": "Connection",
+            "className": "Connection"
+          }
+        ]
+      }
+    },
+    {
       "sid": "INSTANCE",
       "data": {
         "bindings": [
           {
             "type": "plain_text",
             "name": "INSTANCE",
-            "text": "{\"settings\":{\"values\":{\"instance.port\":24109,\"fabrika-version\":\"0.0.0\",\"gateway.limit\":100000,\"gateway.window\":60000,\"desktop.brain-throttle\":2,\"desktop.brain-poll\":100,\"desktop.brain-start-timeout\":60000,\"desktop.brain-stop-timeout\":5000,\"desktop.link-ttl\":60000},\"origins\":{\"instance.port\":{\"_tag\":\"flag\",\"name\":\"--instance.port\"},\"fabrika-version\":{\"_tag\":\"default\"},\"gateway.limit\":{\"_tag\":\"flag\",\"name\":\"--gateway.limit\"},\"gateway.window\":{\"_tag\":\"flag\",\"name\":\"--gateway.window\"},\"desktop.brain-throttle\":{\"_tag\":\"default\"},\"desktop.brain-poll\":{\"_tag\":\"default\"},\"desktop.brain-start-timeout\":{\"_tag\":\"default\"},\"desktop.brain-stop-timeout\":{\"_tag\":\"default\"},\"desktop.link-ttl\":{\"_tag\":\"default\"}},\"hash\":\"24007941fb0f4323eaaafcdcfd6d988cf619ff7547dbc5f54f76ead11665d5a2\"},\"start\":\"process_01m7ccwwndf3qa4het73knqnhy\",\"build\":\"ea83d82ac6871323dc8d02bc0bb5cc86d78aae8e490bdb74c4cee79f884b768e\",\"repo\":null,\"founding\":{\"person\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"founder\":\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMVwy4GQL+573VjbmmU3DUGPXw01bp+8jH3Cep3fwsqZ\",\"window\":\"xXDLgZAv7nvdWNuaZTcNQY9fDTVun7yMfcJ6nd_Cypk\"},\"name\":\"port-home\",\"origin\":{\"by\":\"instance:process_01m7ccwwndf3qa4het73knqnhy\",\"for\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"sentAt\":\"2026-11-14T06:46:10.861Z\",\"seen\":0,\"parent\":null,\"traceId\":\"47d49e7c862f05b36813e593a04f6ce3\"}}"
+            "text": "{\"settings\":{\"values\":{\"instance.port\":24683,\"fabrika-version\":\"0.0.0\",\"gateway.limit\":100000,\"gateway.window\":60000,\"desktop.brain-throttle\":2,\"desktop.brain-poll\":100,\"desktop.brain-start-timeout\":60000,\"desktop.brain-stop-timeout\":5000,\"desktop.link-ttl\":60000},\"origins\":{\"instance.port\":{\"_tag\":\"flag\",\"name\":\"--instance.port\"},\"fabrika-version\":{\"_tag\":\"default\"},\"gateway.limit\":{\"_tag\":\"flag\",\"name\":\"--gateway.limit\"},\"gateway.window\":{\"_tag\":\"flag\",\"name\":\"--gateway.window\"},\"desktop.brain-throttle\":{\"_tag\":\"default\"},\"desktop.brain-poll\":{\"_tag\":\"default\"},\"desktop.brain-start-timeout\":{\"_tag\":\"default\"},\"desktop.brain-stop-timeout\":{\"_tag\":\"default\"},\"desktop.link-ttl\":{\"_tag\":\"default\"}},\"hash\":\"f360cc796d2ebea54568780461e35183558dfff192be4218a07d2794560c5701\"},\"start\":\"process_01m7d9vbbefpptantwr0c9mzz0\",\"build\":\"3a66a10b35ed418bede3938ddb7c01148202dc54e336782ca38cae6404283c73\",\"repo\":null,\"founding\":{\"person\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"founder\":\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQcgBfMvyfxZjqg0tC5jAj9x5hiL3USTpnE9VNcGm6h\",\"window\":\"FByAF8y_J_FmOqDS0LmMCP3HmGIvdRJOmcT1U1wabqE\"},\"name\":\"port-home\",\"origin\":{\"by\":\"instance:process_01m7d9vbbefpptantwr0c9mzz0\",\"for\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"sentAt\":\"2026-11-14T15:12:09.070Z\",\"seen\":0,\"parent\":null,\"traceId\":\"a1ae752ff115c29cd8c4313262bf4f25\"}}"
           }
         ]
       }
@@ -119,7 +136,7 @@
           {
             "type": "r2_bucket",
             "name": "MEASUREMENTS",
-            "bucketName": "dev:7ae131a3-5adb-4894-bd69-3d321a901a7f"
+            "bucketName": "dev:9098795a-d95d-454e-a194-721eb187a490"
           }
         ]
       }

@@ -65,6 +65,7 @@ const projectObject = (ctx: DurableObjectState, env: Env) => {
     grant: (input: unknown) => run((p) => p.grant(input)),
     start: (...args: Parameters<ProjectCalls["start"]>) => run((p) => p.start(...args)),
     read: (...args: Parameters<ProjectCalls["read"]>) => run((p) => p.read(...args)),
+    code: (...args: Parameters<ProjectCalls["code"]>) => run((p) => p.code(...args)),
     wait: (...args: Parameters<ProjectCalls["wait"]>) => run((p) => p.wait(...args)),
     append: (...args: Parameters<ProjectCalls["append"]>) => run((p) => p.append(...args)),
     mail: (...args: Parameters<ProjectCalls["mail"]>) => run((p) => p.mail(...args)),
@@ -122,6 +123,17 @@ const processObject = (ctx: DurableObjectState, env: Env) => {
 };
 
 type ProcessObject = ReturnType<typeof processObject>;
+
+const built = (source: string) => ({ hash: createHash("sha256").update(source).digest("hex"), source });
+const counterCode = built("counter");
+const checklistCode = built("checklist");
+const approvalCode = built("approvals");
+const poisonCode = built("poison");
+const requesterCode = built("requester");
+const responderCode = built("responder");
+
+/** A call on a Durable Object stub rejected. */
+class StubFailure extends Schema.TaggedError<StubFailure>()("StubFailure", { cause: Schema.Defect() }) {}
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-08T04:00:00.000Z";
@@ -190,7 +202,7 @@ const caused = (parent: string) =>
   write({ stream: "events", write: { _tag: "caused", parent, event: { _tag: "answered" } } });
 
 const approvals = {
-  name: "approvals",
+  name: "p12/approvals",
   machine: Machine.make({
     model: Model,
     msg: Msg,
@@ -285,7 +297,7 @@ const mailRequester = (config: { readonly self: string; readonly peer: string })
     },
   });
   return Program.make({
-    name: `requester-${config.self}`,
+    name: `p41/requester-${config.self.replaceAll(":", "-")}`,
     machine,
     state: { v: 1, upgrades: [] },
     view: (s) => s,
@@ -338,7 +350,7 @@ const machine = Machine.make({
 
 /** @internal */
 const mailResponder = Program.make({
-  name: "responder",
+  name: "p41/responder",
   machine,
   state: { v: 1, upgrades: [] },
   view: (s) => s,
@@ -403,7 +415,7 @@ const PoisonMsg = Schema.Union([
 ]);
 
 const poisonProgram = (limit: number | null) => ({
-  name: "poison",
+  name: "p34/poison-fixture",
   ...(limit === null ? {} : { maxDeliveries: limit }),
   machine: Machine.make({
     model: PoisonModel,
@@ -459,12 +471,12 @@ const world = (
   settingsCounts = { calls: 0, reads: 0, appends: 0 },
 ) => {
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
-  table.programs["fabrika/counter"] = { hash: "counter-a", source: "counter" };
-  table.programs["fabrika/checklist"] = { hash: "checklist-a", source: "checklist" };
-  table.programs.approvals = { hash: "approvals-a", source: "approvals" };
-  table.programs.poison = { hash: "poison-a", source: "poison" };
-  table.programs[requestProgram.name] = { hash: "requester-a", source: "requester" };
-  table.programs[mailResponder.name] = { hash: "responder-a", source: "responder" };
+  table.programs["fabrika/counter"] = counterCode;
+  table.programs["fabrika/checklist"] = checklistCode;
+  table.programs["p12/approvals"] = approvalCode;
+  table.programs["p34/poison-fixture"] = poisonCode;
+  table.programs[requestProgram.name] = requesterCode;
+  table.programs[mailResponder.name] = responderCode;
   const key = identity(),
     db = new DatabaseSync(":memory:");
   const handles = storage(db);
@@ -718,16 +730,15 @@ const world = (
     LOADER: {
       get: (id: string) => ({
         getEntrypoint: () => {
-          if (id.startsWith("poison-") || id.startsWith("requester-") || id.startsWith("responder-")) {
+          const requester = id.startsWith(`${requesterCode.hash}/`),
+            responder = id.startsWith(`${responderCode.hash}/`);
+
+          if (id.startsWith(`${poisonCode.hash}/`) || requester || responder) {
             // The real box: its declaration carries the program's own maxDeliveries.
-            const program = id.startsWith("requester-")
-              ? requestProgram
-              : id.startsWith("responder-")
-                ? mailResponder
-                : poisonProgram(flow.limit);
+            const program = requester ? requestProgram : responder ? mailResponder : poisonProgram(flow.limit);
             const Box = programBox(
               program,
-              id.startsWith("requester-") ? "requester-a" : id.startsWith("responder-") ? "responder-a" : "poison-a",
+              requester ? requesterCode.hash : responder ? responderCode.hash : poisonCode.hash,
             );
             const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
             return {
@@ -759,12 +770,12 @@ const world = (
             };
           }
 
-          if (id.startsWith("checklist-")) {
-            const Box = programBox(checklist, "checklist-a");
+          if (id.startsWith(`${checklistCode.hash}/`)) {
+            const Box = programBox(checklist, checklistCode.hash);
             return Reflect.construct(Box, []);
           }
 
-          const approval = id.startsWith("approvals-"),
+          const approval = id.startsWith(`${approvalCode.hash}/`),
             program = approval ? approvals : counter,
             execution = nodeExecution(program);
           return {
@@ -935,7 +946,7 @@ const world = (
             name: `${role}:1`,
             code: {
               program: role === "requester" ? requestProgram.name : mailResponder.name,
-              hash: `${role}-a`,
+              hash: role === "requester" ? requesterCode.hash : responderCode.hash,
             },
           }),
           {
@@ -951,15 +962,18 @@ const world = (
       ).process,
     startPoison: async (name: string) =>
       (
-        await project.start(Start.cases.first.make({ id: name, name, code: { program: "poison", hash: "poison-a" } }), {
-          by: key.fingerprint,
-          for: PERSON,
-          sentAt: SENT,
-          seen: 0,
-          parent: null,
-          traceId: TRACE,
-          build: "brain-test",
-        })
+        await project.start(
+          Start.cases.first.make({ id: name, name, code: { program: "p34/poison-fixture", hash: poisonCode.hash } }),
+          {
+            by: key.fingerprint,
+            for: PERSON,
+            sentAt: SENT,
+            seen: 0,
+            parent: null,
+            traceId: TRACE,
+            build: "brain-test",
+          },
+        )
       ).process,
     interrupt: async () => {
       await project.runtime.dispose();
@@ -967,7 +981,7 @@ const world = (
     },
     reopen: async () => {
       await project.runtime.dispose();
-      table.programs["fabrika/counter"] = { hash: "counter-b", source: "changed counter" };
+      table.programs["fabrika/counter"] = built("changed counter");
       project = projectObject(ctx, env);
       return project.info();
     },
@@ -1000,7 +1014,7 @@ const world = (
         Start.cases.first.make({
           id: "approvals:1",
           name: "approvals:1",
-          code: { program: "approvals", hash: "approvals-a" },
+          code: { program: "p12/approvals", hash: approvalCode.hash },
         }),
         {
           by: key.fingerprint,
@@ -1125,7 +1139,10 @@ StartsTest.law(
           count++;
           expect(yield* Effect.promise(() => owner.object.open("settings-audit"))).toMatchObject({ view: { count } });
         } else if (move === "successor") {
-          yield* Effect.promise(() => owner.object.restart({ id: `settings-restart-${index}`, build: "counter-a" }));
+          yield* Effect.tryPromise({
+            try: () => owner.object.restart({ id: `settings-restart-${index}`, build: counterCode.hash }),
+            catch: (cause) => new StubFailure({ cause }),
+          });
           const rows = yield* Effect.promise(() => w.project.info());
           const successor = rows.find((row) => row.name === first!.name)!;
           expect(successor.process).not.toBe(pid);
@@ -1425,12 +1442,12 @@ const runFlow = async (flow: RecoveryFlow) => {
     dead.map((process) => ({
       _tag: "dead",
       process,
-      program: "poison",
+      program: "p34/poison-fixture",
       name: NAME,
       tries: limit,
       limit,
       m: letter,
-      build: "poison-a",
+      build: poisonCode.hash,
       errors: Array.from({ length: limit }, () => "TypeError"),
       // The brain writes the row; `asked` keeps the key that asked for it (process-manager.ts).
       asked: expect.stringMatching(/^SHA256:/),
@@ -1528,7 +1545,7 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
         });
         // A trusted restart with a generated request ID, asked twice: one replacement.
         const before = (await restarts()).length;
-        const request = { id: `r${flow.restart}`, build: "poison-a" };
+        const request = { id: `r${flow.restart}`, build: poisonCode.hash };
         const object = w.process(current).object;
         await Reflect.apply(Reflect.get(object, "restart"), object, [request]);
         await Reflect.apply(Reflect.get(object, "restart"), object, [request]);
@@ -1548,7 +1565,7 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
         // that checked refusal crosses the Project RPC and stays a ProcessError.
         const reused = await w
           .process(String(next))
-          .object.restart({ id: NAME, build: "poison-a" })
+          .object.restart({ id: NAME, build: poisonCode.hash })
           .then(
             () => ({ answer: "ok" }),
             (error: unknown) => ({ error }),
