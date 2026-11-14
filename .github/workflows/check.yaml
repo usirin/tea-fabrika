@@ -37,6 +37,9 @@ jobs:
   # and on a push to main; unknown paths run the rest. History that cannot be read runs everything.
   # Today's own checks (its tests, e2e, the promises gate and the build) start only when a file of
   # today's version changed, on every event: the `today`, `e2e` and `build` outputs (0175).
+  # A change only to experiments/ runs check alone, and one only to .agents/skills/ skips next:
+  # no next/ test reads either. experiments/177-themes/schemes/, which a test reads, runs as an
+  # unknown path does.
   # These small checks still run when pnpm setup and the heavy jobs skip.
   changes:
     runs-on: ubuntu-latest
@@ -161,7 +164,8 @@ jobs:
 
   # `pnpm typecheck` alone, beside check (0133): it starts at once, a red typecheck no longer hides
   # lint's answer, and a lane reads this one job's conclusion for its head the moment it ends
-  # (chain.ts's `typechecking` phase). It runs where check runs: changes gives it check's flag.
+  # (chain.ts's `typechecking` phase). It runs where check runs, less a change only to
+  # experiments/, which the root tsconfig leaves out.
   typecheck:
     needs: changes
     if: >-

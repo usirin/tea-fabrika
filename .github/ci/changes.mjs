@@ -53,6 +53,22 @@ const old = (path) => trees.some((tree) => path.startsWith(tree)) && !path.start
 const quiet = (path) => safe(path) || prose(path);
 
 /**
+ * A file under .agents/skills/: no next/ test reads one. Today's only file there that is no script
+ * and no prose, the lead's gc.plist, is read by the lead's tooling tests, so it still starts test.
+ * @param {string} path
+ */
+const skill = (path) => path.startsWith(".agents/skills/");
+
+/** The one experiments folder a test reads: apps/fabrika/src/pipes.test.ts reads its color scheme. */
+const read = ["experiments/177-themes/schemes/"];
+
+/**
+ * A file under experiments/ that no test reads and CI does not type-check, so only lint reads it.
+ * @param {string} path
+ */
+const experiment = (path) => path.startsWith("experiments/") && !read.some((folder) => path.startsWith(folder));
+
+/**
  * A file of today's version: its trees, the design package today's app imports, and the toy
  * projects its tests read. Only these start today's own checks (0175): its tests, e2e and build.
  * A file that reruns every test, such as the lockfile or a root config, is not one.
@@ -91,14 +107,15 @@ export const classify = (paths, event) => {
     return { ...all, today: touched, e2e: touched, field: paths.some(rows) };
   }
 
-  // The typecheck is its own job so it answers at once, beside lint and build; it reads the same
-  // paths as check, so it runs where check runs.
-  const check = !paths.every(quiet);
+  // The typecheck is its own job so it answers at once, beside lint and build. It reads what check
+  // reads, less the experiments, which the root tsconfig leaves out.
   return {
-    check,
-    typecheck: check,
-    test: !paths.every((path) => quiet(path) || (path.startsWith("next/") && path !== helper && path !== commits)),
-    next: !paths.every((path) => quiet(path) || script(path) || old(path)),
+    check: !paths.every(quiet),
+    typecheck: !paths.every((path) => quiet(path) || experiment(path)),
+    test: !paths.every(
+      (path) => quiet(path) || experiment(path) || (path.startsWith("next/") && path !== helper && path !== commits),
+    ),
+    next: !paths.every((path) => quiet(path) || script(path) || old(path) || experiment(path) || skill(path)),
     e2e: touched,
     field: paths.some(rows),
     today: touched,
