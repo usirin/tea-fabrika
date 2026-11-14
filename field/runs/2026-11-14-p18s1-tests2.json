@@ -10,7 +10,7 @@
   "role": "tests",
   "model": "claude-opus-5-5",
   "effort": null,
-  "outcome": null,
+  "outcome": "pass",
   "why": "P18 slice 1 tests Claude Code subagent transcript: 142 model calls; tokens in 290 uncached, 0 5-minute and 553,748 1-hour cache writes, 26,959,448 cache reads; out 98,220. Dollars are list price (https://platform.claude.com/docs/en/about-claude/pricing, read 2026-11-08). Billing `subscription` as the caller gave it; the transcript does not record it.",
   "tokens": 299906,
   "tools": 167,
