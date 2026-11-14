@@ -34,7 +34,7 @@ it("vector: L5 known next timings are the median of three runs, or the larger of
   }
 });
 
-it("scenario: L6 the five measured heaviest next files occupy the five vitest machines with bounded loads", () => {
+it("scenario: L6 the five measured heaviest next files occupy the five vitest machines with bounded loads", async () => {
   // Today's CI: the real table, the real file set and the workflow's own count of vitest machines,
   // since the law is about today's split. The names are the five heaviest by the rows of runs
   // 43544589151, 43551626086 and 43556494864. The sixth heaviest shares a machine with the fifth.
@@ -51,7 +51,7 @@ it("scenario: L6 the five measured heaviest next files occupy the five vitest ma
   ];
   const machines = vitestLegs(readFileSync(join(import.meta.dirname, ".github/workflows/check.yaml"), "utf8")).length;
   expect(machines).toBe(heaviest.length);
-  const files = nextFiles(import.meta.dirname).map((path) => ({ path, seconds: measured[path] ?? 1 }));
+  const files = (await nextFiles(import.meta.dirname)).map((path) => ({ path, seconds: measured[path] ?? 1 }));
   const placed = assign(files, machines);
   expect(new Set(heaviest.map((path) => placed[files.findIndex((file) => file.path === path)]))).toHaveLength(machines);
   const loads = Array.from({ length: machines }, (_, machine) =>

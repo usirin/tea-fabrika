@@ -44,7 +44,7 @@ it("L2: missing rows are exactly absent own keys, sorted in either input order",
 it("scenario: L3 the real config finds TSX tests and excludes e2e, node_modules and dist", async () => {
   // This law is about the file set selected by today's real Vitest config. No .tsx test is left
   // under next/ in the repo, so the scratch folder's view.test.tsx holds that case.
-  const files = nextFiles(root);
+  const files = await nextFiles(root);
   expect(files.length).toBeGreaterThan(0);
   expect(files.every((path) => !/(?:^|\/)(?:e2e|node_modules|dist)\//.test(path))).toBe(true);
   const folder = mkdtempSync(join(tmpdir(), "t890-files-"));
@@ -73,7 +73,7 @@ it("scenario: L3 the real config finds TSX tests and excludes e2e, node_modules 
       const actual = (await vitest.globTestSpecifications())
         .map((spec) => relative(vitest.config.root, spec.moduleId))
         .toSorted();
-      expect(nextFiles(folder)).toEqual(actual);
+      expect(await nextFiles(folder)).toEqual(actual);
       expect(actual).toEqual(selected);
     } finally {
       await vitest.close();
@@ -86,13 +86,88 @@ it("scenario: L3 the real config finds TSX tests and excludes e2e, node_modules 
     testConfig.test.include.push("next/extra/*.test.tsx");
 
     try {
-      expect(nextFiles(folder)).toEqual([...selected, added].toSorted());
+      expect(await nextFiles(folder)).toEqual([...selected, added].toSorted());
     } finally {
       testConfig.test.include.pop();
     }
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
+});
+
+// Generated paths under the three next/ include roots. A folder or file name may start with a dot
+// or end in `.git`, and a folder may be one the config or Vitest's defaults exclude, so the dot
+// rules and every exclude meet in one walk. fast-check supplies the paths; no domain schema fits.
+const segment = fc.oneof(
+  fc.stringMatching(/^\.?[a-z]{1,4}(?:\.git)?$/),
+  fc.constantFrom("e2e", "dist", "node_modules", ".git"),
+);
+
+const testPath = fc
+  .tuple(
+    fc.constantFrom("next/apps", "next/packages", "next/programs"),
+    segment,
+    fc.constantFrom("src", "e2e", ".src"),
+    fc.array(segment, { maxLength: 2 }),
+    fc.stringMatching(/^\.?[a-z]{1,4}$/),
+    fc.constantFrom(".test.ts", ".test.tsx", ".ts"),
+  )
+  .map(([top, name, src, folders, file, end]) => [top, name, src, ...folders, file + end].join("/"));
+
+// L3, the class: the file set is Vitest's own selection on any tree, and a new exclude in the
+// config is read on every call. Plants, each run once on shard-rows.ts and restored: the reviewed
+// `node:fs` globSync, which skips dot folders and dot files (red, `next/apps/a/src/.a.test.ts`
+// lost); read the excludes once at load, so the pushed exclude is ignored (red).
+// Each run gets its own folder and its own Vitest: one Vitest reused over a changed tree kept its
+// first selection, so a reused one is no reference.
+it("L3: next files equal Vitest's own selection on generated trees, new excludes included", async () => {
+  await fc.assert(
+    fc.asyncProperty(fc.uniqueArray(testPath, { minLength: 1, maxLength: 8 }), fc.nat(), async (paths, pick) => {
+      const folder = mkdtempSync(join(tmpdir(), "t890-dots-"));
+
+      try {
+        for (const path of paths) {
+          mkdirSync(dirname(join(folder, path)), { recursive: true });
+          writeFileSync(join(folder, path), "");
+        }
+
+        const vitest = await createVitest("test", {
+          root: folder,
+          config: false,
+          watch: false,
+          include: testConfig.test.include,
+          exclude: testConfig.test.exclude,
+        });
+        let selected: string[];
+
+        try {
+          selected = (await vitest.globTestSpecifications())
+            .map((spec) => relative(vitest.config.root, spec.moduleId))
+            .toSorted();
+        } finally {
+          await vitest.close();
+        }
+
+        expect(await nextFiles(folder)).toEqual(selected);
+
+        // A new exclude is picked up: exclude one selected file by its own path.
+        const gone = selected[pick % Math.max(selected.length, 1)];
+
+        if (gone !== undefined) {
+          testConfig.test.exclude.push(gone);
+
+          try {
+            expect(await nextFiles(folder)).toEqual(selected.filter((path) => path !== gone));
+          } finally {
+            testConfig.test.exclude.pop();
+          }
+        }
+      } finally {
+        rmSync(folder, { recursive: true, force: true });
+      }
+    }),
+    options,
+  );
 });
 
 // L4. Plants, each run once on shard-rows.ts and restored: exit 0 always (red); print only the
@@ -118,9 +193,9 @@ it("format: L4 one diagnostic per missing path, exit 1 for missing rows and 0 ot
   );
 });
 
-it("scenario: L4 the Node entry passes the real table and file set to the reporter", () => {
+it("scenario: L4 the Node entry passes the real table and file set to the reporter", async () => {
   // Spawn the real CLI so import.meta.main and its exit status are covered too.
-  const missing = unmeasured(measured, nextFiles(root));
+  const missing = unmeasured(measured, await nextFiles(root));
   const result = spawnSync(process.execPath, [".github/ci/shard-rows.ts"], { cwd: root, encoding: "utf8" });
   expect(result.error).toBeUndefined();
   expect(result.status).toBe(missing.length === 0 ? 0 : 1);

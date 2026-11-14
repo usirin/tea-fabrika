@@ -1,6 +1,7 @@
 // Today's CI, about next/'s test files.
-import { globSync } from "node:fs";
+import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createVitest } from "vitest/node";
 import { testConfig } from "../../vitest.config.ts";
 import { measured } from "../../vitest.shards.ts";
 
@@ -8,15 +9,28 @@ import { measured } from "../../vitest.shards.ts";
 export const unmeasured = (table: Readonly<Record<string, number>>, files: readonly string[]): string[] =>
   files.filter((path) => !Object.hasOwn(table, path)).toSorted();
 
-/** Use the same next/ includes and excludes as Vitest. */
-export const nextFiles = (root: string): string[] =>
-  globSync(
-    testConfig.test.include.filter((glob) => glob.startsWith("next/")),
-    {
-      cwd: root,
-      exclude: testConfig.test.exclude,
-    },
-  ).toSorted();
+/**
+ * next/'s test files as Vitest itself selects them, from the config's next/ includes and every
+ * exclude, read on each call. A glob of our own drifted from Vitest's twice (`dist`, then dot
+ * folders), so Vitest does the selecting.
+ */
+export const nextFiles = async (root: string): Promise<string[]> => {
+  const vitest = await createVitest("test", {
+    root,
+    config: false,
+    watch: false,
+    include: testConfig.test.include.filter((glob) => glob.startsWith("next/")),
+    exclude: [...testConfig.test.exclude],
+  });
+
+  try {
+    return (await vitest.globTestSpecifications())
+      .map((spec) => relative(vitest.config.root, spec.moduleId))
+      .toSorted();
+  } finally {
+    await vitest.close();
+  }
+};
 
 /** Write the lint diagnostic for each missing file and return its exit code. */
 export const main = (missing: readonly string[], write: (line: string) => void): number => {
@@ -32,7 +46,6 @@ export const main = (missing: readonly string[], write: (line: string) => void):
 // exited 1; restored, it printed nothing and exited 0.
 // Under Vitest `import.meta.main` is false, so a test that imports this file never runs the check.
 if (import.meta.main) {
-  process.exitCode = main(unmeasured(measured, nextFiles(fileURLToPath(new URL("../../", import.meta.url)))), (line) =>
-    console.error(line),
-  );
+  const files = await nextFiles(fileURLToPath(new URL("../../", import.meta.url)));
+  process.exitCode = main(unmeasured(measured, files), (line) => console.error(line));
 }
