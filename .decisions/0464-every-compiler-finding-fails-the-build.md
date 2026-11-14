@@ -1,7 +1,7 @@
 ---
 id: 0464
 title: Every React Compiler and React rule finding fails the build in every repo, always, and the only exit is use no memo plus an owner-approved row in a ledger that only shrinks
-status: accepted
+status: amended-in-part by [0524](0524-no-list-lets-broken-code-pass.md)
 date: 2026-11-03
 tags: [react, compiler, lint, exam, next]
 ---
