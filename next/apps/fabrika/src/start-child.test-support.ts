@@ -113,9 +113,15 @@ const env = (key: string, value: string) =>
 /**
  * One real local instance with both test programs built in and `starts` as its start grants. Its
  * home, port, environment and instance are acquired in the caller's scope and given back with it.
+ * With `starts` undefined, the instance gets no start grants at all, as the app starts it. `extra`
+ * adds programs by name, each a module source that exports `program`; one named like an app
+ * program takes its place, as the app's `build` does.
  */
 export const childInstance = Effect.fnUntraced(
-  function* (starts: ReadonlyArray<{ readonly source: string; readonly to: string }>) {
+  function* (
+    starts: ReadonlyArray<{ readonly source: string; readonly to: string }> | undefined,
+    extra: Readonly<Record<string, string>> = {},
+  ) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     yield* env("DO_NOT_TRACK", "1");
@@ -125,9 +131,20 @@ export const childInstance = Effect.fnUntraced(
     yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
     yield* fs.writeFileString(path.join(home, "starter.ts"), starterSource);
     yield* fs.writeFileString(path.join(home, "child.ts"), childSource);
+    const added: Record<string, string> = {};
+
+    for (const [n, [name, source]] of Object.entries(extra).entries()) {
+      added[name] = path.join(home, `extra-${n}.ts`);
+      yield* fs.writeFileString(added[name], source);
+    }
+
     const built = yield* build({
       out: path.join(home, "dist"),
-      programs: { "p42/starter": path.join(home, "starter.ts"), "p42/child": path.join(home, "child.ts") },
+      programs: {
+        "p42/starter": path.join(home, "starter.ts"),
+        "p42/child": path.join(home, "child.ts"),
+        ...added,
+      },
     });
     const hashes = {
       starter: built.programs["p42/starter"]?.hash ?? "",
@@ -145,7 +162,7 @@ export const childInstance = Effect.fnUntraced(
         founder: key.line,
         window: key.raw,
         port: port.port,
-        starts,
+        ...(starts === undefined ? {} : { starts }),
       }),
     );
     const from: From = {
