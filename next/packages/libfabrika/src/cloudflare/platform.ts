@@ -5,7 +5,8 @@ import { Context, Effect, Predicate, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import type { ConnectionBinding, ProcessBinding, ProjectBinding } from "./bindings.ts";
-import type { RecordShape } from "./objects.ts";
+import type { ConnectionShape, RecordShape } from "./objects.ts";
+import { reach } from "./reach.ts";
 
 /**
  * Reads only call metadata, including workerd's prototype getters.
@@ -42,12 +43,14 @@ type Client<S> = {
 /** A rejected platform call. It keeps the thrown value as its cause (ticket 695), and its message keeps
  *  that value's class and text as `<class>: <text>`. Both stay in memory: a sink stores a typed
  *  failure's tag and reason only, and never puts its text in a tag. */
-const unreachable = (cause: unknown) =>
-  new LedgerError({
-    reason: "unreachable",
-    message: cause instanceof Error ? `${cause.name}: ${cause.message}` : `${typeof cause}: ${String(cause)}`,
-    cause,
-  });
+const thrown = (cause: unknown) =>
+  cause instanceof Error ? `${cause.name}: ${cause.message}` : `${typeof cause}: ${String(cause)}`;
+
+const unreachable = (cause: unknown) => new LedgerError({ reason: "unreachable", message: thrown(cause), cause });
+
+/** A call the typed stub could not make. Its RpcCallError is the cause, and the message names what
+ *  the platform threw inside it, in the form `unreachable` writes. */
+const lost = (cause: RpcCallError) => new LedgerError({ reason: "unreachable", message: thrown(cause.cause), cause });
 
 /** The thrown value behind an `unreachable` LedgerError, rebuilt from its message with its class as
  *  `name`, so a failed span names the class that was thrown; any other error stays as it is. */
@@ -241,19 +244,15 @@ export class GatewayClient extends Context.Service<
   Client<Omit<ConnectionBinding, keyof Rpc.DurableObjectBranded>>
 >()("@kampus/libfabrika/cloudflare/platform.GatewayClient") {
   static make(stub: ConnectionBinding): GatewayClient["Service"] {
+    // The object's own contract: a LedgerError it fails with crosses as itself.
+    const calls = makeRpcStub<Pick<ConnectionShape, "ring" | "notify" | "probe">>(stub, { errors: [LedgerError] });
     return {
       fetch: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Connection fetch RPC enters Effect
+        // oxlint-disable-next-line fabrika/no-promises -- edge: a request into the Connection object is the stub's own fetch, which no typed call carries
         Effect.tryPromise({ try: () => stub.fetch(...args), catch: unreachable }),
-      ring: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Connection ring RPC enters Effect
-        Effect.tryPromise({ try: () => stub.ring(...args), catch: unreachable }),
-      notify: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Connection notify RPC enters Effect
-        Effect.tryPromise({ try: () => stub.notify(...args), catch: unreachable }),
-      probe: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Connection probe RPC enters Effect
-        Effect.tryPromise({ try: () => stub.probe(...args), catch: unreachable }),
+      ring: (stream, rev) => reach(calls.ring(stream, rev), lost),
+      notify: (client, news) => reach(calls.notify(client, news), lost),
+      probe: (session) => reach(calls.probe(session), lost),
     };
   }
 }

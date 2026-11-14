@@ -8,7 +8,10 @@ Today's version does not change.
 written with Alchemy's Effect Durable Object model, a class that only names it plus a `.make()`
 Layer, not as a plain `cloudflare:workers` class. Only what the class is made of changes. The
 rule below stands: the logic is plain code behind a service, and it also runs on Node in tests.
-The port is tracker ticket 502 and is not built yet, so `brain.ts` still has the plain classes.
+The port is tracker ticket 502. `RecordPart` and `Connection` are built this way: each is one
+bridge line in `brain.ts`, and its Layer is a sibling file, such as `cloudflare/ConnectionObject.ts`,
+which builds the service with `ObjectService.make` and hands each slot and call to it. `Project`,
+`Process` and `Control` are still plain classes in `brain.ts`.
 
 ```ts
 // A sketch from 0041, not built yet. All the logic is in ProgramRunner, which also runs on Node.
