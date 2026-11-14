@@ -345,8 +345,6 @@ export const measured: Record<string, number> = {
   "next/packages/libfabrika/src/transport/SshsigWebauthn.test.ts": 0.6,
   "next/packages/libfabrika/src/transport/internal/binaryCryptoFailure.test.ts": 0.0,
   "next/packages/libfabrika/src/transport/internal/connection.test.ts": 1.8,
-  "next/packages/tuval/src/window/machine.model.laws.test.ts": 18.7,
-  "next/packages/tuval/src/window/main.laws.test.ts": 11.5,
   "next/programs/chaos/src/program.laws.test.ts": 1.5,
   "next/programs/checklist/src/client.laws.test.ts": 0.1,
   "next/programs/checklist/src/program.laws.test.ts": 0.2,
