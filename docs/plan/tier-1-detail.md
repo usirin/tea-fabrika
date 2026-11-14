@@ -509,7 +509,7 @@ const agentMay = ["initialize", "view.open", "window.msg:notes", "ledger.read", 
 
 **The SDK stays in the bridge.** `serveStdio` reads Node's `process`, so `@modelcontextprotocol/server` 2.4.0, already exact in the catalog, is a dependency of `@kampus/libfabrika` that only `./mcp` reaches. It never reaches the top level, the brain or the Worker, and a law checks those bytes. The SDK's async transport and `Effect.runPromiseWith` go on the exam's edge list by name.
 
-**One headless client, shared with the drill.** `mcp/client.ts`, on `@kampus/libfabrika/client`: key file, signed hello, knock, wait for a grant, send, read. It sits in the library, not in `@kampus/tuval/headless`, since the bridge needs it and tuval imports the library, not the other way. It lands in PR D, and PR E's drill uses it instead of its own, which saves 40 to 60 product lines there. A `tuval/headless` memory key stays for tests.
+**One headless client, shared with the drill.** `client/Headless.ts`, at `@kampus/libfabrika/client/Headless`, built in P18's slice 1 on the same window parent and start as a browser tab: signed hello, knock, wait for a grant, send, read. The bridge brings its key file. *It said, earlier: `mcp/client.ts`, on `@kampus/libfabrika/client`.* It sits in the library, not in `@kampus/tuval/headless`, since the bridge needs it and tuval imports the library, not the other way. It lands in PR D, and PR E's drill uses it instead of its own, which saves 40 to 60 product lines there. A `tuval/headless` memory key stays for tests.
 
 **The size, my own.** 370 to 510 product lines before that saving, 310 to 470 after it, about 120 of them copied. Tests 350 to 500. About 1.1 to 1.6 agent hours at 600 an hour, a `2` on the scale (0.4 to 0.6 at 1,660, a `0.5`); *old guess, wrong: 4 to 6 agent hours.* Why more than a thin command: one input declaration grows, the door learns `as`, and MCP brings its own edges. Sure: 50%.
 
@@ -690,7 +690,8 @@ Nothing is lost. A focus move was never kept for its own sake, and PR 223's `des
 	"./box": "./src/app/entry.ts",           // `entrypoint`, what the box loads; `cloudflare:workers`
 	"./sqlite": "./src/data/sqlite.ts",      // `Ledger.sql` on node:sqlite, for tests
 	"./mcp": "./src/mcp/index.ts",           // tools and the bridge; Node and the SDK
-	"./client": "./src/mcp/client.ts"        // the headless client; Node
+	"./client/*": "./src/client/*.ts",       // the one window client: WindowMachine, WindowStart, Headless (P18)
+	"./client/internal/*": null
 }
 // next/packages/tuval/package.json: "." the desktop core and the window's names; "./page" the page and its style;
 //   "./browser", "./electron", "./headless", "./dom". Its dependencies list @kampus/libfabrika. libfabrika's never list tuval.

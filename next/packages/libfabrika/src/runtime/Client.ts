@@ -2,7 +2,8 @@
  * A program client's own rules. One tea machine, made by one factory (decision 0046 and its
  * 2026-11-10 amendments): its Model is `Client`, its Msgs are plain data, and it does no input or
  * output. It is the same in a browser tab, in Electron and in a headless client. It imports no
- * transport and no window code; the window parent (Tuval) steps it by hand, by sending it Msgs.
+ * transport and no window code; the library's window parent (`client/WindowMachine.ts`) steps it
+ * by hand, by sending it Msgs.
  *
  * Its states: each pending letter is `dating` or `ready`. `press` adds a `dating` letter, `dated`
  * moves `dating` to `ready`, and `reply` (accepted, or a program's refusal) removes a `ready` one.

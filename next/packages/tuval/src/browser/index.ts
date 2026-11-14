@@ -2,7 +2,6 @@ import { ErrorClass } from "@kampus/libfabrika/transport/ClientRows";
 import { Predicate, Schema } from "effect";
 
 export { browserKey } from "./key.ts";
-export { browserSocket } from "./socket.ts";
 export { browserRows } from "./rows.ts";
 
 /** Keep only a fixed platform class, never an error's text or data. */

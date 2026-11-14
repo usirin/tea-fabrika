@@ -33,6 +33,8 @@ export const ClientRecord = Schema.TaggedUnion({
     dial: Count,
     result: Schema.Literals(["online", "waiting", "closed", "stalled", "removed"]),
     ms: Ms,
+    /** On a `closed` or `removed` row only: the close code the socket saw. */
+    code: Schema.optionalKey(Count),
   },
   press: {
     command: Schema.String,
