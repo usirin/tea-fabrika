@@ -1,0 +1,18 @@
+{
+  "id": "2026-11-14-p18s1-opus-lane-ran-eight-times-its-estimate",
+  "date": "2026-11-14",
+  "lanes": [
+    "kamp-us/tea-fabrika#1208"
+  ],
+  "stage": "review",
+  "kind": "cost",
+  "what": "next/ version. The P18 slice 1 lane (one window client for the browser and headless) cost $75.15 at list price against its plan's estimate of 5 steps, $9, so it passed 0076's stop at twice the estimate after the first tests and build steps. The lead chose to finish: the lane was close and the desk lane stacks on it. Every step ran as a Claude Opus subagent, with 20M to 80M cache-read tokens each; the build alone was $27.95 over three rounds. The lane also took four tests rounds: the build sent back four laws no product could pass, then CI's real round trip found the headless test key hashing the SSH blob in place of the raw key.",
+  "cause": "The plan priced its steps from field/runs.jsonl medians, which are mostly Codex runs in boxes; an Opus subagent reading the whole repo context costs several times that per step. No estimate source names the model it was measured on.",
+  "person": true,
+  "primitive": "Check",
+  "fix": "The plan's Estimate line names the model, and its medians come from rows of that same model and role; chain.ts's budget check compares against the right base.",
+  "test": "Property: for any set of priced run rows with mixed models, the estimate for a model uses only that model's rows, and is null when there are none.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1208"
+  ]
+}
