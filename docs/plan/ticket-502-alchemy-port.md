@@ -41,7 +41,8 @@ flowchart LR
   name a raw platform type in 9 files, and `bundle: false` in the stack.
 - **The object slices change the shell only.** Each service keeps its code and its laws, as
   `RecordPart` did. The storage turn and the raw state move later, in S5 and S6.
-- **Three questions go to the owner.** They are in [Open questions](#open-questions).
+- **One question goes to the owner.** It is in [Open questions](#open-questions), and it holds
+  only the last slice.
 
 How sure: 90% on the counts, made today with the commands below. 75% on the slice order. 55% that
 S8 lands as 0041 wrote it; the first open question is about that.
@@ -285,6 +286,17 @@ Each is a choice a decided note already answers, so it is not a question.
 - **Scope** ([0061](../../.decisions/0061-resources-are-acquired-in-a-scope.md)): the service is
   built in the instance's scope. The `ManagedRuntime` each class holds today goes with the class.
 - **A browser as a client:** not touched. These are calls inside the brain.
+- **S5 changes the turn for every store in one pull request.** 0050 decides the route, and
+  [0099](../../.decisions/0099-no-number-caps-a-pull-request.md) decides the size: a slice is cut by
+  what works on its own, never to fit a count. The `Sql` contract has one turn, and two shapes of
+  it side by side would be a port inside the port. The cost is the widest diff of the nine, across
+  six modules that primitives lanes also change, so the lead counts the open lanes in those files
+  on the day and holds merges to them for S5's last check run.
+- **`ProgramBox` stays out of this port.** 0041 leaves it out with its own ticket, and 0042 says
+  Alchemy has no form for a named entrypoint class. A loaded program is built by our program build
+  and runs with no Alchemy stack, so it needs its own design. The cost: when S8 lands, "no plain
+  platform class in the brain" is true and "none in `next/`" is not. One `cloudflare:workers`
+  import, 8 edges and 7 test mocks stay until that ticket.
 
 ## What 0041's unknowns still owe
 
@@ -542,19 +554,7 @@ Estimate: 31 steps, $56
    the rest of S8 still lands. Why: the build's hash is in every door hello and every loaded
    program's id, so two bundles of one source would be two builds. Cost: 0041's end state may be
    one line short. How sure: 70%. The doubt is whether Alchemy can hand one bundle to two stacks;
-   S0's third question settles it.
-2. **May S5 change the turn for every store at once?** 0050 decides the route. It does not say
-   that the 12 files outside `cloudflare/` change in one pull request. Lean: yes, one pull
-   request. Why: the `Sql` contract has one turn, and two shapes of it side by side would be a
-   port inside the port. Cost: the widest diff of the nine, across six modules that primitives
-   lanes also change. How sure: 75%. The doubt is the merge traffic; a count of open lanes in
-   those files on the day settles it.
-3. **Does `ProgramBox` join this port?** 0041 leaves it out with its own ticket, and 0042 says
-   Alchemy has no form for a named entrypoint class. With it out, the port ends with one
-   `cloudflare:workers` import, 8 edges and 7 test mocks left in `next/`. Lean: leave it out, as
-   0041 says. Why: a loaded program is built by our program build and runs with no Alchemy stack,
-   so it needs its own design. Cost: "no plain platform class in the brain" is true, and "none in
-   `next/`" is not. How sure: 80%.
+   S0's third question settles it. It holds only S8: S0 to S7 do not need its answer.
 
 ## Findings
 
