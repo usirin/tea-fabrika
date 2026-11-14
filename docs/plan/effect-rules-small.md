@@ -1,11 +1,10 @@
-
+Approved by the lead agent, builds effect-code-guidelines.md (0168); the owner answered its open question on 2026-11-13; body 85334000b907
 Plancheck-Version: 3
 
 # Plan A: six small Effect rules, each turned on at zero
 
 Everything here is about `next/` and the repo's lint and type-check config. Today's version is not
-changed. A draft. Nothing is built. Plan B, [the three big rules](./effect-rules-big.md), is its
-sibling.
+changed. Nothing is built. Plan B, [the three big rules](./effect-rules-big.md), is its sibling.
 
 ```mermaid
 flowchart LR
@@ -314,7 +313,8 @@ The rule: `fabrika/effect-functions` learns one more case. Its edge cases, each 
 - **Why ours:** the table above. **Cost:** about 40 lines added to the rule, the new plants in the
   exam's test of it, 13 one-line product changes, and 3 doc lines. One new span per call of 13
   functions; what that costs at run time is not measured (0252 says the same).
-  **How sure:** 80%. The doubt is question 1.
+  **How sure:** 80%. The doubt was the four usage exports, and the owner answered it: they take a
+  named span too ([Open questions](#open-questions)).
 
 ## A4: `service-id` blocks
 
@@ -622,4 +622,11 @@ Estimate: 22 steps, $28
 
 ## Open questions
 
-1. May `cloudflare/tail.ts`'s three exports and `runtime/IsolateUsage.ts`'s `record` use an unnamed `Effect.fn`, a stack frame and no span, under 0252's span sink exception? They carry usage rows toward the span store, and 0252 names only "the span sink". Lean: no, 60%: they get a named span like every other export, since none of them is the sink and a span per tail batch is cheap. A yes means those four keep no span of their own, and A3 writes the exception's wider wording into 0252.
+None.
+
+One question was put to the owner and answered on 2026-11-13.
+
+`cloudflare/tail.ts`'s three exports and `runtime/IsolateUsage.ts`'s `record` get a named span like
+every other export. They carry usage rows toward the span store, but none of them is the sink, and a
+span per tail batch is cheap. 0252's span sink exception stays as narrow as it is written, so A3
+widens nothing there.

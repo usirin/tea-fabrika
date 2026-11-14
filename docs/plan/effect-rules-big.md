@@ -1,11 +1,10 @@
-
+Approved by the lead agent, builds effect-code-guidelines.md (0168); the owner answered its open questions on 2026-11-13; body ba9914c45546
 Plancheck-Version: 3
 
 # Plan B: the three big Effect rules, each closed folder by folder
 
 Everything here is about `next/` and the repo's lint and type-check config. Today's version is not
-changed. A draft. Nothing is built. Plan A, [the six small rules](./effect-rules-small.md), is its
-sibling.
+changed. Nothing is built. Plan A, [the six small rules](./effect-rules-small.md), is its sibling.
 
 ```mermaid
 flowchart TB
@@ -116,7 +115,8 @@ Ours, new: `fabrika/no-static-layer`, in the lint plugin folder. 0095 owes it by
 that returns a Layer. Why: a syntax rule cannot read a member's type, so "returns a Layer" would be
 a guess from names and annotations, and a guess has misses. 0095 also says the service file holds
 "no code that runs". The cost: the eight members above count too, so 27 sites, and `cloudflare/`
-closes only with the Alchemy port. This widens 0095's own words, so it is question 2.
+closes only with the Alchemy port. This widens 0095's own words, and the owner said yes to it on
+2026-11-13 ([Open questions](#open-questions)).
 
 Edge cases, each with a test:
 
@@ -617,5 +617,17 @@ Estimate: 69 steps, $85
 
 ## Open questions
 
-1. May a type that directly follows its same-name schema share the schema's doc block, as `export const Sent = ...` then `export type Sent = typeof Sent.Type;`? The record does not answer it: 0021 treats the pair as one declaration for blank lines only, and 0023 says follow Effect's doc comments, which asks for a block on both. Lean: yes, 70%: the pair is one thing to a reader, and a second block repeats the first. It would remove about 65 blocks from the count and one from every schema written later. Pull request 1127 already writes both, so a no costs nothing more, and a yes adds one edge case to the rule.
-2. May `no-static-layer` refuse every static member on a service class, and not only one that returns a Layer? 0095's rule line names "a static that returns a `Layer`", and its contract line says the file holds "no code that runs". Lean: yes, 70%: a syntax rule cannot read a return type, so the narrow form would guess and miss. A yes adds eight sites, and `cloudflare/` closes only with the Alchemy port. A no keeps 19 sites, closes `cloudflare/` on the first day, and leaves `static make` on seven classes to review.
+None.
+
+Two questions were put to the owner and answered on 2026-11-13.
+
+A type that directly follows its same-name schema shares the schema's doc block, as
+`export const Sent = ...` then `export type Sent = typeof Sent.Type;`. The pair is one thing to a
+reader, and a second block would repeat the first. The docs rule reads the pair as one declaration,
+which is one more edge case for B2.1. It is a kept difference from Effect's doc comments, so B2.1
+adds it to 0023's list with this reason. It takes about 65 blocks out of the count.
+
+`no-static-layer` refuses every static member on a service class, and not only one that returns a
+Layer. A syntax rule cannot read a return type, so the narrow form would guess and miss. That makes
+27 sites, `cloudflare/` closes only with the Alchemy port, and B1.0 amends 0095's rule line to say
+"any static member".
