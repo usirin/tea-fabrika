@@ -53,19 +53,18 @@ export const fixture = Effect.gen(function* () {
   return { home, file, write, relative: "counter/src/program.ts" };
 });
 
-/** Start and watch use the same root, entry and selection, so unchanged bytes have one hash. The
- *  selection is the app's table with the counter swapped for the copy, as `src/build.ts` swaps a
- *  program, so every program the brain boots is built. */
+/** Start and watch use the same root, entry and counter copy, so unchanged bytes have one hash. The
+ *  build's selection is the app's table with the counter swapped for the copy, as `src/build.ts`
+ *  swaps a program, so every program the brain boots is built. The watch covers only the copy: it
+ *  builds each program on its own, and only the copy is ever saved. */
 export const fixtureBuild = Effect.fnUntraced(function* (
   copy: Pick<Effect.Success<typeof fixture>, "home" | "file">,
   out: string,
 ) {
-  const watch = {
-    root: copy.home,
-    entry: `${APP}/src/brain.ts`,
-    programs: [...selected.filter((p) => p.name !== PROGRAM), { name: PROGRAM, package: copy.file, export: "program" }],
-  };
-  const built = yield* build({ ...watch, out, files: [], ledger: [], chaos: false });
+  const counter = { name: PROGRAM, package: copy.file, export: "program" };
+  const watch = { root: copy.home, entry: `${APP}/src/brain.ts`, programs: [counter] };
+  const programs = [...selected.filter((p) => p.name !== PROGRAM), counter];
+  const built = yield* build({ ...watch, programs, out, files: [], ledger: [], chaos: false });
   return { ...built, watch };
 });
 
