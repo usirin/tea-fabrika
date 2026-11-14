@@ -181,13 +181,21 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
             return response;
           }),
         );
-        const answered: unknown = yield* makeRequestEffect(fake(request), slot);
+        // `makeRequestEffect` is typed `any` in its source (Workers/HttpServer.ts). It provides the
+        // request itself, and the error-free `toHandled` answers a web Response, so these slots
+        // need nothing and cannot fail.
+        const run: Effect.Effect<Response, never, never> = makeRequestEffect(fake(request), slot);
+        const answered: unknown = yield* run;
         expect(given).toHaveLength(1);
         expect(given[0], "the handler reads the platform's Request, not a rebuilt one").toBe(request);
         expect(answered, "the answer is the handler's Response, not a copy").toBe(response);
 
         const failing = ObjectService.fromWebHandler(() => Effect.fail(new LedgerError({ reason, message: text })));
-        const refused: Response = yield* makeRequestEffect(fake(new Request(url, { method })), failing);
+        const refusing: Effect.Effect<Response, never, never> = makeRequestEffect(
+          fake(new Request(url, { method })),
+          failing,
+        );
+        const refused: Response = yield* refusing;
         expect(refused.status).toBeGreaterThanOrEqual(500);
         expect(yield* HttpClientResponse.fromWeb(HttpClientRequest.get(url), refused).text).not.toContain(text);
       }),
