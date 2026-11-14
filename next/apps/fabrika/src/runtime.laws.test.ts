@@ -105,13 +105,25 @@ type Open = (trace?: string, build?: string, options?: WorldOptions) => ReturnTy
 /**
  * Runs one law's body in a scope of its own. Each world the body opens closes with that scope and
  * with no other, and the law's abort (its timeout) interrupts the body, so the scope still closes.
+ * After the abort, `stopOnAbort` ends the fast-check run before a shrink opens anything, and the
+ * body's own `open` refuses once its run has ended, since the body's promise runs on past the close.
  * A law that hangs keeps nothing open for the next one (0061).
  */
 const owned = (body: (open: Open) => Promise<void>, signal: AbortSignal) =>
   Effect.runPromise(
-    Effect.scoped(
-      Effect.flatMap(Effect.scope, (scope) =>
-        Effect.promise(() => body((trace, build, options) => world(scope, trace, build, options))),
+    StartsTest.stopOnAbort(signal).pipe(
+      Effect.andThen(
+        Effect.scoped(
+          Effect.flatMap(Effect.scope, (scope) =>
+            Effect.promise((ended) =>
+              body((trace, build, options) =>
+                ended.aborted
+                  ? Promise.reject(new Error("this law run has ended, so it opens no world"))
+                  : world(scope, trace, build, options),
+              ),
+            ),
+          ),
+        ),
       ),
     ),
     { signal },
@@ -289,8 +301,9 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
     .mockImplementation((layer, memo, into) => buildLayer(layer.pipe(Layer.withParentSpan(span)), memo, into));
   let runtime = projectRuntime(ctx, env);
   const run = <A, E>(work: Effect.Effect<A, E, ProjectService>) => runtime.runPromise(work);
-  // Added before the build, so a world whose build fails or hangs is closed by its scope too.
-  Effect.runSync(
+  // Added before the build, so a world whose build fails or hangs is closed by its scope too. A scope
+  // that already closed runs this close at once, so it is awaited, never run synchronously.
+  await Effect.runPromise(
     Scope.addFinalizer(
       scope,
       Effect.promise(async () => {
@@ -532,11 +545,15 @@ describe("P40 the core counter's identity in the brain", () => {
     await fc.assert(
       fc.asyncProperty(fc.array(fc.nat(), { minLength: 2, maxLength: 8 }), (tape) =>
         Effect.runPromise(
-          Effect.scoped(
-            Effect.gen(function* () {
-              const w = yield* openWorld();
-              yield* Effect.promise(() => walk(w, tape));
-            }),
+          StartsTest.stopOnAbort(signal).pipe(
+            Effect.andThen(
+              Effect.scoped(
+                Effect.gen(function* () {
+                  const w = yield* openWorld();
+                  yield* Effect.promise(() => walk(w, tape));
+                }),
+              ),
+            ),
           ),
           { signal },
         ),
