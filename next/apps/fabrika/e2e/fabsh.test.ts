@@ -96,8 +96,8 @@ const measure = (field: Locator, line: string) =>
       ctx.font = style.font;
       ctx.letterSpacing = style.letterSpacing === "normal" ? "0px" : style.letterSpacing;
       const box = input.getBoundingClientRect();
-      const from = box.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
-      const to = box.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
+      const from = box.left + Number.parseFloat(style.borderLeftWidth) + Number.parseFloat(style.paddingLeft);
+      const to = box.right - Number.parseFloat(style.borderRightWidth) - Number.parseFloat(style.paddingRight);
       const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT);
       let drawn = "";
       let at = 0;

@@ -135,6 +135,12 @@ type Key = Effect.Success<ReturnType<typeof key>>;
 
 type Client = { readonly client: ConnectionId; readonly key: Key };
 
+/** The Project reaches a process's runner through a `runtime.rpc` span, as `cloudflare/runtime.ts`'s
+ *  `rpc` does, so a draft that runs under a recording tracer shows in the span sink. */
+const rpc = Effect.fn("runtime.rpc")(function* <A>(work: Effect.Effect<A>) {
+  return yield* work;
+});
+
 /** One world's switches: whether the process is live and whether its program declares a draft. */
 type Controls = { live: boolean; declares: boolean };
 
@@ -182,12 +188,13 @@ const world = Effect.fnUntraced(function* (
       Effect.sync(() => {
         delivered.push(envelope);
       }),
-    // The Project reaches the runner through `runtime.rpc`, a span (cloudflare/runtime.ts, `rpc`).
     draft: (process: string, m: unknown) =>
-      Effect.sync(() => {
-        steps.push({ process, m });
-        return { ok: m };
-      }).pipe(Effect.withSpan("runtime.rpc")),
+      rpc(
+        Effect.sync(() => {
+          steps.push({ process, m });
+          return { ok: m };
+        }),
+      ),
     notify: () => Effect.void,
     inputs: { schema: Schema.Json, personOnly: [], raw: [] },
     events: { personOnly: [] },
