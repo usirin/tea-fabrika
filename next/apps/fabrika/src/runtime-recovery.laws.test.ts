@@ -461,6 +461,8 @@ const world = (
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
   table.programs["fabrika/counter"] = { hash: "counter-a", source: "counter" };
   table.programs["fabrika/checklist"] = { hash: "checklist-a", source: "checklist" };
+  // fabsh slice 1: the app boots `fabsh:1` too, so the table holds its program.
+  table.programs["fabrika/fabsh"] = { hash: "fabsh-a", source: "fabsh" };
   table.programs.approvals = { hash: "approvals-a", source: "approvals" };
   table.programs.poison = { hash: "poison-a", source: "poison" };
   table.programs[requestProgram.name] = { hash: "requester-a", source: "requester" };

@@ -168,6 +168,8 @@ const world = async (
   table.programs["fabrika/counter"] = { hash: "counter-a", source: "counter" };
   // P14 slice 2: the app boots `checklist:1` after `counter:1`, so the table holds its program too.
   table.programs["fabrika/checklist"] = { hash: "checklist-a", source: "checklist" };
+  // fabsh slice 1: the app boots `fabsh:1` too, so the table holds its program.
+  table.programs["fabrika/fabsh"] = { hash: "fabsh-a", source: "fabsh" };
   table.programs.approvals = { hash: "approvals-a", source: "approvals" };
   const home = mkdtempSync(join(tmpdir(), "p12-r-")),
     key = identity();
