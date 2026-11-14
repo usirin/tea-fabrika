@@ -62,6 +62,9 @@ request to another.**
 - **L16's HTTP row changes, and stays exact.** For a cold owner hit by `n` requests at once:
   `n` `settingsStart` calls, one for each. Once one read has finished: 0 calls for every later
   request. No range, no "at most".
+- **The row's reads follow its calls, also exact (owner, 2026-11-13).** Each call reads the start
+  once, so a cold concurrent move makes `n` reads, or `n + 1` when the start is not yet stored: the
+  one call that finds nothing appends it and reads it back. Appends stay at one.
 - **The other four paths keep "exactly one call".** Project, Connection, Process and RecordPart are
   Durable Objects, where one object shares its context across requests.
 - A new law holds the rule itself: a request never waits on another request's read
