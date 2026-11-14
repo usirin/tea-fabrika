@@ -16,7 +16,7 @@ import { ProgramRunner, Sent } from "../runtime/Runner.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import * as ProcessObject from "./ProcessObject.ts";
-import { processRuntime } from "./runtime.ts";
+import { processRuntime, settings } from "./runtime.ts";
 
 type State = Parameters<typeof processRuntime>[0];
 type Environment = Parameters<typeof processRuntime>[1];
@@ -356,7 +356,12 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
             {},
             { get: (_target, key) => (key === "settingsStart" ? async () => StartsTest.reply(start) : unexpected()) },
           );
-          ProcessObject.layer({ programs: {} });
+          // The app's checked read of the instance setting, as next/apps/fabrika/src/runtime.ts has it.
+          ProcessObject.layer({
+            programs: {},
+            input: (env) =>
+              settings(env).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause }))),
+          });
           const constructor = platform<Constructor>(Option.getOrThrow(Option.fromUndefinedOr(made.value)));
           const state = fromDurableObjectState(
             platform<Parameters<typeof fromDurableObjectState>[0]>({
