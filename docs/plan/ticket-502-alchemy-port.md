@@ -10,7 +10,7 @@ the rows of [0042](../../.decisions/0042-platform-pieces-go-through-alchemy.md) 
 
 ```mermaid
 flowchart LR
-  S0["S0: spike, experiment 284<br/>can start today"]
+  S0["S0: spike, experiment 285<br/>can start today"]
   M["pull request 1146 merges"] --> S1["S1: Connection<br/>7 edges"]
   S1 --> S2["S2: Process<br/>12 edges"]
   S2 --> S3["S3: Project<br/>37 edges"]
@@ -419,7 +419,7 @@ write-up to main; its code stays on its branch
 
 | Path | Owner | Slice | Product lines expected | What changes |
 |---|---|---|---|---|
-| `experiments/284-alchemy-port-spike.md` `experiments/README.md` | build | S0 | docs | the write-up and its index row |
+| `experiments/285-alchemy-port-spike.md` `experiments/README.md` | build | S0 | docs | the write-up and its index row |
 | `next/apps/fabrika/src/instance-records.test.ts` | tests | S1, S2, S3, S7 | tests | the exam entry for the slice's object, ported first; laws 2 and 4 |
 | `next/apps/fabrika/src/instance-wire.test.ts` | tests | S1, S7 | tests | law 2, unchanged cases; law 12 |
 | `next/apps/fabrika/src/port-home.laws.test.ts` `fixtures/next/port-home` | tests | S1, then S2, S3, S5, S8 | tests | new: law 5 and its saved home |
