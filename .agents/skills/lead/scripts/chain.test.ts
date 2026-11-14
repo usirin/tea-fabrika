@@ -1365,7 +1365,6 @@ describe("T675 a lane stops at its budget (0076), today's tooling", () => {
       ["stuck:unsigned", "and 5 more", "work"],
       ["stuck:unsigned", "commits check: build_touched_exam a7ff4ee8 next/apps/fabrika/tsconfig.json", "work"],
       ["stuck:unsigned", "commits check: stale_link 62865b7f step lead; build_touched_exam a7ff4ee8 x", "work"],
-      ["stuck:unsigned", "3fda8c62 has no step note", "work"],
       ["stuck:timeout", "stopped after 60 minutes", "work"],
       ["stuck:no_commit", "answered done with no commit", "work"],
       ["stuck:leak", "added lines leak, nothing pushed", "work"],
@@ -1382,7 +1381,7 @@ describe("T675 a lane stops at its budget (0076), today's tooling", () => {
   // each digit boundary (0, 1, 9, 10, 11, 99, 100) and past it. Ticket 724: no law had a tail of 10 or
   // more, so reading only one digit there would count a pure stale-link hold against the budget.
   const hold = fc.record({
-    rule: fc.constantFrom("unsigned_commit", "build_touched_exam", "broken_chain", "stale_link"),
+    rule: fc.constantFrom("no_exam_list", "build_touched_exam", "broken_chain", "stale_link"),
     sha: fc.stringMatching(/^[0-9a-f]{8}$/),
     step: fc.option(fc.constantFrom("tests", "build", "lead"), { nil: undefined }),
   });
