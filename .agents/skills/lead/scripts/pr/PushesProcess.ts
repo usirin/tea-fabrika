@@ -69,7 +69,9 @@ export const layer = (scripts: string): Layer.Layer<Pushes, never, ChildProcessS
 
       const leakText = Effect.fn("PushesProcess.leakText")(
         function* (dir: string, text: string) {
-          const grep = yield* ran("sh", [`${scripts}/leakgrep.sh`, "--text", "/dev/stdin"], dir, text);
+          // `-` is cat's own name for its stdin. A child's stdin is a socket here, and Linux refuses
+          // to open /dev/stdin on a socket (ENXIO), though macOS allows it.
+          const grep = yield* ran("sh", [`${scripts}/leakgrep.sh`, "--text", "-"], dir, text);
 
           if (grep.code !== 0) {
             return yield* new LeakGrepRefused({
