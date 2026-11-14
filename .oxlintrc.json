@@ -20,11 +20,10 @@
     ".claude/**"
   ],
   "rules": {
-    // "warn" here is for today's version only, which is frozen: lint.ts prints these two there as
-    // advice. An override below sets them "error" for next/, .agents/ and oxlint-plugins/, where
-    // they block in every folder at zero (0523).
-    "fabrika/no-effect-promise": "warn",
-    "fabrika/no-raw-try-catch": "warn",
+    // These two block in every folder at zero (0523), a new folder included. An override near the
+    // end sets them "warn" for today's frozen version only, and the dirty-folder lines come last.
+    "fabrika/no-effect-promise": "error",
+    "fabrika/no-raw-try-catch": "error",
 
     "fabrika/no-bare-tell": "error",
     "fabrika/no-context-tag": "error",
@@ -1857,9 +1856,19 @@
       }
     },
     {
-      // The two old advice rules block wherever their code is clean (0523), outside today's frozen
-      // version. Before the warn overrides below, so a dirty folder's "warn" still wins.
-      "files": ["next/**", ".agents/**", "oxlint-plugins/**"],
+      // Today's frozen version (0525): the two top-level rules print as advice there, and a fire
+      // there needs no fix. This override goes when the freeze lane takes these paths out of lint;
+      // oxlint-plugins/advice.ts names the same globs so the stale check does not read them.
+      "files": ["apps/**", "programs/**", "packages/**", "bin/**"],
+      "rules": {
+        "fabrika/no-effect-promise": "warn",
+        "fabrika/no-raw-try-catch": "warn"
+      }
+    },
+    {
+      // The design package is shared by both versions and stays live (0456), so it blocks. A
+      // `files` list has no "except", so this later override takes it back out of the one above.
+      "files": ["packages/fabrika-design/**"],
       "rules": {
         "fabrika/no-effect-promise": "error",
         "fabrika/no-raw-try-catch": "error"

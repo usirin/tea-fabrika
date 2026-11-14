@@ -26,6 +26,14 @@ const CODES: ReadonlyMap<string, string> = new Map([
   ["fabrika/prefer-schema-arbitrary", "fabrika(prefer-schema-arbitrary)"],
 ]);
 
+/**
+ * The frozen version's paths (0525), where the config's one frozen override keeps the two top-level
+ * rules at "warn". That override is not a dirty-folder line: no fill brings it to zero, so these
+ * globs are never read as warn lines. It and this set go when the freeze lane takes the paths out
+ * of lint.
+ */
+const FROZEN: ReadonlySet<string> = new Set(["apps/**", "programs/**", "packages/**", "bin/**"]);
+
 /** One fire as oxlint reports it, its filename from the top of the repo. */
 export interface Fire {
   readonly code?: string;
@@ -59,7 +67,9 @@ export const warnLines = (printed: unknown): ReadonlyArray<WarnLine> => {
       return [];
     }
 
-    const globs = override.files.filter((glob: unknown): glob is string => typeof glob === "string");
+    const globs = override.files.filter(
+      (glob: unknown): glob is string => typeof glob === "string" && !FROZEN.has(glob),
+    );
     return Object.entries(override.rules).flatMap(([key, setting]) => {
       const rule = CODES.get(key);
       return rule !== undefined && level(setting) === "warn" ? globs.map((glob) => ({ rule, glob })) : [];

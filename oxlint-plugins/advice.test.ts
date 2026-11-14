@@ -7,6 +7,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  readFileSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -128,7 +129,7 @@ describe("T930 L3 a warn line is stale when no advice fire of its rule is in its
 });
 
 /** A small repo of its own: lint.ts and the rules copied, node_modules linked, and this config. */
-const repo = (config: object, files: Readonly<Record<string, string>>) => {
+const repo = (config: object | string, files: Readonly<Record<string, string>>) => {
   const at = realpathSync(mkdtempSync(join(tmpdir(), "advice-")));
   spawnSync("git", ["init", "-q", at]);
   mkdirSync(join(at, "oxlint-plugins"));
@@ -142,7 +143,7 @@ const repo = (config: object, files: Readonly<Record<string, string>>) => {
   symlinkSync(join(ROOT, "oxlint-plugins", "node_modules"), join(at, "oxlint-plugins", "node_modules"));
   symlinkSync(join(ROOT, "node_modules"), join(at, "node_modules"));
   mkdirSync(join(at, ".agents/skills"), { recursive: true });
-  writeFileSync(join(at, ".oxlintrc.json"), JSON.stringify(config));
+  writeFileSync(join(at, ".oxlintrc.json"), typeof config === "string" ? config : JSON.stringify(config));
 
   for (const [path, text] of Object.entries(files)) {
     mkdirSync(dirname(join(at, path)), { recursive: true });
@@ -167,7 +168,23 @@ const repo = (config: object, files: Readonly<Record<string, string>>) => {
 const HINT = "decode with Effect Schema, not a bare JSON.parse";
 const parse = (level: string) => [level, { object: "JSON", property: "parse", message: HINT }];
 
-/** The five at "error" in their base scope, and "warn" for the one dirty folder, placed last. */
+/**
+ * The frozen version's override, as the real config writes it (0525): both top-level rules "warn"
+ * there, and fabrika-design carved back to "error". It is not a dirty-folder line, so no fire under
+ * these paths is ever needed to keep a whole run passing.
+ */
+const FROZEN = [
+  {
+    files: ["apps/**", "programs/**", "packages/**", "bin/**"],
+    rules: { "fabrika/no-effect-promise": "warn", "fabrika/no-raw-try-catch": "warn" },
+  },
+  {
+    files: ["packages/fabrika-design/**"],
+    rules: { "fabrika/no-effect-promise": "error", "fabrika/no-raw-try-catch": "error" },
+  },
+];
+
+/** The five at "error" in their base scope, the frozen override, and "warn" for each dirty folder, placed last. */
 const small = (dirty: readonly string[] = ["next/dirty"]) => ({
   jsPlugins: ["./oxlint-plugins/index.ts"],
   categories: { correctness: "off" },
@@ -179,6 +196,7 @@ const small = (dirty: readonly string[] = ["next/dirty"]) => ({
       rules: { "fabrika/law-shape": "error", "fabrika/prefer-schema-arbitrary": "error" },
     },
     { files: ["next/**/*"], rules: { "eslint/no-restricted-properties": parse("error") } },
+    ...FROZEN,
     ...dirty.flatMap((folder) => [
       {
         files: [`${folder}/**`],
@@ -270,12 +288,40 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
       done();
     }
   }, 120_000);
+
+  // scenario: the repo's own config fails closed. A folder nobody listed blocks, the frozen version
+  // still advises until the freeze lane takes it out of lint, and fabrika-design stays live (0456).
+  it("scenario: under the real config an Effect.promise blocks in a new folder and in fabrika-design, and advises under apps/", () => {
+    const { text } = PLANTS["fabrika(no-effect-promise)"];
+    const config = readFileSync(join(ROOT, ".oxlintrc.json"), "utf8");
+    const { lint, done } = repo(config, {
+      "newfolder/unit.ts": text,
+      "packages/fabrika-design/unit.ts": text,
+      "apps/unit.ts": text,
+    });
+
+    try {
+      for (const file of ["newfolder/unit.ts", "packages/fabrika-design/unit.ts"]) {
+        const blocked = lint(file);
+        expect(blocked.out).toContain(`${file}:3:33 fabrika(no-effect-promise) `);
+        expect(blocked.status, blocked.out).toBe(1);
+      }
+
+      const frozen = lint("apps/unit.ts");
+      expect(frozen.out).toContain("fabrika(no-effect-promise) advice, this folder is not at zero yet:");
+      expect(frozen.out).toContain("oxlint: 0 blocking, 1 advice");
+      expect(frozen.status, frozen.out).toBe(0);
+    } finally {
+      done();
+    }
+  }, 120_000);
 });
 
 describe("T930 L4 the warn lines are read from oxlint's own --print-config", () => {
   // pinned: oxlint 1.90.0's --print-config shape (pnpm-lock.yaml): a builtin's key loses its plugin,
-  // a level prints as "deny" or "warn", and an override keeps its `files` list.
-  it("pinned: reads a law-shape warn override and a no-restricted-properties one with options, and no error line", () => {
+  // a level prints as "deny" or "warn", and an override keeps its `files` list. The config holds the
+  // frozen version's warn override too (FROZEN above): it is not a dirty-folder line, so it is not read.
+  it("pinned: reads a law-shape warn override and a no-restricted-properties one with options, and no error or frozen line", () => {
     const config = {
       ...small([]),
       overrides: [
@@ -323,8 +369,10 @@ describe("T930 L5 a whole run fails on a warn line whose folder has no fire left
       expect(path.out).not.toContain("next/empty");
       expect(path.status, path.out).toBe(0);
 
+      // Both repos hold the frozen override with no fire under it, and that never fails a run.
       const clean = pruned.lint();
       expect(clean.out).not.toContain("has no fire left");
+      expect(clean.out).not.toContain("warn line");
       expect(clean.out).toContain(`oxlint: 0 blocking, ${FIVE.length} advice`);
       expect(clean.status, clean.out).toBe(0);
     } finally {
