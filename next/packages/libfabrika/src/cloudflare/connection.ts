@@ -311,24 +311,12 @@ export class ConnectionService extends Context.Service<
   ConnectionService,
   {
     readonly fetch: (request: Request) => Effect.Effect<Response, LedgerError>;
-    // `connection` gives `wait` and `call` one error type, so a frame's type carries the wait's refused answer.
-    readonly message: (
-      ws: WebSocket,
-      text: string | ArrayBuffer,
-    ) => Effect.Effect<void, LedgerError | SinkError | typeof Answer.cases.refused.Type>;
-    readonly close: (ws: WebSocket) => Effect.Effect<void, LedgerError | SinkError>;
-    // A ring fails with a wait's error only when it is the rate count failure, so the type joins the two.
-    readonly ring: (
-      stream: string,
-      rev: number,
-    ) => Effect.Effect<
-      void,
-      | LedgerError
-      | SinkError
-      | Cause.NoSuchElementError
-      | (typeof Answer.cases.refused.Type & typeof RateCountFailure.Type)
-    >;
-    readonly probe: (session: string) => Effect.Effect<number | null, LedgerError | SinkError>;
+    // A frame, a ring and a probe go through the socket's connection, whose calls are door calls. A door
+    // fails with `unknown`, which takes in every other failure.
+    readonly message: (ws: WebSocket, text: string | ArrayBuffer) => Effect.Effect<void, unknown>;
+    readonly close: (ws: WebSocket, code?: number) => Effect.Effect<void, LedgerError | SinkError>;
+    readonly ring: (stream: string, rev: number) => Effect.Effect<void, unknown>;
+    readonly probe: (session: string) => Effect.Effect<number | null, unknown>;
     readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError | SinkError>;
   }
 >()("@kampus/libfabrika/cloudflare/connection.ConnectionService") {}

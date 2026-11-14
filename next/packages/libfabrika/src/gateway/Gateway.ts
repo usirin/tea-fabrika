@@ -1843,6 +1843,7 @@ export class Gateway extends Context.Service<
       | ProcessError
       | RepliesError
       | WatchersError
+      | Audit.AuditError
       | Cause.NoSuchElementError
     >;
     readonly signer: (
