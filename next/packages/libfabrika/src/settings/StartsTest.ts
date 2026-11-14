@@ -1,6 +1,6 @@
 // T753, next/. Shared start laws take their storage driver from the calling module (0062).
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit, Option, Schema, type Scope } from "effect";
+import { DateTime, Effect, Exit, Option, Schema, type Scope } from "effect";
 import { Digest } from "effect/crypto";
 import { Hex } from "effect/encoding";
 import * as fc from "fast-check";
@@ -349,7 +349,7 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
                 origin: {
                   ...origin,
                   seen: Math.min(origin.seen, saved.size),
-                  sentAt: new Date(Date.parse(origin.sentAt) + index + 1).toISOString(),
+                  sentAt: DateTime.formatIso(DateTime.makeUnsafe(Date.parse(origin.sentAt) + index + 1)),
                 },
               });
               continue;
@@ -385,7 +385,7 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
                           : key === "traceId"
                             ? `${original.traceId[0] === "0" ? "1" : "0"}${original.traceId.slice(1)}`
                             : key === "sentAt"
-                              ? new Date(Date.parse(original.sentAt) + 1).toISOString()
+                              ? DateTime.formatIso(DateTime.makeUnsafe(Date.parse(original.sentAt) + 1))
                               : `${original[key]}-different`,
                   },
                 };

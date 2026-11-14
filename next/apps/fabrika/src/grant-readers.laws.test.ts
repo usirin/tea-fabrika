@@ -1,6 +1,7 @@
 // P12, next/. The real command is captured at its NodeRuntime edge; no process or socket starts.
 import { grantText } from "@kampus/libfabrika/access/Text";
 import { Cause, Effect, Exit, Layer, Option, Schema, Sink, Stream } from "effect";
+import { FetchHttpClient } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
@@ -25,6 +26,19 @@ vi.mock("@effect/platform-node", async (original) => {
       },
     },
   };
+});
+
+/**
+ * Runs the captured command with this run's `fetch` stub as the client's `fetch`. A fresh process
+ * reads the global once; here one process runs many laws, and the client would keep the first stub.
+ */
+const run = () => Effect.runPromiseExit(cli.work!.pipe(Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)));
+
+/** What one `fetch` call puts on the wire: its method, every header, and its body as text. */
+const wire = (options: RequestInit | undefined) => ({
+  method: options?.method,
+  headers: { ...(options?.headers as Record<string, string> | undefined) },
+  body: options?.body == null ? undefined : new TextDecoder().decode(options.body as Uint8Array),
 });
 
 const typed = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
@@ -61,7 +75,7 @@ it("grant command rejects malformed outside URLs as GrantError before fetching o
         vi.resetModules();
         await import("../grant.ts");
         expect(cli.work).toBeDefined();
-        typed(await Effect.runPromiseExit(cli.work!), "bad_url");
+        typed(await run(), "bad_url");
         expect(fetch).not.toHaveBeenCalled();
       } finally {
         process.argv = argv;
@@ -95,7 +109,7 @@ it("grant usage guard names the error for each missing argument or flag", async 
       try {
         vi.resetModules();
         await import("../grant.ts");
-        typed(await Effect.runPromiseExit(cli.work!), usage);
+        typed(await run(), usage);
         expect(fetch).not.toHaveBeenCalled();
       } finally {
         process.argv = argv;
@@ -183,9 +197,9 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
             }),
           ),
         );
-        const calls: Array<[unknown, RequestInit | undefined]> = [];
+        const calls: Array<[string, RequestInit | undefined]> = [];
         const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
-          calls.push([url, options]);
+          calls.push([String(url), options]);
 
           if (options?.method === "POST") {
             if (mode === "post") {
@@ -232,7 +246,7 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
           vi.resetModules();
           await import("../grant.ts");
           const before = Date.now();
-          const exit = await Effect.runPromiseExit(cli.work!);
+          const exit = await run();
           const reason = results[mode];
 
           if (reason === null) {
@@ -241,10 +255,14 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
             typed(exit, reason);
           }
 
-          expect(calls[0]).toEqual([
-            `http://127.0.0.1:18787/grant/client/${encodeURIComponent(data.fingerprint)}?code=${encodeURIComponent(data.code)}`,
-            undefined,
-          ]);
+          // The address as `fetch` itself parses the string the command builds, and nothing beside
+          // it: a plain GET with no body and no header at all, so no `traceparent` and no `b3`.
+          expect(calls[0]?.[0]).toBe(
+            new URL(
+              `http://127.0.0.1:18787/grant/client/${encodeURIComponent(data.fingerprint)}?code=${encodeURIComponent(data.code)}`,
+            ).href,
+          );
+          expect(wire(calls[0]?.[1])).toEqual({ method: "GET", headers: {}, body: undefined });
           const signs = !["get", "json", "target", "waiting"].includes(mode);
           expect(commands).toHaveLength(signs ? 1 : 0);
 
@@ -282,14 +300,13 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
           expect(calls).toHaveLength(posts ? 2 : 1);
 
           if (posts) {
-            expect(calls[1]).toEqual([
-              "http://127.0.0.1:18787/grant",
-              {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ text: signed[0], armored: data.armored }),
-              },
-            ]);
+            // The one header is the content type: no trace header rides along to an outside address.
+            expect(calls[1]?.[0]).toBe("http://127.0.0.1:18787/grant");
+            expect(wire(calls[1]?.[1])).toEqual({
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ text: signed[0], armored: data.armored }),
+            });
           }
 
           if (mode === "applied") {
@@ -319,7 +336,7 @@ it("grant reports bad_args when the CLI refuses unknown flags", async () => {
       try {
         vi.resetModules();
         await import("../grant.ts");
-        typed(await Effect.runPromiseExit(cli.work!), "bad_args");
+        typed(await run(), "bad_args");
         expect(fetch).not.toHaveBeenCalled();
       } finally {
         process.argv = argv;

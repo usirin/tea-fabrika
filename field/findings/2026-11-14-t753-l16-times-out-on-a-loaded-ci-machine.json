@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-t753-l16-times-out-on-a-loaded-ci-machine",
+  "date": "2026-11-14",
+  "by": "experiment-288",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/apps/fabrika/src/runtime-recovery.laws.test.ts",
+    "line": 1034
+  },
+  "says": "In next/, the law `T753 L16 real first/later process steps, recovery and successors keep the shared instance gate` runs about 30 s alone and has a 60 s limit, so on a loaded CI machine it times out on changes that cannot reach it.",
+  "proof": "Runs 43563163607 (pull request 1195) and 43563165554 (pull request 1196), job next (3) of each: `Error: Test timed out in 60000ms` at next/apps/fabrika/src/runtime-recovery.laws.test.ts:1034. Both pull requests change only comments under next/: every changed file parses to the same oxc-parser 0.157.0 tree as origin/main with positions dropped. The law reads no source file and runs 100 fast-check runs on the fixed seed 119120. Machine 3 took 682 s and 653 s on those runs against 509 s on main run 43556494864, where all 413 of its tests passed. Run alone with Node 26.13.0 and `vitest run next/apps/fabrika/src/runtime-recovery.laws.test.ts -t \"T753 L16\" --maxWorkers=1`, three times per side, it took 28.3, 29.7 and 30.6 s on main at 7ae7cea and 32.3, 28.4 and 33.0 s with plant 1's files.",
+  "cost": "A pull request that cannot reach this law is red on it whenever machine 3 runs slow, and must be run again; in the merge queue it is put out of the queue.",
+  "head": "7ae7cea0fa8a6857a30aee8d3164ed33a314185c",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1195"
+}

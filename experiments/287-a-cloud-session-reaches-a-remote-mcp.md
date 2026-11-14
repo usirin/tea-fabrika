@@ -4,14 +4,16 @@ Run on 2026-11-14 (UTC) inside one Claude cloud session (Anthropic's own cloud, 
 CLI 2.1.325), on the repository's own cloud environment. It is about `next/`: the plan to serve
 the tracker as MCP over HTTP from a Cloudflare Worker. No key, token or login was added, and
 nothing was deployed. Two public MCP servers that need no login were used, read and search tools
-only. Cost: subscription usage only, **about $1.5 at list price** (the tools' own `costUSD`
-figures, list basis, 2026-11-14), most of it the two child sessions' first turns ($0.76 and
-$0.39).
+only. Cost: subscription usage only, **about $2.0 at list price** (the tools' own `costUSD`
+figures, list basis, 2026-11-14), most of it the three child sessions ($0.76, $0.39 and, in the
+follow-up, $0.50).
 
 **The answer: partly. Once the server's host is on the cloud environment's network allowlist, a
 local agent in the box uses it fully, and a new cloud session started on a branch with a
 committed `.mcp.json` connects and lists its tools. But that session's first call to each tool
-stopped at a permission prompt for a person, so it did not run unattended. With the environment as
+stopped at a permission prompt for a person, so it did not run unattended. In a follow-up, a third
+child on a branch that also committed an allow rule ran both searches with no prompt; its log
+credits the auto-mode classifier, not the rule, for both calls. With the environment as
 it was (Limited, nothing listed), every path was refused by the session's own egress proxy, and a
 session that is already running did not pick up a new server.**
 
@@ -19,7 +21,8 @@ session that is already running did not pick up a new server.**
 |---|---|---|---|
 | Plain HTTPS from the box (curl) | no, then yes | ran | the host on the environment's allowlist |
 | Local agent in the box (`claude -p --mcp-config`) | no, then yes | ran | the same |
-| New cloud session started on a branch with `.mcp.json` | no, then tools loaded but each call waited for a person | ran | the same, plus a branch picked with `source_revision`, plus a yes per tool call (or a rule, untested) |
+| New cloud session started on a branch with `.mcp.json` | no, then tools loaded but each call waited for a person | ran | the same, plus a branch picked with `source_revision`, plus a yes per tool call |
+| The same, plus a committed `.claude/settings.json` allow rule (follow-up) | yes, both searches answered with no prompt | ran | the same; the log names the classifier, not the rule |
 | This running session, after `.mcp.json` and `claude mcp add` | no | ran | a new session; see part 5 |
 | A claude.ai connector delivered to the session | not tried | read in docs | the server added at claude.ai, login done there |
 
@@ -149,6 +152,45 @@ that sends project MCP tools to a person whatever the session's mode. Whether a 
 `.claude/settings.json` allow rule such as `mcp__cfdocs` lifts it was not tested: the brief allowed
 two child sessions, and both were used. That is the first thing to test next.
 
+**Child 3, the follow-up: the same, plus a committed allow rule (ran).** The owner allowed one
+more child and put the two hosts back on the allowlist; both answered `initialize` with 200 from
+this box before it started. The branch `fabrikalfa/x287b-mcp-allow-rule` committed the same
+`.mcp.json` and this `.claude/settings.json`, the server-wide form the permissions docs give
+("`mcp__puppeteer` matches any tool provided by the `puppeteer` server",
+<https://code.claude.com/docs/en/permissions.md>), and a committed project settings file is read in
+a one-repository cloud session (<https://code.claude.com/docs/en/settings.md>, "Settings in cloud
+sessions"):
+
+```json
+{ "permissions": { "allow": ["mcp__cfdocs", "mcp__mslearn"] } }
+```
+
+One child on Opus, mode `auto` like the others, with a prompt to call one search on each server.
+From its event log:
+
+- Its only control request was `set_permission_mode` to `auto`. No `can_use_tool` request came,
+  and its status never went to `REQUIRES_ACTION`.
+- Both calls returned. `search_cloudflare_documentation` with "Workers KV": first result "Kv"
+  (developers.cloudflare.com/kv/). `microsoft_docs_search` with "Azure Functions": first result
+  "What is Azure Functions?". The turn took 18.6 s and cost $0.50 at list price (54,231 tokens
+  written to the cache, 234,421 read, 740 out).
+- But each tool result records how it was allowed, and the two MCP calls say
+  `{ decision: "accept", reason_type: "classifier", source: "config" }`, the same as its Bash call.
+  Only its `ToolSearch` call says `reason_type: "rule"`.
+
+So:
+
+1. **Does the committed allow rule skip the prompt?** No prompt came, so for a fabrika session the
+   answer that matters is yes: with the rule committed, the calls ran with no person. But the log
+   credits auto mode's classifier, not the rule. Whether the rule did nothing and the classifier
+   simply said yes this time, or the rule is what turned child 2's `server_policy_ask_only` prompt
+   into a classifier check, cannot be told from one run. A child without the rule, with the hosts
+   allowed and nothing else changed, would settle it; child 2 was that, but an hour earlier.
+2. **Does a call return once approved?** Not asked: no call waited, so nothing was approved.
+
+The probe files were removed in the branch's last commit, so `fabrikalfa/x287b-mcp-allow-rule`
+adds nothing either.
+
 ## 5. This running session, mid-run (ran)
 
 - After `.mcp.json` was committed into this session's working folder, `ToolSearch` found no
@@ -216,8 +258,9 @@ Nothing here was tried. Every line is **read in docs**, from the cloud environme
 - **On the cloud side, whichever login:** the Worker's host goes on the environment's allowed
   domains (not needed for a connector), and the `.mcp.json` is on the branch a session starts
   from. A session that is already running needs a restart to see a new server. And each tool call
-  must be allowed without a person: a committed allow rule for `mcp__<server>` is the guess, but
-  child 2 shows that the default is a prompt, and the rule was not tested.
+  must run without a person. With a committed allow rule for `mcp__<server>` and the session in
+  auto mode, child 3's calls did, though its log credits the classifier and not the rule; child 2,
+  without the rule, stopped at a prompt. About 65% sure the rule is the part that matters.
 
 ## What this cannot tell us
 
@@ -231,11 +274,13 @@ Nothing here was tried. Every line is **read in docs**, from the cloud environme
   was tried, once.
 - The allowlist change was made by the owner on a card and removed afterward. A real setup would
   keep the Worker's host listed for good.
-- Whether an allow rule in `.claude/settings.json`, or anything else, lets a cloud session call a
-  project MCP tool with no person. Child 2 stopped at the prompt, and nothing more was tried.
+- Whether the allow rule, or auto mode's classifier alone, let child 3's MCP calls through. Its log
+  names the classifier; one run with the rule and one an hour earlier without it cannot tell the
+  two apart, and the classifier may answer differently on other tools or other prompts.
+- Whether a session in a mode other than `auto` would ask. All three children ran in `auto`.
 - Whether a cloud session's MCP call returns a result once a person approves it. The approval in
-  child 2 came after the hosts were removed and the worker had restarted, so it says nothing
-  either way.
+  child 2 came after the hosts were removed and the worker had restarted, and child 3 never asked,
+  so this is still open.
 - Whether a worker restart drops a session's MCP servers by itself. In child 2 it came together
   with the allowlist change, so the two cannot be told apart.
 - Probe outputs are not kept. The short lines above are all there is. The `.mcp.json` was

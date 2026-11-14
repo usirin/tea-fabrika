@@ -5,10 +5,12 @@ import { doorIsLibrary } from "./door-is-library.ts";
 import { edgeComment } from "./edge-comment.ts";
 import { effectFunctions } from "./effect-functions.ts";
 import { isolateBoundary } from "./isolate-boundary.ts";
+import { jsdocs } from "./jsdocs.ts";
 import { lawShape } from "./law-shape.ts";
 import { modules } from "./modules.ts";
 import { noBareDisable } from "./no-bare-disable.ts";
 import { noBareTell } from "./no-bare-tell.ts";
+import { noCauseSquash } from "./no-cause-squash.ts";
 import { noClockInView } from "./no-clock-in-view.ts";
 import { noContextTag } from "./no-context-tag.ts";
 import { noDataTaggederror } from "./no-data-taggederror.ts";
@@ -29,6 +31,7 @@ import { noRawTryCatch } from "./no-raw-try-catch.ts";
 import { noRedactedValue } from "./no-redacted-value.ts";
 import { noSecretEnv } from "./no-secret-env.ts";
 import { noStageWord } from "./no-stage-word.ts";
+import { noStaticLayer } from "./no-static-layer.ts";
 import { noThrowInEffectGen } from "./no-throw-in-effect-gen.ts";
 import { noTypeAssertions } from "./no-type-assertions.ts";
 import { noWallClock } from "./no-wall-clock.ts";
@@ -42,6 +45,7 @@ import { programPackageLayout } from "./program-package-layout.ts";
 import { serviceContract } from "./service-contract.ts";
 import { serviceId } from "./service-id.ts";
 import { useImportExtensions } from "./use-import-extensions.ts";
+import { writtenServiceType } from "./written-service-type.ts";
 
 const plugin: Plugin = {
   meta: { name: "fabrika" },
@@ -51,9 +55,11 @@ const plugin: Plugin = {
     "effect-functions": effectFunctions,
     "law-shape": lawShape,
     "isolate-boundary": isolateBoundary,
+    jsdocs,
     modules,
     "no-bare-disable": noBareDisable,
     "no-bare-tell": noBareTell,
+    "no-cause-squash": noCauseSquash,
     "no-clock-in-view": noClockInView,
     "no-context-tag": noContextTag,
     "no-data-taggederror": noDataTaggederror,
@@ -74,6 +80,7 @@ const plugin: Plugin = {
     "no-redacted-value": noRedactedValue,
     "no-secret-env": noSecretEnv,
     "no-stage-word": noStageWord,
+    "no-static-layer": noStaticLayer,
     "no-throw-in-effect-gen": noThrowInEffectGen,
     "no-type-assertions": noTypeAssertions,
     "no-wall-clock": noWallClock,
@@ -87,6 +94,7 @@ const plugin: Plugin = {
     "service-id": serviceId,
     "service-contract": serviceContract,
     "use-import-extensions": useImportExtensions,
+    "written-service-type": writtenServiceType,
   },
 };
 

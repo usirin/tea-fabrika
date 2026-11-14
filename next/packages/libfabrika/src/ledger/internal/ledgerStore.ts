@@ -6,10 +6,10 @@
 // the write. A wait answers at once: `ready`, or a ring row that the next append past it takes out
 // in its own step and rings once. No fiber, timer or Deferred is left behind, so the object can
 // sleep under a parked wait. Every call ends one span with names, ids and numbers only.
-import { Cause, Effect, Equal, Exit, Option, Result, Schema } from "effect";
+import { Effect, Equal, Exit, Option, Result, Schema } from "effect";
 import { ParentText, Rev } from "../../Rev.ts";
 import type { Sql, SqlValue } from "../../Sql.ts";
-import { errorClass, short } from "../../telemetry/Trace.ts";
+import { causeClass, errorClass, short } from "../../telemetry/Trace.ts";
 import type { Doorbell } from "../Ledger.ts";
 import { LedgerError } from "../Ledger.ts";
 import type { LedgerTurn } from "../LedgerTransaction.ts";
@@ -277,7 +277,7 @@ export const ledgerStore = (
         Effect.annotateCurrentSpan(
           Exit.match(exit, {
             onSuccess: () => ({ [tag("ok")]: true }),
-            onFailure: (cause) => ({ [tag("ok")]: false, [ERROR]: errorClass(Cause.squash(cause)) }),
+            onFailure: (cause) => ({ [tag("ok")]: false, [ERROR]: causeClass(cause) }),
           }),
         ),
       ),

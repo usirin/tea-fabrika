@@ -1,7 +1,7 @@
 ---
 id: 0175
 title: Every run that can read its changed paths picks its jobs from them, a push to main included, and today's version's checks start only when one of its files changed
-status: accepted
+status: amended-in-part by [0525](0525-todays-version-is-frozen.md)
 date: 2026-11-13
 tags: [ci, checks, changes, main, push, merge-queue, today, next]
 ---
