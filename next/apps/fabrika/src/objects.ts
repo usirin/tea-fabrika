@@ -5,7 +5,7 @@ import { RecordPartLive } from "@kampus/libfabrika/workers/record";
 import type { FunctionContext } from "alchemy/Runtime/Function";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { Effect } from "effect";
-import { connectionObject } from "./runtime.ts";
+import { connectionObject, processObject } from "./runtime.ts";
 
 export const Objects = Brain.make(
   { main: import.meta.url },
@@ -21,5 +21,5 @@ export const Objects = Brain.make(
     });
     yield* Effect.logDebug("isolate.tail listener registered");
     return {};
-  }).pipe(Effect.provide([RecordPartLive, connectionObject])),
+  }).pipe(Effect.provide([RecordPartLive, connectionObject, processObject])),
 );

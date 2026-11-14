@@ -20,9 +20,16 @@
 // real path) and the repo root. On any hit it fails with the hit list, and the fixture is left as
 // it was. Only then does the staging copy replace the fixture. Read the diff before it is committed.
 //
+// Each row of the process table is also opened on its own Process object. The table and the
+// streams live in the Project object's storage, so a Process object that lost its storage shows
+// nowhere else: at start the Project sends `configure` only to a process whose start is pending.
+// A Process object keeps its descriptor in its own storage and cannot build its service without
+// it, so one that opened empty storage refuses `open`.
+//
 // Not read yet: waits. A parked wait is a row in the Project object, seen only through a test
 // method on the Project class, so it joins with the slice that ports Project (S3).
-// Plant: bind the Connection class under another class name in the stack.
+// Plants: bind the Connection class (S1) or the Process class (S2) under another class name in the
+// stack.
 import { generateKeyPairSync } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -47,6 +54,8 @@ const Founding = Schema.Struct({ person: Schema.String, founder: Schema.String, 
 const Row = Schema.Struct({ name: Schema.String, process: Schema.String });
 const Entries = Schema.Array(Schema.Unknown);
 const Seen = Schema.Struct({ table: Schema.Array(Row), streams: Schema.Record(Schema.String, Entries) });
+/** What a Process object answers when a client opens it: its position and its program's view. */
+const Opened = Schema.Struct({ rev: Schema.Int, view: Schema.Unknown });
 
 /** What the build before the slice answered, with the founding values its home was started with. */
 const Saved = Schema.fromJsonString(Schema.Struct({ founding: Founding, seen: Seen }));
@@ -100,6 +109,12 @@ const observe = Effect.fnUntraced(function* (instance: any) {
 
   for (const stream of STREAMS) {
     streams[stream] = yield* call("read", Entries, () => project.read(stream, 0, "audit"));
+  }
+
+  // Each row's Process object, reached by the process id the table names, opens from its own saved
+  // descriptor. Read after the streams, so nothing an open appends is in them.
+  for (const row of rows) {
+    yield* call(`open ${row.name}`, Opened, () => instance.process(row.process).open("audit"));
   }
 
   // Through JSON and back, so a live answer compares as the saved one reads from its file.

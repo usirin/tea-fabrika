@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-window-start-written-map-never-shrinks-on-answer",
+  "date": "2026-11-14",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/client/WindowStart.ts",
+    "line": 248
+  },
+  "says": "The start's per-dial map of write times gets an entry for every call and loses one only when the write fails, so a long online dial keeps one entry per call it ever made.",
+  "proof": "grep -n written WindowStart.ts shows set at line 248 and delete only at 251 inside the failed-write mapError; the old start at main 60a795c56, next/packages/tuval/src/window/main.tsx, deleted the entry in answer() on every settled reply (written.delete(id)).",
+  "cost": "A headless client or tab that stays online for days grows memory with each read, open and send; small per entry, unbounded over a dial.",
+  "head": "d25a7962556e5e400d3b95dec0eee17a5fae30d5",
+  "ticket": "kamp-us/tea-fabrika#290",
+  "pr": "kamp-us/tea-fabrika#1208"
+}

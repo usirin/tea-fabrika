@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-t502-s2-c5-title-names-only-connection",
+  "date": "2026-11-14",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": "next/packages/libfabrika/src/cloudflare/error-cause.test.ts",
+    "line": 96
+  },
+  "says": "In next/, the C5 law's title says the rejection is kept 'as its cause or in the one RpcCallError a Connection call wraps it in', but since T502 S2 every ProcessClient call wraps it in an RpcCallError too, and the comment at :89 still says every client call goes through `catch: unreachable`.",
+  "proof": "error-cause.test.ts:96 names only a Connection call, while error-cause.test.ts:75-76 is `const throughStub = (client, method) => client === \"process\" || (client === \"gateway\" && method !== \"fetch\")`, and platform.ts builds every ProcessClient method as `reach(process.x(...), lost)`, not with `unreachable`.",
+  "cost": "A reader of a red C5 run is told the wrong set of clients go through Alchemy's typed stub, and S3 will widen the gap again.",
+  "head": "dd5ae9c584ae1e9ae080f0bf13a7d2dc60faa43c",
+  "ticket": "usirin/tea-fabrika#502",
+  "pr": "kamp-us/tea-fabrika#1187"
+}
