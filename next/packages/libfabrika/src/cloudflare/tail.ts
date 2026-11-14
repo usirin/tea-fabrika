@@ -11,7 +11,7 @@ import {
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { errorClass } from "../telemetry/Trace.ts";
+import { causeClass } from "../telemetry/Trace.ts";
 import { isolateUsage, ProcessClient, rejected } from "./platform.ts";
 import { processStub, type Env } from "./runtime.ts";
 
@@ -54,7 +54,7 @@ export const tail = Effect.fnUntraced(function* (
     const stub = processStub(env, props.project, props.name);
     yield* ProcessClient.make(stub).usage(rows);
   });
-  yield* work.pipe(Effect.catchCause((cause) => Effect.logError(errorClass(rejected(Cause.squash(cause))))));
+  yield* work.pipe(Effect.catchCause((cause) => Effect.logError(causeClass(Cause.map(cause, rejected)))));
 });
 
 /**
@@ -79,5 +79,5 @@ export const callback = Effect.fnUntraced(
     const ctx = yield* WorkerExecutionContext;
     yield* receive({ PROCESS: env.PROCESS }, yield* ctx.props, items);
   },
-  Effect.catchCause((cause) => Effect.logError(errorClass(rejected(Cause.squash(cause))))),
+  Effect.catchCause((cause) => Effect.logError(causeClass(Cause.map(cause, rejected)))),
 );

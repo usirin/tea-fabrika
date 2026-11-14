@@ -1,7 +1,7 @@
 ---
 id: 0063
 title: The owner's picked work on today's app fills agent slots beside Tier 1, never parked behind next/
-status: accepted
+status: amended-in-part by [0525](0525-todays-version-is-frozen.md)
 date: 2026-11-10
 tags: [lead, slots, priority, todays-app, tier-1]
 ---

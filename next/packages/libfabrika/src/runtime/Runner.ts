@@ -366,7 +366,7 @@ export class ProgramRunner extends Context.Service<
      */
     readonly restart: (request: { readonly id: string; readonly build: string }) => Effect.Effect<void, RunnerFailure>;
   }
->()("@kampus/libfabrika/ProgramRunner") {
+>()("@kampus/libfabrika/runtime/Runner.ProgramRunner") {
   /** Load in process, keeping the pure stepper available to callers of ProgramLoader. */
   static readonly layer = (
     initial: Descriptor,
@@ -908,7 +908,7 @@ export class ProgramRunner extends Context.Service<
             // A throw is the step's own crash and keeps its class. Any other typed failure is the host's.
             const wrapped = Result.isSuccess(failed)
               ? failed.success
-              : new ProgramDown({ reason, cause: Cause.squash(result.cause) });
+              : new ProgramDown({ reason, cause: Result.getOrUndefined(Cause.findDefect(result.cause)) });
 
             if (!Schema.is(ProgramDown)(wrapped)) {
               return yield* Effect.failCause(result.cause);
@@ -1894,8 +1894,10 @@ export class ProgramRunner extends Context.Service<
                 // A storage failure while draining leaves the alarm that tries it again.
                 Effect.onExit((exit) =>
                   exit._tag === "Failure" &&
-                  (Cause.squash(exit.cause) instanceof LedgerError ||
-                    Cause.squash(exit.cause) instanceof RecoveryStoreError) &&
+                  Option.exists(
+                    Cause.findErrorOption(exit.cause),
+                    (error) => Schema.is(LedgerError)(error) || Schema.is(RecoveryStoreError)(error),
+                  ) &&
                   !Cause.hasInterrupts(exit.cause)
                     ? retryLater
                     : Effect.void,

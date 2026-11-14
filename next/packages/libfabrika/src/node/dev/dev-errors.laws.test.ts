@@ -11,6 +11,7 @@ import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
+import { bodyText, fetchClient } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
 
@@ -61,6 +62,7 @@ for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as con
             Effect.scoped(
               startDev({ name: "errors", port: 18787, build: id, home }, deploy(mode === "offline" ? 0 : 27002)),
             ).pipe(
+              Effect.provide(fetchClient),
               Effect.provide(ProcessIdGenerator.layer),
               Effect.provide(SecureRandom.layerWebCrypto),
               Effect.provide(rssLayer(() => 0)),
@@ -101,6 +103,7 @@ it("instance reports start_timeout when deployment never opens the control liste
               return yield* Fiber.await(running);
             }),
           ).pipe(
+            Effect.provide(fetchClient),
             Effect.provide(ProcessIdGenerator.layer),
             Effect.provide(SecureRandom.layerWebCrypto),
             Effect.provide(rssLayer(() => 0)),
@@ -140,7 +143,7 @@ for (const mode of ["exit", "spawn"] as const) {
           },
         });
         const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
-          const call = JSON.parse(String(options?.body));
+          const call = JSON.parse(bodyText(options));
           return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
         });
         const kill = vi.spyOn(process, "kill").mockReturnValue(true);
@@ -183,6 +186,7 @@ for (const mode of ["exit", "spawn"] as const) {
                 yield* TestClock.adjust("1 second");
               }),
             ).pipe(
+              Effect.provide(fetchClient),
               Effect.provide(ProcessIdGenerator.layer),
               Effect.provide(SecureRandom.layerWebCrypto),
               Effect.provide(spawner),

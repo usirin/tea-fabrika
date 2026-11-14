@@ -8,6 +8,7 @@ import type { BrainEvent } from "@kampus/libfabrika/brain-event";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
 import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
+import { FetchHttpClient } from "effect/http";
 import { vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -80,6 +81,16 @@ const spyOnFetch = (impl: typeof fetch) =>
     () => Effect.sync(() => vi.restoreAllMocks()),
   );
 
+// The entry's own client, whose `fetch` is the global one at the moment of each request: a real
+// process reads the global once, and a law stubs it anew on every run.
+const fetchClient = FetchHttpClient.layer.pipe(
+  Layer.provide(Layer.succeed(FetchHttpClient.Fetch, (input, init) => globalThis.fetch(input, init))),
+);
+
+/** A stubbed `fetch` call's body as text, sent as a string or as the client's bytes. */
+const bodyText = (options: RequestInit | undefined): string =>
+  typeof options?.body === "string" ? options.body : new TextDecoder().decode(options?.body as Uint8Array);
+
 // The installed runner takes runs and a seed, so the old example runs first from this callback.
 const buildsPair = Schema.Tuple([Schema.NonEmptyString, Schema.NonEmptyString]);
 const pinned: ReadonlyArray<readonly [string, string]> = [["build-a", "build-b"]];
@@ -96,7 +107,7 @@ it.live.prop(
           const folder = yield* sandbox;
           const events: Array<typeof BrainEvent.Type> = [];
           yield* spyOnFetch(async (_url, options) => {
-            const call = JSON.parse(String(options?.body)) as {
+            const call = JSON.parse(bodyText(options)) as {
               method: string;
               args: Array<typeof BrainEvent.Type>;
             };
@@ -120,6 +131,7 @@ it.live.prop(
             yield* Effect.scoped(
               startDev({ build, brain: "unused.mjs", programs: {} }, RecordWireTest.startupFixture(config)),
             ).pipe(
+              Effect.provide(fetchClient),
               Effect.provide(ProcessIdGenerator.layer),
               Effect.provide(SecureRandom.layerWebCrypto),
               Effect.provide(filesWithoutSync),
@@ -146,7 +158,7 @@ it.live.prop(
       const release = yield* Deferred.make<void>();
       const events: Array<typeof BrainEvent.Type> = [];
       yield* spyOnFetch(async (_url, options) => {
-        const call = JSON.parse(String(options?.body)) as {
+        const call = JSON.parse(bodyText(options)) as {
           method: string;
           args: Array<typeof BrainEvent.Type>;
         };
@@ -183,6 +195,7 @@ it.live.prop(
       }).pipe(
         Effect.ensuring(Deferred.succeed(release, undefined)),
         Effect.scoped,
+        Effect.provide(fetchClient),
         Effect.provide(ProcessIdGenerator.layer),
         Effect.provide(SecureRandom.layerWebCrypto),
         Effect.provide(NodeServices.layer),

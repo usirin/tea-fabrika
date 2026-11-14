@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-gatewaycalls-initialize-still-inferred",
+  "date": "2026-11-13",
+  "by": "review",
+  "model": "claude-fable-5-2",
+  "rule": "duplicate",
+  "location": {
+    "path": "next/packages/libfabrika/src/cloudflare/bindings.ts",
+    "line": 81
+  },
+  "says": "GatewayCalls.initialize spells its answer as Effect.Success<ReturnType<typeof checkHello>> while Gateway.initialize now names the same type as typeof CheckedHello.Type, and ProjectService.initialize reads the inferred one through GatewayCalls[\"initialize\"].",
+  "proof": "bindings.ts:81 reads `=> Effect.Effect<Effect.Success<ReturnType<typeof checkHello>>, unknown>`; gateway/Gateway.ts:1731 reads `typeof Answer.cases.refused.Type | typeof CheckedHello.Type`; CheckedHello is exported from transport/Hello.ts in this diff.",
+  "cost": "A reader of ProjectService's contract still has to read checkHello's body, which 0095 set out to end; the rule cannot see it because it reads one file.",
+  "head": "03faa1161212d42f26c2a99558475c148d61ea66",
+  "ticket": "kamp-us/tea-fabrika#908",
+  "pr": null
+}
