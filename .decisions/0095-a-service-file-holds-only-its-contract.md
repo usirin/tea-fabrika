@@ -101,8 +101,9 @@ platform's folder.**
   `LedgerSql.layer(...)`, `LedgerRemote.layer(...)`, as Effect writes `NodeFileSystem.layer`
   ([0029](0029-format-and-names-follow-effect.md), [0032](0032-libraries-take-effects-file-layout.md)).
   A memory or test layer is a sibling too.
-- **No static layer members** on a service class, platform-free ones included. One rule reads more
-  evenly than a rule with an exception.
+- **No static member of any kind** on a service class: no layer, platform-free ones included, and
+  no `make` or other helper. One rule reads more evenly than a rule with an exception. *Amended
+  2026-11-13: first written as "no static layer members"; see [Amendments](#amendments).*
 - **Platform code lives in its platform's folder.** A file under a domain module names no platform
   package and no platform global type. The adapter that turns a platform handle into our own small
   interface lives in `cloudflare/` or `node/`.
@@ -115,7 +116,7 @@ platform's folder.**
   ([0087](0087-a-pull-request-caps-product-lines.md)).
 - `Gateway` and the Cloudflare services get an explicit service interface before their layers move.
 - Each rule that code can check becomes a check: a lint rule that a `Context.Service` class has no
-  static that returns a `Layer`; an import ban on platform packages inside the domain modules; a
+  static member (*amended 2026-11-13*, first "no static that returns a `Layer`"); an import ban on platform packages inside the domain modules; a
   tsconfig per folder, so a domain module cannot name a platform global; and the browser bundle
   exam also fails when a contract file reaches a store.
 
@@ -130,3 +131,17 @@ platform's folder.**
   and it stays open.
 - Not decided here: which module moves first. The plan picks; `ledger` shows every part of the
   rule, and `gateway` is the largest.
+
+## Amendments
+
+- 2026-11-13, owner, ticket 911: **the rule covers any static member, not only a layer.** A class
+  that extends `Context.Service` holds no static field, method, getter, setter, accessor or
+  `static {}` block. The lint rule `fabrika/no-static-layer` refuses them all
+  (`oxlint-plugins/no-static-layer.ts`). Why: a syntax rule cannot read a member's type, so "a
+  static that returns a `Layer`" would be a guess from names, and a guess misses. The service file
+  already holds "no code that runs", which a `static make` is. What it adds, measured over all of
+  `next/` outside tests on 2026-11-14: 26 static members, 19 layers on 15 classes and 7
+  `static make` (6 in `cloudflare/platform.ts`, 1 in `runtime/Execution.ts`); the count by module
+  is in `oxlint-plugins/README.md`. `cloudflare/` closes only when the Alchemy port (ticket 502)
+  deletes `platform.ts`. A static member of a class that is not a service, such as one on a
+  `Schema.Opaque` class, is not covered.

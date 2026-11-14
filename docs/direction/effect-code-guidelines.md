@@ -345,12 +345,19 @@ RunnerLive.layer(initial, options).pipe(
   layer (`AGENTS.md:146`), and Effect 3 taught `Effect.Service` with `dependencies`. Only a rule
   stops it.
 - **Elm or OTP.** OTP's child specs list what a supervisor starts, in order.
-- **What holds it.** `fabrika/no-static-layer`, owed by 0095. Shipped `strictEffectProvide` only
-  advises (3 of 5 sampled hits right).
-- **Cost.** 24 static layers on 19 classes, each a new sibling file. About 40 files and 600 lines,
-  mostly moved.
-- **Today's example.** `Runner.ts` breaks it at `:190`, `:200`, `:218-221`, `:1174`. It follows it
-  by listing its requirements in the layer's type (`:196`).
+- **What holds it.** `fabrika/no-static-layer` (`oxlint-plugins/no-static-layer.ts`, ticket 911),
+  at `error` in the 13 `next/` folders where it finds nothing today, tests left out. It refuses every
+  static member of a class that extends `Context.Service`, not only a layer, as 0095 was amended on
+  2026-11-13: a syntax rule cannot read a member's type. Each move adds its folder, and the list
+  becomes `next/**` with the Alchemy port (`oxlint-plugins/README.md`). Shipped
+  `strictEffectProvide` only advises (3 of 5 sampled hits right). "Never built inside" is still
+  review.
+- **Cost.** Guessed on 2026-11-11: 24 static layers on 19 classes, each a new sibling file. Measured
+  by the rule's replay on 2026-11-14: 26 static members, 19 layers on 15 classes and 7
+  `static make`, in 8 modules (top 1, `access` 1, `gateway` 1, `presence` 1, `processes` 3,
+  `runtime` 7, `telemetry` 6, `cloudflare` 6). About 40 files and 600 lines, mostly moved.
+- **Today's example.** `Runner.ts` breaks it at `:335`, `:345`, `:364`, `:368` and `:1343` (read
+  2026-11-14). It follows it by listing its requirements in the layer's type (`:338-342`).
 
 ### E6: a public export has a doc, and a comment says why
 
@@ -499,8 +506,8 @@ None. The note is about `next/` only.
    sites), the `Cause.squash` ban (2), `no-raw-crypto` (11), `no-hand-guard` (11).
 4. **The Alchemy port (0041, ticket 502), first of the old-code work** (owner, 2026-11-11).
 5. The sweeps, smallest first, each turning its check to `error` when it lands: the small shipped
-   checks (about 125 hits), `keep-cause` with the tagged reasons, `no-static-layer` (24),
-   `deterministicKeys` (40), docs (about 240 exports), imports (441).
+   checks (about 125 hits), `keep-cause` with the tagged reasons, `no-static-layer` (24 guessed, 26
+   measured on 2026-11-14), `deterministicKeys` (40), docs (about 240 exports), imports (441).
 6. The move-only splits of `Runner.ts`, `Gateway.ts` and `cloudflare/runtime.ts`, then the holder
    and envelope machines.
 
