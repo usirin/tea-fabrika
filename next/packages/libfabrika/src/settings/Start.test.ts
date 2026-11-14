@@ -21,6 +21,7 @@ describe("instance start envelope, next/", () => {
           "desktop.brain-throttle",
           "desktop.link-ttl",
           "fabrika-version",
+          "gateway.draft-limit",
           "gateway.limit",
           "gateway.window",
           "instance.port",
