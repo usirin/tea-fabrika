@@ -85,8 +85,9 @@ This checklist applies to the owner's plain page and its single-file HTML copy. 
 still follows its type's rule against an agent checking its own canvas render. Its blocking
 check remains the owner's look at the proof slides.
 
-- [ ] One selected design per screen. Today's version is on the left, the selected design on
-  the right, with a label on each. The page never packs three or four frames into one row.
+- [ ] One selected design per screen. The screen as it runs now is on the left (`next/`'s, or
+  frozen today's app where `next/` has none yet), the selected design, built in `next/`, on the
+  right, with a label on each. The page never packs three or four frames into one row.
 - [ ] The distinct designs from step 5 remain available. The walk switches designs between
   screens or steps instead of squeezing them all into the same view.
 - [ ] Both screens use their real dimensions at 1:1 size. No zoom, scaling or smaller layout

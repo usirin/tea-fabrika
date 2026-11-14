@@ -51,8 +51,9 @@ Read `AGENTS.md` first. Its rules on names, writing, version and the public repo
   info mode (`C-b i`). Pipeline used ticket 117's real run. Keybindings used today's key code.
 - It runs through the experiment, the page, the code block that opens the page, and the
   canvas. Every principle says whether today's case follows it or breaks it, and where.
-- Say which version each claim is about: today's version (`apps/`, `packages/`, `programs/`) or
-  `next/`.
+- Say which version each claim is about: today's version (`apps/`, `packages/`, `programs/`),
+  which is frozen and only read
+  ([0525](../../../.decisions/0525-todays-version-is-frozen.md)), or `next/`.
 
 ### 3. Lead with the known way
 
@@ -85,10 +86,11 @@ Read `AGENTS.md` first. Its rules on names, writing, version and the public repo
 The Linear row in step 4 is words. This step checks the look with eyes. It starts wide, as the
 pipe marker finalists did with four different designs, and only then refines one.
 
-This step also runs on its own for a screen already being built in today's app, before its pull
-request opens, even when no study is running (owner, 2026-11-08).
+This step also runs on its own for a screen already being built in `next/`, before its pull
+request opens, even when no study is running (owner, 2026-11-08). Today's app is frozen (0525), so
+no design is built there.
 
-- Build **3 or 4 distinct designs** for real in today's app, on a local branch, with the real
+- Build **3 or 4 distinct designs** for real in `next/`, on a local branch, with the real
   tokens (`packages/fabrika-design/src/themes.ts`) and the real chassis around them. Each is a different
   answer to the same job, such as a list, a card, a panel or inline, not a small change to one
   design. Keys and mouse both work in each, as the guidelines say. Read today's code for which
@@ -140,8 +142,8 @@ request opens, even when no study is running (owner, 2026-11-08).
 - `## What this tells us for fabrika`: the long reasoning the page leaves out. Each principle with
   its lean (**Lean, NN%.** with the doubt and what would settle it, or **No lean, the owner
   picks.**), its Linear row, its Elm or OTP answer and its cost. Then the smaller calls, each with
-  options as small code blocks and a lean; what the ledger records, or "nothing new"; and a tryout
-  in today's version, with a size in lines and agent hours, when the area has one.
+  options as small code blocks and a lean; what the ledger records, or "nothing new"; and a first
+  slice in `next/`, with a size in lines and agent hours, when the area has one.
 - `## What it cannot tell us`, `## Links` with the tags.
 - Dollars spent, even when $0. A probe that ran says where, on what version, and if it was kept.
 
@@ -153,7 +155,7 @@ with its shots in `shots/`
 `references/guideline-page.md`. No new note goes under `docs/direction/`.
 
 The page holds the rules only. The long reasoning, the leans and how sure, the Linear rows, the
-smaller calls, the ledger, the tryout and the cost stay in the experiment (step 6), and the page
+smaller calls, the ledger, the first slice and the cost stay in the experiment (step 6), and the page
 links it.
 
 - **Line one is the status:** **Proposed DATE.** with a link to the experiment. On the owner's
@@ -238,8 +240,9 @@ study ends here.
 
 - **The same day as the merge,** write the build plan for the version the page names, using the
   plan skill.
-- **Today's version is in scope.** A page about today's app, or one whose tryout the owner took,
-  is the owner's pick by that yes; it needs no second ask before it is planned.
+- **The build goes into `next/`.** Today's version is frozen (0525), so a page about today's app is
+  built in `next/` too. It is the owner's pick by that yes; it needs no second ask before it is
+  planned.
 - **Bring it to the owner as one yes or no:** approve the plan? On a yes, the test writer starts
   as soon as a slot is free (AGENTS.md's caps), then the build and one review, as every
   pull request does. File the build as a tracker ticket with `from` set to the page's pull request.

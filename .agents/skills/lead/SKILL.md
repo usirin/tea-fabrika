@@ -416,7 +416,7 @@ visible, and never weaken the rules to hide this message.
    this repo's steps, what ran each one, and the dollars, in the order
    [the pr skill](../pr/SKILL.md) gives.
 9. **Land it** by [the plan's rule](../../../docs/plan/README.md#how-a-change-lands): the review says
-   `merge-ready`, CI is green (e2e included), and you read the diff and run the leak grep.
+   `merge-ready`, CI is green (`next/`'s e2e included), and you read the diff and run the leak grep.
    [The tests skill](../tests/SKILL.md#new-and-changed-laws) says what a new or changed law must be.
    Zero hits from loosening.sh mean no owner read is needed.
    The lead records its output in the PR. A hit goes to the lead's hand check, with the hit list
@@ -518,7 +518,8 @@ counts as proof. The CI `field` job checks each added row's shape.
 Skills, the lead scripts and the drive script run on our own laptop, so they are not product work
 (owner, 2026-11-09). They skip the plan, tests and review steps. The lead or one agent
 changes them directly, keeps each change small, and merges on green CI with a clean leak grep.
-Product code (`next/` and today's app) keeps its steps.
+Product code (`next/`) keeps its steps; today's version takes no edit, and CI's freeze guard
+refuses one ([0525](../../../.decisions/0525-todays-version-is-frozen.md)).
 
 ## Decisions land at once
 
