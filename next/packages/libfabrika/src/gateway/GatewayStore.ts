@@ -5,18 +5,19 @@
  * @stability unstable
  */
 import { Effect, Result, Schema } from "effect";
-import { LedgerError } from "../ledger/Ledger.ts";
 import { type Sql } from "../Sql.ts";
+import { BadRow, GatewayError, Storage } from "./GatewayError.ts";
 
 /**
  * Creates the gateway's store over a Sql: `atomic`, `get`, `set` and the Sql itself.
  *
  * **Details**
  *
- * `atomic` runs one synchronous step in a transaction, creating the tables first, and fails with
- * a storage error if the step throws. `get` and `set` read and write a named state value through a
- * schema. `get` answers null when the name is absent and throws a bad-row error when the saved text
- * does not decode, so call it inside `atomic`.
+ * `atomic` runs one synchronous step in a transaction, creating the tables first. When the step
+ * throws, it fails with that `GatewayError` as it is, or with reason `Storage` for any other
+ * throw. `get` and `set` read and write a named state value through a schema. `get` answers null
+ * when the name is absent and throws a `GatewayError` with reason `BadRow` when the saved text does
+ * not decode, so call it inside `atomic`.
  *
  * @stability unstable
  * @category constructors
@@ -42,7 +43,7 @@ export const gatewayStore = (sql: Sql) => {
           ensure();
           return step();
         }),
-      catch: (cause) => new LedgerError({ reason: "storage", cause }),
+      catch: (cause) => (Schema.is(GatewayError)(cause) ? cause : new GatewayError({ reason: new Storage({ cause }) })),
     });
   });
   const get = <A>(name: string, schema: Schema.Codec<A>) => {
@@ -55,7 +56,7 @@ export const gatewayStore = (sql: Sql) => {
     const decoded = Schema.decodeUnknownResult(Schema.fromJsonString(schema))(row.value);
 
     if (Result.isFailure(decoded)) {
-      throw new LedgerError({ reason: "bad_row", cause: decoded.failure });
+      throw new GatewayError({ reason: new BadRow({ cause: decoded.failure }) });
     }
 
     return decoded.success;

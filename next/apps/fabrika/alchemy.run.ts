@@ -46,6 +46,7 @@ export const stack = (
           PROJECT: Cloudflare.DurableObject("Project"),
           PROCESS: Cloudflare.DurableObject("Process"),
           CONNECTION: Cloudflare.DurableObject("Connection"),
+          Connection: Cloudflare.DurableObject("Connection"),
           RECORD: Cloudflare.DurableObject("RecordPart"),
           RecordPart: Cloudflare.DurableObject("RecordPart"),
           LOADER: Cloudflare.WorkerLoader(),

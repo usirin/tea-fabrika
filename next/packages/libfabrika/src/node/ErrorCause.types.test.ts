@@ -56,7 +56,9 @@ describe("T695, C8: error types accept a diagnostic cause", () => {
     expectTypeOf<Effect.Error<Append>>().toEqualTypeOf<LedgerError>();
     expectTypeOf<Stream.Error<ReturnType<(typeof Ledger)["Service"]["read"]>>>().toEqualTypeOf<LedgerError>();
     expectTypeOf<Effect.Error<(typeof ProcessStore)["Service"]["load"]>>().toEqualTypeOf<LedgerError>();
-    expectTypeOf<Effect.Error<(typeof RecoveryStore)["Service"]["load"]>>().toEqualTypeOf<LedgerError>();
+    // Its own error since ticket 921 slice 1, read by tag: `runtime/Runtime.types.test.ts` holds the rest.
+    type Load = Effect.Error<(typeof RecoveryStore)["Service"]["load"]>;
+    expectTypeOf<Load["_tag"]>().toEqualTypeOf<"RecoveryStoreError">();
     expectTypeOf<Effect.Error<ReturnType<typeof decodeBuilt>>>().toEqualTypeOf<BuildError>();
     expectTypeOf<Effect.Error<ReturnType<(typeof SpanSink)["Service"]["summaries"]>>>().toEqualTypeOf<SinkError>();
     type Next = ReturnType<(typeof Id.Generator)["Service"]["next"]>;

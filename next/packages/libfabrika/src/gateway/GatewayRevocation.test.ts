@@ -35,6 +35,7 @@ import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Answer } from "../transport/Wire.ts";
+import type { GatewayError } from "./GatewayError.ts";
 import * as RateLimiterSql from "./RateLimiterSql.ts";
 
 let Gateway: typeof import("./Gateway.ts").Gateway;
@@ -170,7 +171,8 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
   const controls = {
     letter: "",
     open: (_process: string, _client: string): Effect.Effect<Schema.Json> => Effect.succeed(null),
-    deliver: (_: Incoming): Effect.Effect<void | Sent, LedgerError | NotGranted | ProcessError> => Effect.void,
+    deliver: (_: Incoming): Effect.Effect<void | Sent, LedgerError | NotGranted | ProcessError | GatewayError> =>
+      Effect.void,
   };
   const storage = () => openDb(path).pipe(Effect.map((db) => ({ db, sql: nodeSql(db) })));
   const first = yield* storage();

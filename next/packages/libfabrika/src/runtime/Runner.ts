@@ -23,6 +23,7 @@ import {
   Stream,
   Tracer,
 } from "effect";
+import { type SessionManagerError } from "../access/SessionManager.ts";
 import {
   Activity,
   DeadInput,
@@ -78,7 +79,7 @@ import { defaultPolicy, supervisor, Supervision, type SupervisorMsg } from "./in
 import { MailDelivery } from "./MailDelivery.ts";
 import { diff } from "./Patch.ts";
 import { Admission, ProgramDown, Refusal, Step, Write } from "./Program.ts";
-import { recoveryStore } from "./RecoveryStore.ts";
+import { recoveryStore, RecoveryStoreError } from "./RecoveryStore.ts";
 import { Replies, type RepliesError } from "./Replies.ts";
 import * as RepliesSql from "./RepliesSql.ts";
 import { Queued, SendInput } from "./Send.ts";
@@ -1386,7 +1387,7 @@ export class ProgramRunner extends Context.Service<
             })(function* <E>(appended: Effect.Effect<Appended, E>) {
               return yield* appended;
             });
-          const attempt: Effect.Effect<Appended, LedgerError | SigningRefused | NotGranted> = Effect.gen(function* () {
+          const attempt: Effect.Effect<Appended, WriteFailure> = Effect.gen(function* () {
             if (asked._tag === "own") {
               if (policy.personOnly) {
                 return yield* new SigningRefused({ reason: "person_only" });
@@ -1893,7 +1894,10 @@ export class ProgramRunner extends Context.Service<
                 // A storage failure while draining leaves the alarm that tries it again.
                 Effect.onExit((exit) =>
                   exit._tag === "Failure" &&
-                  Option.exists(Cause.findErrorOption(exit.cause), Schema.is(LedgerError)) &&
+                  Option.exists(
+                    Cause.findErrorOption(exit.cause),
+                    (error) => Schema.is(LedgerError)(error) || Schema.is(RecoveryStoreError)(error),
+                  ) &&
                   !Cause.hasInterrupts(exit.cause)
                     ? retryLater
                     : Effect.void,
@@ -2166,6 +2170,8 @@ export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError"
 
 type RunnerFailure =
   | LedgerError
+  | RecoveryStoreError
+  | SessionManagerError
   | ProgramDown
   | RunnerError
   | SinkError
@@ -2173,6 +2179,9 @@ type RunnerFailure =
   | NotGranted
   | RepliesError
   | WatchersError;
+
+/** Why a checked write did not land: a refusal, or a fault in the ledger or the session table. */
+type WriteFailure = LedgerError | SessionManagerError | SigningRefused | NotGranted;
 
 const cmdType = (job: Dispatched): string =>
   Option.match(decodeTyped(job.cmd), { onNone: () => "", onSome: (c) => c.type });

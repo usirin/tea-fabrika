@@ -227,8 +227,6 @@ const nextSamples = {
   "next/packages/libfabrika/src/access/ClientManager.types.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933326, B job 132315559497, C job 132330501014.
   "next/packages/libfabrika/src/access/Passkey.test.ts": [0.1, 0.0, 0.0],
-  // A job 132292933192, B job 132315559467, C job 132330500983.
-  "next/packages/libfabrika/src/access/SessionManager.test.ts": [8.0, 9.6, 14.7],
   // A job 132292933326, B job 132315559534, C job 132330500993.
   "next/packages/libfabrika/src/access/Text.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933270, B job 132315559508, C job 132330501014.
@@ -345,6 +343,9 @@ const nextSamples = {
   "next/packages/libfabrika/src/node/StartChild.test.ts": [349.9, 341.0, 598.2],
   // A job 132292933326, B job 132315559508, C job 132330500993.
   "next/packages/libfabrika/src/node/Watchers.test.ts": [488.0, 685.9, 492.4],
+  // A job 132292933192, B job 132315559467, C job 132330500983. Sampled at access/, before PR 1189
+  // moved the file to node/access/.
+  "next/packages/libfabrika/src/node/access/SessionManager.test.ts": [8.0, 9.6, 14.7],
   // A job 132292933270, B job 132315559508, C job 132330501001.
   "next/packages/libfabrika/src/node/build/build-assets.test.ts": [37.0, 34.1, 41.9],
   // A job 132292933169, B job 132315559486, C job 132330501025.

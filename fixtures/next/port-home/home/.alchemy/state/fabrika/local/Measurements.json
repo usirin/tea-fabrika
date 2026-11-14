@@ -1,0 +1,28 @@
+{
+  "status": "created",
+  "fqn": "Measurements",
+  "logicalId": "Measurements",
+  "instanceId": "c8cfa2ff832c1faf0d84aee96f0aa466",
+  "resourceType": "Cloudflare.R2.Bucket",
+  "props": {
+    "name": "fabrika-measurements",
+    "lifecycleRules": [],
+    "locks": []
+  },
+  "attr": {
+    "bucketName": "dev:7ae131a3-5adb-4894-bd69-3d321a901a7f",
+    "storageClass": "Standard",
+    "jurisdiction": "default",
+    "accountId": "00000000000000000000000000000000",
+    "domains": [],
+    "lifecycleRules": [],
+    "cors": []
+  },
+  "bindings": [],
+  "providerVersion": 0,
+  "downstream": [
+    "Brain"
+  ],
+  "removalPolicy": "destroy",
+  "providerMode": "local"
+}
