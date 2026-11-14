@@ -107,15 +107,17 @@ it("real skill Markdown subsets select no test", async () => {
 });
 
 // Today's CI serves both versions. The baseline deliberately has no next/ CLI filter.
-// The matrix also holds leg `e2e`, which runs no vitest, so the law reads the numbered legs only,
-// as the workflow lint does. Plant, run once on check.yaml and restored: drop leg "5" from the next
-// matrix, so file indices 5 of 5 land on no leg (red, the sorted legs are not 1 to 5).
+// The matrix also holds the legs `e2e-1` to `e2e-N`, which run no vitest step, so the law reads the
+// numbered legs only, as the workflow lint does. Plant, run once on check.yaml and restored: drop
+// leg "5" from the next matrix, so file indices 5 of 5 land on no leg (red, the sorted legs are not
+// 1 to 5). The end-to-end step has a SHARD too, so the vitest step is found by its run command.
 describe("next workflow coverage", () => {
   const workflow = readFileSync(join(root, ".github/workflows/check.yaml"), "utf8");
   const nextWorkflow = parse(workflow).jobs.next;
   const indices = vitestLegs(workflow);
-  const expression: string = nextWorkflow.steps.find((step: { env?: { SHARD?: string } }) => step.env?.SHARD)?.env
-    .SHARD;
+  const expression: string = nextWorkflow.steps.find((step: { run?: string }) =>
+    step.run?.startsWith("pnpm exec vitest run next/ "),
+  )?.env.SHARD;
   const denominator = Number(/\/([1-9]\d*)$/.exec(expression)?.[1]);
   const contexts: Vitest[] = [];
   let nextSpecs: TestSpecification[];

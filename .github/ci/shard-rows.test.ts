@@ -9,7 +9,7 @@ import * as fc from "fast-check";
 import { createVitest } from "vitest/node";
 import { testConfig } from "../../vitest.config.ts";
 import { measured } from "../../vitest.shards.ts";
-import { main, nextFiles, stale } from "./shard-rows.ts";
+import { e2eFiles, main, nextFiles, stale } from "./shard-rows.ts";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const options = { seed: 119120, numRuns: 100 };
@@ -107,6 +107,33 @@ it("scenario: L3 the real config finds TSX tests and excludes e2e, node_modules 
     } finally {
       testConfig.test.include.pop();
     }
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
+
+// T967, E8, today's CI about next/. The end-to-end selection is the end-to-end config's two globs as
+// Vitest reads them: fabrika's `e2e/` folder, not its subfolders, plus tuval's browser key laws.
+it("scenario: E8 the end-to-end files are e2e/*.test.ts and tuval's key laws, on a scratch tree", async () => {
+  // A scratch tree, as L3's: the real e2e folder holds no subfolder test to lose. Plant, run once on
+  // vitest.e2e.config.ts and restored: make the e2e glob `e2e/**/*.test.ts` (red: e2e/node/b found).
+  const folder = mkdtempSync(join(tmpdir(), "t967-e2e-"));
+  const selected = ["next/apps/fabrika/e2e/a.test.ts", "next/packages/tuval/src/browser/key.laws.test.ts"];
+  const left = [
+    "next/apps/fabrika/e2e/node/b.test.ts",
+    "next/apps/fabrika/src/c.test.ts",
+    "next/apps/other/e2e/d.test.ts",
+    "next/apps/fabrika/e2e/e.test.tsx",
+    "next/packages/tuval/src/browser/other.laws.test.ts",
+  ];
+
+  try {
+    for (const path of [...selected, ...left]) {
+      mkdirSync(dirname(join(folder, path)), { recursive: true });
+      writeFileSync(join(folder, path), "");
+    }
+
+    expect(await e2eFiles(folder)).toEqual(selected);
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
@@ -216,8 +243,11 @@ it("format: L4 one diagnostic naming each stale row, exit 1 for stale rows and 0
 });
 
 it("scenario: L4 the Node entry passes the real table and file set to the reporter", async () => {
-  // Spawn the real CLI so import.meta.main and its exit status are covered too.
-  const rows = stale(measured, await nextFiles(root));
+  // Spawn the real CLI so import.meta.main and its exit status are covered too. T967 (E9): the
+  // entry judges the vitest and end-to-end selections together, since one table holds both rows.
+  // Plant, run once on shard-rows.ts with the 8 end-to-end rows in the table, and restored: leave
+  // e2eFiles out of the entry (red: the entry printed 8 stale rows).
+  const rows = stale(measured, [...(await nextFiles(root)), ...(await e2eFiles(root))]);
   const result = spawnSync(process.execPath, [".github/ci/shard-rows.ts"], { cwd: root, encoding: "utf8" });
   expect(result.error).toBeUndefined();
   expect(result.status).toBe(rows.length === 0 ? 0 : 1);
