@@ -8,17 +8,21 @@ if [ ! -L node_modules ] && [ -e node_modules ] && [ ! -d node_modules ]; then
   echo "typecheck: node_modules is no folder; remove it and run pnpm install --offline --frozen-lockfile" >&2
   exit 1
 fi
-exec python3 - <<'PY'
+exec python3 - "$0" <<'PY'
 import fcntl, os, subprocess, sys
 
 INSTALL = ["pnpm", "install", "--offline", "--frozen-lockfile"]
 TYPECHECK = ["pnpm", "-r", "typecheck"]
+# The script's own folder, wherever the run started: frozen.mjs is found beside it, never from the
+# working folder.
+HERE = os.path.dirname(os.path.abspath(sys.argv[1]))
+FROZEN = os.path.join(HERE, "..", "oxlint-plugins", "frozen.mjs")
 commands = [["pnpm", "exec", "effect-tsgo", "patch", "--typescript"], TYPECHECK]
 
 def live_typecheck():
     # Today's version is frozen (0525): only live packages are checked. oxlint-plugins/frozen.mjs
     # names the frozen paths once and prints the live package folders, one per line.
-    listed = subprocess.run(["node", "oxlint-plugins/frozen.mjs", "packages"], stdout=subprocess.PIPE, text=True)
+    listed = subprocess.run(["node", FROZEN, "packages"], stdout=subprocess.PIPE, text=True)
     dirs = [line for line in listed.stdout.splitlines() if line]
     if listed.returncode or not dirs:
         sys.stderr.write("typecheck: could not list the live packages\n")
