@@ -67,6 +67,11 @@
       ]
     },
     {
+      "name": "next-email",
+      "layer": 5,
+      "paths": ["next/packages/libfabrika/src/email"]
+    },
+    {
       "name": "next-access",
       "layer": 4,
       "paths": ["next/packages/libfabrika/src/access"]

@@ -29,27 +29,43 @@ const run = Effect.gen(function* () {
 
   yield* Console.log(`e2e: ${files.length} file(s): ${files.join(", ")}`);
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const exitCode = yield* spawner.exitCode(
-    ChildProcess.make(
-      "pnpm",
-      [
-        "exec",
-        "vitest",
-        "run",
-        "--maxWorkers=1",
-        "--root",
-        folder,
-        "--fileParallelism=false",
-        `--testTimeout=${LIMIT}`,
-        `--hookTimeout=${LIMIT}`,
-      ],
-      { cwd: import.meta.dirname, stdin: "ignore", stdout: "inherit", stderr: "inherit" },
-    ),
-  );
 
-  if (exitCode !== 0) {
-    return yield* new E2eFailed({ exitCode });
+  for (const file of files) {
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const home = yield* fs.makeTempDirectoryScoped({ directory: "/tmp", prefix: "fh." });
+        const exitCode = yield* spawner.exitCode(
+          ChildProcess.make(
+            "pnpm",
+            [
+              "exec",
+              "vitest",
+              "run",
+              file,
+              "--maxWorkers=1",
+              "--root",
+              folder,
+              "--fileParallelism=false",
+              `--testTimeout=${LIMIT}`,
+              `--hookTimeout=${LIMIT}`,
+            ],
+            {
+              cwd: import.meta.dirname,
+              env: { FABRIKA_HOME: home },
+              extendEnv: true,
+              stdin: "ignore",
+              stdout: "inherit",
+              stderr: "inherit",
+            },
+          ),
+        );
+
+        if (exitCode !== 0) {
+          return yield* new E2eFailed({ exitCode });
+        }
+      }),
+    );
   }
 });
 
-NodeRuntime.runMain(run.pipe(Effect.provide(NodeServices.layer)));
+NodeRuntime.runMain(run.pipe(Effect.scoped, Effect.provide(NodeServices.layer)));

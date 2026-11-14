@@ -987,6 +987,7 @@
               "jobs",
               "packs",
               "access",
+              "email",
               "runtime",
               "gateway",
               "schedules"

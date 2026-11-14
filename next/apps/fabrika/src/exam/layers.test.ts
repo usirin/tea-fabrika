@@ -218,6 +218,9 @@ const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
   transport: ["id"],
   data: ["id"],
   coordination: ["data", "id"],
+  // P36: email reads access and the ledger, and its laws sign and check real SSHSIG with transport's
+  // own code. It may not import the runtime, which sits on its layer.
+  email: ["coordination", "data", "transport", "id"],
   app: ["coordination", "id"],
   node: ["app", "coordination", "data", "id"],
   workers: ["app", "coordination", "data", "transport", "id"],
@@ -256,6 +259,7 @@ const rowParts: Readonly<Record<string, string>> = {
   "next-jobs": "coordination",
   "next-packs": "coordination",
   "next-access": "coordination",
+  "next-email": "email", // P36: layer 5 beside the runtime, with its own line in the table above
   "next-runtime": "app",
   "next-mcp": "mcp",
   "next-door": "door",
@@ -1196,7 +1200,8 @@ describe("layers", () => {
 
   // scenario: the plan's plant for "no module imports another module on its own layer". `next-access` is
   // put on layer 5 beside `next-runtime`: an import from the runtime to access, which went down,
-  // must now fail, and no other pair changes.
+  // must now fail, and no other pair changes. From P36 `next-email` is on layer 5 too, so the same
+  // holds of email and access.
   it.effect("scenario: a module put beside the runtime refuses an import from the runtime", () =>
     Effect.gen(function* () {
       const realTree = yield* plantedReal;
@@ -1205,10 +1210,15 @@ describe("layers", () => {
       const after = runTool(realTree, beside);
       expect(after.edges).toEqual(expectedEdges(beside));
       expect(after.edges.filter((edge) => !before.includes(edge))).toEqual([
+        "next-access -> next-email [sideways]",
         "next-access -> next-runtime [sideways]",
+        "next-email -> next-access [sideways]",
         "next-runtime -> next-access [sideways]",
       ]);
-      expect(before.filter((edge) => !after.edges.includes(edge))).toEqual(["next-access -> next-runtime [upward]"]);
+      expect(before.filter((edge) => !after.edges.includes(edge))).toEqual([
+        "next-access -> next-email [upward]",
+        "next-access -> next-runtime [upward]",
+      ]);
     }),
   );
 
@@ -1222,6 +1232,7 @@ describe("layers", () => {
       "next-door": 6,
       "next-schedules": 6,
       "next-runtime": 5,
+      "next-email": 5, // P36's approved plan: email sits beside the runtime, above access
       "next-access": 4,
       "next-processes": 3,
       "next-presence": 3,
