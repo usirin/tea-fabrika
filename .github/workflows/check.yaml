@@ -379,6 +379,10 @@ jobs:
   # which passes while that folder is empty. Chromium is fetched only once an e2e file exists, by
   # the app's own Playwright. Electron and launchd run on the laptop first; CI gets Electron once
   # xvfb and the keychain are tried.
+  # Six machines. Legs `1` to `5` run vitest, each a fifth of the files by measured seconds
+  # (vitest.shards.ts). Leg `e2e` runs no vitest: it fetches chromium and runs the end-to-end
+  # runner, which the split does not count. Every leg is a quoted string, so each `if` below
+  # compares a string with a string. workflow-lint.ts pins the legs, the `/5` and each `if`.
   next:
     needs: changes
     if: >-
@@ -392,7 +396,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: ["e2e", "1", "2", "3", "4", "5"]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -411,25 +415,26 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec vitest run next/ --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
+        if: matrix.shard != 'e2e'
         env:
-          SHARD: ${{ matrix.shard }}/6
+          SHARD: ${{ matrix.shard }}/5
       - name: shard times
         if: ${{ !cancelled() }}
         run: node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"
       # `--with-deps` runs apt itself, with no limit. apt.sh refreshes the lists first, on a mirror
       # that answers, the same way as the test job's apt step.
       - name: chromium
-        if: matrix.shard == 1 && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''
+        if: matrix.shard == 'e2e' && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''
         run: |
           sudo sh .github/ci/apt.sh update
           pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium
       - run: node next/apps/fabrika/e2e.ts
-        if: matrix.shard == 1
+        if: matrix.shard == 'e2e'
       # Tier 1, P35: each edge comment this pull request adds, one line with its reason, for the owner
       # (docs/direction/no-promises.md). In the step summary and as a note on that line of the diff.
       # It never blocks on an edge: it exits 0, or 2 only when it could not read a file.
       - name: edges
-        if: matrix.shard == 1 && github.event_name == 'pull_request'
+        if: matrix.shard == '1' && github.event_name == 'pull_request'
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: node next/apps/fabrika/src/exam/edges.ts --base "$BASE"

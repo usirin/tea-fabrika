@@ -19,6 +19,8 @@ const rows = fc
   .uniqueArray(fc.string(), { maxLength: 50 })
   .chain((files) => fc.subarray(files).map((present) => ({ files, present })));
 
+// L2. Plants, each run once on shard-rows.ts and restored: return [] always (red); test the key
+// with `in`, so `constructor` passes as a row (red).
 it("L2: missing rows are exactly absent own keys, sorted in either input order", () => {
   fc.assert(
     fc.property(rows, ({ files, present }) => {
@@ -36,10 +38,14 @@ it("L2: missing rows are exactly absent own keys, sorted in either input order",
   );
 });
 
+// L3. Plants, each run once on shard-rows.ts and restored: narrow the next/ globs to `*.test.ts`,
+// so the scratch folder's view.test.tsx is lost (red); add `next/apps/*/e2e/**/*.test.ts`, so the
+// app's end-to-end files are found (red).
 it("scenario: L3 the real config finds TSX tests and excludes e2e, node_modules and dist", async () => {
-  // This law is about the file set selected by today's real Vitest config.
+  // This law is about the file set selected by today's real Vitest config. No .tsx test is left
+  // under next/ in the repo, so the scratch folder's view.test.tsx holds that case.
   const files = nextFiles(root);
-  expect(files).toContain("next/apps/fabrika/src/exam/markdown.test.tsx");
+  expect(files.length).toBeGreaterThan(0);
   expect(files.every((path) => !/(?:^|\/)(?:e2e|node_modules|dist)\//.test(path))).toBe(true);
   const folder = mkdtempSync(join(tmpdir(), "t890-files-"));
   const selected = ["next/apps/toy/src/plain.test.ts", "next/apps/toy/src/view.test.tsx"];
@@ -89,6 +95,8 @@ it("scenario: L3 the real config finds TSX tests and excludes e2e, node_modules 
   }
 });
 
+// L4. Plants, each run once on shard-rows.ts and restored: exit 0 always (red); print only the
+// first path (red).
 it("format: L4 one diagnostic per missing path, exit 1 for missing rows and 0 otherwise", () => {
   // The CLI's line format is consumed by lint. Keep generated paths on one line.
   fc.assert(
