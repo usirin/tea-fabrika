@@ -7,6 +7,7 @@ import { encodeRpcError, ErrorTag, RpcCallError } from "alchemy/Rpc";
 import { Effect, Schema } from "effect";
 import { expect } from "vitest";
 import { LedgerError } from "../ledger/Ledger.ts";
+import * as RepliesTest from "../runtime/RepliesTest.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient, rejected } from "./platform.ts";
 
 class WireFault extends Error {
@@ -20,7 +21,7 @@ const faults = [
 ] as const;
 
 /** A platform stub whose every method rejects with `fault`, standing in for a binding, storage or bucket. */
-const rejecting = <A>(fault: Error) =>
+const rejecting = <A>(fault: unknown) =>
   new Proxy(
     {},
     {
@@ -119,6 +120,39 @@ it.effect.prop(
       expect(cause).toBeInstanceOf(RpcCallError);
       expect(cause).toMatchObject({ method: call });
       expect(Reflect.get(Object(cause), "cause"), "the RpcCallError keeps what the platform threw").toBe(fault);
+    }),
+  { arbitrary: { runs: 100, seed: 119120 } },
+);
+
+// T502 S1 [secrets], next/. What the platform throws on a call through `reach` can hold a letter's
+// text (for `notify`, the `news`), and `lost` puts it in the LedgerError's message. No span the call
+// makes may keep it, in its name, attributes, events or failed exit (docs/plan/ticket-502-alchemy-port.md,
+// the `reach.ts` and `platform.test.ts` rows). The thrown value is each fault class above, bare text,
+// or an object holding the text. Plants: `Effect.fn` back on `reach`; a span named with the message.
+const letter = (call: string, secret: string): ReadonlyArray<unknown> =>
+  call === "notify" ? ["client-1", { news: secret }] : call === "ring" ? ["stream-1", 1] : ["session-1"];
+
+it.effect.prop(
+  "[secrets] a Connection call the platform rejects with a letter's text makes no span that keeps it",
+  {
+    call: Schema.Literals(calls),
+    secret: RepliesTest.sentinel,
+    name: Schema.Literals([...faults.map((fault) => fault.name), "text", "object"]),
+  },
+  ({ call, secret, name }) =>
+    Effect.gen(function* () {
+      const fault = faults.find((kind) => kind.name === name);
+      const thrown: unknown =
+        fault !== undefined ? fault.make(secret) : name === "text" ? secret : { message: secret, news: secret };
+      const captured = RepliesTest.capture();
+      const method = (stub: Parameters<typeof GatewayClient.make>[0]): Effect.Effect<unknown, unknown> =>
+        Reflect.apply(Reflect.get(GatewayClient.make(stub), call), undefined, letter(call, secret));
+      const failure = yield* Effect.flip(method(rejecting(thrown))).pipe(Effect.withTracer(captured.tracer));
+
+      // The text did go through: the caller gets the lost call, with what the platform threw inside.
+      expect(failure).toMatchObject({ _tag: "LedgerError", reason: "unreachable" });
+      expect(Reflect.get(Object(Reflect.get(Object(failure), "cause")), "cause")).toBe(thrown);
+      RepliesTest.unleaked(captured.text(), [secret]);
     }),
   { arbitrary: { runs: 100, seed: 119120 } },
 );
