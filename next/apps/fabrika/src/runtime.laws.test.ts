@@ -1,9 +1,6 @@
 // P12, next/. Project and Connection use their real composition and SQLite services.
 // Only platform handles are supplied here. No sockets or substitute authority rules.
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { Descriptor, Incoming, Sent } from "@kampus/libfabrika";
 import { SigningRefused } from "@kampus/libfabrika/access/SessionManager";
@@ -19,9 +16,9 @@ import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
-import { Cause, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Tracer } from "effect";
+import { Cause, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Scope, Tracer } from "effect";
 import * as fc from "fast-check";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, settings, type Env } from "./runtime.ts";
 import { Settings } from "./settings.ts";
@@ -84,8 +81,6 @@ const identity = () => {
   };
 };
 
-const closers: Array<() => Promise<void>> = [];
-
 const generated = fc.record({
   letter: fc.uuid(),
   write: fc.uuid(),
@@ -104,27 +99,46 @@ const prepareInput = {
 
 const approveInput = { ...prepareInput, letter: "approve" };
 
-const law = (name: string, check: (input: ReturnType<typeof generated.generate>["value"]) => Promise<void>) =>
-  it(name, async () => {
+/** Opens a world in the scope of the law run that asked for it. */
+type Open = (trace?: string, build?: string, options?: WorldOptions) => ReturnType<typeof world>;
+
+/**
+ * Runs one law's body in a scope of its own. Each world the body opens closes with that scope and
+ * with no other, and the law's abort (its timeout) interrupts the body, so the scope still closes.
+ * After the abort, `stopOnAbort` ends the fast-check run before a shrink opens anything, and the
+ * body's own `open` refuses once its run has ended, since the body's promise runs on past the close.
+ * A law that hangs keeps nothing open for the next one (0061).
+ */
+const owned = (body: (open: Open) => Promise<void>, signal: AbortSignal) =>
+  Effect.runPromise(
+    StartsTest.stopOnAbort(signal).pipe(
+      Effect.andThen(
+        Effect.scoped(
+          Effect.flatMap(Effect.scope, (scope) =>
+            Effect.promise((ended) =>
+              body((trace, build, options) =>
+                ended.aborted
+                  ? Promise.reject(new Error("this law run has ended, so it opens no world"))
+                  : world(scope, trace, build, options),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+    { signal },
+  );
+
+const law = (
+  name: string,
+  check: (input: ReturnType<typeof generated.generate>["value"], open: Open) => Promise<void>,
+) =>
+  it(name, async ({ signal }) => {
     await fc.assert(
-      fc.asyncProperty(generated, async (input) => {
-        try {
-          await check(input);
-        } finally {
-          for (const close of closers.splice(0).reverse()) {
-            await close();
-          }
-        }
-      }),
+      fc.asyncProperty(generated, (input) => owned((open) => check(input, open), signal)),
       { seed: 119120, numRuns: 20, examples: [[prepareInput], [approveInput]] },
     );
   });
-
-afterEach(async () => {
-  for (const close of closers.splice(0).reverse()) {
-    await close();
-  }
-});
 
 const storage = (db: DatabaseSync) => {
   const sql = nodeSql(db),
@@ -159,19 +173,26 @@ const settled = (db: DatabaseSync) =>
  *  `status` (amendment A2). It gives up after this, so a build that waits on it still ends. */
 const CALLBACK_GIVES_UP = "6 seconds";
 
-const world = async (
-  trace = TRACE,
-  build = "counter-b",
-  options: { readonly callback?: boolean; readonly starts?: ReadonlyArray<typeof StartGrant.Type> } = {},
-) => {
+interface WorldOptions {
+  readonly callback?: boolean;
+  readonly starts?: ReadonlyArray<typeof StartGrant.Type>;
+}
+
+// The real `Layer.buildWithMemoMap`, read once when the file loads. A world that never ends keeps
+// its spy in place, so a later world that read the method again would wrap that spy in itself.
+const buildLayer = Layer.buildWithMemoMap;
+
+// A world is opened in a scope, and that scope alone closes it (0061).
+const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", options: WorldOptions = {}) => {
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
   table.programs["fabrika/counter"] = { hash: "counter-a", source: "counter" };
   // P14 slice 2: the app boots `checklist:1` after `counter:1`, so the table holds its program too.
   table.programs["fabrika/checklist"] = { hash: "checklist-a", source: "checklist" };
   table.programs.approvals = { hash: "approvals-a", source: "approvals" };
-  const home = mkdtempSync(join(tmpdir(), "p12-r-")),
-    key = identity();
-  const db = new DatabaseSync(join(home, "project.db"));
+  const key = identity();
+  // The ledger is in memory: a file would sync every commit to disk, which took half of L4's time
+  // on a laptop, and no law reads the file. A reopen keeps this same handle.
+  const db = new DatabaseSync(":memory:");
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture implements the platform members Project reads; only workerd can construct a full DurableObjectState
   const ctx = {
     id: { name: "project-test" },
@@ -274,18 +295,23 @@ const world = async (
     },
   } as unknown as Env;
   const span = Tracer.externalSpan({ traceId: trace, spanId: "00f067aa0ba902b7" });
-  const buildLayer = Layer.buildWithMemoMap;
   // The shared holder builds consumers on first entry, after the outer runtime starts.
   const startup = vi
     .spyOn(Layer, "buildWithMemoMap")
-    .mockImplementation((layer, memo, scope) => buildLayer(layer.pipe(Layer.withParentSpan(span)), memo, scope));
+    .mockImplementation((layer, memo, into) => buildLayer(layer.pipe(Layer.withParentSpan(span)), memo, into));
   let runtime = projectRuntime(ctx, env);
   const run = <A, E>(work: Effect.Effect<A, E, ProjectService>) => runtime.runPromise(work);
-  closers.push(async () => {
-    await runtime.dispose();
-    db.close();
-    rmSync(home, { recursive: true, force: true });
-  });
+  // Added before the build, so a world whose build fails or hangs is closed by its scope too. A scope
+  // that already closed runs this close at once, so it is awaited, never run synchronously.
+  await Effect.runPromise(
+    Scope.addFinalizer(
+      scope,
+      Effect.promise(async () => {
+        await runtime.dispose();
+        db.close();
+      }),
+    ),
+  );
   let p: ProjectService["Service"];
 
   try {
@@ -389,19 +415,11 @@ const world = async (
   };
 };
 
-// The L4/L8 world is a scoped resource: its release closes what `world()` opened (0061).
+// The L4/L8 world, opened in the running walk's own scope (0061).
 const openWorld = (starts?: ReadonlyArray<typeof StartGrant.Type>) =>
-  Effect.acquireRelease(
-    Effect.promise(() => world(TRACE, "counter-b", starts === undefined ? {} : { starts })),
-    () =>
-      Effect.promise(async () => {
-        for (const close of closers.splice(0).reverse()) {
-          await close();
-        }
-      }),
+  Effect.flatMap(Effect.scope, (scope) =>
+    Effect.promise(() => world(scope, TRACE, "counter-b", starts === undefined ? {} : { starts })),
   );
-
-const opened = openWorld();
 
 StartsTest.law(
   "L4 child grants pass through the recorded start to ChildrenLedger without entering ledger entries or receipts",
@@ -521,16 +539,23 @@ const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<nu
 };
 
 describe("P40 the core counter's identity in the brain", () => {
-  it("L4 and L8: the bootstrap runs fabrika/counter as counter:1, and no start turns a program identity into a registered name", async () => {
+  it("L4 and L8: the bootstrap runs fabrika/counter as counter:1, and no start turns a program identity into a registered name", async ({
+    signal,
+  }) => {
     await fc.assert(
       fc.asyncProperty(fc.array(fc.nat(), { minLength: 2, maxLength: 8 }), (tape) =>
         Effect.runPromise(
-          Effect.scoped(
-            Effect.gen(function* () {
-              const w = yield* opened;
-              yield* Effect.promise(() => walk(w, tape));
-            }),
+          StartsTest.stopOnAbort(signal).pipe(
+            Effect.andThen(
+              Effect.scoped(
+                Effect.gen(function* () {
+                  const w = yield* openWorld();
+                  yield* Effect.promise(() => walk(w, tape));
+                }),
+              ),
+            ),
           ),
+          { signal },
         ),
       ),
       { seed: 119120, numRuns: 10 },
@@ -539,13 +564,13 @@ describe("P40 the core counter's identity in the brain", () => {
 });
 
 describe("P12 Project authority", () => {
-  law("the bootstrap entry keeps the caller's span trace", async ({ trace }) => {
-    const w = await world(trace);
+  law("the bootstrap entry keeps the caller's span trace", async ({ trace }, open) => {
+    const w = await open(trace);
     const [row] = await w.run(w.p.read("processes/counter:1", 0, "audit"));
     expect(row).toMatchObject({ traceId: w.span.traceId, rev: w.p.boot.rev });
   });
-  law("a brain lifecycle entry keeps the caller's span trace", async ({ trace, write }) => {
-    const w = await world();
+  law("a brain lifecycle entry keeps the caller's span trace", async ({ trace, write }, open) => {
+    const w = await open();
     const event = BrainEvent.cases.stopped.make({ id: write, start: write, at: 1, reason: "stop" });
     await w.run(
       w.p.brain(event).pipe(Effect.withParentSpan(Tracer.externalSpan({ traceId: trace, spanId: "00f067aa0ba902b7" }))),
@@ -554,21 +579,24 @@ describe("P12 Project authority", () => {
     const { _tag, ...body } = event;
     expect(row).toMatchObject({ traceId: trace, id: write, _tag, body });
   });
-  law("reopening an exited bootstrap reads its first placing without starting it again", async ({ trace, build }) => {
-    const w = await world(trace, build);
-    const first = w.p.boot;
-    const before = await w.run(w.p.read("processes/counter:1", 0, "audit"));
-    await w.run(w.p.exit(first.process, { _tag: "normal" }, w.from));
-    const configured = w.configured.length;
-    const reopened = await w.reopen();
-    expect(reopened.boot).toEqual(first);
-    expect(w.configured).toHaveLength(configured);
-    const entries = await w.run(reopened.read("processes/counter:1", 0, "audit"));
-    expect(entries[0]).toEqual(before[0]);
-    expect(entries).toHaveLength(2);
-  });
-  law("a program's person-only events require its own person-only input", async ({ letter, write }) => {
-    const w = await world(),
+  law(
+    "reopening an exited bootstrap reads its first placing without starting it again",
+    async ({ trace, build }, open) => {
+      const w = await open(trace, build);
+      const first = w.p.boot;
+      const before = await w.run(w.p.read("processes/counter:1", 0, "audit"));
+      await w.run(w.p.exit(first.process, { _tag: "normal" }, w.from));
+      const configured = w.configured.length;
+      const reopened = await w.reopen();
+      expect(reopened.boot).toEqual(first);
+      expect(w.configured).toHaveLength(configured);
+      const entries = await w.run(reopened.read("processes/counter:1", 0, "audit"));
+      expect(entries[0]).toEqual(before[0]);
+      expect(entries).toHaveLength(2);
+    },
+  );
+  law("a program's person-only events require its own person-only input", async ({ letter, write }, open) => {
+    const w = await open(),
       pid = await w.start();
     await w.send(pid, "prepare", letter);
     const parent = w.received[0]!.envelope.id;
@@ -578,8 +606,8 @@ describe("P12 Project authority", () => {
     expect(failure).toBeInstanceOf(SigningRefused);
     expect(failure).toMatchObject({ reason: "person_only" });
   });
-  law("a program's declared person-only input authorizes its person-only event", async ({ letter, write }) => {
-    const w = await world(),
+  law("a program's declared person-only input authorizes its person-only event", async ({ letter, write }, open) => {
+    const w = await open(),
       pid = await w.start();
     await w.send(pid, "approve", letter);
     const result = await w.run(Effect.exit(w.p.sign(pid, write, w.received[0]!.envelope.id, "answered")));
@@ -590,8 +618,8 @@ describe("P12 Project authority", () => {
       input: { personOnly: true, process: pid },
     });
   });
-  law("input permission is checked again at the final append", async ({ letter }) => {
-    const w = await world(),
+  law("input permission is checked again at the final append", async ({ letter }, open) => {
+    const w = await open(),
       pid = w.p.boot.process;
     const entered = await Effect.runPromise(Deferred.make<void>()),
       release = await Effect.runPromise(Deferred.make<void>());
@@ -621,8 +649,8 @@ describe("P12 Project authority", () => {
   });
 
   for (const operation of ["own", "inbox", "start", "exit"] as const) {
-    law(`the Project releases its write permit before notifying ${operation}`, async ({ write, letter }) => {
-      const w = await world(),
+    law(`the Project releases its write permit before notifying ${operation}`, async ({ write, letter }, open) => {
+      const w = await open(),
         pid = w.p.boot.process;
       const stream =
         operation === "own"
@@ -672,8 +700,8 @@ describe("P12 Project authority", () => {
     });
   }
 
-  law("reopening a project restores its process when the available bundle changes", async ({ build }) => {
-    const w = await world(TRACE, build),
+  law("reopening a project restores its process when the available bundle changes", async ({ build }, open) => {
+    const w = await open(TRACE, build),
       before = await w.run(w.p.info),
       configured = w.configured.length;
     const result = await Effect.runPromise(
@@ -693,22 +721,26 @@ describe("P12 Project authority", () => {
 
   // scenario: one fixed order, the Project's build and then a callback from its bootstrap's object,
   // so nothing is drawn (ticket 762, L10). A build that waits on that configure waits on itself.
-  it("scenario: the Project's build never waits on its bootstrap's configure calling back into it", async () => {
-    const building = world(TRACE, "counter-b", { callback: true });
-    const built = await Effect.runPromise(Effect.promise(() => building).pipe(Effect.timeoutOption("3 seconds")));
-    const w = await building;
-    expect(Option.isSome(built), "the Project's build waited on its own bootstrap's configure").toBe(true);
-    expect(w.configured.filter((d) => d.id === w.p.boot.process)).toHaveLength(1);
-    // P14 slice 2: the boot is a list, so each entry's configure calls back once, in the list's order.
-    expect(w.statuses, "each boot entry's configure saw the Project answer its status").toMatchObject([
-      { _tag: "ok", value: { name: "counter:1", state: { process: w.p.boot.process } } },
-      { _tag: "ok", value: { name: "checklist:1" } },
-    ]);
+  it("scenario: the Project's build never waits on its bootstrap's configure calling back into it", async ({
+    signal,
+  }) => {
+    await owned(async (open) => {
+      const building = open(TRACE, "counter-b", { callback: true });
+      const built = await Effect.runPromise(Effect.promise(() => building).pipe(Effect.timeoutOption("3 seconds")));
+      const w = await building;
+      expect(Option.isSome(built), "the Project's build waited on its own bootstrap's configure").toBe(true);
+      expect(w.configured.filter((d) => d.id === w.p.boot.process)).toHaveLength(1);
+      // P14 slice 2: the boot is a list, so each entry's configure calls back once, in the list's order.
+      expect(w.statuses, "each boot entry's configure saw the Project answer its status").toMatchObject([
+        { _tag: "ok", value: { name: "counter:1", state: { process: w.p.boot.process } } },
+        { _tag: "ok", value: { name: "checklist:1" } },
+      ]);
+    }, signal);
   }, 15_000);
 
   for (const field of ["writer", "trace"] as const) {
-    law(`an own write retains its process ${field}`, async ({ trace, write }) => {
-      const w = await world(trace),
+    law(`an own write retains its process ${field}`, async ({ trace, write }, open) => {
+      const w = await open(trace),
         pid = w.p.boot.process;
       await w.run(
         w.p
@@ -735,7 +767,7 @@ describe("P12 Project saved and wire readers", () => {
       value: { _tag: "LedgerError", reason: "bad_row" },
     });
   };
-  it("saved instance settings fail through the Project runtime's typed error channel", async () => {
+  it("saved instance settings fail through the Project runtime's typed error channel", async ({ signal }) => {
     const encoded = Schema.fromJsonString(Settings);
     const invalid = fc
       .oneof(
@@ -744,39 +776,37 @@ describe("P12 Project saved and wire readers", () => {
       )
       .filter((value) => !Schema.is(encoded)(value));
     await fc.assert(
-      fc.asyncProperty(invalid, async (raw) => {
-        let runtime: ReturnType<typeof projectRuntime> | undefined;
+      fc.asyncProperty(invalid, (raw) =>
+        owned(async (open) => {
+          const w = await open();
+          let runtime: ReturnType<typeof projectRuntime> | undefined;
 
-        try {
-          const w = await world();
-          typed(
-            await Effect.runPromiseExit(
-              Effect.suspend(() => {
-                runtime = projectRuntime(w.ctx, { ...w.env, INSTANCE: raw });
-                return runtime.contextEffect;
-              }),
-            ),
-          );
-        } finally {
-          await runtime?.dispose();
-
-          for (const close of closers.splice(0).reverse()) {
-            await close();
+          try {
+            typed(
+              await Effect.runPromiseExit(
+                Effect.suspend(() => {
+                  runtime = projectRuntime(w.ctx, { ...w.env, INSTANCE: raw });
+                  return runtime.contextEffect;
+                }),
+              ),
+            );
+          } finally {
+            await runtime?.dispose();
           }
-        }
-      }),
+        }, signal),
+      ),
       { seed: 119120, numRuns: 20, examples: [["{"], ["{}"], ["null"]] },
     );
   });
 
   for (const reader of ["bootstrap", "own descriptor", "pending descriptor", "own event"] as const) {
-    it(`${reader} rejects malformed saved or wire values with LedgerError, never a defect`, async () => {
+    it(`${reader} rejects malformed saved or wire values with LedgerError, never a defect`, async ({ signal }) => {
       const event = Schema.Struct({ _tag: Schema.String });
       const values = reader === "own event" ? fc.jsonValue().filter((value) => !Schema.is(event)(value)) : malformed;
       await fc.assert(
-        fc.asyncProperty(values, async (raw) => {
-          try {
-            const w = await world(),
+        fc.asyncProperty(values, (raw) =>
+          owned(async (open) => {
+            const w = await open(),
               pid = w.p.boot.process;
 
             if (reader === "bootstrap") {
@@ -798,12 +828,8 @@ describe("P12 Project saved and wire readers", () => {
                   : await w.run(Effect.exit(w.p.own(pid, "invalid-descriptor", "events", { _tag: "noted" })));
               typed(exit);
             }
-          } finally {
-            for (const close of closers.splice(0).reverse()) {
-              await close();
-            }
-          }
-        }),
+          }, signal),
+        ),
         { seed: 119120, numRuns: 20, examples: [[null], [{}], [17]] },
       );
     });
@@ -818,46 +844,44 @@ describe("P12 WebCrypto failures", () => {
   );
 
   for (const edge of ["fingerprint", "archive checksum"] as const) {
-    it(`${edge} refuses every thrown or rejected failure with reason crypto`, async () => {
+    it(`${edge} refuses every thrown or rejected failure with reason crypto`, async ({ signal }) => {
       await fc.assert(
-        fc.asyncProperty(failure, fc.boolean(), fc.uint8Array(), async (value, throws, body) => {
-          const w = edge === "fingerprint" ? await world() : null;
-          const digest = vi.spyOn(crypto.subtle, "digest").mockImplementation(() => {
-            if (throws) {
-              throw value;
+        fc.asyncProperty(failure, fc.boolean(), fc.uint8Array(), (value, throws, body) =>
+          owned(async (open) => {
+            const w = edge === "fingerprint" ? await open() : null;
+            const digest = vi.spyOn(crypto.subtle, "digest").mockImplementation(() => {
+              if (throws) {
+                throw value;
+              }
+
+              return Promise.reject(value);
+            });
+            const put = vi.fn(async () => null);
+
+            try {
+              if (w !== null) {
+                const result = await w.run(Effect.exit(w.p.online(w.key.fingerprint)));
+                expect(result).toMatchObject({ _tag: "Failure" });
+                expect(Option.getOrThrow(Exit.findErrorOption(result))).toMatchObject({
+                  _tag: "LedgerError",
+                  reason: "crypto",
+                });
+              } else {
+                // oxlint-disable-next-line fabrika/no-type-assertions -- the digest must fail before any R2 method runs
+                const bucket = { put } as unknown as R2Bucket;
+                await expect(bucketCalls(bucket).put("measurements", body, "0".repeat(64))).rejects.toMatchObject({
+                  _tag: "LedgerError",
+                  reason: "crypto",
+                });
+                expect(put).not.toHaveBeenCalled();
+              }
+
+              expect(digest).toHaveBeenCalled();
+            } finally {
+              digest.mockRestore();
             }
-
-            return Promise.reject(value);
-          });
-          const put = vi.fn(async () => null);
-
-          try {
-            if (w !== null) {
-              const result = await w.run(Effect.exit(w.p.online(w.key.fingerprint)));
-              expect(result).toMatchObject({ _tag: "Failure" });
-              expect(Option.getOrThrow(Exit.findErrorOption(result))).toMatchObject({
-                _tag: "LedgerError",
-                reason: "crypto",
-              });
-            } else {
-              // oxlint-disable-next-line fabrika/no-type-assertions -- the digest must fail before any R2 method runs
-              const bucket = { put } as unknown as R2Bucket;
-              await expect(bucketCalls(bucket).put("measurements", body, "0".repeat(64))).rejects.toMatchObject({
-                _tag: "LedgerError",
-                reason: "crypto",
-              });
-              expect(put).not.toHaveBeenCalled();
-            }
-
-            expect(digest).toHaveBeenCalled();
-          } finally {
-            digest.mockRestore();
-
-            for (const close of closers.splice(0).reverse()) {
-              await close();
-            }
-          }
-        }),
+          }, signal),
+        ),
         { seed: 119120, numRuns: 20 },
       );
     });
@@ -877,8 +901,8 @@ const online = (w: Awaited<ReturnType<typeof world>>, client: string): typeof At
 
 describe("P12 Connection recording", () => {
   for (const operation of ["ring", "probe", "close", "notify"] as const) {
-    law(`an authenticated ${operation} records through the project's sink`, async ({ letter, rev }) => {
-      const w = await world(),
+    law(`an authenticated ${operation} records through the project's sink`, async ({ letter, rev }, open) => {
+      const w = await open(),
         db = new DatabaseSync(":memory:");
       let attached = online(w, letter);
       const ws = {
@@ -956,8 +980,8 @@ describe("P12 Connection recording", () => {
     error: { code: -32000, message: "unreachable", data: { reason: "unreachable" } },
   });
 
-  const refusedCall = async (fault: Error) => {
-    const w = await world(),
+  const refusedCall = async (open: Open, fault: Error) => {
+    const w = await open(),
       db = new DatabaseSync(":memory:"),
       sent: string[] = [];
     let attached = online(w, "client-test");
@@ -1001,40 +1025,43 @@ describe("P12 Connection recording", () => {
     } finally {
       await runtime.dispose();
       db.close();
-
-      for (const close of closers.splice(0).reverse()) {
-        await close();
-      }
     }
   };
 
-  it("a call whose project route fails answers exactly refused unreachable, and none of the failure's text reaches the client", async () => {
+  it("a call whose project route fails answers exactly refused unreachable, and none of the failure's text reaches the client", async ({
+    signal,
+  }) => {
     await fc.assert(
       fc.asyncProperty(
         rejected,
         fc.string({ minLength: 8, maxLength: 64 }).filter((text) => !FRAME.includes(text)),
-        async (kind, text) => {
-          const { sent } = await refusedCall(kind.make(text));
-          expect(sent).toEqual([FRAME]);
-          expect(sent.join("")).not.toContain(text);
-        },
+        (kind, text) =>
+          owned(async (open) => {
+            const { sent } = await refusedCall(open, kind.make(text));
+            expect(sent).toEqual([FRAME]);
+            expect(sent.join("")).not.toContain(text);
+          }, signal),
       ),
       { seed: 119120, numRuns: 20 },
     );
   });
 
-  it("that call records one failed gateway.refused span whose error.type is the rejected error's name, and no text of it in a tag", async () => {
+  it("that call records one failed gateway.refused span whose error.type is the rejected error's name, and no text of it in a tag", async ({
+    signal,
+  }) => {
     await fc.assert(
-      fc.asyncProperty(rejected, fc.string({ minLength: 8, maxLength: 64 }), async (kind, text) => {
-        const { spans } = await refusedCall(kind.make(text));
-        const refused = spans.filter((row) => row.name === "gateway.refused");
-        expect(refused).toHaveLength(1);
-        expect(refused[0]).toMatchObject({ ok: false, attributes: { "error.type": kind.name } });
-        // Failure text is deletable content (P37), never a span tag.
-        expect(
-          Object.values(refused[0]!.attributes).filter((tag) => typeof tag === "string" && tag.includes(text)),
-        ).toEqual([]);
-      }),
+      fc.asyncProperty(rejected, fc.string({ minLength: 8, maxLength: 64 }), (kind, text) =>
+        owned(async (open) => {
+          const { spans } = await refusedCall(open, kind.make(text));
+          const refused = spans.filter((row) => row.name === "gateway.refused");
+          expect(refused).toHaveLength(1);
+          expect(refused[0]).toMatchObject({ ok: false, attributes: { "error.type": kind.name } });
+          // Failure text is deletable content (P37), never a span tag.
+          expect(
+            Object.values(refused[0]!.attributes).filter((tag) => typeof tag === "string" && tag.includes(text)),
+          ).toEqual([]);
+        }, signal),
+      ),
       { seed: 119120, numRuns: 20 },
     );
   });

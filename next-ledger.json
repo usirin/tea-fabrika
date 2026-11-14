@@ -41,11 +41,6 @@
 			"code": "afterEach(async () => {"
 		},
 		{
-			"file": "next/apps/fabrika/src/runtime.laws.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterEach(async () => {"
-		},
-		{
 			"file": "next/packages/libfabrika/src/access/AccessSpans.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { Doorbell, Ledger, LedgerError } from \"../ledger/Ledger.ts\";"

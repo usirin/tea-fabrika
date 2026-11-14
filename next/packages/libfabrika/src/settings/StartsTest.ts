@@ -16,6 +16,23 @@ class PropertyFailure extends Schema.TaggedError<PropertyFailure>()("PropertyFai
 
 const propertyFailure = (cause: unknown) => new PropertyFailure({ cause });
 
+/**
+ * The first step of each property run: once the law's `signal` has aborted, it ends the whole
+ * fast-check run, shrinking included, before anything opens.
+ *
+ * **Details**
+ *
+ * A law's abort (its timeout) fails the run in flight, and fast-check would then shrink: run the
+ * property again on smaller values. Effect starts a run up to its first wait even with an aborted
+ * signal, so each of those runs would still open what it needs. Past the abort this step fails
+ * synchronously with fast-check's own interruption, `PreconditionFailure(true)`, which ends the
+ * run there. A run that starts before the abort passes through unchanged.
+ *
+ * @category testing
+ */
+export const stopOnAbort = (signal: AbortSignal) =>
+  Effect.suspend(() => (signal.aborted ? Effect.fail(new fc.PreconditionFailure(true)) : Effect.void));
+
 // Stateful walks use fast-check because the plan requires fc.array move recipes.
 export const law = <A>(
   name: string,
@@ -24,12 +41,17 @@ export const law = <A>(
   examples?: Array<[A]>,
 ) => {
   const scoped = (value: A) => Effect.scoped(check(value)).pipe(Effect.asVoid, Effect.provide(Digest.layerWebCrypto));
-  // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each generated Effect walk
-  const property = fc.asyncProperty(arbitrary, (value: A) => Effect.runPromise(scoped(value)));
+  // Each walk runs under the law's own signal. When the law is interrupted (its timeout), the walk
+  // in flight is interrupted too, so its scope closes, and `stopOnAbort` ends the run, so no shrink
+  // starts another walk that would run on into later laws.
+  const walk = (signal: AbortSignal, value: A) => stopOnAbort(signal).pipe(Effect.andThen(scoped(value)));
+  const property = (signal: AbortSignal) =>
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each generated Effect walk
+    fc.asyncProperty(arbitrary, (value: A) => Effect.runPromise(walk(signal, value), { signal }));
   const options = { seed: 119120, numRuns: 100, ...(examples === undefined ? {} : { examples }) };
   it.effect(name, () =>
     // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's asynchronous property runner enters Effect
-    Effect.tryPromise({ try: () => fc.assert(property, options), catch: propertyFailure }),
+    Effect.tryPromise({ try: (signal) => fc.assert(property(signal), options), catch: propertyFailure }),
   );
 };
 
