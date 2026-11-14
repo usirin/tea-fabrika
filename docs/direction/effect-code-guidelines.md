@@ -313,7 +313,7 @@ a **pattern** that exists (`effect-services-and-layers.md`).
 Before, `runtime/Runner.ts:188-200` and `:218-221`:
 
 ```ts
->()("@kampus/libfabrika/ProgramRunner") {
+>()("@kampus/libfabrika/runtime/Runner.ProgramRunner") {
   // the layer lives on the service class
   static readonly layer = (initial: Descriptor, options: RunnerOptions): Layer.Layer</* ... */> =>
     Layer.unwrap(Effect.map(ProgramLoader, (loader) => ProgramRunner.withLoader(initial, loader, options)));
@@ -407,7 +407,7 @@ import {
   // ...ten more
 } from "effect";
 
->()("@kampus/libfabrika/ProgramRunner") {
+>()("@kampus/libfabrika/runtime/Runner.ProgramRunner") {
 ```
 
 After:
