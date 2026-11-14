@@ -1001,7 +1001,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     const tail = yield* bindTail(ctx, { project: name, name: process.name, process: process.process }).pipe(
       Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
     );
-    const program = yield* loader.load(process.program, process.process, tail, descriptor.build);
+    const program = yield* loader.recorded(process.program, process.process, tail, descriptor.build);
     remember(process.name, program.declaration);
 
     sql.exec(
@@ -1025,7 +1025,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
     );
     const program = yield* loader
-      .load(life.state.code.program, life.state.process, tail, descriptor.build)
+      .recorded(life.state.code.program, life.state.process, tail, descriptor.build)
       .pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
     return remember(life.name, program.declaration);
   });
@@ -1055,7 +1055,7 @@ const projectLogic = Effect.fn("project.init")(function* (
             saved === undefined
               ? undefined
               : (yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(saved.value)).build;
-          return yield* loader.load(life.state.code.program, life.state.process, tail, running);
+          return yield* loader.recorded(life.state.code.program, life.state.process, tail, running);
         }).pipe(
           Effect.mapError(
             (cause) => new Audit.AuditError({ reason: new Audit.Transport({ cause: Redacted.make(cause) }) }),
@@ -2092,7 +2092,10 @@ const processLogic = Effect.fnUntraced(function* (
           const tail = yield* bindTail(ctx, { project, name: saved.name, process }).pipe(
             Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
           );
-          return yield* loader.load(name, process, tail, hash);
+          // The build this object opened on is the one it runs; any other hash is a swap's candidate.
+          return yield* hash !== undefined && hash === saved.build
+            ? loader.recorded(name, process, tail, hash)
+            : loader.load(name, process, tail, hash);
         }),
     },
     { policy: defaultPolicy, recovery: { sql, name: saved.name, capacity: 1024 ** 3 } },

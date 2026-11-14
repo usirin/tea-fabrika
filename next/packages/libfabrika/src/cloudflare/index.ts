@@ -82,6 +82,12 @@ type Loader = Omit<WorkerLoader, "get"> & {
  * isolate's execution, the declaration and the hash. No code fails with `ProgramDown` reason
  * `no_program`; a failed lookup, decode or describe fails with reason `load`.
  *
+ * `recorded(name, process, tail?, build?)` loads the build a process recorded as it runs. A home
+ * saved before builds were kept names builds whose code it never stored: for such a build, and only
+ * when no code has its hash, it loads this build's program of that name, as every open of a home did
+ * then. The open's catch-up swap then moves the process to the selected hash through a swap's own
+ * checks. A candidate for a swap always loads through `load`, so it is never replaced.
+ *
  * @stability unstable
  * @category constructors
  */
@@ -89,8 +95,8 @@ export const workerLoader = (
   loader: Loader,
   programs: Readonly<Record<string, ProgramSource>>,
   lookup?: (hash: string) => Effect.Effect<ProgramSource | null, unknown>,
-) => ({
-  load: Effect.fn("loader.load")(function* (
+) => {
+  const load = Effect.fn("loader.load")(function* (
     name: string,
     process: string,
     tail?: Effect.Success<ReturnType<typeof bind>>,
@@ -143,5 +149,13 @@ export const workerLoader = (
       hash: code.hash,
       handler: () => Option.none(),
     };
-  }),
-});
+  });
+  const recorded = (name: string, process: string, tail?: Effect.Success<ReturnType<typeof bind>>, build?: string) =>
+    load(name, process, tail, build).pipe(
+      Effect.catchIf(
+        (error) => build !== undefined && error.reason === "no_program",
+        () => load(name, process, tail),
+      ),
+    );
+  return { load, recorded };
+};
