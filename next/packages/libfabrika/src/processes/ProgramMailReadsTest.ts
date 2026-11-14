@@ -21,6 +21,11 @@ import * as ProgramMailLedger from "./ProgramMailLedger.ts";
 import type { Store } from "./ProgramMailTest.ts";
 
 const SEED = 119120;
+
+/** fast-check's own failure report, with its counterexample, as the law's typed failure. */
+class PropertyFailed extends Schema.TaggedError<PropertyFailed>()("PropertyFailed", { cause: Schema.Unknown }) {}
+const failed = (cause: unknown) => new PropertyFailed({ cause });
+
 const RUNS = 25;
 /** The largest history either law reaches: letters already in the outbox and the inbox. */
 const TOP = 120;
@@ -149,7 +154,7 @@ const property = <A>(arbitrary: fc.Arbitrary<A>, law: (value: A) => Effect.Effec
     const checked = fc.asyncProperty(arbitrary, (value) => Effect.runPromise(Effect.scoped(law(value))));
     const options = { seed: SEED, numRuns: RUNS, includeErrorInReport: true };
     // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
-    yield* Effect.tryPromise({ try: () => fc.assert(checked, options), catch: (cause) => cause });
+    yield* Effect.tryPromise({ try: () => fc.assert(checked, options), catch: failed });
   });
 
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>

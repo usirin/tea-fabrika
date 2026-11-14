@@ -15,6 +15,11 @@ import { Receipt } from "./internal/recovery.ts";
 import { recoveryStore } from "./RecoveryStore.ts";
 
 const SEED = 119120;
+
+/** fast-check's own failure report, with its counterexample, as the law's typed failure. */
+class PropertyFailed extends Schema.TaggedError<PropertyFailed>()("PropertyFailed", { cause: Schema.Unknown }) {}
+const failed = (cause: unknown) => new PropertyFailed({ cause });
+
 const NAME = "writer:1";
 const PROCESS = "process_0000000000e008000000000001";
 /** Far above what a tape writes, so only a save that adds the huge receipt passes it. */
@@ -113,7 +118,7 @@ const property = <A>(
     const checked = fc.asyncProperty(arbitrary, (value) => Effect.runPromise(Effect.scoped(law(value))));
     const options = { seed: SEED, numRuns: runs, includeErrorInReport: true };
     // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
-    yield* Effect.tryPromise({ try: () => fc.assert(checked, options), catch: (cause) => cause });
+    yield* Effect.tryPromise({ try: () => fc.assert(checked, options), catch: failed });
   });
 
 /** One L5 save: how many new receipts it adds, and whether it changes one kept receipt. */
@@ -165,7 +170,9 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
 
             for (const { history, loaded } of runs) {
               const sql = yield* open;
-              const world = new Map(Array.from({ length: history }, (_, i) => [`l-${i}`, 0] as const));
+              const world = new Map<string, number>(
+                Array.from({ length: history }, (_, i): [string, number] => [`l-${i}`, 0]),
+              );
               yield* store(sql).save(journal(0, world)).pipe(Effect.orDie);
               const { sql: watched, count } = counted(sql);
               const saver = store(watched);
