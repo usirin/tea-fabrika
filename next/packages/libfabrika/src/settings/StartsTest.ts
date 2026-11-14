@@ -24,12 +24,15 @@ export const law = <A>(
   examples?: Array<[A]>,
 ) => {
   const scoped = (value: A) => Effect.scoped(check(value)).pipe(Effect.asVoid, Effect.provide(Digest.layerWebCrypto));
-  // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each generated Effect walk
-  const property = fc.asyncProperty(arbitrary, (value: A) => Effect.runPromise(scoped(value)));
+  // Each walk runs under the law's own signal. When the law is interrupted (its timeout), the walk
+  // in flight is interrupted too, so its scope closes and nothing it opened runs on into later laws.
+  const property = (signal: AbortSignal) =>
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each generated Effect walk
+    fc.asyncProperty(arbitrary, (value: A) => Effect.runPromise(scoped(value), { signal }));
   const options = { seed: 119120, numRuns: 100, ...(examples === undefined ? {} : { examples }) };
   it.effect(name, () =>
     // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's asynchronous property runner enters Effect
-    Effect.tryPromise({ try: () => fc.assert(property, options), catch: propertyFailure }),
+    Effect.tryPromise({ try: (signal) => fc.assert(property(signal), options), catch: propertyFailure }),
   );
 };
 
