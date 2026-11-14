@@ -1,0 +1,69 @@
+{
+  "founding": {
+    "person": "person_01m6v5270hf3c8x2q7w9z4k5mn",
+    "founder": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMVwy4GQL+573VjbmmU3DUGPXw01bp+8jH3Cep3fwsqZ",
+    "window": "xXDLgZAv7nvdWNuaZTcNQY9fDTVun7yMfcJ6nd_Cypk"
+  },
+  "seen": {
+    "table": [
+      {
+        "name": "checklist:1",
+        "process": "process_01m7ccwxs6egrb71m28ftq34ay"
+      },
+      {
+        "name": "counter:1",
+        "process": "process_01m7ccwxr5fcyvwy2vy00pydgm"
+      }
+    ],
+    "streams": {
+      "processes/counter:1": [
+        {
+          "id": "counter:1",
+          "stream": "processes/counter:1",
+          "pos": 1,
+          "rev": 3,
+          "arrivedAt": 1794638771974,
+          "by": "brain:port-home",
+          "for": "person_01m6v5270hf3c8x2q7w9z4k5mn",
+          "sentAt": "2026-11-14T06:46:11.939Z",
+          "seen": 0,
+          "parent": null,
+          "traceId": "07734401ccac3a33cc03f4d97d9b3f65",
+          "build": "ea83d82ac6871323dc8d02bc0bb5cc86d78aae8e490bdb74c4cee79f884b768e",
+          "_tag": "started",
+          "body": {
+            "process": "process_01m7ccwxr5fcyvwy2vy00pydgm",
+            "name": "counter:1",
+            "program": "fabrika/counter",
+            "hash": "4c7111d9faf03b94b75641faf901ea68368b8e16842aac8062e16625497ab047",
+            "asked": "brain:port-home"
+          }
+        }
+      ],
+      "processes/checklist:1": [
+        {
+          "id": "checklist:1",
+          "stream": "processes/checklist:1",
+          "pos": 1,
+          "rev": 5,
+          "arrivedAt": 1794638772006,
+          "by": "brain:port-home",
+          "for": "person_01m6v5270hf3c8x2q7w9z4k5mn",
+          "sentAt": "2026-11-14T06:46:11.974Z",
+          "seen": 0,
+          "parent": null,
+          "traceId": "07734401ccac3a33cc03f4d97d9b3f65",
+          "build": "ea83d82ac6871323dc8d02bc0bb5cc86d78aae8e490bdb74c4cee79f884b768e",
+          "_tag": "started",
+          "body": {
+            "process": "process_01m7ccwxs6egrb71m28ftq34ay",
+            "name": "checklist:1",
+            "program": "fabrika/checklist",
+            "hash": "c0233b619ec410dea1722952ff04ca94c686734ca7e0f92fe0cbaf0f76077293",
+            "asked": "brain:port-home"
+          }
+        }
+      ]
+    }
+  }
+}

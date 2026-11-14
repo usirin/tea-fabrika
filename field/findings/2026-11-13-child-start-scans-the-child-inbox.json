@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-child-start-scans-the-child-inbox",
+  "date": "2026-11-13",
+  "by": "plan",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/processes/ChildrenLedger.ts",
+    "line": 61
+  },
+  "says": "In next/, a child start finds its first letter by reading the child's whole inbox from position 0 and searching it for one id, where the ledger's UNIQUE (stream, id) index answers it in one read.",
+  "proof": "ChildrenLedger.ts:61 runs [...turn.read(inbox(saved.name), 0)].find((e) => e.id === letterId(child.id)); turn.read is SELECT * FROM entries WHERE stream = ? AND rev > ? with no limit (ledger/internal/ledgerStore.ts:402).",
+  "cost": "A restart of a long-lived child name reads every letter that name ever got, once per start; ticket 936's turn.get would make it one row.",
+  "head": "59cb6a311",
+  "ticket": null,
+  "pr": null
+}

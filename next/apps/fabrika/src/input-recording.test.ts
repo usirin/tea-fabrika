@@ -350,7 +350,10 @@ it("A13: built boxes and the real instance record selected metadata across refus
         ),
       ),
     ),
-    { seed: 119120, numRuns: 6 },
+    // Each run builds and starts a real instance, about 5 s on a busy CI machine. Shrinking a failure
+    // runs hundreds more of them, so one failed run became a 600 s timeout that hid its failing check
+    // (merge-group run 43571022082: 171 instance starts). The first failing tape is reported as found.
+    { seed: 119120, numRuns: 6, endOnFailure: true },
   );
   expect([...reached]).toEqual(
     expect.arrayContaining([

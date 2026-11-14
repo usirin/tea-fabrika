@@ -1,0 +1,44 @@
+{
+  "date": "2026-11-14",
+  "run": "2026-11-14-nowaiver-s1-review1",
+  "ticket": "933",
+  "pr": "1201",
+  "started": "2026-11-14T06:56:20+00:00",
+  "ended": "2026-11-14T06:59:35+00:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "review",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "The new version's exam folder plus CI tooling. One review of the whole diff for ticket 933, slice 1, at 1e7256c7bdf1f6d3389f51afe7d53497a0871a97 against origin/main 60a795c567bd24aac293dbe9ffd279b4bd4149df, by a fresh subagent with the review skill. Answer: done, merge-ready, 0 findings, first round. It checked the unreviewed teardown fix at ratchet.ts:209 (a number exit code, as commits.ts:1044) and planted one break per law, each red; ran ratchet, node-kinds, workflow-lint and commits test files, 220 passed; ran the script on the real repo (done, exit 0; an unknown sha tries the fetch and exits 2). 131484 subagent tokens, 26 tool calls; no dollar figure was reported.",
+  "tokens": 131484,
+  "tools": 26,
+  "minutes": 3.3,
+  "note": null,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "next/apps/fabrika/src/exam/ratchet.test.ts L4",
+      "plant": "next/apps/fabrika/src/exam/ratchet.ts:209 teardown exits 0 on any success",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/exam/ratchet.test.ts L1",
+      "plant": "added lets an extra copy of a base key pass",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/exam/ratchet.test.ts L2",
+      "plant": "lint key drops code",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/exam/node-kinds.test.ts L6",
+      "plant": "node-kinds.json gains Ghost",
+      "result": "red"
+    }
+  ]
+}

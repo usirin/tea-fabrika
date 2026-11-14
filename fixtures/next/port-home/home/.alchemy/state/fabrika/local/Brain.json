@@ -1,0 +1,180 @@
+{
+  "status": "created",
+  "fqn": "Brain",
+  "logicalId": "Brain",
+  "instanceId": "7855e7f0d24f7d9f1e40626835e252b0",
+  "resourceType": "Cloudflare.Worker",
+  "props": {
+    "name": "port-home",
+    "main": "brain.mjs",
+    "bundle": false,
+    "compatibility": {
+      "date": "2026-10-12"
+    },
+    "observability": {
+      "enabled": false
+    },
+    "dev": {
+      "host": "127.0.0.1",
+      "port": 24109,
+      "strictPort": true
+    },
+    "env": {
+      "PROJECT": {
+        "kind": "Cloudflare.DurableObject",
+        "name": "Project",
+        "className": "Project"
+      },
+      "PROCESS": {
+        "kind": "Cloudflare.DurableObject",
+        "name": "Process",
+        "className": "Process"
+      },
+      "CONNECTION": {
+        "kind": "Cloudflare.DurableObject",
+        "name": "Connection",
+        "className": "Connection"
+      },
+      "RECORD": {
+        "kind": "Cloudflare.DurableObject",
+        "name": "RecordPart",
+        "className": "RecordPart"
+      },
+      "RecordPart": {
+        "kind": "Cloudflare.DurableObject",
+        "name": "RecordPart",
+        "className": "RecordPart"
+      },
+      "MEASUREMENTS": {
+        "bucketName": "dev:7ae131a3-5adb-4894-bd69-3d321a901a7f",
+        "storageClass": "Standard",
+        "jurisdiction": "default",
+        "accountId": "00000000000000000000000000000000",
+        "domains": [],
+        "lifecycleRules": [],
+        "cors": []
+      },
+      "INSTANCE": "{\"settings\":{\"values\":{\"instance.port\":24109,\"fabrika-version\":\"0.0.0\",\"gateway.limit\":100000,\"gateway.window\":60000,\"desktop.brain-throttle\":2,\"desktop.brain-poll\":100,\"desktop.brain-start-timeout\":60000,\"desktop.brain-stop-timeout\":5000,\"desktop.link-ttl\":60000},\"origins\":{\"instance.port\":{\"_tag\":\"flag\",\"name\":\"--instance.port\"},\"fabrika-version\":{\"_tag\":\"default\"},\"gateway.limit\":{\"_tag\":\"flag\",\"name\":\"--gateway.limit\"},\"gateway.window\":{\"_tag\":\"flag\",\"name\":\"--gateway.window\"},\"desktop.brain-throttle\":{\"_tag\":\"default\"},\"desktop.brain-poll\":{\"_tag\":\"default\"},\"desktop.brain-start-timeout\":{\"_tag\":\"default\"},\"desktop.brain-stop-timeout\":{\"_tag\":\"default\"},\"desktop.link-ttl\":{\"_tag\":\"default\"}},\"hash\":\"24007941fb0f4323eaaafcdcfd6d988cf619ff7547dbc5f54f76ead11665d5a2\"},\"start\":\"process_01m7ccwwndf3qa4het73knqnhy\",\"build\":\"ea83d82ac6871323dc8d02bc0bb5cc86d78aae8e490bdb74c4cee79f884b768e\",\"repo\":null,\"founding\":{\"person\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"founder\":\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMVwy4GQL+573VjbmmU3DUGPXw01bp+8jH3Cep3fwsqZ\",\"window\":\"xXDLgZAv7nvdWNuaZTcNQY9fDTVun7yMfcJ6nd_Cypk\"},\"name\":\"port-home\",\"origin\":{\"by\":\"instance:process_01m7ccwwndf3qa4het73knqnhy\",\"for\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"sentAt\":\"2026-11-14T06:46:10.861Z\",\"seen\":0,\"parent\":null,\"traceId\":\"47d49e7c862f05b36813e593a04f6ce3\"}}"
+    },
+    "isExternal": true
+  },
+  "attr": {
+    "workerId": "dev:port-home",
+    "workerName": "port-home",
+    "url": "http://localhost:24109",
+    "urls": [
+      "http://localhost:24109"
+    ],
+    "tags": [],
+    "durableObjectNamespaces": {
+      "Connection": "port-home-Connection",
+      "Process": "port-home-Process",
+      "Project": "port-home-Project",
+      "RecordPart": "port-home-RecordPart"
+    },
+    "routes": [],
+    "crons": [],
+    "accountId": "00000000000000000000000000000000"
+  },
+  "bindings": [
+    {
+      "sid": "CONNECTION",
+      "data": {
+        "bindings": [
+          {
+            "type": "durable_object_namespace",
+            "name": "CONNECTION",
+            "className": "Connection"
+          }
+        ]
+      }
+    },
+    {
+      "sid": "INSTANCE",
+      "data": {
+        "bindings": [
+          {
+            "type": "plain_text",
+            "name": "INSTANCE",
+            "text": "{\"settings\":{\"values\":{\"instance.port\":24109,\"fabrika-version\":\"0.0.0\",\"gateway.limit\":100000,\"gateway.window\":60000,\"desktop.brain-throttle\":2,\"desktop.brain-poll\":100,\"desktop.brain-start-timeout\":60000,\"desktop.brain-stop-timeout\":5000,\"desktop.link-ttl\":60000},\"origins\":{\"instance.port\":{\"_tag\":\"flag\",\"name\":\"--instance.port\"},\"fabrika-version\":{\"_tag\":\"default\"},\"gateway.limit\":{\"_tag\":\"flag\",\"name\":\"--gateway.limit\"},\"gateway.window\":{\"_tag\":\"flag\",\"name\":\"--gateway.window\"},\"desktop.brain-throttle\":{\"_tag\":\"default\"},\"desktop.brain-poll\":{\"_tag\":\"default\"},\"desktop.brain-start-timeout\":{\"_tag\":\"default\"},\"desktop.brain-stop-timeout\":{\"_tag\":\"default\"},\"desktop.link-ttl\":{\"_tag\":\"default\"}},\"hash\":\"24007941fb0f4323eaaafcdcfd6d988cf619ff7547dbc5f54f76ead11665d5a2\"},\"start\":\"process_01m7ccwwndf3qa4het73knqnhy\",\"build\":\"ea83d82ac6871323dc8d02bc0bb5cc86d78aae8e490bdb74c4cee79f884b768e\",\"repo\":null,\"founding\":{\"person\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"founder\":\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMVwy4GQL+573VjbmmU3DUGPXw01bp+8jH3Cep3fwsqZ\",\"window\":\"xXDLgZAv7nvdWNuaZTcNQY9fDTVun7yMfcJ6nd_Cypk\"},\"name\":\"port-home\",\"origin\":{\"by\":\"instance:process_01m7ccwwndf3qa4het73knqnhy\",\"for\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"sentAt\":\"2026-11-14T06:46:10.861Z\",\"seen\":0,\"parent\":null,\"traceId\":\"47d49e7c862f05b36813e593a04f6ce3\"}}"
+          }
+        ]
+      }
+    },
+    {
+      "sid": "LOADER",
+      "data": {
+        "bindings": [
+          {
+            "type": "worker_loader",
+            "name": "LOADER"
+          }
+        ]
+      }
+    },
+    {
+      "sid": "MEASUREMENTS",
+      "data": {
+        "bindings": [
+          {
+            "type": "r2_bucket",
+            "name": "MEASUREMENTS",
+            "bucketName": "dev:7ae131a3-5adb-4894-bd69-3d321a901a7f"
+          }
+        ]
+      }
+    },
+    {
+      "sid": "PROCESS",
+      "data": {
+        "bindings": [
+          {
+            "type": "durable_object_namespace",
+            "name": "PROCESS",
+            "className": "Process"
+          }
+        ]
+      }
+    },
+    {
+      "sid": "PROJECT",
+      "data": {
+        "bindings": [
+          {
+            "type": "durable_object_namespace",
+            "name": "PROJECT",
+            "className": "Project"
+          }
+        ]
+      }
+    },
+    {
+      "sid": "RECORD",
+      "data": {
+        "bindings": [
+          {
+            "type": "durable_object_namespace",
+            "name": "RECORD",
+            "className": "RecordPart"
+          }
+        ]
+      }
+    },
+    {
+      "sid": "RecordPart",
+      "data": {
+        "bindings": [
+          {
+            "type": "durable_object_namespace",
+            "name": "RecordPart",
+            "className": "RecordPart"
+          }
+        ]
+      }
+    }
+  ],
+  "providerVersion": 0,
+  "downstream": [],
+  "removalPolicy": "destroy",
+  "providerMode": "local"
+}

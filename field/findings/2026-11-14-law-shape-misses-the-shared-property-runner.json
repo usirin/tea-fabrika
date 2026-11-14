@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-law-shape-misses-the-shared-property-runner",
+  "date": "2026-11-14",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "oxlint-plugins/law-shape.ts",
+    "line": 18
+  },
+  "says": "In next/, fabrika/law-shape advises that six property laws are not properties because it only counts fast-check's assert and @demlik/tea/pbt's runners as property calls and does not follow an imported helper, so every law that runs through the shared runner in next/packages/libfabrika/src/Testing.test-support.ts gets a false alarm; the rule should count that runner the way it counts the pbt runners (law-shape.ts:31 and the import loop at 111-137).",
+  "proof": "pnpm exec oxlint on the ticket 936 law files at 8f313331038b99761360df5e4d56d868bc28c551 prints fabrika(law-shape) advice at ledger/LedgerTurnReads.test.ts:106, processes/ProgramMailReadsTest.ts:148 and :182, runtime/RecoveryStoreReadsTest.ts:164, :230 and :430, while each of those laws calls property from ../Testing.test-support.ts, whose line 28 calls fc.assert.",
+  "cost": "Advice that is wrong on every law using the shared runner hides real law-shape advice among false alarms, and keeps the rule's false-alarm count far above the about 0% it needs before it may block.",
+  "head": "8f313331038b99761360df5e4d56d868bc28c551",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1203"
+}
