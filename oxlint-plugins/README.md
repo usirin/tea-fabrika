@@ -638,3 +638,45 @@ Paths below are relative to `oxlint-plugins/`, except `.oxlintrc.json`.
 
 All property replays used seed 119120. Every replay ran on Node 26.13.0 with one Vitest worker.
 The box refused `nice`'s priority change, so subsequent test commands ran without it.
+
+## A service's type is written out, ticket 908
+
+`fabrika/written-service-type` blocks in `next/` product code. A service's type is the contract a
+reader looks up, so it is written out and never taken from the implementation
+([0095](../.decisions/0095-a-service-file-holds-only-its-contract.md),
+[the Effect code guidelines](../docs/direction/effect-code-guidelines.md)). Slice A2 of
+[the plan](../docs/plan/effect-rules-small.md) fixes every site and turns the rule on in one pull
+request, so it starts at zero with no list file
+([0168](../.decisions/0168-old-lint-breaks-are-fixed.md)).
+
+It reads the last type argument of Effect's `Context.Service`, in the class form
+`Context.Service<Self, Type>()("id")` and the direct form `Context.Service<Type>("id")`. It fires
+when that type holds, at any depth, `ReturnType<...>`, `Effect.Success<...>` or a `typeof` query.
+A type alias or an interface declared in the same file is read through, an interface's `extends`
+list included, so the break cannot hide one line up. One `typeof` passes: `typeof X.Type`, the type of a schema's value, inside a member of
+a written object type. As the whole type, or joined to one with `&`, it fires. A name imported from
+another file passes, since the rule reads one file. A `Context.Reference` is not read. The rule's
+head comment lists the import forms it resolves and what it misses.
+
+Tools looked at first (0040): Effect's checker has no check for a service type built from these
+three forms, and `serviceNotAsClass` and `leakingRequirements` pass every site. oxlint 1.90.0 has
+no `no-restricted-syntax`, and a selector could not resolve a renamed import or read through an
+alias.
+
+Tests are left out by `*.test.ts`, `*.test.tsx`, `*Test.ts` and `*.test-support.ts` under `next/`:
+a test's stand-in service is not a contract file.
+
+First replay, 2026-11-13, over `next/` with the repo's config: 50 lines in 38 product files write
+`Context.Service<`, and the rule fires on **4**. Each fire was read, and none is a false alarm.
+
+| Site | The type it holds | In the plan's count |
+|---|---|---|
+| `next/packages/libfabrika/src/cloudflare/runtime.ts:928` | `Effect.Success<ReturnType<typeof projectLogic>>` | yes |
+| `next/packages/libfabrika/src/cloudflare/runtime.ts:1114` | `Effect.Success<ReturnType<typeof processLogic>>` | yes |
+| `next/packages/libfabrika/src/gateway/Gateway.ts:1693` | `Effect.Success<ReturnType<typeof make>>` | yes |
+| `next/packages/libfabrika/src/cloudflare/connection.ts:280` | `Effect.Success<ReturnType<typeof gatewayLogic>>` | no: the class is written over four lines, and the plan counted with a one-line search |
+
+`written-service-type.test.ts` holds the law: a property over generated files, each with one to six
+services drawn from every service spelling and type form, run through oxlint's `RuleTester`, then
+one real oxlint run that proves the config's wiring. This count says nothing about the false alarms
+of forms nobody has written yet.

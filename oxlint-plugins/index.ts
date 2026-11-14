@@ -42,6 +42,7 @@ import { programPackageLayout } from "./program-package-layout.ts";
 import { serviceContract } from "./service-contract.ts";
 import { serviceId } from "./service-id.ts";
 import { useImportExtensions } from "./use-import-extensions.ts";
+import { writtenServiceType } from "./written-service-type.ts";
 
 const plugin: Plugin = {
   meta: { name: "fabrika" },
@@ -87,6 +88,7 @@ const plugin: Plugin = {
     "service-id": serviceId,
     "service-contract": serviceContract,
     "use-import-extensions": useImportExtensions,
+    "written-service-type": writtenServiceType,
   },
 };
 

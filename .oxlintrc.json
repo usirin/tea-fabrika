@@ -634,6 +634,7 @@
         "fabrika/no-effect-run-outside-edge": "error",
         "fabrika/edge-comment": "error",
         "fabrika/effect-functions": "error",
+        "fabrika/written-service-type": "error",
         "fabrika/no-of": "error",
         // A question word is never a name (0081). oxlint's own rule holds every name written as an
         // identifier; ours holds a quoted, computed or template key, which it does not decode.
@@ -851,6 +852,12 @@
       // Shared law suites and helpers contain fixture machines, not exported product machines.
       "files": ["next/**/*Test.ts", "next/**/*.test-support.ts"],
       "rules": { "fabrika/one-machine-per-file": "off" }
+    },
+    {
+      // A test's stand-in service is not a contract file, so its type may be inferred from a local
+      // value. Product code writes a service's type out (0095).
+      "files": ["next/**/*.test.ts", "next/**/*.test.tsx", "next/**/*Test.ts", "next/**/*.test-support.ts"],
+      "rules": { "fabrika/written-service-type": "off" }
     },
     {
       // A resource is released by the scope that acquired it, never by an after-hook that a thrown
