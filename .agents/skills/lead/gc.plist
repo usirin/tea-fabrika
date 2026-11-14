@@ -3,7 +3,7 @@
 <!--
   The box cleanup's timer (decision 0101): a user LaunchAgent that runs one gc sweep every
   GC_MINUTES. Never loaded from here: `node scripts/gcloop.ts plist` fills each double-braced mark with this
-  laptop's paths, and gcloop.ts's header says how to install it.
+  laptop's paths, and the lead skill's "Box cleanup on a timer" section installs it.
   ProcessType Background: launchd gives it low CPU and disk priority, beside gcloop's own nice.
 -->
 <plist version="1.0">
