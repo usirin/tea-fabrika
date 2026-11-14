@@ -23,6 +23,7 @@ import {
   Stream,
   Tracer,
 } from "effect";
+import { type SessionManagerError } from "../access/SessionManager.ts";
 import {
   Activity,
   DeadInput,
@@ -1351,7 +1352,7 @@ export class ProgramRunner extends Context.Service<
             })(function* <E>(appended: Effect.Effect<Appended, E>) {
               return yield* appended;
             });
-          const attempt: Effect.Effect<Appended, LedgerError | SigningRefused | NotGranted> = Effect.gen(function* () {
+          const attempt: Effect.Effect<Appended, WriteFailure> = Effect.gen(function* () {
             if (asked._tag === "own") {
               if (policy.personOnly) {
                 return yield* new SigningRefused({ reason: "person_only" });
@@ -2133,6 +2134,7 @@ export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError"
 type RunnerFailure =
   | LedgerError
   | RecoveryStoreError
+  | SessionManagerError
   | ProgramDown
   | RunnerError
   | SinkError
@@ -2140,6 +2142,9 @@ type RunnerFailure =
   | NotGranted
   | RepliesError
   | WatchersError;
+
+/** Why a checked write did not land: a refusal, or a fault in the ledger or the session table. */
+type WriteFailure = LedgerError | SessionManagerError | SigningRefused | NotGranted;
 
 const cmdType = (job: Dispatched): string =>
   Option.match(decodeTyped(job.cmd), { onNone: () => "", onSome: (c) => c.type });

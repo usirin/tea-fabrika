@@ -48,6 +48,7 @@ import { checkHello } from "../transport/Hello.ts";
 import { type Checked, KeyLine, verifySshsig } from "../transport/Sshsig.ts";
 import { PasskeyLine, passkeyRp } from "../transport/Webauthn.ts";
 import { Admission, Answer, Attached, Hello, RateCountFailure, RateRefusal } from "../transport/Wire.ts";
+import { type GatewayError } from "./GatewayError.ts";
 import { gatewayNonce } from "./GatewayNonce.ts";
 import { gatewayStore } from "./GatewayStore.ts";
 import * as Waiting from "./internal/waiting.ts";
@@ -286,6 +287,7 @@ type Options<A, RNext, RDeliver, RNotify> = {
   ) => Effect.Effect<
     Sent | void,
     | LedgerError
+    | GatewayError
     | SinkError
     | SigningRefused
     | NotGranted
