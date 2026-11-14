@@ -1,11 +1,50 @@
 import { readdirSync, statSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { BaseSequencer, createVitest } from "vitest/node";
 import { inLaneStep } from "./.github/ci/workflow-lint.ts";
+import { testConfig } from "./vitest.config.ts";
 import { assign, measured, Shards, wall, WORKERS, restLoads } from "./vitest.shards.ts";
+
+// Vitest's own matcher, as vitest.config.ts uses it.
+const picomatch = createRequire(import.meta.resolve("vitest/package.json"))("picomatch") as {
+  readonly isMatch: (path: string, globs: readonly string[], options?: { readonly dot?: boolean }) => boolean;
+};
+
+it("S9: no include glob reaches today's frozen version, and the design package's tests are included (0525)", () => {
+  const word = fc.stringMatching(/^[a-z][a-z0-9-]{0,8}$/);
+  const testFile = fc
+    .tuple(
+      fc.constantFrom(
+        "apps/fabrika/src/",
+        "apps/other/src/",
+        "packages/fabrika/src/",
+        "packages/pipeline/src/stages/",
+        "packages/promises/src/",
+        "programs/trace/src/",
+        "bin/",
+        "packages/fabrika-design/src/",
+        "packages/fabrika-design/src/build/",
+      ),
+      fc.array(word, { maxLength: 2 }),
+      word,
+      fc.constantFrom(".test.ts", ".laws.test.ts", ".test.tsx"),
+    )
+    .map(([at, dirs, name, end]) => [at, ...dirs.map((d) => `${d}/`), name, end].join(""));
+  const frozenFile = (path: string) =>
+    /^(?:apps|programs|packages|bin)\//.test(path) && !path.startsWith("packages/fabrika-design/");
+  fc.assert(
+    fc.property(testFile, (path) => {
+      // A frozen file never; a live one when it is a `.ts` test, as the design package's are.
+      const included = picomatch.isMatch(path, testConfig.test.include, { dot: true });
+      expect(included, path).toBe(!frozenFile(path) && path.endsWith(".ts"));
+    }),
+    { seed: 119120, numRuns: 100, examples: [["packages/fabrika-design/src/x.test.ts"]] },
+  );
+});
 
 it("vector: next medians and four provisional split estimates match the recorded main runs", () => {
   // Today's CI, both versions. Main runs 42717511599, 42716453289 and 42715921306.

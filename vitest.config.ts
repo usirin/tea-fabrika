@@ -26,12 +26,11 @@ export const testConfig = {
       "**/.github/**",
       "**/.gitattributes",
     ],
-    // One run over every package. `fixtures/` holds toy repos with their own
-    // `node --test` files. They are the lane's subject, not this repo's tests.
+    // One run over every live package. Today's version is frozen and has no tests (0525), so no
+    // glob reaches it; the design package both versions share keeps its laws. `fixtures/` holds
+    // toy repos with their own `node --test` files, which are not this repo's tests.
     include: [
-      "apps/*/src/**/*.test.ts",
-      "packages/*/src/**/*.test.ts",
-      "programs/*/src/**/*.test.ts",
+      "packages/fabrika-design/src/**/*.test.ts",
       "oxlint-plugins/*.test.ts",
       "vitest.shards.test.ts",
       ".github/ci/*.test.ts",

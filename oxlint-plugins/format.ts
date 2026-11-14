@@ -5,19 +5,35 @@
 // A `.gitignore` is still obeyed, because generated folders need it. `lint.ts` fails when one hides
 // a tracked file.
 import { spawnSync } from "node:child_process";
+import { readdirSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { liveRoots } from "./frozen.mjs";
 
 const ROOT = join(import.meta.dirname, "..");
 
-const ran = spawnSync(
-  join(ROOT, "node_modules", ".bin", "oxfmt"),
-  [
-    `--config=${join(ROOT, ".oxfmtrc.json")}`,
-    "--disable-nested-config",
-    `--ignore-path=${join(ROOT, ".gitignore")}`,
-    ...process.argv.slice(2),
-  ],
-  { stdio: "inherit" },
-);
+/**
+ * What oxfmt is started with. A path run formats exactly the paths given. A whole run, with flags
+ * alone, formats every top-level entry that is not today's frozen version (0525).
+ * @param args what `format.ts` was given
+ * @param entries the names `readdirSync` gives for the folder oxfmt runs in
+ */
+export const oxfmtArgs = (args: readonly string[], entries: readonly string[]): string[] => [
+  `--config=${join(ROOT, ".oxfmtrc.json")}`,
+  "--disable-nested-config",
+  `--ignore-path=${join(ROOT, ".gitignore")}`,
+  ...args,
+  ...(args.every((arg) => arg.startsWith("-")) ? liveRoots(entries) : []),
+];
 
-process.exit(ran.status ?? 2);
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const ran = spawnSync(
+    join(ROOT, "node_modules", ".bin", "oxfmt"),
+    oxfmtArgs(process.argv.slice(2), readdirSync(process.cwd())),
+    {
+      stdio: "inherit",
+    },
+  );
+
+  process.exit(ran.status ?? 2);
+}

@@ -1,9 +1,8 @@
-// Today's version, design foundations PR 3. Every CSS rule blocks from day one.
+// Design foundations PR 3. Every CSS rule blocks from day one. The CSS check reads next/ and the
+// design package (0525), so no known list holds an entry: each stays `[]` because stylelint.ts
+// needs one until the option and its reader go.
 import { join } from "node:path";
 import type { Config } from "stylelint";
-
-const WINDOW = "apps/fabrika/src/window/window.css";
-const at = (selector: string, property: string) => `${WINDOW} ${selector} { ${property} }`;
 
 export default {
   plugins: [
@@ -24,64 +23,14 @@ export default {
       true,
       {
         severity: "error",
-        known: [
-          "--agent-bg",
-          "--alert",
-          "--bar",
-          "--faint",
-          "--ground",
-          "--hover",
-          "--key",
-          "--line",
-          "--open",
-          "--person-bg",
-          "--pick",
-          "--pop-bg",
-          "--pop-edge",
-          "--pop-in",
-          "--pop-pad",
-          "--pop-shadow",
-          "--raised",
-          "--row-hi",
-          "--row-on",
-          "--sans",
-          "--soft",
-          "--text-muted",
-          "--text-secondary",
-          "--ty",
-          "--ty-checks",
-          "--ty-fact",
-          "--ty-step",
-          "--ty-turn",
-        ],
+        known: [],
       },
     ],
     "fabrika/no-raw-color": [
       true,
       {
         severity: "error",
-        known: [
-          at(":root", "--person-bg"),
-          at(":root", "--agent-bg"),
-          at(":root", "--ty-fact"),
-          at(":root", "--ty-turn"),
-          at(":root", "--ty-step"),
-          at(":root", "--ty-checks"),
-          at(":root", "--svc-0"),
-          at(":root", "--svc-1"),
-          at(":root", "--svc-2"),
-          at(":root", "--svc-3"),
-          at(":root", "--svc-4"),
-          at(":root", "--svc-5"),
-          at(":root", "--pop-shadow"),
-          at(".pop.palette", "box-shadow"),
-          at(".ticket-view .act.open", "background"),
-          at(".map-view .frame", "background"),
-          at(".trace-view .tv-bar", "background"),
-          at(".trace-view .tv-bar.running", "background"),
-          at(".trace-view .tv-bar.done", "background"),
-          at(".trace-view .tv-bar.stuck, .trace-view .tv-bar.wrong", "background"),
-        ],
+        known: [],
       },
     ],
     "fabrika/no-primitive-var": [true, { severity: "error", known: [] }],
@@ -91,14 +40,7 @@ export default {
       true,
       {
         severity: "error",
-        known: [
-          at(".down h1", "font-size"),
-          at(".counter-n", "font-size"),
-          at(".tracker h2", "font-size"),
-          at(".map-view .react-flow__attribution", "font-size"),
-          at(".view .m", "font"),
-          at(".map-view .cl", "font"),
-        ],
+        known: [],
       },
     ],
   },

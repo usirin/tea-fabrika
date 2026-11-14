@@ -25,6 +25,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import fc from "fast-check";
@@ -837,10 +838,6 @@ describe("the rule file's rows give a file its part", () => {
   // exam must name the same row. A file pattern beats its folder, a deeper folder beats a higher
   // one, and a folder claims only at a `/`.
   it("vector: the real rule file gives the rows code-graph gives", () => {
-    expect(rowsAt(REAL, "packages/fabrika/src/agents/claude.ts")).toEqual(["fabrika-entry"]);
-    expect(rowsAt(REAL, "packages/fabrika/src/agents/claude/rules.ts")).toEqual(["fabrika-agents"]);
-    expect(rowsAt(REAL, "packages/pipeline/src/laws/explore.ts")).toEqual(["own-search"]);
-    expect(rowsAt(REAL, "packages/pipeline/src/laws/walk.ts")).toEqual(["pipeline"]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/Testing.ts")).toEqual(["next-runtime"]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/runtime/Runner.ts")).toEqual(["next-runtime"]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/runtime/ProcessStore.ts")).toEqual(["next-runtime"]);
@@ -852,6 +849,31 @@ describe("the rule file's rows give a file its part", () => {
     expect(rowsAt(REAL, "next/packages/libfabrika/src/data/index.ts")).toEqual([]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/apple/runner.ts")).toEqual([]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/testing.tsx")).toEqual([]);
+  });
+
+  // scenario: T937 S12. Today's version is frozen (0525) and lint no longer reads it, so the real
+  // rule file holds no row for it. The frozen roots are read from oxlint-plugins/frozen.mjs, the
+  // one place that names them.
+  it("scenario: S12 the real rule file has no layer path and no allowed row under a frozen root", async () => {
+    const roots = Schema.decodeUnknownSync(
+      Schema.Struct({ frozen: Schema.Array(Schema.String), shared: Schema.Array(Schema.String) }),
+    )(await import(pathToFileURL(resolve(NEXT, "../oxlint-plugins/frozen.mjs")).href));
+    const frozenPath = (path: string) =>
+      roots.frozen.some((root) => `${path}/`.startsWith(root)) &&
+      !roots.shared.some((root) => `${path}/`.startsWith(root));
+    const file = Schema.decodeUnknownSync(
+      Schema.fromJsonString(
+        Schema.Struct({
+          layers: Schema.Array(Schema.Struct({ name: Schema.String, paths: Schema.Array(Schema.String) })),
+          allowed: Schema.Array(Schema.Struct({ from: Schema.String, to: Schema.String })),
+        }),
+      ),
+    )(readFileSync(resolve(NEXT, "../layer-rules.json"), "utf8"));
+    expect(roots.frozen.length).toBeGreaterThan(0);
+    expect(file.layers.filter((row) => row.paths.some(frozenPath)).map((row) => row.name)).toEqual([]);
+    expect(file.allowed.filter((row) => frozenPath(row.from) || frozenPath(row.to))).toEqual([]);
+    // The six next/ rows stay until no-waiver-lists slice 8 removes them.
+    expect(file.allowed.filter((row) => row.from.startsWith("next/") && row.to.startsWith("next/"))).toHaveLength(6);
   });
 });
 

@@ -40,15 +40,16 @@
     "fabrika/one-id-module": "error",
     "fabrika/outside-input-constructor": "error",
 
-    // Where a Claude run's settings come from is said by `ownRules` alone, so its file is left
-    // out below (experiment 155). So are tests: they write the options' shape to check it, and
-    // none starts a live run.
+    // Where a Claude run's settings come from is said by `ownRules` alone (experiment 155). Its file
+    // is in today's frozen version, which lint no longer reads (0525). Tests are left out below:
+    // they write the options' shape to check it, and none starts a live run.
     "fabrika/no-project-settings": "error",
     // A secret is read as a `Redacted`, never as a plain string from `process.env`
     // (docs/direction/secrets-are-redacted.md). Experiments are left out below: they are outside
     // this rule's first change, and README counts what it would find there.
     "fabrika/no-secret-env": "error",
-    // `Redacted.value` only where a secret goes out. Each file left out below says why.
+    // `Redacted.value` only where a secret goes out. Its edge files were in today's frozen version,
+    // which lint no longer reads (0525), so no live file is left out.
     "fabrika/no-redacted-value": "error",
 
     // Node runs the .ts files as they are, so a relative import names its file whole.
@@ -464,41 +465,6 @@
       }
     },
     {
-      "files": ["apps/fabrika/src/host/settings.laws.test.ts"],
-      "rules": {
-        "eslint/no-restricted-imports": [
-          "error",
-          {
-            "paths": [
-              {
-                "name": "playwright",
-                "importNames": ["_electron"],
-                "message": "Launch a test window through apps/fabrika/test-window.ts."
-              },
-              {
-                "name": "@playwright/test",
-                "importNames": ["_electron"],
-                "message": "Launch a test window through apps/fabrika/test-window.ts."
-              }
-            ],
-            "patterns": [
-              {
-                "group": [
-                  "@effect/platform-node",
-                  "@effect/platform-node/*",
-                  "node:fs",
-                  "node:fs/*",
-                  "@radix-ui/colors",
-                  "@radix-ui/colors/*"
-                ],
-                "message": "L8: settings laws use an in-memory FileSystem, never a real file system. Radix tokens remain restricted."
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
       // Test files only: an `expect` that sits only inside an `if` may never run.
       // `!` is allowed here: a test that hits a missing value fails on its own. Shared law suites
       // (0062) hold the laws their runner registers, so they are test files here too.
@@ -553,46 +519,10 @@
       }
     },
     {
-      // `ownRules` is the one place that says where a Claude run's settings come from.
-      "files": ["packages/fabrika/src/agents/claude/rules.ts"],
-      "rules": { "fabrika/no-project-settings": "off" }
-    },
-    {
       // no-secret-env and no-redacted-value are outside experiments, as they were under Biome:
       // those two rules' first change left them out, and the README counts what they would find.
       "files": ["experiments/**"],
       "rules": { "fabrika/no-secret-env": "off", "fabrika/no-redacted-value": "off" }
-    },
-    {
-      // The bearer token as a WebSocket subprotocol: a browser socket sends no header.
-      "files": ["packages/fabrika/src/host/http.ts"],
-      "rules": { "fabrika/no-redacted-value": "off" }
-    },
-    {
-      // The door's secret in the ledger child's env, and in its locker file (mode 0600).
-      "files": ["packages/fabrika/src/host/local.ts"],
-      "rules": { "fabrika/no-redacted-value": "off" }
-    },
-    {
-      // The Worker's bindings: a one-way hash of the local secret, and GitHub's token.
-      "files": ["packages/fabrika/src/host/worker-options.ts"],
-      "rules": { "fabrika/no-redacted-value": "off" }
-    },
-    {
-      // A token's one-way hash, the only form the ledger keeps.
-      "files": ["packages/fabrika/src/host/door.ts"],
-      "rules": { "fabrika/no-redacted-value": "off" }
-    },
-    {
-      // A login's answer on the wire: the token goes to the one who logged in.
-      "files": ["packages/fabrika/src/host/durable-object.ts"],
-      "rules": { "fabrika/no-redacted-value": "off" }
-    },
-    {
-      // An SSH key file's text, handed to sshsig.ts's parser (which may import nothing, so it
-      // takes a string) and kept from then on as a WebCrypto key that cannot be exported.
-      "files": ["packages/fabrika/src/host/signer.ts"],
-      "rules": { "fabrika/no-redacted-value": "off" }
     },
     {
       // Our own source exports by name, never by default (0058). A default the platform loads, a
@@ -1321,52 +1251,6 @@
               }
             ]
           }
-        ]
-      }
-    },
-    {
-      // Ticket 733: an e2e script launches and sizes its window only through test-window.ts. The
-      // top-level paths, plus the Electron binary and a window moved by hand. On main before it,
-      // 3 of 3 `createRequire` calls in these scripts found that binary, and 2 of 2 `setBounds`
-      // moved a test window: 0 false alarms in 8.
-      "files": ["apps/fabrika/e2e.ts", "apps/fabrika/*-e2e.ts"],
-      "rules": {
-        "eslint/no-restricted-imports": [
-          "error",
-          {
-            "paths": [
-              {
-                "name": "@radix-ui/colors",
-                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
-              },
-              {
-                "name": "playwright",
-                "importNames": ["_electron"],
-                "message": "Launch a test window through apps/fabrika/test-window.ts."
-              },
-              {
-                "name": "@playwright/test",
-                "importNames": ["_electron"],
-                "message": "Launch a test window through apps/fabrika/test-window.ts."
-              },
-              {
-                "name": "node:module",
-                "importNames": ["createRequire"],
-                "message": "The Electron binary comes from test-window.ts."
-              }
-            ],
-            "patterns": [
-              {
-                "group": ["@radix-ui/colors/*"],
-                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
-              }
-            ]
-          }
-        ],
-        "eslint/no-restricted-properties": [
-          "error",
-          { "property": "setBounds", "message": "Size a test window with TestWindow.size." },
-          { "property": "setPosition", "message": "Size a test window with TestWindow.size." }
         ]
       }
     },
