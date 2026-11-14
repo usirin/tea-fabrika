@@ -118,8 +118,11 @@ export const suite = (open: Open) =>
               } else {
                 expect(exits.every(Exit.isSuccess)).toBe(true);
                 const after = driver.counts();
-                expect(after.calls - before.calls).toBe(ready || path === "Project" ? 0 : 1);
-                expect(after.reads - before.reads).toBe(ready ? 0 : placed ? 1 : 2);
+                // A plain Worker shares only a finished read across requests, so each early request calls (0184).
+                const cold = path === "HTTP" ? total : 1;
+                expect(after.calls - before.calls).toBe(ready || path === "Project" ? 0 : cold);
+                // Each call looks the start up once. The one that finds none appends it, then reads it back.
+                expect(after.reads - before.reads).toBe(ready ? 0 : placed ? cold : cold + 1);
                 expect(after.appends - before.appends).toBe(placed ? 0 : 1);
                 ready = true;
                 placed = true;
