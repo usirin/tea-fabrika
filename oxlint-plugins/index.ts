@@ -5,6 +5,7 @@ import { doorIsLibrary } from "./door-is-library.ts";
 import { edgeComment } from "./edge-comment.ts";
 import { effectFunctions } from "./effect-functions.ts";
 import { isolateBoundary } from "./isolate-boundary.ts";
+import { jsdocs } from "./jsdocs.ts";
 import { lawShape } from "./law-shape.ts";
 import { modules } from "./modules.ts";
 import { noBareDisable } from "./no-bare-disable.ts";
@@ -53,6 +54,7 @@ const plugin: Plugin = {
     "effect-functions": effectFunctions,
     "law-shape": lawShape,
     "isolate-boundary": isolateBoundary,
+    jsdocs,
     modules,
     "no-bare-disable": noBareDisable,
     "no-bare-tell": noBareTell,

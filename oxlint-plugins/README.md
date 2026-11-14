@@ -315,6 +315,37 @@ and `Effect.promise` and the run functions by their written names. P12 adds the 
 check below for Promises passed through helpers. `no-hand-tag` misses `x._tag = "a"`,
 which the plan does not name. Report any miss.
 
+### The docs rule, E6
+
+Ticket 913, slice B2.1 of [Plan B](../docs/plan/effect-rules-big.md#b2-the-docs-rule), for `next/`: `fabrika/jsdocs` asks every public export of a `next/` library for a doc block in Effect's shape, and its file for a module block (E6, [0023](../.decisions/0023-next-follows-effects-code-style.md), [0120](../.decisions/0120-effect-code-guidelines.md)). `jsdocs.ts` finds the exports and their blocks through oxlint's syntax tree. Whether a block is right is Effect's own grammar: `effect-jsdocs.ts` is lines 973 to 1608 of `packages/tools/jsdocs/src/Jsdocs.ts` in [Effect-TS/effect at `effect@4.1.2`](https://github.com/Effect-TS/effect/blob/effect%404.1.2/packages/tools/jsdocs/src/Jsdocs.ts), with what those lines call, copied with Effect's MIT notice; its head lists every line taken and every change. On an Effect bump, diff those lines again.
+
+| Rule | Asks | Edges | Tests |
+|---|---|---|---|
+| `jsdocs` | a block on `export const`, `let`, `function` (first overload), `class`, `interface`, `type`, `declare namespace` and each export in it, `export * as`, and each name of `export { a }`, with one description paragraph, Effect's sections, `**Example** (Title)` examples, and `@deprecated`, `@see`, `@stability`, `@category` in that order (`@stability` and `@category` required); tags alone on a re-export; a module block with `@stability` and no `@category` in a file with a checked export; a member's block, when there is one | `@internal` takes an export out; a type directly under its same-name schema shares its block (the owner, 2026-11-13: a kept difference in 0023); `since` is `absent` until libfabrika's first release (0118) | left out |
+
+Which tools were looked at, and why none could hold the shape here, is the draft plan's table (`docs/plan/ticket-900-docs-lint.md` on the branch of [pull request 1131](https://github.com/kamp-us/tea-fabrika/pull/1131)): Effect's checker (private, needs TypeScript's JS API below 7, asks `@since`), oxlint's `jsdoc` rules (no rule that asks for a block), `eslint-plugin-jsdoc` (2,770 false alarms on Effect's own source), and TypeDoc and API Extractor (a block's presence only).
+
+**On for the folders at zero, off for what is not public.** One `.oxlintrc.json` block turns it on at `error` for `ci/` and `codehost/` of libfabrika; each fill adds its folder in its own pull request, and the list ends as `next/packages/*/src/**` once the barrels become namespace re-exports (B2.8). A second block turns it off for `internal/`, tests, test support, shared suites (`*Test.ts`), fixtures and declaration files. A folder not yet listed has no ignore: the rule has not reached it ([0168](../.decisions/0168-old-lint-breaks-are-fixed.md)).
+
+Count on 2026-11-14, on main at `c0aaf4a24`: `ci` 9 of 9 exports pass and `codehost` 12 of 12, with both module blocks, so 0 fires, as the draft's prototype found. With every block stripped from the two files, it fired 23 times: the 21 exports and the 2 files. On Effect 4.1.2's own source, 432 files outside `internal/`, with `since` set to `required`, it fires 10 times: the 6 exports of `StandardSchema.ts`, the one file Effect's config leaves out, and the 4 files whose only block above their first statement is that statement's own, as Effect's checker reads it (`encoding/Ini.ts`, `encoding/Yaml.ts`, `http/HttpStatus.ts`, `index.ts`). So 0 false alarms against Effect's own verdict.
+
+Not yet on, for the fills to count against: all 136 public files of libfabrika fire 666 times, 346 exports with no block, 232 with a block out of shape (most lack `@stability` and `@category`) and 88 files with no module block or a wrong one.
+
+| Module | Files | No block | Out of shape | Module block | Module | Files | No block | Out of shape | Module block |
+|---|---|---|---|---|---|---|---|---|---|
+| top files | 7 | 69 | 13 | 7 | `node` | 15 | 17 | 16 | 15 |
+| `access` | 7 | 18 | 21 | 7 | `packs` | 4 | 11 | 2 | 4 |
+| `ci` | 1 | 0 | 0 | 0 | `presence` | 1 | 1 | 0 | 1 |
+| `cloudflare` | 16 | 65 | 11 | 15 | `processes` | 11 | 6 | 34 | 0 |
+| `codehost` | 1 | 0 | 0 | 0 | `repositories` | 1 | 10 | 2 | 1 |
+| `coordination` | 1 | 72 | 0 | 1 | `runtime` | 31 | 3 | 60 | 0 |
+| `gateway` | 5 | 4 | 0 | 3 | `schedules` | 1 | 3 | 1 | 1 |
+| `jobs` | 3 | 3 | 11 | 3 | `settings` | 11 | 26 | 23 | 10 |
+| `ledger` | 9 | 8 | 16 | 9 | `telemetry` | 5 | 11 | 19 | 5 |
+| | | | | | `transport` | 6 | 19 | 3 | 6 |
+
+`jsdocs.test.ts` holds laws 3 to 9 of the draft: generated files through RuleTester at seed 119120 for which exports fire, the tag order, the module block, `@internal` and tags alone, and the `since` option; the real oxlint over Effect's source; and one planted file per left-out kind at its real path with this config. A `fixtures/` folder is also in the top `ignorePatterns`, which oxlint obeys even with `--no-ignore`, so no planted file there is linted. What the rule cannot see: whether a description is true, whether a `@see {@link x}` names a real thing, whether an example compiles, and a name sent on under a new binding.
+
 ### Ticket 682: question words are never names
 
 A question word names the question, not the answer, so `where`, `why`, `what`, `who` and `how`
