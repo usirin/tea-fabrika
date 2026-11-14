@@ -1,7 +1,7 @@
 ---
 id: 0168
 title: An old lint break is fixed, never kept in a list file and never marked as debt, and a new rule turns on where its breaks are at zero
-status: accepted
+status: amended-in-part by [0524](0524-no-list-lets-broken-code-pass.md)
 date: 2026-11-13
 tags: [lint, oxlint, ledger, inline-ignore, effect, guidelines, exam, foundations]
 ---
