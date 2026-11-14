@@ -25,6 +25,7 @@ import { describe, expect, it } from "vitest";
 import type { Built } from "../src/build.ts";
 import { heldPort } from "../src/port.test-support.ts";
 import * as RecordWireTest from "../src/record-wire.test-support.ts";
+import { programs } from "../src/table.ts";
 
 const APP = resolve(import.meta.dirname, ".."),
   ROOT = resolve(APP, "../../..");
@@ -112,9 +113,12 @@ describe("P16 real browser from a copied one-file build", () => {
                   root: home,
                   entry: join(home, "src/brain.ts"),
                   out: join(home, "dist"),
-                  // The app's brain starts `counter:1` on the core pack's `fabrika/counter` (runtime.ts), so
-                  // the build must hold that name, which is also the re-exported program's own.
-                  programs: [{ name: "fabrika/counter", package: "@p16/browser", export: "program" }],
+                  // The app's brain starts every name on its boot list (runtime.ts), so the build holds the
+                  // app's whole table. Only `fabrika/counter` comes from this fixture's package, which
+                  // re-exports the real counter and keeps its name.
+                  programs: programs.map((p) =>
+                    p.name === "fabrika/counter" ? { ...p, package: "@p16/browser", export: "program" } : p,
+                  ),
                   chaos: false,
                   files: [],
                   ledger: [],
@@ -345,7 +349,8 @@ const servedCounter = Effect.gen(function* () {
       root: home,
       entry: join(home, "src/brain.ts"),
       out: join(home, "dist"),
-      programs: [{ name: "fabrika/counter", package: "@kampus/counter", export: "counter" }],
+      // The brain starts every name on its boot list, so the build holds the app's whole table.
+      programs,
       chaos: false,
       files: [],
       ledger: [],
