@@ -4,9 +4,9 @@ Run on 2026-11-14 (UTC) inside one Claude cloud session (Anthropic's own cloud, 
 CLI 2.1.325), on the repository's own cloud environment. It is about `next/`: the plan to serve
 the tracker as MCP over HTTP from a Cloudflare Worker. No key, token or login was added, and
 nothing was deployed. Two public MCP servers that need no login were used, read and search tools
-only. Cost: subscription usage only, **about $1.1 at list price** (the tools' own `costUSD`
-figures, list basis, 2026-11-14), most of it child 1's first turn; child 2 reported no cost
-because its turn never ended.
+only. Cost: subscription usage only, **about $1.5 at list price** (the tools' own `costUSD`
+figures, list basis, 2026-11-14), most of it the two child sessions' first turns ($0.76 and
+$0.39).
 
 **The answer: partly. Once the server's host is on the cloud environment's network allowlist, a
 local agent in the box uses it fully, and a new cloud session started on a branch with a
@@ -133,8 +133,15 @@ writing about 90,000 tokens of system prompt and tools to the cache.
   became "Waiting on permission: mslearn — Microsoft Docs Search", status `REQUIRES_ACTION`.
 - Its Bash and ToolSearch calls before that were accepted by a rule (`source: "config"`). The two
   MCP calls were not.
-- Nobody answered the prompts: no agent answers a question the machine put to a person
-  (AGENTS.md). So no search result came back, and no cost was reported for this turn.
+- No agent answered the prompts: no agent answers a question the machine put to a person
+  (AGENTS.md). The owner approved them about six minutes later, by hand. By then the two hosts
+  had already been taken off the allowlist, and the session's worker had restarted (its result
+  says `turn_start_resume_kind: "orphaned_permission"`). After the restart, the cut-off Cloudflare
+  search returned nothing and its tool was gone. The Microsoft call failed with "MCP server
+  'mslearn' has disconnected", and both servers then reported `ERR_PROXY_TUNNEL ... 403
+  Forbidden`. So no search result came back from a cloud session. The timing was this
+  experiment's mistake: the hosts should have stayed listed until the child's prompt was settled.
+  Child 2 cost $0.39 at list price in all.
 
 What `server_policy_ask_only` means is not documented on the pages read. It reads like a policy
 that sends project MCP tools to a person whatever the session's mode. Whether a committed
@@ -225,6 +232,11 @@ Nothing here was tried. Every line is **read in docs**, from the cloud environme
   keep the Worker's host listed for good.
 - Whether an allow rule in `.claude/settings.json`, or anything else, lets a cloud session call a
   project MCP tool with no person. Child 2 stopped at the prompt, and nothing more was tried.
+- Whether a cloud session's MCP call returns a result once a person approves it. The approval in
+  child 2 came after the hosts were removed and the worker had restarted, so it says nothing
+  either way.
+- Whether a worker restart drops a session's MCP servers by itself. In child 2 it came together
+  with the allowlist change, so the two cannot be told apart.
 - Probe outputs are not kept. The short lines above are all there is. The `.mcp.json` was
   committed on this branch for the child sessions and removed again in the final commit, so the
   branch adds no MCP server; its content is the block at the top.
