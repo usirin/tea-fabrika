@@ -8,7 +8,7 @@
     "typecheck": "sh scripts/typecheck.sh",
     "build": "pnpm --filter @kampus/fabrika-old --filter @kampus/pipeline build",
     "test": "vitest run",
-    "lint": "sh .agents/skills/lead/scripts/skillscheck.sh && node .github/ci/workflow-lint.ts && node oxlint-plugins/lint.ts && node oxlint-plugins/format.ts --check && pnpm -s lint:versions && pnpm -s lint:reach && pnpm -s lint:layers && pnpm -s lint:boundaries && pnpm -s lint:browser && pnpm -s lint:dead && pnpm -s lint:compiler && pnpm -s lint:twin && pnpm -s lint:promise-types && node packages/fabrika-design/src/build/tokens.ts --check && node oxlint-plugins/stylelint.ts",
+    "lint": "sh .agents/skills/lead/scripts/skillscheck.sh && node .github/ci/workflow-lint.ts && node .github/ci/shard-rows.ts && node oxlint-plugins/lint.ts && node oxlint-plugins/format.ts --check && pnpm -s lint:versions && pnpm -s lint:reach && pnpm -s lint:layers && pnpm -s lint:boundaries && pnpm -s lint:browser && pnpm -s lint:dead && pnpm -s lint:compiler && pnpm -s lint:twin && pnpm -s lint:promise-types && node packages/fabrika-design/src/build/tokens.ts --check && node oxlint-plugins/stylelint.ts",
     "lint:versions": "node oxlint-plugins/exact-versions.ts",
     "lint:reach": "node oxlint-plugins/workspace-reach.ts",
     "lint:layers": "code-graph . --layers --layer-rules layer-rules.json",

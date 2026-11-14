@@ -766,11 +766,17 @@ describe("P12 real dev.ts wire", () => {
     const s = await instance(),
       c = await connected(s),
       pid = await counter(c);
-    const accepted: Array<{ rev: number; pos: number }> = [];
-
-    for (let n = 0; n < PAGE + 3; n++) {
-      accepted.push(placing(await send(c, pid, `page-${n}`)));
-    }
+    // T890, L8. The PAGE + 3 sends start in order on one socket and are awaited together.
+    // Three plants, each at the gateway's ledger read for a page, run once on a laptop and restored:
+    // reverse a page (red: the second page has 256 entries, 3 expected); repeat a page, so the read
+    // ignores `after` (red: 256 entries, 3 expected); stop at the first page (red: the second page
+    // is empty, 3 expected).
+    // Tried and survived: the same sends from two sockets, turn by turn, passed 3 runs of 3. Both
+    // local sockets deliver in sending order, so this scenario cannot tell one socket from two and
+    // claims nothing about the order of two.
+    const accepted = (await Promise.all(Array.from({ length: PAGE + 3 }, (_, n) => send(c, pid, `page-${n}`)))).map(
+      placing,
+    );
 
     const first = await read(c, "counter:1/inbox");
     expect(first).toHaveLength(PAGE);
