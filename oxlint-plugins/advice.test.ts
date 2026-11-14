@@ -44,8 +44,9 @@ describe("T930 L1 a fire advises only when it is one of the five and graded a wa
       fc.property(
         fc.record(
           {
-            code: fc.constantFrom<string | undefined>(...FIVE, ...OTHERS, undefined),
-            severity: fc.constantFrom<string | undefined>("warning", "error", undefined),
+            // A missing key is drawn through `requiredKeys: []`: oxlint's JSON never holds an explicit undefined.
+            code: fc.constantFrom<string>(...FIVE, ...OTHERS),
+            severity: fc.constantFrom("warning", "error"),
           },
           { requiredKeys: [] },
         ),

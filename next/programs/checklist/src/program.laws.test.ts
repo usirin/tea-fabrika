@@ -556,6 +556,11 @@ describe("ticket 806 the checklist's laws", () => {
     // @ts-expect-error A check's note is a string or absent, never a number.
     const numbered: Check = { type: "check", name: "x", note: 1 };
     expect(numbered.name).toBe("x");
+  });
+
+  // pinned: the checklist's input keys, so a renamed or dropped input is seen.
+  it("pinned: the checklist's input keys, so a renamed or dropped input is seen", async () => {
+    const { checklist } = await load();
     expect(Object.keys(checklist.inputs).sort()).toEqual([
       "add",
       "check",
