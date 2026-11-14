@@ -67,7 +67,8 @@ const forms = (secret: string): ReadonlyArray<string> => [
 export const unleaked = (outputs: ReadonlyArray<string>, secrets: ReadonlyArray<string>) => {
   const leaks = secrets.flatMap(forms);
   const leaked = outputs.filter((output) => leaks.some((form) => output.includes(form)));
-  expect(leaked, "input text leaked").toEqual([]);
+  // The outputs go in the message: a property law prints the message and not the diff.
+  expect(leaked, `input text leaked: ${leaked.join("\n")}`).toEqual([]);
 };
 
 /** Made-up input text with a quote, a space, a slash and a non-ASCII letter, so its three forms
