@@ -215,7 +215,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
               const world = { n: 0, receipts: new Map<string, number>() };
               let failed: Sent | null = null;
               /** The long-lived store's last committed save, which its owner may send again. */
-              let mine: Sent | null = null;
+              const mine: { last: Sent | null } = { last: null };
               let made = 0;
               let others = 0;
 
@@ -238,7 +238,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                 world.n = save.n;
 
                 if (by === "kept") {
-                  mine = save;
+                  mine.last = save;
                 }
 
                 for (const [letter, v] of save.values) {
@@ -257,7 +257,9 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                 return Exit.isSuccess(left);
               });
               const possible = (): ReadonlyArray<Move> =>
-                MOVES.filter((move) => (move === "retry" ? failed !== null : move === "again" ? mine !== null : true));
+                MOVES.filter((move) =>
+                  move === "retry" ? failed !== null : move === "again" ? mine.last !== null : true,
+                );
 
               for (const cell of tape) {
                 const move = choose(possible(), cell.move);
@@ -318,7 +320,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                     // changes a receipt the long-lived store last wrote, so only receipts move, or it
                     // writes a journal text no other save writes.
                     const base = value(cell, cell.keep ? world.n : 1000 + ++others);
-                    const own = cell.keep && mine !== null ? [...mine.values] : [];
+                    const own = cell.keep && mine.last !== null ? [...mine.last.values] : [];
                     let save = base;
 
                     if (own.length > 0) {
@@ -340,11 +342,11 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                   }
                   case "again": {
                     // The owner sends its own last save again, blind to what a second store wrote since.
-                    if (mine === null) {
+                    if (mine.last === null) {
                       return yield* Effect.die(new Error("an again ran with no save of its own"));
                     }
 
-                    const save = mine;
+                    const save = mine.last;
 
                     // The journal row is the one this store last wrote, but a receipt under it is not.
                     if (
