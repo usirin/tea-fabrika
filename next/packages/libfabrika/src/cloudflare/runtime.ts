@@ -1,3 +1,9 @@
+/**
+ * The Cloudflare runtime of a brain: the Project and Process Durable Objects' services and layers, the
+ * stubs and RPC replies they talk through, and the bucket and recording layers they share.
+ *
+ * @stability unstable
+ */
 import { makeRpcStub } from "@alchemy.run/cloudflare/Bridge";
 import { applyCell } from "@demlik/tea";
 import {
@@ -110,6 +116,13 @@ const SavedDescriptor = Schema.Struct({
   owner: Writer,
 });
 
+/**
+ * The bindings a brain's Worker and objects read: the start's `INSTANCE` JSON, the four Durable Object
+ * namespaces, the Worker Loader and the measurements bucket.
+ *
+ * @stability unstable
+ * @category models
+ */
 export interface Env {
   readonly INSTANCE: string;
   readonly PROJECT: DurableObjectNamespace<ProjectBinding>;
@@ -120,6 +133,12 @@ export interface Env {
   readonly MEASUREMENTS: R2Bucket;
 }
 
+/**
+ * The start's input a brain is configured with, as `SettingsStart.Input`.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type BrainOptions = SettingsStart.Input;
 
 /**
@@ -167,10 +186,15 @@ export function recordedLayer(
   );
 }
 
-/**
- * @stability unstable
- */
-export { SettingsRuntime };
+export {
+  /**
+   * A runtime for one layer whose build can be tried again after it fails.
+   *
+   * @stability unstable
+   * @category constructors
+   */
+  SettingsRuntime,
+};
 
 /**
  * Converts a `Starts` answer into the reply sent over RPC: `ok` with the receipt, or the failure's
@@ -258,6 +282,13 @@ export const settingsWire = <R, E>(context: Effect.Effect<Context.Context<R>, E>
   };
 };
 
+/**
+ * What the Project hands its door: the SQL handle, the founder, the write turn and the process
+ * calls the door needs.
+ *
+ * @stability unstable
+ * @category models
+ */
 export interface ProjectDoorOptions {
   readonly sql: Sql;
   readonly founder: Parameters<typeof ClientManagerLedger.layer>[0];
@@ -275,6 +306,13 @@ export interface ProjectDoorOptions {
 
 type Boot = { readonly name: string; readonly id: string; readonly program: string };
 
+/**
+ * What a Project object is built with: its built-in programs, the processes it boots, the door it
+ * serves, and optionally its start's input, mail grants, configuration and start grants.
+ *
+ * @stability unstable
+ * @category models
+ */
 export interface ProjectOptions {
   readonly input?: Effect.Effect<Effect.Success<ReturnType<typeof settings>>, LedgerError>;
   readonly mail?: { readonly grants: Grants };
@@ -300,16 +338,40 @@ export interface ProjectOptions {
   >;
 }
 
+/**
+ * Returns the stub of the Project object of the given name.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const projectStub = (env: Env, name: string) => env.PROJECT.getByName(name);
 
-/** One Process object per registered name: every process ID of that name, first or successor. */
+/**
+ * Returns the stub of the Process object for a registered name in a project. One object holds
+ * every process ID of that name, the first and each successor.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const processStub = (env: Pick<Env, "PROCESS">, project: string, name: string) =>
   env.PROCESS.getByName(JSON.stringify([project, name]));
 
+/**
+ * Returns the RPC stub of the Record object for a name in a project; a `SinkError` crosses it typed.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const recordStub = (env: Env, project: string, name: string) =>
   makeRpcStub<RecordShape>(env.RECORD.getByName(JSON.stringify([project, name])), { errors: [SinkError] });
 
 // Bindings have already entered Effect before the caller adds its RPC span.
+/**
+ * Runs a binding call that already entered Effect, under its own `runtime.rpc` span.
+ *
+ * @stability unstable
+ * @category combinators
+ */
 export const rpc = Effect.fn("runtime.rpc")(function* <A, E>(work: Effect.Effect<A, E>) {
   return yield* work;
 });
@@ -329,15 +391,35 @@ const checkedReply = Effect.fnUntraced(function* <A, B>(work: Effect.Effect<A, u
   );
 });
 
+/**
+ * Converts a signing call into its RPC reply: `ok` with the `Session`, or a `SigningRefused` or
+ * `NotGranted` refusal as data. Any other failure still fails the call.
+ *
+ * @stability unstable
+ * @category error handling
+ */
 export const signingReply = Effect.fn("project.signingReply")(function* (work: Effect.Effect<Session, unknown>) {
   return yield* checkedReply(work, (value) => SigningReply.cases.ok.make({ value }));
 });
 
+/**
+ * Converts a commit into its RPC reply: `ok` with the `Appended` entry, or a `SigningRefused` or
+ * `NotGranted` refusal as data. Any other failure still fails the call.
+ *
+ * @stability unstable
+ * @category error handling
+ */
 export const commitReply = Effect.fn("project.commitReply")(function* (work: Effect.Effect<Appended, unknown>) {
   return yield* checkedReply(work, (value) => CommitReply.cases.ok.make({ value }));
 });
 
-/** A ProcessManager call's checked refusal becomes reply data; other failures still fail the call. */
+/**
+ * Converts a `ProcessManager` call into its RPC reply: `ok` with the value, or a `ProcessError`
+ * refusal as data. Any other failure still fails the call.
+ *
+ * @stability unstable
+ * @category error handling
+ */
 export const processReply = <A, E>(work: Effect.Effect<A, E | ProcessError>): Effect.Effect<ProcessReply<A>, E> =>
   work.pipe(
     Effect.map((value): ProcessReply<A> => ({ ...ProcessReplies.cases.ok.make({ value }), value })),
@@ -418,9 +500,19 @@ const checkedValue = Effect.fnUntraced(function* <A>(
   return reply.value;
 });
 
-/** Saves the descriptor, then runs the new process's first turn before the start answers.
- *  A child's first letter waits in its inbox, so `drain` also wakes it (P42): its first alarm steps
- *  that letter, as a wake schedules a mail drain, with no client call. A saved wake is kept. */
+/**
+ * Saves a process's descriptor in its object, then runs the process's first turn before the start
+ * answers.
+ *
+ * **Details**
+ *
+ * A child's first letter waits in its inbox, so `drain` also sets the object's alarm, which steps
+ * that letter with no client call. A saved wake time is kept; with none, the alarm is set for now
+ * and saved.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const configureProcess = Effect.fn("process.configure")(function* <E>(
   ctx: DurableObjectState,
   descriptor: Descriptor,
@@ -445,10 +537,28 @@ export const configureProcess = Effect.fn("process.configure")(function* <E>(
   }
 });
 
+/**
+ * Returns the wake time a Process object saved, or `undefined` when none is saved.
+ *
+ * @stability unstable
+ * @category getters
+ */
 export const savedAlarm = Effect.fn("process.savedAlarm")(function* (ctx: DurableObjectState) {
   return yield* rpc(StorageClient.make(ctx.storage).get<number>("wake"));
 });
 
+/**
+ * Returns a Process object's saved descriptor, for `pid` when given, with the build of the process's
+ * own checkpoint when it has one.
+ *
+ * **Details**
+ *
+ * A descriptor or checkpoint that does not decode fails with a `LedgerError` of reason `bad_row`, and
+ * a failed read with reason `storage`.
+ *
+ * @stability unstable
+ * @category getters
+ */
 export const processDescriptor = Effect.fn("process.descriptor")(function* (ctx: DurableObjectState, pid?: string) {
   const raw = yield* rpc(StorageClient.make(ctx.storage).get("descriptor"));
   const descriptor = yield* Schema.decodeUnknownEffect(SavedDescriptor)(raw).pipe(
@@ -477,6 +587,13 @@ const hex = (bytes: ArrayBuffer) => Array.from(new Uint8Array(bytes), (n) => n.t
 
 // R2 refuses a body whose SHA-256 differs from the one sent. The local bucket does not check,
 // so the adapter checks first and both places fail the same way.
+/**
+ * Puts a body in the bucket after checking its SHA-256 against `sha256`, as R2 itself does; a
+ * mismatch fails with a `LedgerError` of reason `bad_row`, before anything is written.
+ *
+ * @stability unstable
+ * @category combinators
+ */
 export const checkedPut = Effect.fnUntraced(function* (
   bucket: R2Bucket,
   key: string,
@@ -496,11 +613,23 @@ export const checkedPut = Effect.fnUntraced(function* (
   yield* BucketClient.make(bucket).put(key, copy, sha256);
 });
 
+/**
+ * Returns a bucket object's SHA-256 as hex, or `null` when the object or its checksum is absent.
+ *
+ * @stability unstable
+ * @category getters
+ */
 export const bucketHead = Effect.fn(function* (bucket: R2Bucket, key: string) {
   const row = yield* BucketClient.make(bucket).head(key);
   return row?.checksums.sha256 === undefined ? null : { sha256: hex(row.checksums.sha256) };
 });
 
+/**
+ * Returns the bucket's `put` and `head` as the Promise calls the archive takes.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const bucketCalls = (bucket: R2Bucket): BucketCalls => ({
   put: (key, body, sha256) =>
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: P37's R2 interface returns a Promise
@@ -515,6 +644,18 @@ const recordLayer = (env: Env, project: string) => RecordManager.remote((name) =
 const archiveLayer = (env: Env) => Archive.bucket(bucketCalls(env.MEASUREMENTS));
 const flushed = SpanSink.use((sink) => sink.flush);
 
+/**
+ * Runs one call, then flushes the span sink before it answers.
+ *
+ * **Details**
+ *
+ * The flush is skipped when the call failed with a `RateCountFailure`, when `counted` is true of its
+ * value, or when it answered a `reserved` or `rate_limited` refusal. A failed flush fails a call that
+ * succeeded; a call that failed keeps its own failure.
+ *
+ * @stability unstable
+ * @category combinators
+ */
 export const complete = Effect.fn(function* <A, E, R>(
   work: Effect.Effect<A, E, R>,
   counted: (value: A) => boolean = () => false,
@@ -543,6 +684,13 @@ export const complete = Effect.fn(function* <A, E, R>(
   );
 });
 
+/**
+ * Layer that provides an object's recording: the remote Record calls, the archive and the span sink
+ * on its own SQL, with every span tagged with the start's settings hash and build.
+ *
+ * @stability unstable
+ * @category layers
+ */
 export const recordingLayer = (sql: Sql, env: Env, project: string, object: string) =>
   Layer.effectContext(
     Effect.gen(function* () {
@@ -1557,10 +1705,24 @@ const projectLogic = Effect.fn("project.init")(function* (
   };
 }, projectStorage);
 
+/**
+ * Service for the Project object's calls: the ledger, the door, code install, processes, mail and its
+ * boot.
+ *
+ * @stability unstable
+ * @category services
+ */
 export class ProjectService extends Context.Service<ProjectService, Effect.Success<ReturnType<typeof projectLogic>>>()(
   "@kampus/libfabrika/cloudflare/runtime.ProjectService",
 ) {}
 
+/**
+ * Layer that provides `ProjectService` for one Project object, after its start's input is decoded and
+ * recorded in its own ledger.
+ *
+ * @stability unstable
+ * @category layers
+ */
 export const projectLayer = (
   ctx: DurableObjectState,
   env: Env,
@@ -1590,6 +1752,13 @@ export const projectLayer = (
   );
 };
 
+/**
+ * Creates the Project object's runtime: the full `ProjectService`, plus `settingsStart` and
+ * `settingsRead`, which run on a smaller runtime of its ledger and starts alone.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const projectRuntime = (ctx: DurableObjectState, env: Env, options: ProjectOptions) => {
   const local = projectLedger(ctx, env, ctx.id.name ?? options.config?.name ?? "project");
   const minimal = SettingsRuntime.runtime(local.starts.pipe(Layer.provideMerge(local.ledgerLayer)));
@@ -1622,7 +1791,13 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env, options: Proje
   };
 };
 
-/** Composes durable job storage on the Project's database for trusted startup code. */
+/**
+ * Layer that provides durable job storage on the Project's own database, for trusted startup code.
+ * A job's doorbell rings the Connection object it names.
+ *
+ * @stability unstable
+ * @category layers
+ */
 export const projectJobsLayer = (ctx: DurableObjectState, env: Env) =>
   JobsLedger.layer.pipe(
     Layer.provide(
@@ -1815,10 +1990,23 @@ const processLogic = Effect.fnUntraced(function* (
   };
 });
 
+/**
+ * Service for a Process object's calls: its runner's turns, its alarm and its saved activity.
+ *
+ * @stability unstable
+ * @category services
+ */
 export class ProcessService extends Context.Service<ProcessService, Effect.Success<ReturnType<typeof processLogic>>>()(
   "@kampus/libfabrika/cloudflare/runtime.ProcessService",
 ) {}
 
+/**
+ * Creates a Process object's runtime: `ProcessService` over its built-in programs, with the start
+ * recorded with the Project.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const processRuntime = (ctx: DurableObjectState, env: Env, programs: Readonly<Record<string, ProgramSource>>) =>
   SettingsRuntime.runtime(
     Layer.effect(ProcessService, processLogic(ctx, env, programs)).pipe(Layer.provide(recordedLayer(env))),

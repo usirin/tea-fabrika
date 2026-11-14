@@ -1,3 +1,9 @@
+/**
+ * The app's brain Worker: its Durable Object classes, the private control entrypoint and the default
+ * `fetch`, each a thin handoff into libfabrika's Cloudflare runtime.
+ *
+ * @stability unstable
+ */
 import { makeDurableObjectBridge, makeWorkerBridge } from "@alchemy.run/cloudflare/Bridge";
 import type { SettingsStart } from "@kampus/libfabrika";
 import { type Descriptor, type Incoming } from "@kampus/libfabrika";
@@ -26,6 +32,13 @@ import type { ConnectionId } from "./door.ts";
 import { Objects } from "./objects.ts";
 import { connectionRuntime, projectRuntime, type Env } from "./runtime.ts";
 
+/**
+ * Durable Object for the Project: each RPC method runs the matching `ProjectService` call, and
+ * `settingsStart` and `settingsRead` run on the runtime's settings calls.
+ *
+ * @stability unstable
+ * @category objects
+ */
 export class Project extends DurableObject<Env> {
   readonly owner = projectRuntime(this.ctx, this.env);
   readonly runtime = settingsWire(this.owner.contextEffect);
@@ -243,6 +256,13 @@ export class Project extends DurableObject<Env> {
 
 type ContextProject = (typeof ProjectService)["Service"];
 
+/**
+ * Durable Object for one registered name's processes: each RPC method runs the matching
+ * `ProcessService` call, or its configuration, descriptor or alarm call.
+ *
+ * @stability unstable
+ * @category objects
+ */
 export class Process extends DurableObject<Env> {
   readonly runtime = settingsWire(processRuntime(this.ctx, this.env, programs).contextEffect);
 
@@ -316,6 +336,13 @@ export class Process extends DurableObject<Env> {
   }
 }
 
+/**
+ * Durable Object for one connection at the door: its `fetch`, WebSocket events, `ring`, `probe` and
+ * `notify` run the matching `ConnectionService` call.
+ *
+ * @stability unstable
+ * @category objects
+ */
 export class Connection extends DurableObject<Env> {
   readonly runtime = settingsWire(connectionRuntime(this.ctx, this.env).contextEffect);
 
@@ -369,10 +396,29 @@ const meta = {
 
 const Bridge = makeDurableObjectBridge(DurableObject, meta);
 
+/**
+ * Durable Object for the Record, bridged to Alchemy's object of that name.
+ *
+ * @stability unstable
+ * @category objects
+ */
 export class RecordPart extends Bridge("RecordPart") {}
 
+/**
+ * Worker entrypoint that receives the program isolates' tail events, bridged to Alchemy's Worker.
+ *
+ * @stability unstable
+ * @category objects
+ */
 export class IsolateTail extends makeWorkerBridge(WorkerEntrypoint, meta) {}
 
+/**
+ * Worker entrypoint for the private local control socket: each request runs `control` with the
+ * token from its props.
+ *
+ * @stability unstable
+ * @category objects
+ */
 export class Control extends WorkerEntrypoint<Env, { token: string }> {
   fetch(request: Request) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the private local control socket enters Effect
