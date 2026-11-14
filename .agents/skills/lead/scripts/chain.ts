@@ -116,7 +116,7 @@ import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Context, Duration, Effect, Layer, Schedule, Schema } from "effect";
+import { Context, Duration, Effect, Layer, Result, Schedule, Schema } from "effect";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as Typecheck from "./ci/typecheck.ts";
@@ -240,13 +240,13 @@ const isFault = Schema.is(FaultS);
 /** The last JSON line of drive's output, read loosely; `null` when there is none. */
 export const lineOf = (out: string, exit: number): Line | null => {
   for (const raw of out.trim().split("\n").toReversed()) {
-    let d: unknown;
+    const parsed = Result.try((): unknown => JSON.parse(raw));
 
-    try {
-      d = JSON.parse(raw);
-    } catch {
+    if (Result.isFailure(parsed)) {
       continue;
     }
+
+    const d = parsed.success;
 
     if (d === null || typeof d !== "object" || !("outcome" in d)) {
       continue;
@@ -347,7 +347,8 @@ export const judgedMove = (j: Judgment): Judged =>
 
 /** The judge Cmd's answer: the move it chose as JSON, or, for an older text, its `answer:` line. */
 export const moveFrom = (text: string): Judged => {
-  try {
+  // A text that is not such JSON, or reads as neither move, falls back to its `answer:` line.
+  const move = Result.try((): Judged | undefined => {
     const d = JSON.parse(text) as Judged;
 
     if (d._tag === "step" && isLaneStep(d.step)) {
@@ -357,9 +358,10 @@ export const moveFrom = (text: string): Judged => {
     if (d._tag === "park") {
       return toPark(String(d.reason ?? ""));
     }
-  } catch {}
 
-  return judgedOf(text);
+    return undefined;
+  });
+  return Result.getOrUndefined(move) ?? judgedOf(text);
 };
 
 /** What the judgment agent said on its last `answer:` line; none is a park. */
@@ -1618,13 +1620,12 @@ export const stepsTable = (
 
   if (existsSync(rowsFile)) {
     for (const raw of readFileSync(rowsFile, "utf8").split("\n")) {
-      try {
-        const r = JSON.parse(raw) as { run?: string; listUsd?: number };
+      // A line that is not JSON, or is JSON null, holds no row.
+      const r = Result.getOrUndefined(Result.try(() => JSON.parse(raw) as { run?: string; listUsd?: number } | null));
 
-        if (r.run && typeof r.listUsd === "number") {
-          dollars.set(r.run, r.listUsd);
-        }
-      } catch {}
+      if (r?.run && typeof r.listUsd === "number") {
+        dollars.set(r.run, r.listUsd);
+      }
     }
   }
 

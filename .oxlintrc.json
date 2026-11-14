@@ -1947,7 +1947,6 @@
     },
     {
       "files": [
-        ".agents/skills/lead/scripts/*",
         "next/apps/fabrika/e2e/*",
         "next/apps/fabrika/src/*",
         "next/apps/fabrika/src/exam/**",

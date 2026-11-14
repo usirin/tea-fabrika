@@ -38,7 +38,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { Schema } from "effect";
+import { Result, Schema } from "effect";
 import { boxTree, boxTrees, IDLE, oldBoxTree, pinsFolder, wipOf } from "./lane.ts";
 import { GC_SECONDS } from "./mutbox.ts";
 import { type PgrepAnswer, pgrepAnswer } from "./pgrep.ts";
@@ -369,7 +369,8 @@ const keptByDrive = (boxes: string): Map<string, number> => {
   }
 
   for (const file of readdirSync(dir).filter((f) => f.endsWith(".json"))) {
-    try {
+    // A state file that does not read is skipped, from the step where it stopped reading.
+    Result.try(() => {
       const lane = JSON.parse(readFileSync(join(dir, file), "utf8")) as {
         steps?: { box?: string; kept?: boolean; ended?: string }[];
       };
@@ -379,7 +380,7 @@ const keptByDrive = (boxes: string): Map<string, number> => {
           kept.set(step.box, Date.parse(step.ended ?? "") || Date.now());
         }
       }
-    } catch {}
+    });
   }
 
   return kept;
