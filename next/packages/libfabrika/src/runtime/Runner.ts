@@ -23,8 +23,8 @@ import {
   Stream,
   Tracer,
 } from "effect";
-import { mayStart } from "../access/StartRule.ts";
 import { type SessionManagerError } from "../access/SessionManager.ts";
+import { mayStart } from "../access/StartRule.ts";
 import {
   Activity,
   DeadInput,
