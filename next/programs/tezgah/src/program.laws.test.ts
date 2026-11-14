@@ -474,8 +474,8 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
 
             if (e.waiting?._tag === "split" && e.answer === "started") {
               seen.placed++;
-              const { tile, dir, cmd } = e.waiting;
-              const was = e.before.workspaces.find((s) => s.id === e.waiting?.space);
+              const { tile, dir, cmd, space: home } = e.waiting;
+              const was = e.before.workspaces.find((s) => s.id === home);
               // Plan amendment (a): a split whose tile was closed while its start waited is placed
               // after the workspace's focused tile instead.
               const gone = !live(e.before).includes(e.waiting.from);
@@ -529,14 +529,15 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
 
             if (e.waiting?._tag === "attach" && e.answer !== undefined && e.answer !== "refused") {
               seen.attached++;
-              const space = e.after.workspaces.find((s) => s.n === e.waiting?.workspace);
+              const { workspace, tile } = e.waiting;
+              const space = e.after.workspaces.find((s) => s.n === workspace);
               expect(space, "L6: an attach's answer makes its workspace with its one tile, focused").toMatchObject({
                 layout: e.waiting.tile,
                 focus: e.waiting.tile,
                 recent: [e.waiting.tile],
               });
               expect(
-                e.after.tiles.find((t) => t.id === e.waiting?.tile),
+                e.after.tiles.find((t) => t.id === tile),
                 "L6: the first tile shows its start",
               ).toMatchObject({
                 shows: e.waiting.cmd["name"],

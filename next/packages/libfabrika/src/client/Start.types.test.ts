@@ -20,7 +20,7 @@ it("format: start and Headless.start take the same machine and no React or Tuval
   expectTypeOf<"client" extends keyof HeadlessOptions ? true : false>().toEqualTypeOf<false>();
   // Every option is plain data or the machine: no element, node or component.
   expectTypeOf<Options["origin"] | Options["build"]>().toEqualTypeOf<string>();
-  expectTypeOf<keyof Options>().toEqualTypeOf<"tiles" | "window" | "origin" | "build" | "client">();
+  expectTypeOf<keyof Options>().toEqualTypeOf<"tiles" | "window" | "origin" | "build" | "client" | "desk">();
   expectTypeOf<(typeof ClientInfo.Type)["platform"]>().toEqualTypeOf<(typeof Hello.Type)["platform"]>();
   expectTypeOf<(typeof ClientInfo.Type)["platform"]>().toEqualTypeOf<"browser" | "electron" | "headless">();
   expectTypeOf<string>().not.toExtend<(typeof ClientInfo.Type)["platform"]>();

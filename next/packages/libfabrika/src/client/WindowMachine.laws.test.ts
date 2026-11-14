@@ -1968,6 +1968,9 @@ const typeId = (prefix: string, n: number): string => {
   return `${prefix}_${suffix}`;
 };
 
+/** The tiles a start is given, named by processes tezgah never shows, so a read of one of their
+ *  streams can only come from the given list, never from tezgah's view. */
+const GIVEN = ["given:1", "given:2", "given:3"].map((name, i) => ({ id: `given_${i + 1}`, name }));
 const DESK_PERSON = typeId("person", 41);
 const TEZGAH_PID = "process_of_tezgah";
 const DESK_ADMITTED = { version: 1, ping: 5_000, identity: { key: "SHA256:k", person: DESK_PERSON, as: "window" } };
@@ -2185,7 +2188,7 @@ const deskFold = (
     shows: new Map([[typeId("tile", 1), "checklist:1"]]),
     next: 2,
   };
-  const ctx = withDesk ? { tiles: TILES, desk: { workspace: 1 } } : { tiles: TILES };
+  const ctx = withDesk ? { tiles: GIVEN, desk: { workspace: 1 } } : { tiles: GIVEN };
   const [s0, cmds0] = machine.init(null, ctx as never);
   const w: DeskWorld = { s: s0, waiting: [...cmds0], desk, shown: null, subscribed: false };
   each({ prev: s0, m: { type: "seen", rev: 0 } as WindowMsg, next: s0, cmds: cmds0, w });
@@ -2220,7 +2223,7 @@ describe("Desk S2a L10: a window with a desk takes its tiles from tezgah", () =>
             `L10: after ${m.type} the window's tiles are workspace 1's in tezgah's latest view`,
           ).toEqual([...want].sort((a, b) => (a.id < b.id ? -1 : 1)));
 
-          for (const name of TILES.map((t) => t.name)) {
+          for (const name of GIVEN.map((t) => t.name)) {
             expect(reads(cmds), `L10: a desk window never reads the given tile ${name}`).not.toContain(
               `processes/${name}`,
             );
@@ -2267,7 +2270,7 @@ describe("Desk S2a L10: a window with a desk takes its tiles from tezgah", () =>
           expect(
             next.tiles.map((t) => [t.id, t.name]),
             "L10: the given tiles stay",
-          ).toEqual(TILES.map((t) => [t.id, t.name]));
+          ).toEqual(GIVEN.map((t) => [t.id, t.name]));
           expect(
             reads(cmds).filter((r) => r.startsWith("processes/tezgah:")),
             "L10: no desk, no tezgah read",
