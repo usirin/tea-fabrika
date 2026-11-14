@@ -8,7 +8,7 @@
  *
  * @stability unstable
  */
-import { Schema } from "effect";
+import { Cause, Schema } from "effect";
 import { ProcessId } from "../ProcessId.ts";
 
 /**
@@ -319,6 +319,12 @@ export const sinkError = (error: unknown): SinkError =>
  * @category getters
  */
 export const errorClass = (error: unknown): string => (error instanceof Error ? error.name : typeof error);
+
+/** The class of whatever ended a failed span, for `error.type`: its first typed failure, or else the
+ *  first value that was thrown. The one place a cause is squashed, since a thrown value counts too. */
+export const causeClass = (cause: Cause.Cause<unknown>): string =>
+  // oxlint-disable-next-line fabrika/no-cause-squash -- edge: error.type names a thrown value as it names a typed failure
+  errorClass(Cause.squash(cause));
 
 /** The most characters a span tag holds (p95, p99). Text past it is cut, its length kept beside. */
 const MOST_CHARS = 128;

@@ -1,7 +1,12 @@
-// The editor's JSON Schema for a settings file, written by Effect from the file's own schema
-// (`Files.schema`), so validation and editor hints share one tree. A key no declaration names is
-// refused, a default is only an annotation, and a leaf JSON Schema cannot hold exactly stops
-// generation rather than shipping a looser schema.
+/**
+ * The editor's JSON Schema for a settings file, written by Effect from the file's own schema (`Files.schema`), so validation and editor hints share one tree.
+ *
+ * **Details**
+ *
+ * A key no declaration names is refused, and a default is only an annotation. A leaf JSON Schema cannot hold exactly stops generation rather than shipping a looser schema.
+ *
+ * @stability unstable
+ */
 import { Predicate, Schema } from "effect";
 
 const DIALECT = "https://json-schema.org/draft/2020-12/schema";
@@ -30,6 +35,20 @@ const loose = (node: unknown, seen: Set<unknown>): boolean => {
   return Object.values(node).some((value) => loose(value, seen));
 };
 
+/**
+ * Writes the JSON Schema document for a settings file's schema.
+ *
+ * **Details**
+ *
+ * The result is a draft 2020-12 document with its definitions under `$defs`, and excess properties are refused.
+ *
+ * **Gotchas**
+ *
+ * Throws an `Error` when any part of the schema would be written looser than it decodes: an opaque declaration, or a check with no exact JSON Schema form.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const make = (schema: Schema.Top) => {
   if (loose(Schema.toRepresentation(Schema.toCodecJson(schema)), new Set())) {
     throw new Error("A setting's schema cannot be written as JSON Schema without loosening it.");
@@ -39,5 +58,10 @@ export const make = (schema: Schema.Top) => {
   return { $schema: DIALECT, ...document.schema, $defs: document.definitions };
 };
 
-/** The committed bytes: two-space JSON and one trailing newline. */
+/**
+ * Returns a document as the text that is committed: two-space JSON and one trailing newline.
+ *
+ * @stability unstable
+ * @category combinators
+ */
 export const format = (document: ReturnType<typeof make>) => `${JSON.stringify(document, null, 2)}\n`;

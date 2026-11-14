@@ -41,8 +41,8 @@ import { type Ended, held, machine } from "./internal/sink.ts";
 import { RecordManager } from "./Records.ts";
 import {
   Chain,
+  causeClass,
   chainName,
-  errorClass,
   OBJECT,
   PROCESS,
   REFUSED,
@@ -157,7 +157,7 @@ const ended = (span: Tracer.NativeSpan, endTime: bigint, exit: Exit.Exit<unknown
   const failure = Exit.isFailure(exit) ? Option.some(exit.cause) : Option.none();
   const error = Option.map(failure, (cause) => {
     const named = own.tags[ERROR];
-    return typeof named === "string" ? named : errorClass(Cause.squash(cause));
+    return typeof named === "string" ? named : causeClass(cause);
   });
   const tags: Record<string, Tag> = {
     ...own.tags,

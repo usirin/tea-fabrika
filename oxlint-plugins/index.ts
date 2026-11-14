@@ -10,6 +10,7 @@ import { lawShape } from "./law-shape.ts";
 import { modules } from "./modules.ts";
 import { noBareDisable } from "./no-bare-disable.ts";
 import { noBareTell } from "./no-bare-tell.ts";
+import { noCauseSquash } from "./no-cause-squash.ts";
 import { noClockInView } from "./no-clock-in-view.ts";
 import { noContextTag } from "./no-context-tag.ts";
 import { noDataTaggederror } from "./no-data-taggederror.ts";
@@ -58,6 +59,7 @@ const plugin: Plugin = {
     modules,
     "no-bare-disable": noBareDisable,
     "no-bare-tell": noBareTell,
+    "no-cause-squash": noCauseSquash,
     "no-clock-in-view": noClockInView,
     "no-context-tag": noContextTag,
     "no-data-taggederror": noDataTaggederror,

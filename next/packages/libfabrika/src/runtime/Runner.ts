@@ -872,7 +872,7 @@ export class ProgramRunner extends Context.Service<
             // A throw is the step's own crash and keeps its class. Any other typed failure is the host's.
             const wrapped = Result.isSuccess(failed)
               ? failed.success
-              : new ProgramDown({ reason, cause: Cause.squash(result.cause) });
+              : new ProgramDown({ reason, cause: Result.getOrUndefined(Cause.findDefect(result.cause)) });
 
             if (!Schema.is(ProgramDown)(wrapped)) {
               return yield* Effect.failCause(result.cause);
@@ -1858,7 +1858,7 @@ export class ProgramRunner extends Context.Service<
                 // A storage failure while draining leaves the alarm that tries it again.
                 Effect.onExit((exit) =>
                   exit._tag === "Failure" &&
-                  Cause.squash(exit.cause) instanceof LedgerError &&
+                  Option.exists(Cause.findErrorOption(exit.cause), Schema.is(LedgerError)) &&
                   !Cause.hasInterrupts(exit.cause)
                     ? retryLater
                     : Effect.void,
