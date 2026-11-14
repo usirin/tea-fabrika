@@ -10,15 +10,13 @@
 // text field named by the add input's description, with its refusal words tied to it by
 // `aria-describedby`), a removed screen with an Ask again button, and a blocked screen. A lost link dims
 // the tile and makes it `inert`.
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite"; // edge: inspect the instance's persisted SQLite cells, including records outside access history
 import { applyCell } from "@demlik/tea";
+import { NodeServices } from "@effect/platform-node";
 import { checklist, checklistMachine } from "@kampus/checklist";
 import { checklistWindow } from "@kampus/checklist/window";
 import { Sent } from "@kampus/libfabrika";
 import { MemberEvent } from "@kampus/libfabrika/access/Access";
-import { Row as LedgerRow, valueFor } from "@kampus/libfabrika/ledger/Log";
+import { valueFor } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { Effect, Fiber, Schema } from "effect";
@@ -44,6 +42,7 @@ import {
   tile,
   waiting,
 } from "./p14.test-support.ts";
+import { stored } from "./stored.test-support.ts";
 
 const SEED = 119120;
 const NAME = "checklist:1";
@@ -606,11 +605,20 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   return ["access record", JSON.stringify({ ...entry, body: { ...body, signed } })];
                 });
                 const proofs = [...[...h.grants, ...stranger.grants].flatMap((g) => g.signatures), revoked.armored];
-                const disk = yield* stored(h.dir, accessBodies, proofs);
+                // The tabs' last look comes while the instance still runs. The scan reads the home once
+                // more while it runs, then stops it and reads a home nothing writes to any more.
+                const last = [...(yield* look(t.page, t.seen)), ...(yield* look(second.page, second.seen))];
+                const disk = yield* stored({ dir: h.dir, stop: dev.stop }, accessBodies, proofs).pipe(
+                  Effect.provide(NodeServices.layer),
+                );
+                // The span queue's WAL holds rows deleted once delivered, and only while the instance
+                // runs, so the running pass must have read it.
+                expect(disk.running, "the running scan read the span queue's WAL").toContain(
+                  "/brain.records.sqlite-wal",
+                );
                 const outputs: ReadonlyArray<readonly [string, string]> = [
                   ...snapshots,
-                  ...(yield* look(t.page, t.seen)),
-                  ...(yield* look(second.page, second.seen)),
+                  ...last,
                   ...grantErrors.map((error): readonly [string, string] => ["grant error", error]),
                   ...[...h.grants, ...stranger.grants].flatMap((g): ReadonlyArray<readonly [string, string]> => [
                     ["grant output", g.output],
@@ -686,127 +694,6 @@ const percentDecoded = (text: string): string => {
     text = decoded;
   }
 };
-
-/** Check every file and SQLite cell. Two places keep a signature on purpose, and only its `armored`
- *  text is omitted there: a verified access entry's signed.armored, and the gateway's replay rows.
- *  Checking cells too catches a copy of that entire body in another table or stream. */
-const stored = (dir: string, accessBodies: ReadonlyMap<string, string>, proofs: ReadonlyArray<string>) =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const files = readdirSync(dir, { recursive: true, encoding: "utf8" })
-        .map((name) => join(dir, name))
-        .filter((file) => statSync(file).isFile() && file !== join(dir, "person") && file !== join(dir, "person.pub"));
-      const raw: Array<readonly [string, string]> = files.map((file) => [
-        `home ${file.slice(dir.length)}`,
-        readFileSync(file).toString("latin1"),
-      ]);
-      const outputs: Array<readonly [string, string]> = [];
-      const retained = new Map<string, Map<string, string>>();
-
-      for (let n = 0; n < files.length; n++) {
-        const file = files[n]!;
-        const [label, bytes] = raw[n]!;
-
-        if (!bytes.startsWith("SQLite format 3\0")) {
-          continue;
-        }
-
-        const db = yield* Effect.acquireRelease(
-          Effect.sync(() => new DatabaseSync(file, { readOnly: true })),
-          (db) => Effect.sync(() => db.close()),
-        );
-        const allowed = new Map<string, string>();
-        retained.set(file, allowed);
-        const tables = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ name: Schema.String })))(
-          db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all(),
-        );
-
-        for (const { name } of tables) {
-          const table = `"${name.replaceAll('"', '""')}"`;
-          const keys = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ name: Schema.String, pk: Schema.Int })))(
-            db.prepare(`PRAGMA table_info(${table})`).all(),
-          )
-            .filter((column) => column.pk > 0)
-            .map((column) => column.name);
-          const select = db.prepare(`SELECT * FROM ${table}`);
-          // The runtime's own tables hold 64-bit integers, such as an alarm's time in nanoseconds.
-          select.setReadBigInts(true);
-
-          for (const [at, read] of select.all().entries()) {
-            // An integer a JavaScript number holds exactly is read as one, as before; a larger one stays whole.
-            const row = Object.fromEntries(
-              Object.entries(read).map(([column, value]) => [
-                column,
-                typeof value === "bigint" && value >= Number.MIN_SAFE_INTEGER && value <= Number.MAX_SAFE_INTEGER
-                  ? Number(value)
-                  : value,
-              ]),
-            );
-            const key = keys.length === 0 ? `row ${at}` : `key ${keys.map((column) => String(row[column])).join(" ")}`;
-            let cells = row;
-
-            if (
-              name === "entries" &&
-              row.stream === "gateway/access" &&
-              ["granted", "revoked"].includes(String(row._tag))
-            ) {
-              const entry = Schema.decodeUnknownSync(LedgerRow)(row);
-              const body = JSON.stringify(entry.body);
-              const replacement = Schema.decodeUnknownSync(Schema.String)(accessBodies.get(body));
-              allowed.set(body, replacement);
-              cells = { ...row, body: replacement };
-            }
-
-            // The gateway's replay rows keep a whole signed change on purpose, since P10, to answer a
-            // repeated change id: `changePending/<id>` and `change/<id>` in `gateway_state`. The parent
-            // plan lets a grant's signature stay "only in the ledger locations that deliberately preserve
-            // that public evidence", and this is one. A signature is public evidence, not a secret, and
-            // the access entry above holds the same one. Only `armored` is left out, and only when it is
-            // a proof this run really sent: anything else there is checked like any cell. The row's other
-            // fields are checked too, and the raw file below is still checked whole for a private key
-            // and for every credential.
-            if (name === "gateway_state" && /^(?:changePending|change)\//.test(String(row.name))) {
-              const value = Schema.decodeUnknownSync(Schema.String)(row.value);
-              const { armored, ...rest } = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Json))(
-                JSON.parse(value),
-              );
-
-              if (typeof armored === "string" && proofs.includes(armored)) {
-                const replacement = JSON.stringify(rest);
-                allowed.set(value, replacement);
-                cells = { ...row, value: replacement };
-              }
-            }
-
-            for (const [column, value] of Object.entries(cells)) {
-              outputs.push([
-                `${label} table ${name} ${key} column ${column}`,
-                value instanceof Uint8Array ? Buffer.from(value).toString("latin1") : String(value),
-              ]);
-            }
-          }
-        }
-      }
-
-      for (let n = 0; n < files.length; n++) {
-        const file = files[n]!;
-        const [label, bytes] = raw[n]!;
-        // SQLite's journal repeats the same cells. No other file gets this exception. The raw bytes are
-        // still scanned: only the exact text of an omitted cell is swapped for its checked form, so a
-        // signature anywhere else in the file, under another key or in another table, is still found.
-        const database = file.replace(/-(?:wal|shm|journal)$/, "");
-        let checked = bytes;
-
-        for (const [body, replacement] of retained.get(database) ?? []) {
-          checked = checked.replaceAll(body, replacement);
-        }
-
-        outputs.push([label, checked]);
-      }
-
-      return { outputs, raw };
-    }),
-  );
 
 /** Every named output of a tab: its page text and markup, its rows, console lines, errors, URLs and sockets. */
 const look = (page: import("playwright").Page, seen: Seen) =>
