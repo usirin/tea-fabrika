@@ -679,6 +679,10 @@
             ],
             "patterns": [
               {
+                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
                 "group": ["@radix-ui/colors/*"],
                 "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
               },
@@ -762,6 +766,10 @@
               }
             ],
             "patterns": [
+              {
+                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
               {
                 "group": ["@radix-ui/colors/*"],
                 "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
@@ -965,6 +973,10 @@
             ],
             "patterns": [
               {
+                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
                 "group": ["@radix-ui/colors/*"],
                 "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
               },
@@ -1091,6 +1103,10 @@
             ],
             "patterns": [
               {
+                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
                 "group": ["@radix-ui/colors/*"],
                 "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
               },
@@ -1164,6 +1180,10 @@
             ],
             "patterns": [
               {
+                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
                 "group": ["@radix-ui/colors/*"],
                 "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
               },
@@ -1215,6 +1235,10 @@
             ],
             "patterns": [
               {
+                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
                 "group": ["@radix-ui/colors/*"],
                 "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
               },
@@ -1263,6 +1287,10 @@
               }
             ],
             "patterns": [
+              {
+                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
               {
                 // A front file of ledger/, PascalCase by the case override below. Its `internal/` is the
                 // `internal/` entry's, so one import is reported once: oxlint reads a `!` in any group
@@ -1497,6 +1525,10 @@
             ],
             "patterns": [
               {
+                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
                 "group": ["@kampus/tuval/*", "**/tuval/**"],
                 "message": "The inbox program imports only libfabrika."
               },
@@ -1646,6 +1678,10 @@
             ],
             "patterns": [
               {
+                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
                 "group": ["@radix-ui/colors/*"],
                 "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
               },
@@ -1763,6 +1799,10 @@
             ],
             "patterns": [
               {
+                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
                 "group": ["@radix-ui/colors/*"],
                 "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
               },
@@ -1868,6 +1908,10 @@
             ],
             "patterns": [
               {
+                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
                 "group": ["@radix-ui/colors/*"],
                 "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
               },
@@ -1920,6 +1964,149 @@
         "next/**/*.d.ts"
       ],
       "rules": { "fabrika/jsdocs": "off" }
+    },
+    {
+      // CI paths, law 20 (the plan for CI paths, slice 2): the tests on the reader list in
+      // .github/ci/changes.mjs, which a comment-only change still runs, may import the exam's plant
+      // helper. Each block repeats the rule as its own folder's override has it, less the plant entry:
+      // change them together.
+      "files": [
+        "next/apps/fabrika/src/exam/**",
+        "next/apps/fabrika/src/settings-generated.test.ts",
+        "next/apps/fabrika/src/build.test.ts",
+        "next/apps/fabrika/src/build-command.test.ts",
+        "next/apps/fabrika/src/instance-one-file.test.ts"
+      ],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // The reader list's libfabrika folder: the rule as next/packages/libfabrika/src/** has it.
+      "files": ["next/packages/libfabrika/src/node/build/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "./*/internal/**",
+                  "../*/internal/**",
+                  "./../*/internal/**",
+                  "../../*/internal/**",
+                  "./../../*/internal/**"
+                ],
+                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }

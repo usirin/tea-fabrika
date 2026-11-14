@@ -266,6 +266,11 @@ it("Markdown a check reads runs check, typecheck, test and next, alone or beside
 
 // 0175 narrowed this law: a shared path that is no file of today's version, the lockfile among
 // them, no longer starts today's checks.
+// The plan for CI paths narrowed it again, with the owner's yes (its answered question 2): lint rule
+// files (`.oxlintrc.json`, `oxlint-plugins/`) are no longer shared paths. They give scope readers,
+// so next runs only the next/ tests that lint, read or bundle source, and the lint rule files law
+// below says so. This law keeps its generators, which hold no lint rule file; its `next` means
+// every next/ test only for the paths those generators make.
 it("shared paths run check, typecheck, test and next, and today's checks by the paths; adding paths never disables a job", () => {
   fc.assert(
     fc.property(fc.array(path, { minLength: 1, maxLength: 10 }), list, shared, (paths, more, unknown) => {
@@ -724,4 +729,275 @@ it("pinned: the one experiments folder a test reads runs as an unknown path does
   const unknown = ci.classify(["unknown/a"], "pull_request");
   expect(ci.classify([read], "pull_request")).toEqual(unknown);
   expect(ci.classify([read, "experiments/177-themes/notes.ts"], "pull_request")).toEqual(unknown);
+});
+
+// The plan for CI paths, slice 2, cases 1 and 2: the `next` job runs only the reader tests (the
+// next/ tests that read source as text, lint it or bundle it) when every next/ path is proven the
+// same program, and for lint rule files. `scope` is what of next/ a run needs: "none", "readers"
+// or "all". `proven` holds the paths program.ts proved; on the first pass it is empty.
+type Scope = "none" | "readers" | "all";
+const rank: Record<Scope, number> = { none: 0, readers: 1, all: 2 };
+
+// Lint rule files: the config and the plugin folder, which the exam's lint tests copy and run.
+const lintFile = fc.oneof(
+  fc.constant(".oxlintrc.json"),
+  fc
+    .tuple(fc.array(word, { maxLength: 2 }), word, fc.constantFrom("mjs", "ts", "json"))
+    .map(([dirs, name, ext]) => ["oxlint-plugins", ...dirs, `${name}.${ext}`].join("/")),
+);
+
+// Paths nobody listed: today's shared generator and unusual names.
+const unlisted = fc.oneof(
+  shared,
+  fc.string({ minLength: 1 }).map((s) => `unusual/${s}`),
+);
+
+// Any path the classifier knows, lint rule files and experiments included.
+const known = fc.oneof(path, lintFile, experimentFile, agentsSkill);
+const proven = fc.array(fc.oneof(next, known), { maxLength: 8 });
+
+it("property: a path nobody listed gives scope all and every flag on, whatever proven holds", () => {
+  fc.assert(
+    fc.property(unlisted, fc.array(known, { maxLength: 8 }), proven, scopedEvent, (unknown, others, same, event) => {
+      // The path itself counts as proven too: only a next/ path can be.
+      const all = [...same, unknown];
+      expect(ci.scope([unknown], event, all)).toBe("all");
+      expect(ci.classify([unknown], event, all)).toMatchObject({
+        ...heavy,
+        e2e: todays(unknown),
+        today: todays(unknown),
+      });
+      expect(ci.scope([...others, unknown], event, [...all, ...others])).toBe("all");
+    }),
+    options,
+  );
+});
+
+it("property: adding paths never lowers the scope or turns a flag off, and adding to proven never raises the scope or changes a flag", () => {
+  fc.assert(
+    fc.property(
+      fc.array(fc.oneof(known, next), { minLength: 1, maxLength: 10 }),
+      fc.array(fc.oneof(known, next, unlisted), { maxLength: 6 }),
+      proven,
+      proven,
+      scopedEvent,
+      (paths, more, same, extra, event) => {
+        const before = ci.scope(paths, event, same);
+        const after = ci.scope([...paths, ...more], event, same);
+        expect(rank[after as Scope]).toBeGreaterThanOrEqual(rank[before as Scope]);
+        const flags = ci.classify(paths, event, same);
+        const grown = ci.classify([...paths, ...more], event, same);
+
+        for (const key of ["check", "typecheck", "test", "next", "e2e", "field", "today"] as const) {
+          expect(!flags[key] || grown[key]).toBe(true);
+        }
+
+        // Proving more paths can only lower what next/ needs, and never moves a flag.
+        expect(rank[ci.scope(paths, event, [...same, ...extra, ...paths]) as Scope]).toBeLessThanOrEqual(
+          rank[before as Scope],
+        );
+        expect(ci.classify(paths, event, [...same, ...extra, ...paths])).toEqual(ci.classify(paths, event));
+      },
+    ),
+    {
+      ...options,
+      examples: [
+        // pinned: a lint file needs readers and a next/ file nobody proved needs all, whatever the order.
+        [["next/packages/libfabrika/src/a.ts"], [".oxlintrc.json"], [], [], "pull_request"],
+        [[".oxlintrc.json"], ["next/packages/libfabrika/src/a.ts"], [], [], "pull_request"],
+      ],
+    },
+  );
+});
+
+it("property: proven counts only for a next/ path that is in paths", () => {
+  fc.assert(
+    fc.property(
+      fc.array(fc.oneof(known, next, unlisted), { minLength: 1, maxLength: 10 }),
+      proven,
+      fc.array(fc.oneof(today, unlisted, lintFile, next), { maxLength: 6 }),
+      scopedEvent,
+      (paths, same, outside, event) => {
+        // Every path of the run is offered as proven, with paths that are not in the run at all.
+        const offered = [...same, ...outside, ...paths];
+        const counted = offered.filter((p) => p.startsWith("next/") && paths.includes(p));
+        expect(ci.scope(paths, event, offered)).toBe(ci.scope(paths, event, counted));
+        // A non-next/ path that needs everything still needs everything when it is offered.
+        const old = paths.filter((p) => !p.startsWith("next/"));
+        expect(ci.scope(old, event, old)).toBe(ci.scope(old, event));
+      },
+    ),
+    {
+      ...options,
+      examples: [
+        // pinned: a file of today's version offered as proven still runs every next/ test.
+        [["packages/fabrika-design/src/colors.ts"], [], [], "pull_request"],
+      ],
+    },
+  );
+});
+
+it("property: next/ files all proven run check and typecheck, no test, and scope readers; one not proven gives scope all", () => {
+  fc.assert(
+    fc.property(fc.uniqueArray(next, { minLength: 1, maxLength: 12 }), next, scopedEvent, (paths, other, event) => {
+      expect(ci.scope(paths, event, paths)).toBe("readers");
+      expect(ci.classify(paths, event, paths)).toMatchObject({ check: true, typecheck: true, test: false, next: true });
+      fc.pre(!paths.includes(other));
+      expect(ci.scope([...paths, other], event, paths)).toBe("all");
+      expect(ci.scope(paths, event)).toBe("all");
+    }),
+    options,
+  );
+});
+
+it("property: lint rule files alone run check, typecheck and test, with scope readers", () => {
+  fc.assert(
+    fc.property(fc.array(lintFile, { minLength: 1, maxLength: 8 }), proven, scopedEvent, (paths, same, event) => {
+      expect(ci.scope(paths, event, same)).toBe("readers");
+      expect(ci.classify(paths, event, same)).toMatchObject({ check: true, typecheck: true, test: true, next: true });
+    }),
+    {
+      ...options,
+      examples: [
+        // pinned: the config alone, the commonest case 2 change.
+        [[".oxlintrc.json"], [], "pull_request"],
+      ],
+    },
+  );
+});
+
+it("format: each entry of readers is a tracked path that holds a test file", () => {
+  // format: the next job's path argument is this list, so a renamed folder would leave the reader
+  // run empty. The six entries the plan and experiment 288 found are all on it.
+  expect(Array.isArray(ci.readers)).toBe(true);
+  expect(ci.readers).toEqual(
+    expect.arrayContaining([
+      "next/apps/fabrika/src/exam/",
+      "next/apps/fabrika/src/settings-generated.test.ts",
+      "next/apps/fabrika/src/build.test.ts",
+      "next/apps/fabrika/src/build-command.test.ts",
+      "next/apps/fabrika/src/instance-one-file.test.ts",
+      "next/packages/libfabrika/src/node/build/",
+    ]),
+  );
+
+  for (const entry of ci.readers) {
+    const listed = spawnSync("git", ["ls-files", "--", entry], { encoding: "utf8" });
+    expect(listed.status, entry).toBe(0);
+    const tracked = listed.stdout.split("\n").filter(Boolean);
+    expect(entry.startsWith("next/"), entry).toBe(true);
+    expect(
+      entry.endsWith("/") ? tracked.some((file) => /\.test\.tsx?$/.test(file)) : tracked.includes(entry),
+      entry,
+    ).toBe(true);
+    expect(entry.endsWith("/") || /\.test\.tsx?$/.test(entry), entry).toBe(true);
+  }
+});
+
+// The first pass and the `--same` pass, through `outputs`, the function the script prints.
+const sha = { base: "b".repeat(40), merged: "a".repeat(40), head: "c".repeat(40) };
+
+/** A fake git: the merge base, the changed paths, and `diff` text for any other diff. */
+const git =
+  (paths: readonly string[], diff: string): Runner =>
+  (args) => {
+    if (args[0] === "merge-base") {
+      return { status: 0, stdout: `${sha.merged}\n` };
+    }
+
+    if (args[0] === "diff" && args.includes("--name-only")) {
+      return { status: 0, stdout: paths.length === 0 ? "" : `${paths.join("\0")}\0` };
+    }
+
+    return args[0] === "diff" ? { status: 0, stdout: diff } : { status: 128, stdout: "" };
+  };
+
+const envOf = (event: string, draft: boolean) => ({
+  BASE: sha.base,
+  HEAD: sha.head,
+  EVENT: event,
+  DRAFT: String(draft),
+});
+
+/** What a run prints for a scope: the reader paths, or all of next/. */
+const filterOf = (scope: Scope) => (scope === "readers" ? ci.readers.join(" ") : "next/");
+
+it("property: probe changes no flag: the first pass prints the same flags for any diff text", async () => {
+  await fc.assert(
+    fc.asyncProperty(
+      // A NUL ends a path in git's output, so no path holds one.
+      fc
+        .array(fc.oneof(known, next), { minLength: 1, maxLength: 10 })
+        .filter((list) => list.every((p) => !p.includes("\0"))),
+      fc.oneof(
+        fc.string(),
+        fc
+          .array(fc.constantFrom("+// a note", "-// old", "+ * @since 1.0", "+", "+const a = 1;", "@@ -1 +1 @@"), {
+            maxLength: 6,
+          })
+          .map((lines) => lines.join("\n")),
+      ),
+      scopedEvent,
+      fc.boolean(),
+      async (paths, diff, event, draft) => {
+        const printed = await ci.outputs({ same: false, env: envOf(event, draft), run: git(paths, diff) });
+        const expected = ci.jobs(paths, event, draft);
+
+        for (const [key, on] of Object.entries(expected)) {
+          expect(printed[key], key).toBe(String(on));
+        }
+
+        expect(["true", "false"]).toContain(printed["probe"]);
+
+        if (expected.next) {
+          expect(printed["filter"]).toBe(filterOf(ci.scope(paths, event) as Scope));
+        }
+      },
+    ),
+    options,
+  );
+});
+
+it("scenario: with no parser to import, --same prints what the first pass printed", async () => {
+  // scenario: the import of program.ts rejects, as it does when the parser's install failed. Then
+  // a parser that proves every path, and one that proves all but one, for the same runs.
+  const rejects = () => Promise.reject(new Error("Cannot find package 'oxc-parser'"));
+  const proves = (keep: (path: string) => boolean) => () =>
+    Promise.resolve({ samePaths: (_base: string, _head: string, paths: readonly string[]) => paths.filter(keep) });
+  const nextPaths = [
+    "next/packages/libfabrika/src/transport/Hello.ts",
+    "next/packages/libfabrika/src/transport/Wire.ts",
+  ];
+  const comments = "+/** A note. */\n+// more";
+
+  for (const [paths, event] of [
+    [nextPaths, "pull_request"],
+    [nextPaths, "merge_group"],
+    [[".oxlintrc.json"], "push"],
+    [[...nextPaths, ".oxlintrc.json"], "pull_request"],
+  ] as const) {
+    const run = git(paths, comments);
+    const env = envOf(event, false);
+    const first = await ci.outputs({ same: false, env, run });
+    const again = await ci.outputs({ same: true, env, run, load: rejects });
+    expect({ next: again["next"], filter: again["filter"] }).toEqual({ next: first["next"], filter: first["filter"] });
+    expect(first["next"]).toBe("true");
+
+    const proved = await ci.outputs({ same: true, env, run, load: proves(() => true) });
+    expect(proved).toMatchObject({ next: "true", filter: filterOf("readers") });
+    const one = await ci.outputs({ same: true, env, run, load: proves((p) => !p.endsWith("Wire.ts")) });
+    expect(one).toMatchObject({
+      next: "true",
+      filter: paths.includes("next/packages/libfabrika/src/transport/Wire.ts") ? "next/" : filterOf("readers"),
+    });
+  }
+
+  // History that cannot be read: both passes run everything, parser or none.
+  const broken: Runner = () => ({ status: 128, stdout: "" });
+  const env = envOf("pull_request", false);
+  expect(await ci.outputs({ same: true, env, run: broken, load: rejects })).toMatchObject({
+    next: "true",
+    filter: "next/",
+  });
+  expect(await ci.outputs({ same: false, env, run: broken })).toMatchObject({ next: "true", filter: "next/" });
 });

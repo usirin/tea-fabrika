@@ -164,9 +164,42 @@ export const lintWorkflow = (text: string): string[] => {
     outputs = map(changes["outputs"]);
   require(!("if" in changes) && !("needs" in changes), "changes starts on every event");
 
-  for (const name of ["check", "typecheck", "test", "next", "e2e", "field", "build", "today"]) {
+  for (const name of ["check", "typecheck", "test", "e2e", "field", "build", "today"]) {
     require(compact(outputs[name]) === `steps.diff.outputs.${name}`, `changes exposes ${name}`);
   }
+
+  // The plan for CI paths, slice 2: the parser's pass (`--same`) prints `next` and `filter` again
+  // when it proved a next/ file is the same program, and the first pass's stand when it printed
+  // nothing. Its install and its run may fail without failing changes, which would run everything
+  // and turn ci-required red.
+  for (const name of ["next", "filter"]) {
+    require(compact(outputs[name]) ===
+      `steps.same.outputs.${name}||steps.diff.outputs.${name}`, `changes exposes ${name} from the parser's pass, else the first`);
+  }
+
+  const changeSteps = steps(changes);
+  const same = changeSteps.find((s) => s["id"] === "same");
+  require(same?.["run"] === "node .github/ci/changes.mjs --same" &&
+    same["continue-on-error"] === true, "changes runs the parser's pass, and its failure fails nothing");
+
+  for (const [key, expected] of Object.entries(classifier)) {
+    require(map(same?.["env"])[key] === expected, `the parser's pass gets event ${key} through env`);
+  }
+
+  for (const step of changeSteps.filter(
+    (s) =>
+      (typeof s["uses"] === "string" && /^(pnpm\/action-setup|actions\/setup-node)@/.test(s["uses"])) ||
+      (typeof s["run"] === "string" && s["run"].startsWith("pnpm install")),
+  )) {
+    require(step["continue-on-error"] === true &&
+      same !== undefined &&
+      changeSteps.indexOf(step) <
+        changeSteps.indexOf(same), "the parser's setup comes before its pass, and its failure fails nothing");
+  }
+
+  require(changeSteps.some(
+    (s) => typeof s["run"] === "string" && s["run"].startsWith("pnpm install"),
+  ), "changes installs the parser for its pass");
 
   // The typecheck is its own job, so its answer comes as soon as it ends and a lane can read it
   // alone (0133). check runs no second one.
@@ -321,8 +354,10 @@ export const lintWorkflow = (text: string): string[] => {
   require(JSON.stringify(matrix["shard"]) === "[1,2,3,4,5,6]" &&
     Object.keys(matrix).length === 1, "next has exactly six shards and no other matrix entries");
   require(strategy["fail-fast"] === false, "next lets every shard finish");
+  // The plan for CI paths, slice 2: the path is `filter` from changes, the reader tests or `next/`,
+  // unquoted so each reader path is its own argument. A missing filter runs all of next/.
   const nextCommand =
-    'pnpm exec vitest run next/ --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
+    'pnpm exec vitest run $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
   const adviceCommand = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"';
   // Only these whole scripts are allowed; shell aliases and alternate paths cannot add work.
   const allowed = [
@@ -347,6 +382,8 @@ export const lintWorkflow = (text: string): string[] => {
     /^\$\{\{\s*matrix\.shard\s*\}\}\/6$/.test(
       shard,
     ), "next passes its six-shard expression without an extra test guard");
+  require(compact(map(testStep?.["env"])["FILTER"]) ===
+    "needs.changes.outputs.filter||'next/'", "next takes its path from filter, with the fallback next/");
   const advice = nextSteps.find((s) => s["run"] === adviceCommand);
   require(testStep !== undefined &&
     advice !== undefined &&

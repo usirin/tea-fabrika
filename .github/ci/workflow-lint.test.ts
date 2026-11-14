@@ -34,6 +34,7 @@ const testEnv = {
 
 const toolingExcludes = "--exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**'";
 const fieldIf = "steps.diff.outputs.field == 'true'";
+const probe = "steps.diff.outputs.probe == 'true'";
 const name = fc.string({ maxLength: 20 });
 
 const valid = (label: string, extra: string) => ({
@@ -51,19 +52,38 @@ const valid = (label: string, extra: string) => ({
     changes: {
       "runs-on": "ubuntu-latest",
       "timeout-minutes": 5,
-      outputs: Object.fromEntries(
-        ["check", "typecheck", "test", "next", "e2e", "field", "build", "today"].map((key) => [
-          key,
-          `\${{ steps.diff.outputs.${key} }}`,
-        ]),
-      ),
+      outputs: {
+        ...Object.fromEntries(
+          ["check", "typecheck", "test", "e2e", "field", "build", "today"].map((key) => [
+            key,
+            `\${{ steps.diff.outputs.${key} }}`,
+          ]),
+        ),
+        // The plan for CI paths, slice 2: the parser's pass prints these two again.
+        next: `\${{ steps.same.outputs.next || steps.diff.outputs.next }}`,
+        filter: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter }}`,
+      } as Record<string, string>,
       steps: [
         { uses: "actions/checkout@v7", with: { "fetch-depth": 0 } },
         diff,
         { run: "sh .agents/skills/lead/scripts/skillscheck.sh", if: "!cancelled()" },
         { run: "node oxlint-plugins/gitignore.mjs", if: "!cancelled()" },
         { name: extra, run: "echo checked" },
-      ],
+        // The parser's setup and pass, only when every changed line looks like a comment.
+        { uses: "pnpm/action-setup@v6", if: probe, "continue-on-error": true, with: { run_install: false } },
+        {
+          uses: "actions/setup-node@v7",
+          if: probe,
+          "continue-on-error": true,
+          with: { "node-version": "26.13.0" },
+        },
+        {
+          run: "pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts",
+          if: probe,
+          "continue-on-error": true,
+        },
+        { ...diff, id: "same", if: probe, "continue-on-error": true, run: "node .github/ci/changes.mjs --same" },
+      ] as Record<string, unknown>[],
     },
     check: {
       name: `\${{ github.event.pull_request.draft && 'lint' || 'check' }}`,
@@ -126,8 +146,8 @@ const valid = (label: string, extra: string) => ({
       strategy: { "fail-fast": false, matrix: { shard: [1, 2, 3, 4, 5, 6] } },
       steps: [
         {
-          run: 'pnpm exec vitest run next/ --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"',
-          env: { SHARD: `\${{ matrix.shard }}/6` },
+          run: 'pnpm exec vitest run $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"',
+          env: { SHARD: `\${{ matrix.shard }}/6`, FILTER: `\${{ needs.changes.outputs.filter || 'next/' }}` },
         },
         {
           name: "chromium",
@@ -685,6 +705,82 @@ const plants: [string, (workflow: Workflow) => void][] = [
     "missing output",
     (w) => {
       delete w.jobs.changes.outputs["next"];
+    },
+  ],
+  // The plan for CI paths, slice 2, law 21: the next job's path comes from filter with the fallback
+  // next/, and the changes job's parser steps carry continue-on-error.
+  [
+    "next loses its path fallback",
+    (w) => {
+      w.jobs.next.steps[0]!.env!.FILTER = `\${{ needs.changes.outputs.filter }}`;
+    },
+  ],
+  [
+    "next runs all of next/ whatever filter says",
+    (w) => {
+      w.jobs.next.steps[0]!.run = w.jobs.next.steps[0]!.run.replace("$FILTER", "next/");
+    },
+  ],
+  [
+    "next quotes its path, so the reader paths are one argument",
+    (w) => {
+      w.jobs.next.steps[0]!.run = w.jobs.next.steps[0]!.run.replace("$FILTER", '"$FILTER"');
+    },
+  ],
+  [
+    "next has no filter",
+    (w) => {
+      delete (w.jobs.next.steps[0]!.env as Record<string, string>)["FILTER"];
+    },
+  ],
+  ...(["next", "filter"] as const).flatMap((key): [string, (w: Workflow) => void][] => [
+    [
+      `changes exposes ${key} from the first pass alone`,
+      (w) => {
+        w.jobs.changes.outputs[key] = `\${{ steps.diff.outputs.${key} }}`;
+      },
+    ],
+    [
+      `changes exposes ${key} from the parser's pass alone`,
+      (w) => {
+        w.jobs.changes.outputs[key] = `\${{ steps.same.outputs.${key} }}`;
+      },
+    ],
+    [
+      `changes hides ${key}`,
+      (w) => {
+        delete w.jobs.changes.outputs[key];
+      },
+    ],
+  ]),
+  ...[5, 6, 7, 8].map((index): [string, (w: Workflow) => void] => [
+    `the parser's step ${index} fails changes`,
+    (w) => {
+      delete w.jobs.changes.steps[index]!["continue-on-error"];
+    },
+  ]),
+  [
+    "the parser's pass is gone",
+    (w) => {
+      w.jobs.changes.steps.splice(8, 1);
+    },
+  ],
+  [
+    "the parser's install is gone",
+    (w) => {
+      w.jobs.changes.steps.splice(7, 1);
+    },
+  ],
+  [
+    "the parser's pass runs before its install",
+    (w) => {
+      w.jobs.changes.steps.splice(7, 0, w.jobs.changes.steps.splice(8, 1)[0]!);
+    },
+  ],
+  [
+    "the parser's pass is not told the draft",
+    (w) => {
+      w.jobs.changes.steps[8]!["env"] = env;
     },
   ],
   [
