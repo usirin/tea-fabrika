@@ -577,6 +577,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     return policy;
   };
 
+  // The delivered processes this build found, each with the build its object runs.
   const bootProcesses: Array<Descriptor> = [];
 
   for (const process of yield* processes.info) {
@@ -613,10 +614,16 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     }
 
     // A start not yet delivered has no descriptor in its object: its saved row is what it will get.
+    // It also cannot take a swap yet, so its delivery below brings it to the selected code.
+    const undelivered = yield* decodePending(process.process);
     const descriptor =
-      (yield* decodePending(process.process))?.descriptor ??
+      undelivered?.descriptor ??
       (yield* rpc(ProcessClient.make(processStub(env, name, process.name)).descriptor(process.process)));
-    bootProcesses.push(descriptor);
+
+    if (undelivered === undefined) {
+      bootProcesses.push(descriptor);
+    }
+
     const tail = yield* bindTail(ctx, { project: name, name: process.name, process: process.process }).pipe(
       Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
     );
@@ -1099,6 +1106,17 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
           }),
           yield* from(),
         );
+  /** Brings one process to the selected code when it runs another. A failure is logged with its
+   *  process, never dropped: that process keeps its old code until the next install or load. */
+  const catchUp = Effect.fnUntraced(function* (process: Pick<Descriptor, "id" | "name" | "program" | "build">) {
+    const chosen = selected[process.program];
+
+    if (chosen !== undefined && process.build !== chosen.hash) {
+      yield* push(chosen.load, process.program, chosen.hash, process.name).pipe(
+        Effect.catch((error) => Effect.logWarning(`swap of ${process.id} not done: ${error._tag}`)),
+      );
+    }
+  });
   // A malformed pending row still fails the build; only the deliveries run after it, as handle_continue.
   const pending = yield* Effect.forEach(
     sql.exec("SELECT process FROM dev_descriptors WHERE pending>0"),
@@ -1112,6 +1130,9 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
         saved === undefined
           ? Effect.void
           : deliver(pid, saved).pipe(
+              // A swap waits for the delivery: an object with no descriptor cannot take one. The
+              // start keeps the code it chose, and a save since then reaches it here, as a swap.
+              Effect.andThen(installs.withPermit(catchUp(saved.descriptor))),
               // The row stays pending, so the next load sends it again; the failure is still seen.
               Effect.catch((error) => Effect.logWarning(`start of ${pid} not delivered: ${error._tag}`)),
               Effect.onInterrupt(() => Effect.logWarning(`start of ${pid} not delivered: interrupted`)),
@@ -1162,18 +1183,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
         const pushes: Array<Fiber.Fiber<void>> = [];
 
         for (const process of bootProcesses) {
-          const chosen = selected[process.program];
-
-          if (chosen !== undefined && process.build !== chosen.hash) {
-            pushes.push(
-              yield* Effect.forkChild(
-                push(chosen.load, process.program, chosen.hash, process.name).pipe(Effect.ignore),
-                {
-                  startImmediately: true,
-                },
-              ),
-            );
-          }
+          pushes.push(yield* Effect.forkChild(catchUp(process), { startImmediately: true }));
         }
 
         yield* Fiber.joinAll(pushes);

@@ -1525,7 +1525,9 @@ export class ProgramRunner extends Context.Service<
             return yield* err(job, "no_program");
           }
 
-          const code = yield* loader.load(program.value, process.build).pipe(Effect.result);
+          // By name only: the loader's second argument picks the code to load, and this life's
+          // build is the requester's code, not the child's.
+          const code = yield* loader.load(program.value).pipe(Effect.result);
 
           if (Result.isFailure(code)) {
             return code.failure.reason === "no_program"
