@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-26; changed 2026-10-28"
+summary: "fabrika builds public repositories too, so every secret is an Effect `Redacted` from its read (`Config.Redacted`) to the one line that sends it. Two blocking lint rules refuse a plain `process.env` read of a secret and a `Redacted.value` outside seven edge files. It does not hide a login from an agent inside its own box. Changed 2026-10-28: no storage saves a state holding a secret; a state holds the secret's name, and each person's keys live in their own ledger object, since a job's record is read by every member, forever."
+---
+
 # Secrets are Redacted, from the read to the one line that sends them
 
 Decided 2026-10-26 by the owner.

@@ -1,3 +1,9 @@
+---
+date: "2026-10-17"
+scripts: "`src/operator-ship-crash.test.ts`, `src/program/shelf.ts`"
+summary: "Yes, with two fixes. First, each pipe into an input is one writer and the input closes after the last one, and `stop` moved off the run to the starter. Then the operator was killed at five points of a ship and started again from what it saved, on fakes, for the child machine of today, the ship program started naively, and the ship program kept. Naive got 4 of 10 cells wrong: an ejected pull request queued twice, or a landed one written up as `ALREADY-MERGED`. The fixes: a program with machines cannot be started without a stable id and a shelf, where each machine run keeps its state and closed inputs are marked; and ship takes `ask {id, pr}` and answers on `answer` under the asker's id, going on with an unfinished run and answering a finished one again from the shelf. Kept: 10 of 10 right, the same as the child: one enqueue, one lane line. Recommended: keep the child as `operate`'s default and use the kept program where many parents feed one ship; about 70%. `SHIP=program` never ran live. Not built: removing finished runs from the shelf, a pipe's writer end kept across a restart."
+---
+
 # 66. Operate starts ship: can programs compose and still survive a crash?
 
 ```ts

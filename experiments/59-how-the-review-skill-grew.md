@@ -1,3 +1,8 @@
+---
+date: "2026-10-12"
+summary: "The whole git history of today's fabrika's review text, and the text at one commit sorted by hand. It only goes up: 212 commits in four months, 16 left it smaller, and each real cut moved text into code or one shared place. A rewrite cut 3,944 lines to 1,142, and 57 days later it was 3,038. Half the growth is lessons from bad runs, and two thirds of the changes came from outside the stage. Of today's lines 62.8% are facts code holds, 15.3% the reason for a rule, 10.8% flow and 9.5% judgment; 70% serve steps code can do alone. Nine rot patterns, each with a proposed guard. This repo's prompts already grow the same way and are never cut."
+---
+
 # 59. How fabrika's review skill got so big
 
 Today's fabrika tells its reviewer what to do in six text files: a skill page,

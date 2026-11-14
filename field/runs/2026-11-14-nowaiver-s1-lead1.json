@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-14",
+  "run": "2026-11-14-nowaiver-s1-lead1",
+  "ticket": "933",
+  "pr": "1201",
+  "started": "2026-11-14T06:50:00+00:00",
+  "ended": "2026-11-14T07:10:00+00:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "The lead's closing checks for ticket 933, slice 1, in a cloud container, Node 26.13.0, pnpm 12.16.1. origin/main 60a795c56 was already merged into the branch at 1e7256c, so the merge step had nothing to do. ratchet.test.ts: 8 passed in 4 s. pnpm typecheck: green in 40 s. loosening.sh from the merge base to the head: 5 unrecognized-change hits (workflow-lint.test.ts, workflow-lint.ts, check.yaml, exam-paths.json, commits.test.ts), all read by hand: every one is a pure addition, the diff removes no line, and the one change to old laws' input adds the ratchet step at index 3 of the generated valid wiring, after the steps older plants index. No real loosening. Saved the plan's two findings. The time window is approximate.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 20,
+  "note": null,
+  "costUsd": null,
+  "billed": null
+}

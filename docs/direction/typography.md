@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-02"
+summary: "Both versions, today's windows first, through `@kampus/fabrika-design`. Six text styles in `text-styles.ts` (`textStyles`, `TextStyle`), spread onto Manti's `Text` and `Heading`: `title` 22/600, `heading` 15/600, `strong` 13/500, `body` 13, `quiet` 13 in the low gray, `label` 12 in the low gray; the same steps as macOS's text styles and Linear's app. \"Text styles\", not \"roles\", as Apple, Figma, Panda and Chakra say. Six principles: every size comes from a text style; what you act on leads its block; rank by size, then weight, in two grays; the text style sets the look, the element the meaning; a label is one line and meta gives way first; mono only for typed words. `DescriptionList`, `DescriptionTerm` and `DescriptionDetails` live in the same package, built from Manti's `Text`. No new prop on Manti; our six go to Manti's issue 135 as a real case. The ask desk's card is the test: its rec moves to `heading` and its question to `strong`. The ledger records nothing new."
+---
+
 # Typography
 
 **Decided 2026-11-02.** The owner approved the six principles, the shape and the smaller calls below

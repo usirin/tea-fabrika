@@ -1,3 +1,9 @@
+---
+date: "2026-10-17"
+scripts: "`src/program/refs.ts`, `src/program/program.ts`, `src/stages/queue.ts`, `src/program/kept.test.ts`, `src/stages/review/program.test.ts`, `src/stages/operate/program.test.ts`"
+summary: "Yes, scripted. Effect's `Entity` does not fit (it keeps messages, not state; SQL or memory only; re-sends on its own; 221 to 270 KB against 38 KB), so refs are `RcMap`. `keep`, `until`, `first` and the `left` steps are gone; each kind is declared once and `main` calls `machines.<kind>.get(id).start(msg)`. Two starts of one id share one copy; another Msg fails `AlreadyStarted`; a run its parent left unfinished fails the program by name. Review and ship moved onto the kept queue. review piped into ship and operate, each with three items and two kills: every write once, nothing kept after. Found on the way: a clear under a live copy was undone by its next save (now a death), and a forget could ship an answered ask again (now dropped from the queue first). Code grew by 249 lines. Confidence 75%."
+---
+
 # 75b. Machine refs: one declaration per kind, a ref per id
 
 The build of [experiment 75](./75-machine-refs-design.md)'s proposal. Scripted

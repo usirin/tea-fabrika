@@ -6,7 +6,12 @@
  */
 import { Result, Schema } from "effect";
 
-/** One RFC 6902 operation. `add`, `remove` and `replace` are all a view diff needs. */
+/**
+ * One RFC 6902 operation. `add`, `remove` and `replace` are all a view diff needs.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Patch =
   | { readonly op: "add"; readonly path: string; readonly value: unknown }
   | { readonly op: "remove"; readonly path: string }
@@ -79,7 +84,12 @@ const walk = (path: string, before: unknown, after: unknown, out: Array<Patch>):
   out.push({ op: "replace", path, value: structuredClone(after) });
 };
 
-/** The patches that turn `before` into `after`, in the order to apply them. None when equal. */
+/**
+ * Returns the patches that turn `before` into `after`, in the order to apply them. None when equal.
+ *
+ * @stability unstable
+ * @category combinators
+ */
 export const diff = (before: unknown, after: unknown): ReadonlyArray<Patch> => {
   const out: Array<Patch> = [];
   walk("", before, after, out);
@@ -97,7 +107,18 @@ const decodeJson = Schema.decodeUnknownResult(Schema.Json);
 const unsafe = new Set(["__proto__", "constructor", "prototype"]);
 const invalid = () => Result.fail("bad_patch" as const);
 
-/** Applies the view protocol's RFC 6902 subset to a copy. A rejected patch changes nothing. */
+/**
+ * Applies the view protocol's RFC 6902 subset to a copy. A rejected patch changes nothing.
+ *
+ * **Details**
+ *
+ * It fails with `bad_patch` when `before` is not JSON, an operation is not one of `add`, `replace`
+ * and `remove`, a path is malformed or names a missing place, or a path holds `__proto__`,
+ * `constructor` or `prototype`.
+ *
+ * @stability unstable
+ * @category combinators
+ */
 export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json, "bad_patch"> => {
   const decoded = decodeOps(ops);
   const json = decodeJson(before);

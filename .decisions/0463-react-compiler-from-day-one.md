@@ -1,7 +1,7 @@
 ---
 id: 0463
 title: next/ is React Compiler compatible from day one, on oxc's native port with no Babel, and today's app follows the same rules as a tryout
-status: accepted
+status: amended-in-part by [0525](0525-todays-version-is-frozen.md)
 date: 2026-11-02
 tags: [react, compiler, oxc, build, next, today]
 ---

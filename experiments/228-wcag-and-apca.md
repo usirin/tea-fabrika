@@ -1,3 +1,9 @@
+---
+date: "2026-11-07"
+scripts: "`228-wcag-and-apca.ts`, `228-wcag-and-apca/`, `results/228-wcag-and-apca-pairs.jsonl`, `results/228-wcag-and-apca.md`"
+summary: "Today's version; 387 pairs from the two contrast tests, apca-w3 0.1.9. Text: 365 pairs, 1 WCAG fail (the known ticket 153 exception), 19 pass WCAG and fail Lc 60, all dark: status colors on hovered or selected rows, one button label, 4 terminal colors. Non-text: 22 pairs, all pass Lc 15 (the script's Lc 30 was a wrong lean). Fed the two floors decided in [themes](../docs/direction/themes.md). No model, $0."
+---
+
 # 228. Do today's color pairs pass APCA as well as WCAG 2.2?
 
 Measured 2026-11-07. About today's version: the pairs that

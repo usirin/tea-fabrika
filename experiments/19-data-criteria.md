@@ -1,3 +1,8 @@
+---
+date: "2026-10-04"
+summary: "On the toys every rule fit and 0 of 54 results were wrong. On seven real demlik issues 36 of 130 criteria carried an example."
+---
+
 # 19. Criteria as data: a rule, a call and its result
 
 The idea from the Open list: triage writes each criterion as a rule plus

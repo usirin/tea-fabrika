@@ -1,7 +1,7 @@
 ---
 id: 0093
 title: Each law the tests step writes is a property that walks the machine, and each plant is run once and recorded, never kept, as a trial
-status: accepted
+status: amended-in-part by [0523](0523-advice-rules-block-where-clean.md), [0527](0527-type-laws-get-a-type-label.md)
 date: 2026-11-11
 tags: [tests, laws, properties, plants, lint, mutation, trial, next]
 ---

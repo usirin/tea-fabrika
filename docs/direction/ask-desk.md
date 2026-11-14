@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-02"
+summary: "`next/`, with tryouts in today's version. Most asks take one key: `y` takes the step's rec, `n` refuses it with a required note, `o` opens every pick, each key has a button, and the keys work only where focus is. One asks program with two views: the top bar's popup as the glance, with the rec and `y` and `n` on its rows, and \"open all\" as a tile, a list beside the selected ask, with the ticket tile following on a pipe; five rules for the first tile the app opens with content. Six principles: one queue as a list beside the selected ask, with a count and minutes; the question in one line with the rec's why, cost and percent sure, the evidence folded; three keys; the rec written before the ask and what the person did recorded (`took`: key, time on screen, what was opened, rec shown or hidden), attention counted per merged ticket (from experiment 185); autonomy offered per narrow kind after 30 blind agreements in a row (the rule of three), one press to make and undo, never for the exam, spend or security kinds; code answers what code can, and a stop shows as a stop. An answer may carry an optional `needed` mark: the ask really needed the person, or the agent could have worked it out (decided 2026-11-07). Ticket 117's three asks and its `no_review` stop are the running example. From experiment 196."
+---
+
 # The ask desk: most asks are one key, and the desk learns from the answers
 
 **Decided 2026-11-02.** The owner approved the whole note after a walk of each part: one asks

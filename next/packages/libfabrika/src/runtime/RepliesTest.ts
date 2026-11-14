@@ -97,16 +97,34 @@ export const capture = () => {
       return span;
     },
   });
+  // An ended NativeSpan takes no more attributes, events or end, so its text is made once. A walk
+  // that looks after every move asks for every span again each time; remaking each one cost about
+  // a tenth of queue S2's time.
+  const ended = new WeakMap<Tracer.NativeSpan, string>();
+  const write = (span: Tracer.NativeSpan) =>
+    [
+      span.name,
+      JSON.stringify([...span.attributes], (_, value) => (typeof value === "bigint" ? value.toString() : value)),
+      JSON.stringify(span.events, (_, value) => (typeof value === "bigint" ? value.toString() : value)),
+      span.status._tag === "Ended" && Exit.isFailure(span.status.exit) ? Cause.pretty(span.status.exit.cause) : "",
+    ].join("\n");
   /** Each span as text: its name, tags, events and, once it ended, its exit. */
   const text = () =>
-    spans.map((span) =>
-      [
-        span.name,
-        JSON.stringify([...span.attributes], (_, value) => (typeof value === "bigint" ? value.toString() : value)),
-        JSON.stringify(span.events, (_, value) => (typeof value === "bigint" ? value.toString() : value)),
-        span.status._tag === "Ended" && Exit.isFailure(span.status.exit) ? Cause.pretty(span.status.exit.cause) : "",
-      ].join("\n"),
-    );
+    spans.map((span) => {
+      const known = ended.get(span);
+
+      if (known !== undefined) {
+        return known;
+      }
+
+      const made = write(span);
+
+      if (span.status._tag === "Ended") {
+        ended.set(span, made);
+      }
+
+      return made;
+    });
   return { tracer, text };
 };
 

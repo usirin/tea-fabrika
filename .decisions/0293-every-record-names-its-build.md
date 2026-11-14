@@ -1,7 +1,7 @@
 ---
 id: 0293
 title: In next/, every record a process writes carries the build that wrote it, each load, refusal and failure is a code.loaded, code.refused or code.failed event, and a swap shows a quiet word and icon on its tile
-status: accepted
+status: amended-in-part by [0529](0529-code-loaded-from-open.md)
 date: 2026-11-01
 tags: [hot-reload, build, events, ledger, record-wide, accessibility, next]
 ---

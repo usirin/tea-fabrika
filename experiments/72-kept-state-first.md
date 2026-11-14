@@ -1,3 +1,8 @@
+---
+date: "2026-10-17"
+summary: "Yes. `keep.run(machine, key, options, first)` is now the only way a program hands a machine its storage (`keep.store` is gone). It reads the kept state first, `first(kept)` picks `start`, `resume` or nothing, and every Listen and timer is held behind an Effect `Latch` until that Msg settles, like Elm's `init`. Build, operate, review and ship moved; 69's `from` and `goOn` deleted. A bare tea run writes twice on the 69 race; `keep.run` writes once, and run 1's Listen never starts. Ship killed in `waiting` and in the queue, review killed in `reviewing`: each goes on from the kept phase with no repeated write. Skipping `first` or passing a `store` does not compile. `@demlik/tea` unchanged; recs for tea: hold Subs until a boot Msg, and resolve `done()` after the save."
+---
+
 # 72. Kept state first: one way to start a kept machine
 
 ```sh

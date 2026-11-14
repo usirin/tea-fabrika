@@ -1,5 +1,6 @@
 /**
  * Bounded chaos: saved requests precede outside work, and unanswered work stays unknown.
+ *
  * @stability unstable
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
@@ -16,21 +17,24 @@ const Request = Schema.Struct({ id: Chaos.ExperimentId });
 const Inspect = Schema.Struct({ ...Request.fields, target: Chaos.Target });
 
 /**
- * Ask the host for authoritative time for this experiment.
+ * Asks the host for authoritative time for this experiment.
+ *
  * @stability unstable
  * @category commands
  */
 export const now = Cmd.make("now", { input: Schema.toType(Request), ok: Count, err: Errors });
 
 /**
- * Request the recorded fault through the trusted host handler.
+ * Requests the recorded fault through the trusted host handler.
+ *
  * @stability unstable
  * @category commands
  */
 export const fire = Cmd.make("fire", { input: Schema.toType(Chaos.Fire), ok: Schema.toType(Chaos.Fired), err: Errors });
 
 /**
- * Read the target's bounded history once the fault cap is reached.
+ * Reads the target's bounded history once the fault cap is reached.
+ *
  * @stability unstable
  * @category commands
  */
@@ -71,6 +75,7 @@ const Phase = Schema.TaggedUnion({
 
 /**
  * The complete saved control state, including the next display number.
+ *
  * @stability unstable
  * @category schemas
  */
@@ -84,6 +89,7 @@ const errorFields = { error: Error, at: Count, reason: Schema.optionalKey(Schema
 
 /**
  * Inputs and the settled host answers, with their original request identity.
+ *
  * @stability unstable
  * @category schemas
  */
@@ -177,6 +183,7 @@ const receive = (m: Model, msg: Extract<Msg, { type: "fire_ok" | "fire_err" }>):
 
 /**
  * One machine owns all transitions. Its Cmds are data for the runner.
+ *
  * @stability unstable
  * @category machines
  */
@@ -286,7 +293,9 @@ export const chaosMachine = Machine.make({
 });
 
 /**
- * The next saved deadline, or no alarm when work is stopped or awaiting a check.
+ * The next saved deadline: the active experiment's. It gives no alarm in any other phase (`idle`,
+ * `starting`, `checking`, `done`, `incomplete` and `stopped`).
+ *
  * @stability unstable
  * @category scheduling
  */
@@ -294,7 +303,9 @@ export const wake = (model: Model): number | null =>
   model.phase._tag === "active" ? model.phase.experiment.deadline : null;
 
 /**
- * Active experiments cannot be replaced by another start.
+ * Refuses a `start` with reason `active` while an experiment is starting, active or checking, or
+ * once the display number has reached its maximum.
+ *
  * @stability unstable
  * @category validation
  */

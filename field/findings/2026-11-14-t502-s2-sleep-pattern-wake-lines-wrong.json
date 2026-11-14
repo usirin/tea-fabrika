@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-t502-s2-sleep-pattern-wake-lines-wrong",
+  "date": "2026-11-14",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".patterns/durable-objects-sleep.md",
+    "line": 59
+  },
+  "says": "In next/, the sleep pattern doc cites `cloudflare/runtime.ts:1341` and `:1399` (lines 59 and 70) as where the Process saves `wake` and reads it in the alarm handler, but at this head those lines are in `projectRuntime` and `processLogic`'s settings read; the wake save is at :1496 and the alarm's read at :1555.",
+  "proof": "`sed -n 1341p runtime.ts` prints `const minimal = SettingsRuntime.runtime(local.starts.pipe(Layer.provideMerge(local.ledgerLayer)));` and `sed -n 1399p` prints `const checked = yield* RecordedStart;`; `grep -n '\"wake\"' runtime.ts` prints 1495-1496 (`storage.put(\"wake\", at)` then `setAlarm`) and 1555 (`rpc(storage.get<number>(\"wake\")).pipe(` inside `alarm:`). At build commit 428c1cf69 the same grep gave 1341 and 1400, so the numbers predate the merge of main.",
+  "cost": "The pattern doc sends a reader looking for the alarm's saved wake to unrelated code, in the doc that says how an object sleeps.",
+  "head": "dd5ae9c584ae1e9ae080f0bf13a7d2dc60faa43c",
+  "ticket": "usirin/tea-fabrika#502",
+  "pr": "kamp-us/tea-fabrika#1187"
+}

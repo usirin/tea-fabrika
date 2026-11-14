@@ -1,3 +1,8 @@
+---
+date: "2026-10-18"
+summary: "Stories help a little; the whole-job criterion brings the fixture back. Part 1 rerun on the same 6 tickets with user stories first (each criterion names the stories it serves, an unlinked one cannot be written), a first criterion that is the user's whole job with a realistic fixture, and a names rule that lets through what a user meets (flags, config keys, globs, published names, read from manifests and docs). 15 stories; every job carried a fixture (504 and 565 close to what shipped). Most stories named users part 1's criteria already served, but they brought back 3 criteria today's triage had and part 1 missed, and 1 nobody had. Names-code send-backs 21 to 8. Outcome share 90% (part 1 93%; the judge moved 10 points on today's unchanged text). New costs: the forced fixture made a comment-only chore (490) a hand-worked job at 3.5 times the cost, and a false two-claims catch left 504 stuck. $4.26, 46 to 146 s a plan. Confidence 65%."
+---
+
 # 86b. The plan stage, with user stories
 
 Part 1 of [experiment 86](./86-plan-stage.md) ran the plan stage on 6 closed

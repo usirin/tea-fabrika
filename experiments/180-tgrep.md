@@ -1,3 +1,9 @@
+---
+date: "2026-10-31"
+scripts: "none, raw timings not kept"
+summary: "No. Made safe, it ties `rg` on repos up to 17k files, and it costs a server of 100 to 390MB per working copy. Without its server it is wrong without saying so. Re-test past about 100k files, or if it gains a loud stale mode. $0."
+---
+
 # Is tgrep worth adopting over rg?
 
 Run 2026-10-31. **No.** Once made safe, it ties `rg` on the repos we work in, and it costs a

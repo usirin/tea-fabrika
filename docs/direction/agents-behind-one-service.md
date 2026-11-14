@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-26; the direct SDK path stays; logins ruled the same day"
+summary: "Every stage reaches an agent only through one Effect service of ours, as GitHub is reached through `CodeHost`. The service is our own interface, its shapes taken from ACP; Claude and Codex are adapters on their makers' own SDKs, ACP one adapter for the rest, the fake one more, picked by config. What the protocol lacks, such as a typed answer, the service adds once. It must allow a chat window later: streamed text, warm sessions, a person's answer, history. Logins: each person's own locker on one shared Cloudflare account, and the box holds the login, as GitHub Actions does; our Worker never sees a real token (experiment 157)."
+---
+
 # Agents sit behind one service, and providers swap
 
 Decided 2026-10-26 by the owner.

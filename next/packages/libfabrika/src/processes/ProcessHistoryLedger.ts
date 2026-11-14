@@ -41,7 +41,9 @@ const validate = Effect.fnUntraced(function* (entry: Entry) {
 }, Effect.mapError(badRow));
 
 /**
- * Read through the ledger's paged stream, preserving failures from every page.
+ * Layer that answers `ProcessHistory` from the ledger's paged streams, keeping the failure of any
+ * page.
+ *
  * @stability unstable
  * @category layers
  */

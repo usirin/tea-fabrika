@@ -1,3 +1,9 @@
+---
+date: "2026-11-01"
+scripts: "`176-bench.ts`, `176-rules.ts`, `results/176-bench.jsonl`, `results/176-rules.jsonl`, `176-react-on-the-real-app/` (shots)"
+summary: "Today's version, on a branch never merged; the write-up came to main with experiment 194. Stable references and a list keyed by id did almost all the work: a focus move went from 2553 renders to 67, 7.8 ms to 2.5 ms. Keep the one store hook, `memo` per tile with `share`, a flat keyed list, Strict Mode, `<Activity>` (an hour's soak: no memory cost) and a paced feed in a tea Sub. A short `<ViewTransition>` only with its press fix (0 of 10 presses land without it). React Compiler: the app froze until the desk read through the store hook; then 100 compiled, 5 failed in `pop.tsx`, tile `memo` was not needed in one run, and `desk.js` built about 10 times slower. Native dialog and popover under Manti work as an opt-in and are not needed today. `useDeferredValue` on the markdown window made keys slower. Of oxlint's other React rules, `purity`, `refs`, `immutability` and `display-name` met the block bar on small counts. No model, $0. The owner dropped the tile store by id (pick 4b) from next/'s plan on 2026-11-02; the tree stays unless sync between two people needs records, which 176 did not test."
+---
+
 # Experiment 176: modern React, tried on today's real app
 
 Every claim here is about **today's version** of fabrika (`apps/fabrika`, `programs/*`), not `next/`.

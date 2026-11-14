@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-e2e-job-name-hides-where-next-end-to-end-runs",
+  "date": "2026-11-13",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".github/workflows/check.yaml",
+    "line": 195
+  },
+  "says": "The CI job named e2e runs only today's version's end-to-end tests (apps/fabrika/e2e.ts in Electron), while next/'s end-to-end tests run inside the next (1) shard through node next/apps/fabrika/e2e.ts, so a skipped e2e on a pull request reads as if no end-to-end test ran.",
+  "proof": "On pull request 1186 (run 43560007045), the e2e job showed skipping, and both the merge session and the lead read it as the rewritten next/apps/fabrika/e2e/p14.test-support.ts never running. The next (1) job 132341981730 of the same run ran node next/apps/fabrika/e2e.ts, and both files that import p14.test-support.ts passed: first-window.test.ts 4 of 4 and resources.laws.test.ts 4 of 4. classify() in .github/ci/changes.mjs gives next: true and e2e: false for that path, which is right.",
+  "cost": "It misled two sessions within ten minutes into a false alarm about an untested file; a reader can also miss a real gap the same way. If ci-required or the main ruleset names the e2e check, a rename touches a required check and needs the owner's word first.",
+  "head": "4ec0c44088318c0cfeac4e2cf3bf60e97c6d529d",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1186"
+}

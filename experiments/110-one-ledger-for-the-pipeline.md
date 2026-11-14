@@ -1,3 +1,9 @@
+---
+date: "2026-10-21"
+scripts: "`packages/fabrika/src/pipeline/asks/{ledger,claims,laws}.ts`, `110-one-ledger-for-the-pipeline.ts`, `110-one-ledger-for-the-pipeline/`, `results/110-one-ledger-for-the-pipeline.json`"
+summary: "Yes. The pipeline keeps every fact on tea-host's `Ledger`: one name per ticket and per plan under `pipeline/`, a fenced `facts` stream and an open `inbox` each; the folds in `asks/rules.ts` unchanged but for `claimed`. A claim is `register` plus the ledger's lease on the ticket's name, renewed by the holder, ended at once on release (etcd's LeaseRevoke); a lost lease fences the old holder. operate, the desk and the review record read one ledger; the JSONL store and the desk's in-memory ledger are gone; tsh keeps one node:sqlite file per repository. Pipeline laws P1 to P5 hold on the Durable Object (Miniflare), node:sqlite and memory; 2 of 2 plants caught (no guard breaks P2, a misread breaks P1). One ticket's flow (plan, approve, lane, claim, scripted review, release) SIGKILLed after each step and started again: 20 of 20 fold the control's state. Two processes racing for a claim: 50 of 50 rounds one winner. A holder SIGSTOPped past its lease: 75 late writes, 0 accepted. Tests 2029 to 2034: 12 disk tests became 9 (torn lines, `appendAfter` and the lock file have no counterpart), claims 9 to 12, laws 5 new. Open: which ledger tsh uses, and where it is set. Confidence 85%. $0."
+---
+
 # 110. One ledger for the pipeline
 
 The question: can the pipeline keep every record on tea-host's `Ledger`, with

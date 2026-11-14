@@ -1,3 +1,8 @@
+---
+date: "2026-10-19"
+summary: "Yes for the ledger; for a daemon, reliable but not light. One `Ledger` Durable Object (SQLite, claims with leases and fences, compare-and-set appends, an alarm, a view), its rules in one `sql.ts`, ran in Miniflare and, unchanged, on node:sqlite (`BEGIN IMMEDIATE`, 8 threads, one file). All 10 laws hold: 50 claims at once, one winner; 50 appends on one rev, one ok; an old fence refused after reclaim; lazy expiry before the alarm; two Node processes racing over HTTP, one winner on 20 of 20. Five SIGKILLs mid-write and a 30-minute soak (468,598 events, a kill every 5 minutes): 0 acknowledged writes lost, 0 duplicates, 0 gaps; every pending alarm fired by itself after restart. Start 40 ms in process, 200 ms as a child; restart 200 to 285 ms. Found: a SIGKILL to Node leaves workerd serving the port, and a second Miniflare on the same folder then shares the file (no double winner, but `SQLITE_BUSY` 500s); 200 new connections at once get reset; workerd's RSS grows with traffic and is never given back (1.17 GB after 15 minutes of reads of a 6,058-event log, still rising), so a daemon needs a memory cap and a restart. 160 MB installed, 109 MB the workerd binary. SQLite 3.47.0 in workerd against 3.54.0 in Node. Not run on Cloudflare. Confidence 80%. $0."
+---
+
 # 93. One Durable Object as the ledger, on Cloudflare and on a laptop
 
 The question: can ONE Durable Object class be our ledger everywhere? On

@@ -1,3 +1,8 @@
+---
+state: "direction decided 2026-11-04, details proposed; input ids decided 2026-11-08; walked 2026-11-08, question 17 approved"
+summary: "Both versions, today's first. The host's door stamps every input as `Envelope<A> = {id, by, at, input}`, with `id` an `InputId` only the door makes; a client-sent id is refused. Every write names its `cause`, and the host signs it as that input's sender, so an agent signs its own writes and never the person's. The cause rides in the data (OTP's kept `From`, causation ids, Datomic), not by pairing a Cmd with its Msg. A write with no cause is the job owner's, and a test-kit law catches a program that forgets. Delegation, not impersonation (RFC 8693's `act`). Traces mirror it with span links and never decide. Not saved state's envelope. In `next/`, `Entry` gains `cause`. In `next/`, an `InputId` is a TypeID, `input_<26 chars>`, with the door's process and count as their own fields on the entry (decided 2026-11-08). From experiment 209."
+---
+
 # Inputs carry their sender, and every write carries its cause
 
 Its decided rules are in: [0261](../../.decisions/0261-inputs-carry-their-sender.md), [0262](../../.decisions/0262-a-write-carries-parent-and-traceid.md), [0263](../../.decisions/0263-a-writes-signer-is-its-causes-sender.md).

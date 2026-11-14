@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-03"
+summary: "Both versions: `next/` from Tier 2's desk, today's asks popup as the example. How a program is built and how programs meet. Eight principles: one job and one model that every size draws (G1, decided 2026-11-03); a program says where it is (its `location`) and asks the desk with an `open` Cmd, never naming a tile; open or focus, then land beside; only on a press, with the selection traveling and one thing said; the way back is one key; programs meet on typed pipes; what every program gets for free from `commands`, the desk and the kit; a program's name is one short plain word with one meaning, and a phrase around it is written from the noun (G8, with five names for `asks`, the owner picks). Takes experiment 196's P1 to P8 as rules. Open: where focus goes when a tile you opened closes (the opener, reading order as decided, or the focus history tmux and i3 use), and a Linear peek against a tile. Composing, C1 to C11: one row type on the pipe, a `Schema.Union` of tagged cases kept below the programs; a tree goes flat (`Tree.fromRows`, `Tree.toRows`); a drawer has nothing of its own; a filter is a program; across lines a ticket goes by `open`; a fold two programs need moves below both; `notes` is the notepad you type in; the keys line comes from `commands`. Plus three splits of today's programs: one read-only reader below them, the tracker's ticket page goes after fix 1, and the asks list leaves the frame in `next/`. From experiments 198 and 201."
+---
+
 # Programs: one job, a location, and the desk places the tile
 
 **Decided 2026-11-03.** G7's R5 was added and decided 2026-11-06, and call 6 the same day. The owner approved G1 to G8 and calls 1 to 5 with their leans, after a walk

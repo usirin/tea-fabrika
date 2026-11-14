@@ -1,3 +1,9 @@
+---
+date: "2026-11-03"
+scripts: "`207-layers/designs.patch` (the four designs, on today's app at `711ddaa4`, never pushed), `207-layers/shots/` (62 dark states, one folder a design, each with `presses.json`)"
+summary: "Today's version; reading plus four designs shot, not a measurement. About 20 makers (NSWindow levels, Neovim floats, Emacs child frames, tmux 3.8, i3, elm-ui, OTP links, VS Code's peek, Apple's HIG, Linear, APG, WCAG, Ableton, an IFALPA HUD paper) agree: a few named layers in one fixed order nobody picks a number for, each with an owner it goes with, on top and taking keys as two facts, one modal at a time with the rest inert. They split on a look: VS Code embeds it, Linear floats it. Four designs on the asks menu and ticket #117, at five layouts: D1 one over with fixes, D2 floats (hid a whole tile in a small 2x2, and Esc never peeled it), D3 a sheet per tile, D4 a peek that unfolds in place (its menu covered the peek's title; a zoom hid it). Today breaks two rules: the palette is `aria-modal` with a live desk under it (ticket 203), and the status bar never names the layer. Feeds [layers](../docs/direction/layers.md), decided 2026-11-03. $0."
+---
+
 # What sits on top of what in the desk, and who takes the keys?
 
 Read and built 2026-11-03. **This is reading plus four designs shot in today's app, not a

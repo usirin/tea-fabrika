@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-01"
+summary: "Today's version, not built yet. Written rules for each part of a tile: edge, focus, hover, title bar, name, id, pipe marker, asking, fold strip, closing, empty, gap, bottom line, zoomed, lost link. The title bar is a mono `header`, with no line under it. One `main`, one region per open tile. F6, `C-b o`, `C-b ;`, `C-b [` and resize keys are added. Forced colors and more contrast have rules. Each part is tested against how Linear would build it."
+---
+
 # A tile stays quiet, says every fact in words, and every part is reached by keys
 
 Decided 2026-11-01 by the owner. Tiles PR 1 builds it. This is about today's version, and `next/` reads it

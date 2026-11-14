@@ -1,3 +1,8 @@
+---
+state: "decided"
+summary: "Plan is its own stage for every ticket; triage only sorts. An epic is a plan with many tasks, a project is a parent plan. Milestones leave the loop; a roadmap is a view."
+---
+
 # A project is a parent plan; milestones leave the loop
 
 Decided 2026-10-18.

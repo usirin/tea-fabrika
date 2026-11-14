@@ -1,3 +1,8 @@
+---
+date: "2026-10-04"
+summary: "All three ways (full output, names only, a new ticket example) passed 5 of 5 and scored 20 of 20 held-out, so the toy cannot tell them apart."
+---
+
 # 26. What may the builder hear from a hidden test?
 
 `26-hidden-feedback.ts` builds the duration toy from its hand-written ticket (3

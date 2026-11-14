@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-p14-row-says-pr-1028-is-open",
+  "date": "2026-11-13",
+  "by": "plan",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": "docs/plan/tier-1.md",
+    "line": 728
+  },
+  "says": "P14's row says slice 2 is open as PR 1028, past its budget stop with red laws, but PR 1028 closed unmerged and its work landed on main in PR 1146.",
+  "proof": "docs/plan/tier-1.md:728 reads 'Open 2026-11-13: slice 2 as [PR 1028] ... past its budget stop with red laws'; gh pr view 1028 says CLOSED 2026-11-13T23:48:46Z, and gh pr view 1146 lists 1028 among its lanes, MERGED as 48460bdaa.",
+  "cost": "A planner or the owner reading the plan thinks P14 slice 2 is still blocked and holds P18, P19 slice 3 and P40 slice 4 behind it.",
+  "head": "cd4ef5398087c83f1a6baf6b7b5d6c59a8e4b4d9",
+  "ticket": null,
+  "pr": null
+}

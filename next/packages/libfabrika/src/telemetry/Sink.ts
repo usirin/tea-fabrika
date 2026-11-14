@@ -41,8 +41,8 @@ import { type Ended, held, machine } from "./internal/sink.ts";
 import { RecordManager } from "./Records.ts";
 import {
   Chain,
+  causeClass,
   chainName,
-  errorClass,
   OBJECT,
   PROCESS,
   REFUSED,
@@ -55,7 +55,16 @@ import {
   type Tag,
 } from "./Trace.ts";
 
-export { SinkError } from "./Trace.ts";
+export {
+  /**
+   * Error for a sink, record or archive call that failed: the call never answered, a row or an
+   * answer did not decode, or storage threw.
+   *
+   * @stability unstable
+   * @category errors
+   */
+  SinkError,
+} from "./Trace.ts";
 
 const ERROR = "error.type";
 const DROPPED = "fab.sink.dropped";
@@ -126,13 +135,22 @@ const largestLag = (tags: Readonly<Record<string, Tag>>): number | null => {
   return lags.length === 0 ? null : Math.max(...lags);
 };
 
+/** A reason as a fixed word from code: a string reason itself, or a tagged reason's tag. */
+const reasonWord = (reason: unknown): string =>
+  Predicate.isString(reason)
+    ? reason
+    : Predicate.hasProperty(reason, "_tag") && Predicate.isString(reason._tag)
+      ? reason._tag
+      : "";
+
 /** A typed failure as code wrote it: its tag and reason. Its message and the cause it keeps may hold
- *  input, so they stay in memory and out of stored content. A thrown value keeps its own text. */
+ *  input, so they stay in memory and out of stored content, and so do a tagged reason's own message
+ *  and cause. A thrown value keeps its own text. */
 const summary = (error: unknown): unknown =>
   error instanceof Error && Predicate.hasProperty(error, "_tag") && Predicate.isString(error._tag)
     ? {
         name: error._tag,
-        message: Predicate.hasProperty(error, "reason") && Predicate.isString(error.reason) ? error.reason : "",
+        message: Predicate.hasProperty(error, "reason") ? reasonWord(error.reason) : "",
       }
     : error;
 
@@ -238,7 +256,7 @@ const ended = (span: Tracer.NativeSpan, endTime: bigint, exit: Exit.Exit<unknown
   const failure = Exit.isFailure(exit) ? Option.some(exit.cause) : Option.none();
   const error = Option.map(failure, (cause) => {
     const named = own.tags[ERROR];
-    return typeof named === "string" ? named : errorClass(Cause.squash(cause));
+    return typeof named === "string" ? named : causeClass(cause);
   });
   const tags: Record<string, Tag> = {
     ...own.tags,

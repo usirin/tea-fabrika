@@ -1,3 +1,8 @@
+---
+state: "decided"
+summary: "A person's comment goes to that person, a bot's back to the builder. Red checks run again once per head. Behind main ships; the queue is the check. Waits have limits. No queue: merge straight in."
+---
+
 # Ship stage rules
 
 Decided 2026-10-11, while designing the ship machine. One rule added

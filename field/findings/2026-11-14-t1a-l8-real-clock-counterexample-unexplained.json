@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-t1a-l8-real-clock-counterexample-unexplained",
+  "date": "2026-11-14",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/ProgramMailTest.ts",
+    "line": 1101
+  },
+  "says": "In next/, T1a [secrets] failed L8 on CI under the real clock (a forbidden request ended failed with other fields than reason forbidden). Pull request 1228 makes that path unreachable at the fixed seed, but nobody has found the cause and it has no ticket of its own, so it may be a product bug that real wall time reaches.",
+  "proof": "Merge-group run 43601969237, job next (4): `{ seed: 119120, path: \"53\", endOnFailure: true }` then `L8: a forbidden destination is refused, whatever sender the command claims: expected { _tag: 'failed', …(2) } to deeply equal { _tag: 'failed', …(2) }`, 99.8 s for 54 walks. At 609f760c1, in a scratch copy, T1a on seed 119120 passed with walk clocks of 50 ms and 500 ms per read and with 6 jittered clocks (gaps up to 300 ms and up to 3 s), so a time gap alone did not bring it back.",
+  "cost": "If it is a product bug, a forbidden send can end with the wrong refusal under real timing, and no law catches it again now that T1a walks on a fixed clock.",
+  "head": "609f760c182cab295d678d673d9de2463105037c",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1228"
+}

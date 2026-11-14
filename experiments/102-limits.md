@@ -1,3 +1,9 @@
+---
+date: "2026-10-21"
+scripts: "`packages/tea-host/src/{rules,memory,ledger,host,supervisor,dead-letters}.ts`, `102-limits.ts`, `102-limits/`, `results/102-limits.json`"
+summary: "Yes. A container's `resources.limits`, kept the way a cgroup keeps them: dollars and tokens a run reports (`hold` before a turn, `charge` after), wall time from the first start (`activeDeadlineSeconds`), children at any depth (`pids.max`, OTP's `max_children`). Declared on the child spec, not the program (Kubernetes' pod spec, not the image); counted and enforced by the ledger, nested up the tree (cgroup v2); tea-program unchanged. 3 hosts, a ticket tree per case, stub agents with a cost per turn, a SIGKILL and a freeze mid-spend, a crash loop, bursts over the children cap: 4 of 4 runs pass (3 small, 1 large: 1,909 turns, $57.45 billed). With a hold before each turn, 35 of 35 limits ended at or under the cap (0.1 to 2.4 turns early); without, 0.3 to 0.7 turns over for one agent and 2.1 to 2.9 for four. Spend never reset (crash loops of up to 39 runs, 3 leases per killed builder) and never counted twice (every resent charge `dup`); 71 limit exits, 0 restarted, each with one record in `<name>/dead`; each burst of 10: 3 started, 7 `max_children`. A SIGKILLed turn is counted at its hold, or lost with no hold. Found: a stop could cut a charge in flight (40 turns lost; `Self.charge` is now uninterruptible). Laws: ledger 26 to 30 new, supervisor 21 (2 new); 34 ledger and 25 supervisor planted mistakes caught. Soft limits not needed yet. Confidence 85%. $0."
+---
+
 # 102. Limits a run cannot pass, kept by the ledger
 
 The question: can a tea program run under `limits` its host enforces, the way a

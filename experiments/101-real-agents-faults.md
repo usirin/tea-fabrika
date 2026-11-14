@@ -1,3 +1,8 @@
+---
+date: "2026-10-20"
+summary: "Yes, and partly. Claude Code (haiku, Agent SDK) in two Docker answerer hosts, the asker on the Mac, tea-host's public exports only; each container killed in turn 1 and in turn 2, a host's own SIGKILL after a finished run and before its answer is saved, and a 4 s `docker pause` over the lease. 4 of 4 runs: 120 of 120 right, 0 answered twice, 0 replies from a non-holder, the woken host wrote nothing accepted (stopped 131 to 160 ms after waking). Fresh mode: 1.13 runs a question, 1 extra run and 1.5 extra turns per takeover. Resume mode (the run's session id on record before it starts, each turn and its transcript recorded through the SDK's `SessionStore` into the program's fenced state): 1.10 runs a question, 0.75 extra runs and 0.75 extra turns per takeover, about 43% less wasted money; a run cut after turn 1 resumes as a fork and sends turn 2 only ($0.0000508 against $0.00021, 76% less; no time saved, Claude Code start-up dominates); a finished run whose answer was lost is recovered with no run. A turn cut in flight is still paid (the reply lands after the abort): agent work is at-least-once, the record exactly-once; a side effect needs a ledger-made idempotency key and a fence check at the service. A 1 s lease is too short with real agents (about 0.5 s stalls at Claude Code start-up; 3 s used). Laws: 15, 12 of 12 planted mistakes caught. Not yet: tools, resume inside a turn, big transcripts, ACP. Confidence 75%. About $0.035."
+---
+
 # 101. Real agents behind tea-host, with hosts killed mid-question
 
 The question: experiment 98 put a stub agent behind `packages/tea-host`. Put real

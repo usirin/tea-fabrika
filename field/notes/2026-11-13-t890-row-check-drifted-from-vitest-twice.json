@@ -1,0 +1,18 @@
+{
+  "id": "2026-11-13-t890-row-check-drifted-from-vitest-twice",
+  "date": "2026-11-13",
+  "lanes": [
+    "usirin/tea-fabrika#890"
+  ],
+  "stage": "review",
+  "kind": "worked",
+  "what": "Today's CI, about next/'s tests. The shard row check chose test files with its own glob. Review 1 found it skipped dist folders that Vitest selects; review 2 found it also skipped dot folders and dot files, and that an older CI test still read the next matrix as six numbers. The fix round made the check ask Vitest itself for the file list, with a property over generated trees, so the class is closed and not only the two cases. Earlier the lane's agents stopped on a rate limit mid-step; a fresh tests agent finished the uncommitted work without redoing it.",
+  "cause": "A second copy of a rule another tool owns (which files Vitest runs) drifts from it one case at a time. A-E2E's search for readers of the old matrix looked for job names only, not for code that parses the matrix legs.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "Ask the owning tool for the answer, as nextFiles now does with Vitest's globTestSpecifications, instead of copying its rule.",
+  "test": "Property: over generated trees with dot names, dist, e2e, node_modules and .git folders, and one new exclude per run, nextFiles equals a fresh Vitest's own selection.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1104"
+  ]
+}

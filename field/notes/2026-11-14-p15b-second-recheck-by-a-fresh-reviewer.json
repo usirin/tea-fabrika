@@ -1,0 +1,19 @@
+{
+  "id": "2026-11-14-p15b-second-recheck-by-a-fresh-reviewer",
+  "date": "2026-11-14",
+  "lanes": [
+    "kamp-us/tea-fabrika#1012"
+  ],
+  "stage": "review",
+  "kind": "friction",
+  "what": "next/ version. Decision 0177 says the same reviewer rechecks a fix round. Pull request 1012's fix round 8ba7894a5 (a recorded-build load that falls back to this build's program by name on no_program, so a home saved before the code store opens) was rechecked by a fresh reviewer on claude-opus-5-5, the second swap on this lane, because the last reviewer ran in a session the merge session could not reach. The fresh reviewer was briefed with the earlier swap note, the earlier reviews on the pull request and the round's diff, and scoped to that round. It sent the round back: records named the old build's hash for this build's code (hot-reload H6), and the fallback caught any no_program.",
+  "cause": "A reviewer runs as a subagent of the session that started it, so a later session cannot message it; the same-reviewer rule assumes it can.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "A review step stores its full report where a later session can read it, so a recheck by a different reviewer starts from the whole first report, not a summary; the lane's state file names where that report is.",
+  "test": "Replay: start a recheck from another session using only the lane's state file, and check the brief it builds carries the first review's findings and its not-run list.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1012",
+    "https://github.com/kamp-us/tea-fabrika/blob/main/field/notes/2026-11-13-p15b-recheck-by-a-different-reviewer.json"
+  ]
+}

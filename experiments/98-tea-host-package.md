@@ -1,3 +1,9 @@
+---
+date: "2026-10-20"
+scripts: "`packages/tea-host/`, `98-tea-host-package.ts`, `98-tea-host-package/`, `results/98-tea-host-package.json`"
+summary: "Yes. 93 to 97 lifted into `packages/tea-host`: one `Ledger` Effect service (tagged errors) with a Miniflare-child Layer (own process group, fixed direct socket, 500 MB restart, pooled HTTP), an in-memory Layer and node:sqlite; `serve` (a registered name held by a lease, any host takes over, replay, error sink always the host's: `store` and `onError` typed `never`, demlik issue 728); `call` (gen_server:call as an Elm module); `whereis`/`getState`. 94's counter (3 of 1,000, 1 of 10,000) and 95's agents across a Docker container (3 of 200, 1 of 2,000, stub agents) pass 4 of 4 each against the package's exports only, numbers within a few percent of 97. 97's hole 1 closed by deny by default: `register(name)` first (Kafka CreateTopics with auto-create off, OTP `register/2`), else `UnknownName`; only the exact `<name>/inbox` is open. 17 ledger laws (new 19, 20) hold on the DO in process and across 5 SIGKILLs, on node:sqlite and in memory; 11 planted mistakes caught; host machine gains a lease clock (stops at its own lease's end), 9 laws, call module 7. Not yet: who may send, unregister, supervisors, laws for the asker's call window. Confidence 80%. $0."
+---
+
 # 98. The tea-host package
 
 The question: experiments 93 to 97 each proved a piece of a tea host, and

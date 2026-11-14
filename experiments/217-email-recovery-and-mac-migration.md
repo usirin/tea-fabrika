@@ -1,3 +1,9 @@
+---
+date: "2026-11-06"
+scripts: "none"
+summary: "`next/`, for the backup note (PR 404); reading only, not a measurement. Sending: $0 on Cloudflare's free plan through Email Routing's `send_email` to the person's one verified address, which needs a domain on Cloudflare DNS; with no domain, Access's one-time PIN in front of the Worker (free to 50 people, not tried). Resend, Postmark and SES each add an account and a party. The careful tools keep email out of a takeover or put it second (Bitwarden, 1Password, Proton; Tailscale has none); NIST 800-63B rev 4 bars email for sign-in and wants two recovery codes at two-factor level. Lean: a 6-digit code typed on the asking Mac, a notice to every live Mac, and a wait a live Mac can stop; the sheet skips it. Tailscale is the lead reference: tailnet lock is the person key granting, its disablement secrets are blunter than the sheet, and it leans on an outside identity provider fabrika does not have. Migration Assistant, from a Mac or Time Machine, likely carries the \"<app> Safe Storage\" item (login Keychain file, not ThisDeviceOnly, never iCloud), the app folder and the local stage; a hand copy fails on macOS 26.4+; a missing item makes Chromium silently make a new key, so the app must route to recovery. No product matches the proposed key ranks whole; only Matrix ranks a person's own keys. One change to a decision: \"no wait\" fits the sheet, not email. Five research subagents, tokens not logged, $0."
+---
+
 # Email recovery, a recovery sheet, and what a new Mac gets back
 
 Read 2026-11-05 and 2026-11-06. **This is research, not a measurement.** Nobody sent an email,

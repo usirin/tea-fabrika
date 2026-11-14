@@ -1,3 +1,9 @@
+---
+date: "2026-11-11"
+scripts: "none; reading, nothing ran"
+summary: "Both versions' notes under `docs/direction/`, at `67864f7bf`, after 0115's move; step 2 of 0130. Of 151 notes, 114 can go with no owner call: 21 delete now, 34 fold into an existing decision, 44 need their missed rules written first, 6 become experiments, 3 patterns, 6 go to the private archive. 37 need the owner, as 18 yes/no questions, among them 5 long notes whose reasoning fits no short decision file. The 0115 move missed 258 rule flags in 62 notes. `follows/`'s four files stay apart under 0017; the lean is `.patterns/follows/`. Agent time only, $0; tokens not recorded."
+---
+
 # 280. Sorting the direction notes: what kind each one is, and where it goes
 
 Read on 2026-11-11. **This is reading, not a measurement.** Seven agents read every note under

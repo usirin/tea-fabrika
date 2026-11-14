@@ -1,3 +1,8 @@
+---
+date: "2026-10-04"
+summary: "The `null` rules came back and the tests caught 33 of 33 broken versions. With the reworded question the judge let through 39 of 63 sound tests and still accepted 0 of 168 bad ones."
+---
+
 # 13. Both fixes, and a third problem they uncovered
 
 Fix one: the enricher is told that a rule the finished code must follow gets a

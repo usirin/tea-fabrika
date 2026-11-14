@@ -1,3 +1,8 @@
+---
+date: "2026-10-10"
+summary: "A redesign. A type guard caught the widening experiment 44 missed. Run 5 of #558 had 8 of 9 criteria checked, against 0 of 7 in run 4."
+---
+
 # 45. Two more checks: type snippets and existing tests
 
 Not an experiment, a redesign, with offline probes and one real run. Run 4 of

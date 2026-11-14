@@ -1,3 +1,8 @@
+---
+date: "2026-11-09"
+summary: "Today's lead tooling (`leakgrep.sh`, `botpush.mjs`), ticket 504; gitleaks 8.30.1 run for real, TruffleHog, detect-secrets and GitHub push protection read from their docs. Not as a whole: yes for keys, no for private words, machine paths, the em dash and canvas links, which no tool has. gitleaks' default rules on all of main: 13 hits in 1,423 commits, all false, 10 from one rule. It flagged 3 of 3 re-indented lines and its baseline did not help; ours reads them as old text since PR 709. Git's `-b` fixes it for gitleaks. Lean: add gitleaks 8.30.1 for keys beside ours, with `generic-api-key` off (75%, ticket 547). Read each pushed commit on its own: decided as 0048 and built in [PR 744](https://github.com/usirin/tea-fabrika/pull/744). Betterleaks could not run. No model, $0."
+---
+
 # 247. Should an existing tool replace the hand-written leak check?
 
 Run 2026-11-09 on origin/main at `8936c7e1`; the made-up repo was run again on 2026-11-10 with

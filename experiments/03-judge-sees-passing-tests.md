@@ -1,3 +1,8 @@
+---
+date: "2026-10-04"
+summary: "`duration-open` went from 0 of 5 runs finishing to 8 of 10. An undone, untested criterion still came back \"not met\" at 0.99."
+---
+
 # 3. Show the judge the passing tests
 
 The judge was first shown only the diff. Adding the names of the tests that

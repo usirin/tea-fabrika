@@ -1,3 +1,8 @@
+---
+date: "2026-10-05"
+summary: "Scout: 29 of 29 changed files in the top 10. Docs: no claim the doc does not make passed. Failures: 42 of 42 right. Shell guard: nothing that should be blocked ran."
+---
+
 # 34. Jev on real code: scout, docs, failures, shell
 
 Until now Jev only read short texts: a ticket line, a reviewer's finding, a

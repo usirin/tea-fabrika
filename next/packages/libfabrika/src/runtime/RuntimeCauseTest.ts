@@ -12,6 +12,11 @@
 // `processes/ProcessManager.ts:338` (a dead letter's record that does not decode). The runner, built
 // as runner-reply.laws.test.ts builds it: `Runner.ts:1345` (a delivery that does not decode) and
 // `Runner.ts:606` (a restart policy that does not decode).
+//
+// Ticket 921 slice 1: `RecoveryStore` and `SessionManager` fail with their own errors,
+// `RecoveryStoreError` and `SessionManagerError`, whose tagged reason keeps the fault from below
+// (0055, 0119). Their laws here are the plan's law 8, one injected fault a method, and each plant
+// builds the error without its `cause`. The other stores keep the ledger's error until their slices.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect } from "@effect/vitest";
 import { Effect, Layer, Result, Schema } from "effect";
@@ -20,8 +25,8 @@ import { MemberEvent } from "../access/Access.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
 import { ClientManager } from "../access/ClientManager.ts";
 import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
-import type { NotGranted } from "../access/SessionManager.ts";
-import { SessionManager, Writer } from "../access/SessionManager.ts";
+import type { NotGranted, SigningRefused } from "../access/SessionManager.ts";
+import { SessionManager, SignRequest, Writer } from "../access/SessionManager.ts";
 import { Connections } from "../presence/Connections.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
 import { BRAIN, brain, from } from "../processes/Process.test-support.ts";
@@ -93,6 +98,7 @@ const callStore = (call: StoreCall) =>
     return store.save({ saved: { v: 1, build: "b", model: null, after: 0 }, turn: null, cmds: [] });
   });
 
+// `save` is not here: its law needs a whole journal, so it sits in `RecoveryStore.test.ts`.
 type RecoveryCall = "load" | "input" | "receipt";
 const recoveryCalls = fc.constantFrom<RecoveryCall>("load", "input", "receipt");
 
@@ -101,14 +107,69 @@ const callRecovery = (call: RecoveryCall) =>
     call === "load" ? store.load : call === "input" ? store.input("letter-1") : store.receipt("letter-1"),
   );
 
+/** The session manager's own error, named through `end`, which fails with nothing else. */
+type SessionFault = Effect.Error<ReturnType<(typeof SessionManager)["Service"]["end"]>>;
+
+/** The manager's own error out of a call that fails; a refusal there is a broken law, a defect. */
+const sessionFault = <A, R>(call: Effect.Effect<A, SessionFault | SigningRefused | NotGranted, R>) =>
+  call.pipe(
+    Effect.catchTags({
+      SigningRefused: (refusal) => Effect.die(refusal),
+      NotGranted: (refusal) => Effect.die(refusal),
+    }),
+    Effect.flip,
+  );
+
+const PARENT = `in-${PROCESS}-1`;
+const SESSION_TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
+/** One input as the door records it, from a person, for `PROCESS`. */
+const recorded = {
+  id: PARENT,
+  by: Writer.cases.person.make({ key: "SHA256:person", for: "person-1" }),
+  client: "window-a",
+  process: PROCESS,
+  name: "comment",
+  personOnly: false,
+  digest: "SHA256:payload",
+  traceId: SESSION_TRACE,
+  span: { traceId: SESSION_TRACE, spanId: "00f067aa0ba902b7" },
+  arrivedAt: 100,
+};
+
+/** The session manager's calls, by name. */
+type SessionCall = "record" | "delivered" | "end" | "signer" | "receipt";
+const sessionCalls = fc.constantFrom<SessionCall>("record", "delivered", "end", "signer", "receipt");
+
+const callSession = (call: SessionCall) =>
+  SessionManager.use((sessions) => {
+    if (call === "record") {
+      return sessionFault(sessions.record(recorded));
+    }
+
+    if (call === "delivered") {
+      return sessionFault(sessions.delivered(PARENT, PROCESS));
+    }
+
+    if (call === "end") {
+      return sessionFault(sessions.end(PROCESS));
+    }
+
+    return call === "signer"
+      ? sessionFault(sessions.signer(PARENT, PROCESS, "saved").pipe(Effect.provideService(SignRequest, { id: "w-1" })))
+      : sessionFault(sessions.receipt("w-1", PARENT, PROCESS, "saved"));
+  });
+
+const sessionPolicy = { input: () => true, event: () => false };
+
 /** What the stores read from the context: the ledger, named through the process store's layer. */
 type LedgerNeeds = Layer.Services<ReturnType<typeof ProcessStore.layer>>;
 /** What a write under the referee's lock reads, named through `appendAdmitted`. */
 type TransactionNeeds = Effect.Services<ReturnType<typeof appendAdmitted>>;
 /** A ledger line, as `appendAdmitted` takes one. */
 type WriteLine = Parameters<typeof appendAdmitted>[1]["line"];
-/** The error the stores fail with, named through the recovery store's calls. */
-type StoreError = Effect.Error<ReturnType<typeof callRecovery>>;
+/** The error the stores still on the ledger's own fail with, named through the process store's calls. */
+type StoreError = Effect.Error<ReturnType<typeof callStore>>;
 
 /** What the module that owns the driver gives: fresh storage, and the ledger over it. */
 export type Harness = {
@@ -122,7 +183,7 @@ export type Harness = {
   readonly lineFor: (from: Omit<WriteLine, "_tag" | "body">, event: MemberEvent) => WriteLine;
   /** Appends `line` to `stream` under `id`, unchecked, as a row no reader wrote. */
   readonly append: (stream: string, id: string, line: WriteLine) => Effect.Effect<unknown, unknown, LedgerNeeds>;
-  /** The stores' own error class, which a store passes through untouched. */
+  /** The ledger's own error class, as a store two layers up meets it in a throw from below. */
   readonly LedgerError: new (fields: { readonly reason: StoreError["reason"]; readonly cause?: unknown }) => StoreError;
 };
 
@@ -200,9 +261,9 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
   });
 
   describe("T695, RecoveryStore keeps what its storage threw", () => {
-    // C1, RecoveryStore.ts:53. Plant: drop `cause` from the translated LedgerError.
+    // C1, RecoveryStore.ts:53. Plant: build the `Storage` reason without the caught value.
     law(
-      "C1: a generated throw on any recovery call is `storage` with that value as its cause",
+      "C1: a generated throw on any recovery call is the store's own `Storage` with that value as its cause",
       fc.record({ calls: fc.array(recoveryCalls, { minLength: 1, maxLength: 4 }), failure: failures }),
       ({ calls, failure }) =>
         Effect.gen(function* () {
@@ -211,15 +272,16 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
 
           for (const call of calls) {
             const error = yield* Effect.flip(Effect.provide(callRecovery(call), recoveryStore(planted.sql)));
-            expect(error.reason).toBe("storage");
-            expect(error.cause).toBe(failure);
+            expect(error._tag).toBe("RecoveryStoreError");
+            expect(error.reason._tag).toBe("Storage");
+            expect(error.reason.cause).toBe(failure);
           }
         }),
     );
 
-    // C3, RecoveryStore.ts:53. Plant: replace `cause` with `undefined`.
+    // C3, RecoveryStore.ts:53. Plant: replace the reason's `cause` with `undefined`.
     law(
-      "C3: a recovery row that does not decode is `bad_row` with the decoder's SchemaError",
+      "C3: a recovery row that does not decode is the store's own `BadRow` with the decoder's SchemaError",
       fc.record({ name: fc.string(), bad: fc.jsonValue() }),
       ({ name, bad }) =>
         Effect.gen(function* () {
@@ -232,14 +294,16 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
             JSON.stringify({ v: 1, name, policy: bad }),
           );
           const error = yield* Effect.flip(Effect.provide(callRecovery("load"), recoveryStore(sql)));
-          expect(error.reason).toBe("bad_row");
-          expect(Schema.isSchemaError(error.cause), "the cause is the decoder's own failure").toBe(true);
+          expect(error._tag).toBe("RecoveryStoreError");
+          expect(error.reason._tag).toBe("BadRow");
+          expect(Schema.isSchemaError(error.reason.cause), "the cause is the decoder's own failure").toBe(true);
         }),
     );
 
-    // C4, RecoveryStore.ts:51. Plant: construct a new LedgerError from the caught one's reason.
+    // C4, RecoveryStore.ts:51. Plants: pass the caught LedgerError through as the store's failure;
+    // or keep only its reason and build the store's error without it.
     law(
-      "C4: a LedgerError thrown by the storage comes out as that same object, its chain untouched",
+      "C4: a LedgerError thrown by the storage comes out under the store's own error, that same object, its chain untouched",
       fc.record({ call: recoveryCalls, reason: reasons, failure: failures }),
       ({ call, reason, failure }) =>
         Effect.gen(function* () {
@@ -247,8 +311,84 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
           const planted = throwing(fresh(), thrown);
           planted.arm();
           const error = yield* Effect.flip(Effect.provide(callRecovery(call), recoveryStore(planted.sql)));
-          expect(error).toBe(thrown);
-          expect(error.cause).toBe(failure);
+          expect(error._tag).toBe("RecoveryStoreError");
+          expect(error.reason._tag).toBe("Storage");
+          expect(error.reason.cause).toBe(thrown);
+          expect(thrown.cause).toBe(failure);
+        }),
+    );
+  });
+
+  describe("T921, SessionManager keeps the fault from below", () => {
+    /** The manager on `sql`. `membership` may fail with any error of the layer below (0043 rule 12). */
+    const sessions = <E>(sql: Sql, membership: (key: string) => Effect.Effect<typeof Writer.Type, E>) =>
+      SessionManager.layer(sql, membership, sessionPolicy);
+    const member = () => Effect.succeed(recorded.by);
+
+    // Law 8, SessionManager.ts:242. Plant: build the `Storage` reason without the caught value.
+    law(
+      "law 8: a generated throw on any session call is the manager's own `Storage` with that value as its cause",
+      fc.record({ calls: fc.array(sessionCalls, { minLength: 1, maxLength: 5 }), failure: failures }),
+      ({ calls, failure }) =>
+        Effect.gen(function* () {
+          const planted = throwing(fresh(), failure);
+          planted.arm();
+
+          for (const call of calls) {
+            const error = yield* Effect.provide(callSession(call), sessions(planted.sql, member));
+            expect(error._tag).toBe("SessionManagerError");
+            expect(error.reason._tag).toBe("Storage");
+            expect(error.reason.cause).toBe(failure);
+          }
+        }),
+    );
+
+    // Law 8, SessionManager.ts:248. Plant: build the `BadRow` reason without the decoder's failure.
+    law(
+      "law 8: a saved input that does not decode is the manager's own `BadRow` with the decoder's SchemaError",
+      fc.record({ call: fc.constantFrom<SessionCall>("record", "delivered", "signer"), bad: fc.string() }),
+      ({ call, bad }) =>
+        Effect.gen(function* () {
+          const sql = fresh();
+          const layer = sessions(sql, member);
+          yield* Effect.provide(
+            SessionManager.use((s) => Effect.andThen(s.record(recorded), s.delivered(PARENT, PROCESS))),
+            layer,
+          );
+          // The required `arrivedAt` is now text, as a row this store never wrote.
+          sql.exec("UPDATE gateway_sessions SET saved = json_set(saved, '$.input.arrivedAt', ?)", bad);
+          const error = yield* Effect.provide(callSession(call), layer);
+          expect(error._tag).toBe("SessionManagerError");
+          expect(error.reason._tag).toBe("BadRow");
+          expect(Schema.isSchemaError(error.reason.cause), "the cause is the decoder's own failure").toBe(true);
+        }),
+    );
+
+    // Law 8, SessionManager.ts:265. Plant: build the `Membership` reason without the check's failure.
+    law(
+      "law 8: a membership check that fails below is the manager's own `Membership` with that failure as its cause",
+      fc.record({ call: fc.constantFrom<SessionCall>("signer", "receipt"), failure: failures }),
+      ({ call, failure }) =>
+        Effect.gen(function* () {
+          const sql = fresh();
+          let down = false;
+          const layer = sessions(sql, () => (down ? Effect.fail(failure) : member()));
+          // A delivered input and one signed receipt, so both calls reach the membership check.
+          yield* Effect.provide(
+            SessionManager.use((s) =>
+              Effect.gen(function* () {
+                yield* s.record(recorded);
+                yield* s.delivered(PARENT, PROCESS);
+                yield* s.signer(PARENT, PROCESS, "saved").pipe(Effect.provideService(SignRequest, { id: "w-1" }));
+              }),
+            ),
+            layer,
+          );
+          down = true;
+          const error = yield* Effect.provide(callSession(call), layer);
+          expect(error._tag).toBe("SessionManagerError");
+          expect(error.reason._tag).toBe("Membership");
+          expect(error.reason.cause).toBe(failure);
         }),
     );
   });
@@ -302,30 +442,23 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
         }),
     );
 
-    // C1, SessionManager.ts:119 and Connections.ts:55. Plant: their zero-argument `catch`.
+    // C1, Connections.ts:55. Plant: its zero-argument `catch`. The session store's half of this law
+    // is law 8 above, since ticket 921 slice 1.
     law(
-      "C1: a generated throw in a session or connection store step is `storage` with that value as its cause",
-      fc.record({ store: fc.constantFrom("sessions", "connections"), failure: failures, key: fc.string() }),
-      ({ store, failure, key }) =>
+      "C1: a generated throw in a connection store step is `storage` with that value as its cause",
+      fc.record({ failure: failures, key: fc.string() }),
+      ({ failure, key }) =>
         Effect.gen(function* () {
           const planted = throwing(fresh(), failure);
           planted.arm();
           const error = yield* Effect.flip(
-            store === "sessions"
-              ? Effect.provide(
-                  SessionManager.use((s) => s.end(PROCESS)),
-                  SessionManager.layer(planted.sql, () => Effect.die("unused"), {
-                    input: () => true,
-                    event: () => true,
-                  }),
-                )
-              : Effect.provide(
-                  Connections.use((c) => c.online(key)),
-                  Connections.layer(planted.sql, {
-                    probe: () => Effect.succeed(null),
-                    admitted: () => Effect.succeed(true),
-                  }),
-                ),
+            Effect.provide(
+              Connections.use((c) => c.online(key)),
+              Connections.layer(planted.sql, {
+                probe: () => Effect.succeed(null),
+                admitted: () => Effect.succeed(true),
+              }),
+            ),
           );
           expect(error.reason).toBe("storage");
           expect(error.cause).toBe(failure);

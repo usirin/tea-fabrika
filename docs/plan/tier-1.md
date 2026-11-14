@@ -82,7 +82,12 @@ At the laptop, in the app or a tab, a person can:
   [0278](../../.decisions/0278-each-window-runs-its-own-prefix.md),
   [0272](../../.decisions/0272-a-press-finds-its-command.md)), never a fixed layout first;
 - start a program from `fabsh` and see it in a tile, which follows its `keep` when the process ends
-  ([0276](../../.decisions/0276-a-tile-shows-one-process.md));
+  ([0276](../../.decisions/0276-a-tile-shows-one-process.md)); the brain checks the start against
+  the member whose line caused it, never against `fabsh`'s program
+  ([0170](../../.decisions/0170-a-start-is-checked-against-its-sender.md)). *2026-11-14: not built.
+  The start still checks only program to program, `StartGrant` in
+  `next/packages/libfabrika/src/processes/ChildrenLedger.ts:85`; ticketed. What becomes of
+  `StartGrant` is the owner's open question;*
 - pipe `a | b` between `fabsh`'s built-ins, over saved program mail
   ([0109](../../.decisions/0109-a-pipe-is-saved-program-mail.md));
 - `summon` an agent under a name, talk to it with `@name` in the background, wait on it with
@@ -469,7 +474,7 @@ log           one row per agent run, with the sha of the commit it made, and a n
 P1, PR 402, the frame
   pnpm-workspace.yaml, vitest.config.ts   next/{packages,programs,apps}/* are packages; pnpm test runs their src/**/*.test.ts
   .github/workflows/check.yaml            a `next` job: vitest run next/, Chromium once an e2e file exists, then the runner
-  next/apps/fabrika/e2e.ts                the thin runner over next/apps/fabrika/e2e/*.test.ts, one file at a time; passes while there are none
+  next/apps/fabrika/e2e.ts                the thin runner over next/apps/fabrika/e2e/*.test.ts, one file at a time, split over CI legs by measured seconds (ticket 967); a leg with no file fails
   layer-rules.json                        11 next-* layers, so pnpm lint:layers fails an upward import (p32)
   boundary-rules.json                     4 library types for next/ and libraryRoots: ["next"]; each package's row comes in its first PR's test writer commit
   src/exam/layers.test.ts                 each part imports only what the detail's table allows (p32, p65)

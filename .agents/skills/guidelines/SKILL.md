@@ -28,7 +28,7 @@ Read `AGENTS.md` first. Its rules on names, writing, version and the public repo
 ### 1. Check what is settled
 
 - Search `docs/guidelines/` (any page on the area), `.decisions/`, what is
-  left of `docs/direction/`, `experiments/README.md` and `docs/plan/` (README, `tiers.md`,
+  left of `docs/direction/`, `experiments/` (the `records.ts list experiments` lines) and `docs/plan/` (README, `tiers.md`,
   `tier-1.md`) for the area.
 - Write down each decided point with its source. A decided point is marked decided everywhere
   and is never asked again.
@@ -71,11 +71,8 @@ Read `AGENTS.md` first. Its rules on names, writing, version and the public repo
 
 ### 4. Test every guideline three ways
 
-- **Linear as the builder.** For every principle and every rule, not only screens: how would
-  Linear's team build this if they were building it as fabrika programs, with our pieces
-  (programs that compose in tiles, the desk, the top bar, pipes)? Their taste and quality bar,
-  on our pieces. Never copy a Linear screen. Ask which program owns the job, what sits beside
-  what, and what becomes a piece every program gets for free. Write it as a row, or "No Linear
+- **Linear as the builder** ([`AGENTS.md`, "Changing the product"](../../../AGENTS.md#changing-the-product)),
+  asked of every principle and every rule, not only screens. Write it as a row, or "No Linear
   answer: <why>". Where we differ, say why. Ask it again for each design in step 5: which program
   owns each part of it?
 - **Elm or OTP.** Name the Elm answer (model, update, view, parents step children) or the
@@ -100,14 +97,13 @@ request opens, even when no study is running (owner, 2026-11-08).
 - **Each design writes its tsh pipe line first,** before it is built: `tracker --all | outline`,
   or `outline | ticket`. Any part that is another program's job becomes its own tile, joined by a
   pipe: a sidebar that opens a detail, a list another program owns, a mode that swaps the whole
-  view. The yardstick is program guidelines (PR 332, proposed): G1, one job per program, and G6,
-  programs meet on typed pipes.
-- Fewer boxes. If something already draws an edge, a second line, box or background goes. A
-  selected row is a full-row fill and stronger text, never a colored bar on one side.
-- Shoot each design with Playwright on Electron, as `apps/fabrika/e2e.ts` does, at five layouts:
-  one tile filling the window, two side by side, two stacked, a 2x2 grid, and about 1024x700. Put
-  each shot beside today's app and beside the closest Linear screen, from Linear's public docs or
-  changelog.
+  view. The yardstick is [program guidelines](../../../docs/direction/program-guidelines.md): G1,
+  one job per program, and G6, programs meet on typed pipes.
+- Fewer boxes (`AGENTS.md`, "No extra containers"). A selected row is a full-row fill and stronger
+  text, never a colored bar on one side.
+- Shoot each design as `AGENTS.md`'s "Show it running" says, at the five layouts of its "Shoot more
+  than one layout". Put each shot beside today's app and beside the closest Linear screen, from
+  Linear's public docs or changelog.
 - Show the owner the designs on the canvas (step 9), one slide each with its pipe line on top and
   its prototype beside it. **The owner picks one.** Each design that lost gets one or two plain
   lines on why, tied to a principle or a shot.
@@ -129,7 +125,8 @@ request opens, even when no study is running (owner, 2026-11-08).
 
 ### 6. Write the experiment
 
-`experiments/NN-<area>.md`, the next free number. Shape, from 182, 183 and 184:
+`experiments/NN-<area>.md`, with the number from
+`node .agents/skills/lead/scripts/records.ts next experiments`. Shape, from 182, 183 and 184:
 
 - The title is the question. Line one: the date read, and **"This is reading, not a
   measurement."** unless something ran. It links the page and names the Design canvas "<Area>
@@ -165,23 +162,18 @@ links it.
 - **One `## X1: <name>` per principle,** as many as the findings give, never aimed at a count.
   When several share one reason and one check, they are rules: group them under one principle, as
   hot reload's six held seventeen rules.
-- **Each principle has six fields:** **Kind** (`law`, `lint` or `taste`), **Means**, **Why** (a
-  quoted source), **Example** (real code or a real shot), **Held by** (the type, test, lint rule
-  or refusal) and **Breaks today** (`file:line`, or where today's case follows it).
-- **Held by** links the decision file that enforces a `law` or `lint` principle and never restates
-  it. A `taste` principle names the shot a person judges it by.
-- **A visual principle** opens with a do and don't pair of shots, then the fields, plus **Tokens**
-  (from `@kampus/fabrika-design`) and **Checked by**. The shots are step 5's real ones from the
-  built app, in `shots/`, named `<state>.<layout>.<look>.png`. Step 5's other shots stay private.
-- The canvas and the walk page are named by title, never linked.
+- **Each principle's fields,** for a text and for a visual principle, are in
+  `references/guideline-page.md`, with a filled one and a checklist. Step 5's shots that are not
+  on the page stay private.
 
-### 8. Add the index rows
+### 8. List the page and the experiment
 
 - One row in `docs/guidelines/README.md`: the area, what the page covers, then its status,
   `proposed`. If the folder or its README does not exist yet, create it with this first row.
-- One row in `experiments/README.md`: number, question, files, date, the answer, $.
-- If AGENTS.md's table has no row for `docs/guidelines/` yet, add it, as 0136 asks: read a page
-  there, write one per area.
+- The experiment gets no row: it opens with its own frontmatter (`date`, `scripts`, `summary`, with
+  the answer and the $ in `summary`), in the shape
+  [`experiments/README.md`](../../../experiments/README.md#the-experiments) gives
+  ([0522](../../../.decisions/0522-no-folder-keeps-an-index-table.md)).
 
 ### 9. Build and publish the deck and the prototype
 
@@ -202,55 +194,12 @@ in this order:
 The Slides type is not used: its live embed takes no clicks and no keys, so it cannot hold a
 prototype. Shots and the prototype are in dark mode first, as the owner runs it.
 
-- Follow `references/deck-structure.md`: the slide list, the prototype rules, the press checklist
-  and the marks. Every box on it is checked before publishing.
-- **The prototype is a model, an update and a view** (Elm first). The model is the screen's state;
-  the update is a table of presses, one row per key or click in each state; the view is real
-  parts. A flow lives in one artboard, since each artboard keeps its own state.
-- **Real parts, not redrawn.** Mount Manti's parts and ours from the system's bundle
-  (`window.Fabrika`) by name, never a look-alike. Layout is plain markup on the system's tokens.
-  Every word, name and key is copied once from step 5's saved states: nobody retypes a word of
-  the screen. A keys line comes from its program's `commands` table plus `refuse`, as the outline
-  round's did. A part the bundle cannot draw yet, such as an edit inside a `TreeView` row, is a
-  named gap tag where it would be; the press still moves the state, and the gap tag says what the
-  build will draw there.
-- **Keys go to a focused window.** The canvas allows no page-wide key handler. So the prototype's
-  app window is one focusable element with its own key handler. It takes focus when Play opens it,
-  and a click on it gives the keys back. A ring shows while it has them, and a quiet line under it
-  says "Click the window to give it the keys" when it does not. A key the browser keeps for itself
-  (such as Cmd-W) cannot reach it: that key gets a row on the press checklist and a click on its
-  menu item stands in.
-- **Every press answers.** A line under the window logs each press: the key or click, and the
-  state it reached. A press the app ignores in that state says so in the log, with why, as the
-  app does. There is no "not shot": a press with no state is a bug to fix before publishing,
-  never a label.
-- **The press checklist.** One row per key or click a principle names: the press, the state it
-  starts from, the state it reaches, the principle and Try it line it serves, and whether that
-  state has a real shot. The agent ticks each row by reading the prototype's press table against
-  the principles' Try it lines and keys tables. It sits on a slide before the prototype.
-- **The blocking check is the owner's look,** once per round. The canvas type tells an agent not
-  to check its own render. So the proof slides put each prototype state beside its step 5 shot,
-  uploaded as an image, at the same size and scale. Any difference in words, boxes or sizes sends
-  the round back: fix the prototype, not the shot. A round is ready for that look only when every
-  row of the press checklist is ticked and every state has a real shot.
-
-The owner's plain walk page uses the same real parts, states, working keys and clicks. It sits
-beside the canvas for the walk. Keep the distinct designs from step 5 available to choose.
-
-- **One selected design per screen.** Show today's version on the left and the selected design
-  on the right. Label both. Switch the design between screens or walk steps. Never pack three
-  or four frames into one row to show all choices at once.
-- **Keep both at 1:1 real size.** Use their real dimensions. Allow scrolling when the pair needs
-  more space. Never shrink the screens to fit the page or redraw their layout at a smaller size.
-- **Lead looks before sending.** Capture the plain page at 1440x900 and look at that capture.
-  Check the left and right order, real sizes, scrolling and the chosen design. Fix clipping or
-  crowding before the owner sees it. Press the keys and clicks too.
-- **Make one HTML copy with everything inline.** Include styles, scripts, fonts, images and
-  real parts, so the owner's side panel needs no other files or server. Open that copy and
-  check its keys, clicks and states before sending it.
-- These checks apply only to the plain walk page and its single-file copy. Keep the canvas
-  type's own rule against an agent checking its own canvas render. The owner's canvas look
-  still checks each proof slide against its real shot.
+- Follow `references/deck-structure.md`: the slide list, the prototype rules, the plain walk
+  page, the press checklist and the marks. Every box on it is checked before publishing.
+- A gap tag says what the build will draw there.
+- A round is ready for the owner's look only when every row of the press checklist is ticked and
+  every state has a real shot.
+- The owner's plain walk page sits beside the canvas for the walk.
 
 ### 10. Open a docs-only pull request
 

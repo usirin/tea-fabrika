@@ -1,3 +1,9 @@
+---
+date: "2026-10-10"
+scripts: "none"
+summary: "Against a fake, the operator machine drove a scripted lane from `queued` to merged and spent no tokens of its own. Nothing here touched a real lane."
+---
+
 # 48. The operator, built from six moves and no agent
 
 Fabrika's lane is already a tea machine. On top of it sits an agent, the

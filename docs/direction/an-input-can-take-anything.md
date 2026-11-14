@@ -1,3 +1,8 @@
+---
+state: "proposed 2026-10-29; today's version; walked if a tryout is picked"
+summary: "A program may declare one input with `anyInput`: Elm's `Json.Decode.value`, JSON Schema's `{}`. A pipe feeds it only when no typed input fits, and then with the source's first output, as a Unix pipe carries stdout. Every other input's fit is unchanged, and `input(Schema.Unknown)` still takes only its own shape. `trace` is the first: it ends any line, as `pv` does."
+---
+
 # An input can take anything, and says so
 
 **Proposed 2026-10-29.** Today's version; walked if a tryout is picked (owner, 2026-11-08). A program may declare one input that takes any value, with `anyInput`.

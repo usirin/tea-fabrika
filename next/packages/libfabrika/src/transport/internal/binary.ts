@@ -63,7 +63,8 @@ export const armor = (blob: Uint8Array): string => {
   return `-----BEGIN SSH SIGNATURE-----\n${rows.join("\n")}\n-----END SSH SIGNATURE-----\n`;
 };
 
-class WebCryptoError extends Schema.TaggedError<WebCryptoError>()("WebCryptoError", {
+/** @internal */
+export class WebCryptoError extends Schema.TaggedError<WebCryptoError>()("WebCryptoError", {
   cause: Schema.optional(Schema.Defect()),
 }) {}
 

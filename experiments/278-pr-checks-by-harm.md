@@ -1,3 +1,9 @@
+---
+date: "2026-11-11"
+scripts: "none; reading, nothing ran"
+summary: "Today's CI plus the lead's two laptop checks, sorted by pipeline strategies' line. Before the merge: the gate (`changes`, `ci-required`, `.github/ci/` tests), `commits`, the cheap `check` job (kept for a green main, 85%), and the tests that guard lasting harm (leak grep and `loosening.sh` and their own tests). After each merge: lane tests (paused programs), today's other tests, `next/` shards while `next/` holds no real data, macOS e2e. Before-merge wall from 268's medians: whole suite 964 to about 200 s, `next/` 316 to about 190, today's 327 to about 190, `.agents/` 455 to about 200 only if the tool checkout moves to a green main. Safe only with a reader of main's red (the 0108 watcher is not built) and a stop on merging over it (nothing stops one today). Three owner calls; 65% on the split. No model, $0."
+---
+
 # 278. Which checks must a pull request run before the merge, and which can run after it, sorted by whether a later change can undo the harm?
 
 Read on 2026-11-11, on main at `9dd31f378`. **This is a reading, not a measurement:** no test ran

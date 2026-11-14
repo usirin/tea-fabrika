@@ -1,3 +1,8 @@
+---
+date: "2026-11-03"
+summary: "`next/` design, built in experiments only. Yes: each refined value says once how it is spelled (`TicketNumber` is a digit 1-9 then up to 14 digits; `AskId` is `a-`, letters and `_`, `-`, digits), and the compiler, the run-time reader and the schema's check all read that one spelling. On 628 lines generated from the programs' parts (every program, flag, pair and three in a row, plus edge values from each spelling: `0`, `1.5`, `-1`, `1e3`, `0x10`, `01`, a 20-digit number, empty) and 41 fixed ones (204's 40 and one more), the compiler gives the run-time answer in the same words on every line. 204's readers differ on 31 of the 628: 28 the compiler lets through, and 3 it refuses that the run time takes (`a--1-0`), so 204's \"never the other way\" was wrong. The known way does not close it: Effect 4.1.1's and Zod 4.6.7's template literals keep one parts list but type it as TypeScript's template literal, looser than their own checks. One source per value; two readers of it in the library, held by the law. One line costs about 676 instantiations, up from 522, and about 0.5 ms; 167 stages is still the longest line. `1e3` and `0x10` are no longer a ticket number; a plain number flag no longer compiles. Lean: yes, 75%; the doubt is how far fixed text and runs reach on real ids. No model, $0."
+---
+
 # A typed tsh line with no gaps: one spelling per value
 
 **Yes, the gaps close, from one source.** Each refined value now says once how it is spelled, and

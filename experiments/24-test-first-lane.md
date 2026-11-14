@@ -1,3 +1,9 @@
+---
+date: "2026-10-04"
+scripts: "none"
+summary: "slugify: 6 rules, the builder answered `done` on its first try, and the 6 tests plus the toy's own 3 passed. duration parked at triage on both runs."
+---
+
 # 24. The test-first lane, end to end
 
 The lane no longer asks Jev whether a diff meets a criterion. Triage writes

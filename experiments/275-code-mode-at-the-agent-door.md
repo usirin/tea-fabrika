@@ -1,3 +1,9 @@
+---
+date: "2026-11-11"
+scripts: "`275-code-mode/` (`run.ts`, `bridge.ts`, `door.ts`, `notes.ts`, `brain.ts`, `instance.ts`, `scripts/worker.js`, `limits.ts`, `replay.ts`) on branch `fabrikalfa/exp-code-mode-script`; raw rows under `runs/exp-275/`"
+summary: "Draft, the handful only; `next/`. Three doors on one local instance with a stand-in notes program (P13 has no source yet), next/'s real door, and `claude -p` on Sonnet 5.5 with only the door's tools. At 5 notes all 9 jobs were right on every door. Door B (one `execute` tool, the script in a Worker Loader isolate through Alchemy, `globalOutbound: null`) took 2 turns and about 5,400 input tokens; door A 10 to 11 turns and about 12,700 to 13,400; door C 3 turns and about 9,300. A SIGKILL after write 2 of 3 lost nothing and wrote nothing twice; back in 1.8 s. Without a model, a repeat after SIGKILL got its first answer back, and a fresh letter on the old base was refused `stale`. The poisoned note caused 0 writes on every door; in B the model never saw it. The call cap and time limit fired as named refusals on B and C, but a spinning script kept its workerd near 100% CPU until a restart. $0.16."
+---
+
 # 275. Does a script at the agent door beat one tool call at a time, and does it stay safe when the brain is killed or a note is poisoned?
 
 **Draft, started 2026-11-11. The handful has run (5 notes, 10 agent runs, $0.16); 20 and 100

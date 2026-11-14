@@ -1,3 +1,9 @@
+---
+date: "2026-10-04"
+scripts: "none"
+summary: "`--allowedTools` only pre-approves, so agents read deleted tests out of git. Rerun with the shell gone: the test-writer and the hidden tests held up, and triage from the ticket alone wrote half as many criteria."
+---
+
 # 16. Correction: the agents had a shell
 
 Every agent turn was started with `--allowedTools Read Glob Grep` (plus the

@@ -1,0 +1,19 @@
+{
+  "id": "2026-11-14-admin-merges-to-main-retest-the-queue",
+  "date": "2026-11-14",
+  "lanes": [
+    "kamp-us/tea-fabrika#1219"
+  ],
+  "stage": "ship",
+  "kind": "cost",
+  "what": "Lead tooling, both versions. The lead admin-merged three docs or rows pull requests straight to main overnight (1214 at 09:07 UTC, 1210 at 09:17, 1219 at 10:13) while six pull requests sat in the merge queue and about 35 CI runs waited for runners. Each admin merge moved main under the queue, so the queue tested its groups again on the new main. The merge session counted about an hour of runner time for each rebuild.",
+  "cause": "The rule that lets the lead admin-merge a docs-only pull request after its own check does not say to wait for an empty queue. On the free plan's 20 jobs, a queue rebuild is the most expensive thing on the repo.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "Before an admin merge to main, a Check reads the merge queue and answers wait while it holds any entry. Docs and rows batch into one pull request until the queue is empty.",
+  "test": "Property: for any merge queue size, the Check answers merge only when the size is 0.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1219",
+    "https://github.com/kamp-us/tea-fabrika/pull/1223"
+  ]
+}

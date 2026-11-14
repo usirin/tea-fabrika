@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-03"
+summary: "Both versions. Guidelines studies, design explorations and prototypes are drawn on a Design canvas with the design system installed: our colors, the Manti mapping, the six text styles, `DescriptionList`, and one bundle (`window.Fabrika`, all of Manti 0.13.0 and our pieces) whose real parts the canvas mounts, never look-alikes. A keyboard-only walk stays a plain page, since the canvas takes keys only on a focused element. Four limits from the first round, each with what settles it: one file per publish, no page-wide keys, a person looks once per round since the agent may not check its own render, and Manti's `TreeView` takes string labels only. The system's contents come from the settled notes; `@kampus/fabrika-design` is its source once the code moves there."
+---
+
 # Designs are drawn on Claude Design
 
 **Decided 2026-11-03** by the owner. Both versions. Guidelines studies, design explorations and

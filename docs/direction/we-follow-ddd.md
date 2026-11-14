@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-03; 2026-11-09: inside libfabrika a folder is a module, not a context ([0043](../../.decisions/0043-rooms-on-floors.md), named 2026-11-10 by [0091](../../.decisions/0091-modules-and-layers.md))"
+summary: "Both versions. Bounded contexts and a ubiquitous language as Evans defines them: inside one context a word has one meaning; across two it may differ, and the glossary's context map names the boundary and how the word translates. First case: inbox is a stream others write to in the ledger and a person's list of things waiting in the tracker; the asks program is `inbox`. Replaces the 2026-10-24 two-domains softening. The eight contexts and the context map in `.glossary/TERMS.md` are decided too."
+---
+
 # We follow Domain-Driven Design
 
 **Decided 2026-11-03 by the owner.** Both versions. The rule, the eight contexts drawn in

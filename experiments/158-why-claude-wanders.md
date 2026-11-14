@@ -1,3 +1,9 @@
+---
+date: "2026-10-26"
+scripts: "`158-why-claude-wanders.ts`, the system prompt in `packages/fabrika/src/agents/claude/adapter.ts` and its test, `results/158-why-claude-wanders.json`"
+summary: "Mostly not the adapter: Haiku 4.5 wanders on every path, ACP's included. 82 runs of 156's job, 7 variants. The first draft was wrong in 33 (32 the same off-by-one); each cost about 28 s and 5 calls to fix, and with 7 long thinks that explains 40 of the 42 runs over 30 s. Through ACP 6 of 10 took over 30 s (median 35.5 s), so 156's five fast ACP runs were luck. Ours: the adapter named no system prompt, so the SDK sent an empty one; it now names Claude Code's preset, its memory part off. That did not change how often the slow mode came; it may cut the longest thinks (3 of 26 vs 1 of 56, p = 0.09). The guard hook, effort, the model and `outputFormat` ruled out. `haiku` means Haiku 5.5 on our CLI. $4.37."
+---
+
 # 158: Why Claude wanders through our SDK adapter
 
 **Answer: mostly it is not our adapter. The model wanders on every path, ACP's

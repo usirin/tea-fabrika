@@ -1,3 +1,9 @@
+---
+date: "2026-10-20"
+scripts: "`94-tea-host-counter.ts`, `94-tea-host/`, `results/94-tea-host-counter.json`"
+summary: "Yes on every run. Three hosts (separate Node processes) share 93's Ledger in a Miniflare child on workerd's direct socket; a `counter` tea program registered as `counter:1` runs on the one host holding the lease on `registry/counter:1`, its every save a fenced compare-and-set append; two senders send increments as inbox appends with message ids, 2% sent twice on purpose. Three runs of 1,000 (2 SIGKILLs of the owner's process group, one owner frozen past its lease and woken after a takeover, one woken alone before anyone claimed) and one of 10,000 (3 SIGKILLs): count exactly 1,000 and 10,000, every id once, a fold from scratch equals the live state, never two believing owners both with an accepted write; all 16 late writes of frozen owners refused (8 `stale`, 8 by the fence alone), each noticed it lost in 4 to 16 ms and stopped the program. Takeover = the lease left (ttl 1 s) + 3 to 8 ms to claim + 17 to 91 ms to the next counted message; send p50 1.5 ms, p99 5 to 7 ms; catch-up 1,000 to 3,000 messages a second; workerd 120 MB (332 MB on the large run), each host 200 to 330 MB. A memory-cap restart mid-run (371 ms) lost nothing. Found: tea's default `onError` throws a refused final save on a timer and killed the frozen host's process, so every run on a fenced store needs its own sink; 93's fence guards only the lease's stream, so progress shares the registry stream; senders race the inbox's rev (42% `stale`), so a mailbox wants an append at the end and a one-stream tail. Host and counter laws: 10 hold, 10 planted mistakes caught. Confidence 80%. $0."
+---
+
 # 94. A tea-host counter survives its host dying
 
 The question: tea-host's first test (tea-host).

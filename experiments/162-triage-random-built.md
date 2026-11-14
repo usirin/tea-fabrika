@@ -1,3 +1,9 @@
+---
+date: "2026-10-27"
+scripts: "`162-triage-random-built.ts`, `162-truth.json` (the seeded draw, its pool, the security rule and every read), `lib/triage-135.ts` (161's security line, moved in; 161 and 159 print the same), `results/162-triage-random-built.json`, `results/162-triage-random-built-opus.json`"
+summary: "Yes, about twice as often as opus. 30 built phoenix tickets drawn at random (seed 162) and 10 held-out built security tickets picked by a written rule, two runs each, 160 sorts. GPT sol (161's setup, security line in) closed 9 of 30 random built tickets (30%, 95% 17 to 48%), opus as 135 ran it 4 (13%, 5 to 30%); every ticket opus closed GPT sol closed too, 5 to 0 (p = 0.06). Its extra closes are bugs read as \"hardening with no incident\" (3) and tickets called duplicates of their epic or of a fix that did not hold (2). 161's \"less than opus\" was wrong. The security line held on the new set: 2 of 10 closed, as opus. Agreement 75% of answer pairs. Opus $4.71 for 80 sorts. Lean: do not move triage to GPT sol on this bar; narrow the hardening and duplicate rules first, then rerun. Confidence 75%."
+---
+
 # 162. Does GPT sol wrongly close built work, on a fair sample?
 
 The question: experiment 161 found GPT sol, with one security line in the bar,

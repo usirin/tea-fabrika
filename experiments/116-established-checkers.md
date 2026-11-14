@@ -1,3 +1,8 @@
+---
+date: "2026-10-22"
+summary: "Yes, both. On 115's bug (a child that ends with no outcome row leaves the hosted lane waiting for good). TLA+ and TLC (v1.6.0, Java 8): a 119-line hand-written spec of lane, host and rows; \"every started child is seen to end\" breaks in 3 steps then stuttering (118 states, about 1 s with the JVM); \"every lane ends\" breaks too, but TLC printed a 13-step loop, not the shortest; TLC's plain deadlock check finds it in 4 states; the fixed spec passes (131 states). A property test on the real code: Effect 4's own `Arbitrary.checkEffect` over generated child endings, on the real hosted lane, real host and in-memory ledger, under TestClock (about 10 ms a case); today's lane falsified on all 5 seeds in 6 to 22 runs (65 to 133 ms), shrunk to one child with no row; a fixed lane built in the test (only the child Sub swapped, `lane.ts` not changed) and today's lane with every child writing first pass 500 runs each, and the fixed lane never ends a child that wrote its row as `no_outcome`. fast-check not needed. Lines: our checker's world 348, TLA+ 138, property 355. Only the property test runs the real Sub and host; it samples one schedule per input and its law is a time limit. Trace validation of ledger rows against the spec is written up, not built. Recommendation: the property test as the guard for hosted wiring, our checker for many interleavings, TLA+ not adopted. $0. Confidence 75%."
+---
+
 # 116. Do established checkers find the hosted lane's hang?
 
 The question: we built our own model checker (`laws/explore.ts`,

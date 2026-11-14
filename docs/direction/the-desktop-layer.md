@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-31; focus per window waits until two windows on one workspace annoy; 2026-11-01: for `next/`, `@kampus/tuval`, `fabsh`, the desk as a Tier 2 program, and the menu bar in the first slice"
+summary: "Layer 5, codename Tuval; users see \"fabrika\". It places tiles, owns focus and routes keys, on the app layer's window protocol. One platform-free core with electron, browser and headless backends, its state a process in the brain like a tmux server (W1). tsh is a regular program with speculative local echo (W2). A tile shows one process and follows its `keep` when it ends (W3). Size belongs to the viewer: layouts in percent, focus per workspace (W4). Each window runs the Ctrl-B prefix itself, and a binding on a key its backend cannot have fails at load (W5)."
+---
+
 # The desktop layer
 
 **Decided 2026-10-31 by the owner,** in the walk of

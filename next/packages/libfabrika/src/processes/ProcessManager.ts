@@ -469,14 +469,31 @@ export class ProcessManager extends Context.Service<
 
 /**
  * The manager's calls as plain Effects, for a manager another object owns, such as the Worker's
- * Project. A receive collects its letters so the call can cross an RPC; the Stream is rebuilt here.
- * Refusals keep their ProcessError; a transport failure stays the caller's LedgerError.
+ * Project.
+ *
+ * **Details**
+ *
+ * A receive collects its letters so the call can cross an RPC; `remoteProcessManager` rebuilds the
+ * Stream. Refusals keep their `ProcessError`; a transport failure stays the caller's
+ * `LedgerError`.
+ *
+ * @stability unstable
+ * @category models
  */
 export type ProcessCalls = Omit<Context.Service.Shape<typeof ProcessManager>, "receive" | "table"> & {
   readonly receive: (process: string, after: Rev) => Effect.Effect<ReadonlyArray<Letter>, Failure>;
 };
 
-/** `by` is the brain's own writer key: a turn this side is given folds as the brain's does. */
+/**
+ * Layer that provides `ProcessManager` from calls another object owns.
+ *
+ * **Details**
+ *
+ * `by` is the brain's own writer key: a turn this side is given folds as the brain's does.
+ *
+ * @stability unstable
+ * @category layers
+ */
 export const remoteProcessManager = (calls: ProcessCalls, by: string): Layer.Layer<ProcessManager> =>
   Layer.succeed(ProcessManager, {
     ...calls,

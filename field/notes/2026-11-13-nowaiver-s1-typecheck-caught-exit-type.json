@@ -1,0 +1,18 @@
+{
+  "id": "2026-11-13-nowaiver-s1-typecheck-caught-exit-type",
+  "date": "2026-11-13",
+  "lanes": [
+    "ticket 933"
+  ],
+  "stage": "tests",
+  "kind": "friction",
+  "what": "Lead tooling and CI, both versions. On PR 1201 (no list lets broken code pass, slice 1) the tests step wrote ratchet.ts and its laws green with pnpm lint clean, and the build step confirmed 220 of 220 tests green. The lead's one pnpm typecheck at d0321b746 then failed: ratchet.ts line 209, the runMain teardown handed '2 | E' where a number is needed. The lead sent it back to the same tests agent, which fixed it as commits.ts does (a number check on the success value, no cast), and the full typecheck passed at e65076b80. One extra round, no person needed.",
+  "cause": "Neither step ran a typecheck, by the brief's caps: vitest strips types and oxlint does not check them, so an Effect error channel leaking into the exit code passed both.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "A step that writes a new script with a runMain edge runs its own package's typecheck (cd into the package, after pgrep -x tsgo finds none) before it commits; it is one package, about 10 seconds.",
+  "test": "Replay: check out d0321b746 and run pnpm typecheck in next/apps/fabrika; it fails on src/exam/ratchet.ts(209,71) TS2345.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1201"
+  ]
+}

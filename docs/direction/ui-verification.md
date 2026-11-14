@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-07"
+summary: "Today's version first, in `apps/fabrika`'s tests and shot script; `next/` reads it for every window. Seven principles: check tokens, the machine, the tree and boxes before pixels, and pin each found bug at the lowest layer that can say it; block only what is measured near 0% false alarms, the rest advises; every check runs on eight layouts (the five from AGENTS.md, 200% text zoom, the smallest tile, 400% reflow) and each window's content states, in both looks; a check presses what a person presses, with Testing Library component tests under Playwright, and every promise in the window's words is tested; approved images, ARIA snapshots and suppressions are the exam, only the owner changes them; a model judge answers one narrow row, measured first, and advises; a person looks at what no law explains and at the critical tasks, and rates each finding. One `ui_checked` row per check. Tickets 143 and 144's five bugs, all found by eyes, are the running example. From experiment 192."
+---
+
 # UI verification
 
 **Decided 2026-11-07.** The owner approved the seven principles, as leaned, after a walk of each,

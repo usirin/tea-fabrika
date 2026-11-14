@@ -1,6 +1,6 @@
 ---
 name: write-pattern
-description: Write or re-ground one `.patterns/<name>.md` doc, the record of how the code is shaped now. Use on "write a pattern doc", "record this pattern", "the patterns drifted", "re-ground .patterns/X", and whenever a shape you just relied on turns out to be undocumented, or a pattern doc you just trusted turns out to be wrong. Not for why a choice was made (that is the adr skill) or for what a word means (that is the glossary).
+description: Write or re-ground one `.patterns/<name>.md` doc, the record of how the code is shaped now. Use on "write a pattern doc" or "the patterns drifted", and whenever a shape you relied on is undocumented or a pattern doc you trusted is wrong. Not for why a choice was made (the adr skill) or what a word means (the glossary).
 ---
 
 # write-pattern
@@ -11,8 +11,8 @@ one question asked twice: is this true of the source right now, and will a reade
 still be right tomorrow?
 
 It is the code-level sibling of the [guidelines skill](../guidelines/SKILL.md), which covers product
-design. You edit two paths and nothing else: `.patterns/<name>.md` and
-[`.patterns/README.md`](../../../.patterns/README.md). You only read the code you describe.
+design. You edit one path and nothing else: `.patterns/<name>.md`. You only read the code you
+describe.
 
 ```mermaid
 flowchart TD
@@ -25,7 +25,7 @@ flowchart TD
   bar -- yes --> exists{"a doc already covers it?"}
   exists -- yes --> reground["re-ground that doc against the source"]
   exists -- no --> write["write .patterns/name.md"]
-  reground --> register["one row in .patterns/README.md"]
+  reground --> register["its frontmatter: where and when"]
   write --> register
 ```
 
@@ -75,12 +75,11 @@ are below the bar. Writing nothing is a correct result.
 ## 3. Read the library before you add to it
 
 ```sh
-ls .patterns
-rg -o '\]\(\./[a-z0-9-]+\.md\)' .patterns/README.md
+node .agents/skills/lead/scripts/records.ts list .patterns
 ```
 
-Each doc must have exactly one row in the README, and each row must name a doc that exists. A doc
-with no row is one nobody will find; a row with no doc is a dead link. Fix either in step 6.
+It prints one line per doc on `origin/main`, from each doc's own frontmatter. A line that says
+`(no where)` or `(no when)` is a doc nobody will find. Fix it in step 6.
 
 A doc that already covers the shape gets **extended**. A second doc on one subject is how a corpus
 starts to contradict itself.
@@ -120,7 +119,7 @@ What each answer asks of you:
 - **The pin moved:** read the shape again at the new version, then change the line. Bumping the line
   over prose you did not re-read is the exact lie the line exists to catch.
 - **The dependency is gone:** decide whether the doc still describes anything here. If not, route
-  it out or delete it, with its row.
+  it out or delete it.
 - **Every `path:line`:** open the line. It must still hold the thing the doc names there.
 
 A cited path that does not exist here is not drift on its own: prose may cite a dependency's own
@@ -140,10 +139,15 @@ pattern doc reads exactly like a held one, and a reader cannot tell them apart.
 
 ### The doc's shape
 
-No frontmatter. One file per shape, a short kebab-case name. **A picture first, then one small real
-code block, then the words** ([0005](../../../.decisions/0005-patterns-and-decisions-are-visual.md)):
+Frontmatter (step 6), then the heading. One file per shape, a short kebab-case name. **A
+picture first, then one small real code block, then the words** ([0005](../../../.decisions/0005-patterns-and-decisions-are-visual.md)):
 
 ````markdown
+---
+where: "packages/pipeline"
+when: "Adding a step that writes the world, or replaying one after a restart"
+---
+
 # Act keeps its intent before the write goes out
 
 ```mermaid
@@ -188,55 +192,32 @@ reuse any of it. A shape about to be used swaps `## Where it applies` for `## In
 `## Decision` with the link to the accepted decision. Keep the derived line only when the doc was
 read from a pinned dependency.
 
-## 6. Register it, or nobody finds it
+## 6. Give it frontmatter, or nobody finds it
 
-Add one row to the README's index table, by hand, touching no other line. Other sessions edit that
-file too, so a reflowed table destroys work you cannot see.
+The folder keeps no index table ([0522](../../../.decisions/0522-no-folder-keeps-an-index-table.md)),
+so the doc says at its own top where it applies and when to read it. That block is what
+`records.ts list .patterns` prints. Each value is one line, in double quotes:
 
 ```markdown
-| [act-keeps-its-intent.md](./act-keeps-its-intent.md) | packages/pipeline | Adding a step that writes the world, or replaying one after a restart |
+---
+where: "packages/pipeline"
+when: "Adding a step that writes the world, or replaying one after a restart"
+---
 ```
 
-All three cells are judgment. The middle one is where the shape lives. **Read when** is the moment a
-reader knows they need it: a trigger, not a summary. Match the rows already there.
+Both values are judgment. `where` is where the shape lives. `when` is the moment a reader knows they
+need it: a trigger, not a summary. Match the docs already there.
 
 ## Diagrams
 
-**Rule one: diagrams are Mermaid wherever possible.** Only when Mermaid really cannot express the
-thing may a doc use ASCII art or another form, and then it says in one line, right above the
-picture, why Mermaid could not.
-
-- The diagram shows the real mechanism, with real names from the code: the functions, Msgs, states
-  and files a reader will grep for. No decorative boxes, no "System" or "Service" placeholders.
-- Dark-mode safe: no `style`, `classDef`, `linkStyle` or `%%{init}` theme lines. GitHub picks the
-  colors for each theme.
-- About 12 nodes at most. A bigger mechanism gets two diagrams, each one part.
-- At most one table per section (AGENTS.md).
-
-Which diagram fits which idea. All of these render on GitHub:
-
-| The idea | Mermaid type |
-|---|---|
-| who calls whom, in time order (a Cmd, a reply, a restart) | `sequenceDiagram` |
-| a machine's states and the Msgs that move it | `stateDiagram-v2` |
-| a route, a choice, data flowing through steps | `flowchart TD` or `flowchart LR` |
-| types and what holds or extends what | `classDiagram` |
-| stored records and their keys | `erDiagram` |
-| branches, merges, a stack of commits | `gitGraph` |
-
-Things that break on GitHub:
-
-- Quote a label that holds punctuation: `a["act(name, spec)"]`. Write `<` and `>` in a label as
-  `#lt;` and `#gt;`.
-- A node id is one plain word. `end` as a lowercase id breaks a flowchart.
-- `%%` starts a comment. Use it to name the source file a diagram was read from.
-- In `stateDiagram-v2`, a transition label is the Msg's real `type`: `idle --> asking : ask_sent`.
+The Mermaid rules, which diagram fits which idea and what breaks on GitHub are in
+[`references/diagrams.md`](references/diagrams.md). Read it before you draw.
 
 ## End as exactly one of these
 
 | Result | What happened |
 |---|---|
-| **recorded** | a new doc exists with its row; both files edited, not committed |
+| **recorded** | a new doc exists with its frontmatter; not committed |
 | **re-grounded** | an existing doc now matches its source; edits not committed |
 | **declined** | below the bar, or a why already carried at its one home; name which; nothing written |
 | **routed** | another place owns it, named; nothing written here |
