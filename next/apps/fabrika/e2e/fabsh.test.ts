@@ -23,7 +23,8 @@ const decodeFrame = Schema.decodeUnknownOption(Schema.fromJsonString(Frame));
 /** The tab's socket through a route: every frame passes, and draft answers wait while `held`. */
 const route = (context: BrowserContext) =>
   Effect.gen(function* () {
-    const state = { held: false, drafts: new Set<unknown>(), waiting: [] as Array<() => void> };
+    // `delivered` counts draft answers handed to the tab since the last hold.
+    const state = { held: false, drafts: new Set<unknown>(), waiting: [] as Array<() => void>, delivered: 0 };
     yield* Effect.promise(() =>
       context.routeWebSocket(/\/client\//, (ws) => {
         const server = ws.connectToServer();
@@ -42,6 +43,10 @@ const route = (context: BrowserContext) =>
           if (f._tag === "Some" && state.drafts.has(f.value.id) && state.held) {
             state.waiting.push(() => ws.send(m));
             return;
+          }
+
+          if (f._tag === "Some" && state.drafts.has(f.value.id)) {
+            state.delivered++;
           }
 
           ws.send(m);
@@ -81,6 +86,7 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
       online: run(() => region.and(page.locator(":not([inert])")).waitFor({ timeout: 60_000 })),
       hold: Effect.sync(() => {
         held.held = true;
+        held.delivered = 0;
       }),
       release: Effect.sync(() => {
         held.held = false;
@@ -97,7 +103,16 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
       drawn: run(() => region.locator("[aria-hidden='true']:has(> [data-role])").innerText()).pipe(
         Effect.map((t) => t.trim()),
       ),
-      unechoed: Effect.sync(() => held.waiting.length > 0),
+      // The tab writes its frame after the key's update, and holds one frame in flight per tile, so
+      // a newer letter may send none yet: read whether any echo reached the tab, not whether one
+      // happens to be waiting. Wait first until one answer is held, so the hold is really in the way.
+      unechoed: Effect.gen(function* () {
+        for (let n = 0; n < 100 && held.waiting.length === 0; n++) {
+          yield* Effect.sleep("100 millis");
+        }
+
+        return held.waiting.length > 0 && held.delivered === 0;
+      }),
       description: describedBy(page),
       scroll: run(() => region.getByRole("log").innerText()).pipe(
         Effect.map((t) =>
@@ -107,7 +122,22 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
             .filter((l) => l !== ""),
         ),
       ),
-      recall: run(() => field.press("ArrowUp").then(() => field.inputValue())),
+      // The key's update reaches the input on the tab's next render, after `press` resolves, so read
+      // the recalled line once it is drawn (at most 10 s), and an empty line if history held nothing.
+      recall: Effect.gen(function* () {
+        yield* run(() => field.press("ArrowUp"));
+        let value = "";
+
+        for (let n = 0; n < 100 && value === ""; n++) {
+          value = yield* run(() => field.inputValue());
+
+          if (value === "") {
+            yield* Effect.sleep("100 millis");
+          }
+        }
+
+        return value;
+      }),
       reload: run(() => page.reload()).pipe(Effect.asVoid),
     };
     return backend;

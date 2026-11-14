@@ -37,7 +37,9 @@ export type Backend = {
   readonly enter: Effect.Effect<void>;
   /** The line the tile draws now: its span layer's text. */
   readonly drawn: Effect.Effect<string>;
-  /** Whether the newest letter's echo has not come back yet. */
+  /** Whether no echo of this line's edits has reached the client yet: the headless tile has not
+   *  taken one; the tab has had none delivered since `hold`, with at least one answer held, so the
+   *  hold is known to be in the way. Never a reading of whether a frame happens to be on the wire. */
   readonly unechoed: Effect.Effect<boolean>;
   /** The words tied to the line: its accessible description. */
   readonly description: Effect.Effect<string>;
