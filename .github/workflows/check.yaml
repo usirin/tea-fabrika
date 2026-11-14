@@ -41,6 +41,11 @@ jobs:
   # no next/ test reads either. experiments/177-themes/schemes/, which a test reads, runs as an
   # unknown path does.
   # These small checks still run when pnpm setup and the heavy jobs skip.
+  # `filter` is the next job's path: the next/ tests that read source as text, lint it or bundle
+  # it, when only lint rule files changed or every next/ file is the same program with other
+  # comments; else all of next/. The parser's pass (`same`) proves the second case. It runs only when
+  # every changed line looks like a comment (`probe`), and its install and run may fail without
+  # failing changes: then the first pass's `next` and `filter` stand, which run all of next/.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -48,7 +53,8 @@ jobs:
       check: ${{ steps.diff.outputs.check }}
       typecheck: ${{ steps.diff.outputs.typecheck }}
       test: ${{ steps.diff.outputs.test }}
-      next: ${{ steps.diff.outputs.next }}
+      next: ${{ steps.same.outputs.next || steps.diff.outputs.next }}
+      filter: ${{ steps.same.outputs.filter || steps.diff.outputs.filter }}
       e2e: ${{ steps.diff.outputs.e2e }}
       field: ${{ steps.diff.outputs.field }}
       build: ${{ steps.diff.outputs.build }}
@@ -68,6 +74,31 @@ jobs:
         if: ${{ !cancelled() }}
       - run: node oxlint-plugins/gitignore.mjs
         if: ${{ !cancelled() }}
+      # The parser for the `--same` pass, with the field job's filtered install, about 15 s.
+      - uses: pnpm/action-setup@v6
+        if: steps.diff.outputs.probe == 'true'
+        continue-on-error: true
+        with:
+          run_install: false
+      - uses: actions/setup-node@v7
+        if: steps.diff.outputs.probe == 'true'
+        continue-on-error: true
+        with:
+          node-version: 26.13.0
+      - run: pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts
+        if: steps.diff.outputs.probe == 'true'
+        continue-on-error: true
+      # One line per candidate file, same program or why not, and the parser's version, in the log
+      # and the job summary.
+      - id: same
+        if: steps.diff.outputs.probe == 'true'
+        continue-on-error: true
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+        run: node .github/ci/changes.mjs --same
 
   # Start beside changes. No workspace setup for Markdown alone.
   # Filtered install uses the root lockfile and all workspace supply-chain rules.
@@ -377,9 +408,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: node .github/ci/shard-times.ts "$RUNNER_TEMP/lanes.json" "$RUNNER_TEMP/rest.json" "$RUNNER_TEMP/forced.json" "$RUNNER_TEMP/tooling.json"
 
-  # next/, the new version (docs/plan/tier-1.md). Every test under next/ runs when affected:
-  # the exam's tests read files and the later ones start a brain, so `--changed` in the test job,
-  # which follows imports, would not pick them up. Then the thin runner over next/apps/fabrika/e2e/,
+  # next/, the new version (docs/plan/tier-1.md). Every test under next/ runs when affected, or only
+  # the reader tests when changes' `filter` names them (the plan for CI paths, slice 2). The exam's
+  # tests read files and the later ones start a brain, so `--changed` in the test job, which follows
+  # imports, would not pick them up. Then the thin runner over next/apps/fabrika/e2e/,
   # which passes while that folder is empty. Chromium is fetched only once an e2e file exists, by
   # the app's own Playwright. Electron and launchd run on the laptop first; CI gets Electron once
   # xvfb and the keychain are tried.
@@ -414,9 +446,11 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec vitest run next/ --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
+      # FILTER is unquoted, so each reader path is its own argument. A missing filter runs all of next/.
+      - run: pnpm exec vitest run $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
         env:
           SHARD: ${{ matrix.shard }}/6
+          FILTER: ${{ needs.changes.outputs.filter || 'next/' }}
       - name: shard times
         if: ${{ !cancelled() }}
         run: node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"
