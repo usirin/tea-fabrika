@@ -190,9 +190,9 @@ it("reads next/ and .agents/ tests and shared suites, and leaves today's tests a
   );
 });
 
-// scenario: `pnpm lint`'s own runner prints the advice, names both shapes, and exits 0 on it, so the
-// rule advises and never blocks until its false alarms are counted (0093).
-it("scenario: lint.ts prints the advice with both shapes and does not fail on it", () => {
+// scenario: T930 L7, `pnpm lint`'s own runner fails on an unlabeled law in a `next/` folder at zero,
+// and its message names both shapes (0093, 0523).
+it("scenario: T930 L7 lint.ts blocks on an unlabeled law in a clean folder and names both shapes", () => {
   const root = resolve(import.meta.dirname, "..");
   const dir = realpathSync(mkdtempSync(join(root, "next", ".law-shape-")));
 
@@ -206,11 +206,12 @@ it("scenario: lint.ts prints the advice with both shapes and does not fail on it
       encoding: "utf8",
       timeout: 20_000,
     });
-    expect(ran.stdout).toContain(`${CODE} Advice, does not block:`);
+    expect(ran.stdout).toContain(CODE);
+    expect(ran.stdout).not.toMatch(/Advice|does not block/);
     expect(ran.stdout).toContain("it.prop");
     expect(ran.stdout).toContain("vector:, format:, pinned:, scenario:");
-    expect(ran.stdout).toContain("0 blocking, 1 advice");
-    expect(ran.status, ran.stdout + ran.stderr).toBe(0);
+    expect(ran.stdout).toContain("1 blocking, 0 advice");
+    expect(ran.status, ran.stdout + ran.stderr).toBe(1);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

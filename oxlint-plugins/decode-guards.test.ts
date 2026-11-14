@@ -1,6 +1,7 @@
 // Ticket 737, G1 and G3. next/ decodes input with Effect Schema (decision 0023), so oxlint's own
-// `no-restricted-properties` reports a bare `JSON.parse` there, and both new guards only advise until
-// their false alarms are counted. The fixtures are the rule's inputs (0093); the replay reads the tree.
+// `no-restricted-properties` reports a bare `JSON.parse` there. It blocks in every folder at zero
+// (0523), and the service-ID guard still advises. The fixtures are the rule's inputs (0093); the
+// replay reads the tree.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -105,8 +106,10 @@ const lint = (files: Readonly<Record<string, string>>, args: ReadonlyArray<strin
   }
 };
 
-describe("T737 G3 the new guards advise before measured promotion", () => {
-  it("a report of only their diagnostics passes, and any blocking one beside them still fails", () => {
+// T930 L9: the planted folder has no warn line, so it is at zero and a bare JSON.parse blocks there
+// (0523). The service-ID guard still advises until its own pull request makes it block.
+describe("T737 G3, T930 L9 a bare JSON.parse blocks in a clean folder, and the service-ID guard advises", () => {
+  it("a service-ID report alone passes, and a JSON.parse or another blocking one beside it fails", () => {
     const seen = new Set<string>();
     fc.assert(
       fc.property(
@@ -123,11 +126,11 @@ describe("T737 G3 the new guards advise before measured promotion", () => {
           const ran = lint({ "next/packages/libfabrika/src/runtime/Probe.ts": `${lines.join("\n")}\n` }, [
             "--warn=no-debugger",
           ]);
-          const advice = Number(parse) + Number(id);
-          expect(ran.stdout).toContain(`oxlint: ${Number(blocking)} blocking, ${advice} advice`);
+          const blocks = Number(parse) + Number(blocking);
+          expect(ran.stdout).toContain(`oxlint: ${blocks} blocking, ${Number(id)} advice`);
           expect(ran.stdout.includes(CODE)).toBe(parse);
           expect(ran.stdout.includes(ID)).toBe(id);
-          expect(ran.status, ran.stdout + ran.stderr).toBe(blocking ? 1 : 0);
+          expect(ran.status, ran.stdout + ran.stderr).toBe(blocks > 0 ? 1 : 0);
           seen.add(`${parse}:${id}:${blocking}`);
         },
       ),

@@ -1,5 +1,6 @@
 // The lint settings. `pnpm lint` runs them through oxlint-plugins/lint.ts, which fails on any
-// diagnostic but the advice rules. docs/direction/oxlint-and-oxfmt.md says what each choice costs.
+// diagnostic but advice: a fire of the five old advice rules in a folder a warn override at the end
+// still names (0523). docs/direction/oxlint-and-oxfmt.md says what each choice costs.
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["eslint", "typescript", "unicorn", "oxc", "react", "jsx-a11y", "vitest", "import", "promise"],
@@ -19,8 +20,9 @@
     ".claude/**"
   ],
   "rules": {
-    // "warn" here only advises: lint.ts prints these two and does not fail on them. They were
-    // wrong too often to block (experiment 125). Any other warning fails.
+    // "warn" here is for today's version only, which is frozen: lint.ts prints these two there as
+    // advice. An override below sets them "error" for next/, .agents/ and oxlint-plugins/, where
+    // they block in every folder at zero (0523).
     "fabrika/no-effect-promise": "warn",
     "fabrika/no-raw-try-catch": "warn",
 
@@ -864,7 +866,7 @@
       // Tests also manufacture spans as input for the sink. Tracing plants use product paths.
       "files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
       "rules": {
-        "fabrika/prefer-schema-arbitrary": "warn",
+        "fabrika/prefer-schema-arbitrary": "error",
         "fabrika/no-promises": "off",
         "fabrika/no-effect-run-outside-edge": "off",
         "fabrika/effect-functions": "off",
@@ -885,7 +887,7 @@
       // may turn one off (`edge-comment.test.ts`).
       "files": ["next/packages/libfabrika/src/telemetry/RecordPartTest.ts", "next/programs/inbox/src/RunnerTest.ts"],
       "rules": {
-        "fabrika/prefer-schema-arbitrary": "warn",
+        "fabrika/prefer-schema-arbitrary": "error",
         "fabrika/effect-functions": "off",
         "fabrika/no-hand-tag": "off",
         "fabrika/one-machine-per-file": "off",
@@ -960,13 +962,13 @@
       }
     },
     {
-      // Each law is a property or a labeled example (0093). "warn" only advises: lint.ts prints it
-      // and does not fail on it until its false alarms on main are counted at about 0%. A shared
-      // suite (`SinkTest.ts`, 0062) holds laws too. Today's version's tests are left out: 0093 covers
+      // Each law is a property or a labeled example (0093). It blocks in every folder at zero, and
+      // advises where the warn override at the end still names the folder (0523). A shared suite
+      // (`SinkTest.ts`, 0062) holds laws too. Today's version's tests are left out: 0093 covers
       // next/, and .agents/ follows next/'s rules (0033).
       "files": ["next/**/*.test.ts", "next/**/*.test.tsx", "next/**/*Test.ts", ".agents/**/*.test.ts"],
       "rules": {
-        "fabrika/law-shape": "warn"
+        "fabrika/law-shape": "error"
       }
     },
     {
@@ -1395,20 +1397,21 @@
     },
     {
       // Ticket 737 (decision 0023): next/ decodes input with Effect Schema, so a bare JSON.parse is
-      // reported, and a service ID carries the package and its file's path. "warn" only advises:
-      // lint.ts prints both and does not fail on them until their false alarms are counted
-      // (oxlint-plugins/README.md). A test oracle may keep a parse with a line exception and a reason.
-      // The ID rule reads only libfabrika's source folder, so its glob can stay wide. Its glob is
-      // `next/**/*`, the same files as `next/**`: that exact key names the exam block above, which
-      // `.agents/` repeats (0033), and this advice holds next/ alone.
+      // reported, and a service ID carries the package and its file's path. The parse rule blocks in
+      // every folder at zero, and advises where the warn override at the end still names the folder
+      // (0523). The ID rule still only advises: lint.ts prints it and does not fail on it. A test
+      // oracle may keep a parse with a line exception and a reason. The ID rule reads only
+      // libfabrika's source folder, so its glob can stay wide. Its glob is `next/**/*`, the same
+      // files as `next/**`: that exact key names the exam block above, which `.agents/` repeats
+      // (0033), and this rule holds next/ alone.
       "files": ["next/**/*"],
       "rules": {
         "eslint/no-restricted-properties": [
-          "warn",
+          "error",
           {
             "object": "JSON",
             "property": "parse",
-            "message": "Advice, does not block: decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
           }
         ],
         "fabrika/service-id": ["warn", { "package": "@kampus/libfabrika", "src": "next/packages/libfabrika/src" }]
@@ -1852,6 +1855,117 @@
         ],
         "eslint/no-restricted-globals": ["error", "setTimeout", "setInterval"]
       }
+    },
+    {
+      // The two old advice rules block wherever their code is clean (0523), outside today's frozen
+      // version. Before the warn overrides below, so a dirty folder's "warn" still wins.
+      "files": ["next/**", ".agents/**", "oxlint-plugins/**"],
+      "rules": {
+        "fabrika/no-effect-promise": "error",
+        "fabrika/no-raw-try-catch": "error"
+      }
+    },
+    // The folders where each of the five old advice rules still advises, until a fill brings the
+    // folder to zero (0523, 0168). The rule blocks everywhere else. One glob per folder: a package's
+    // `src/<name>/**`, the files right in `src/` as `src/*`, or one folder's own files as `<folder>/*`.
+    // Delete a line when its folder reaches zero: a whole `pnpm lint` run fails until you do. Never
+    // add a line for a folder that blocks, and never a file. Today's frozen version is not listed.
+    {
+      "files": [
+        "next/apps/fabrika/e2e/*",
+        "next/apps/fabrika/src/*",
+        "next/apps/fabrika/src/exam/**",
+        "next/packages/libfabrika/src/access/**",
+        "next/packages/libfabrika/src/cloudflare/**",
+        "next/packages/libfabrika/src/jobs/**",
+        "next/packages/libfabrika/src/ledger/**",
+        "next/packages/libfabrika/src/node/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/processes/**",
+        "next/packages/libfabrika/src/runtime/**",
+        "next/packages/libfabrika/src/telemetry/**",
+        "next/packages/libfabrika/src/transport/**",
+        "next/packages/tuval/src/browser/**",
+        "next/packages/tuval/src/window/**",
+        "next/programs/counter/src/*",
+        "next/programs/inbox/src/*"
+      ],
+      "rules": { "fabrika/no-effect-promise": "warn" }
+    },
+    {
+      "files": [
+        ".agents/skills/lead/scripts/*",
+        "next/apps/fabrika/e2e/*",
+        "next/apps/fabrika/src/*",
+        "next/apps/fabrika/src/exam/**",
+        "next/packages/libfabrika/src/ledger/**",
+        "next/packages/libfabrika/src/runtime/**",
+        "next/packages/tuval/src/browser/**",
+        "next/programs/pipeline/src/*"
+      ],
+      "rules": { "fabrika/no-raw-try-catch": "warn" }
+    },
+    {
+      // An override replaces a rule's options, so the JSON.parse entry is written out again.
+      "files": [
+        "next/apps/fabrika/e2e/*",
+        "next/apps/fabrika/src/*",
+        "next/apps/fabrika/src/exam/**",
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/cloudflare/**",
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/jobs/**",
+        "next/packages/libfabrika/src/ledger/**",
+        "next/packages/libfabrika/src/node/**",
+        "next/packages/libfabrika/src/processes/**",
+        "next/packages/libfabrika/src/runtime/**",
+        "next/packages/libfabrika/src/settings/**",
+        "next/packages/libfabrika/src/telemetry/**",
+        "next/packages/libfabrika/src/transport/**"
+      ],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "warn",
+          {
+            "object": "JSON",
+            "property": "parse",
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          }
+        ]
+      }
+    },
+    {
+      // Each glob keeps the rule's own file kinds, so a warn line never turns it on for other files.
+      "files": [
+        ".agents/skills/lead/scripts/*.test.ts",
+        ".agents/skills/mutation/scripts/*.test.ts",
+        ".agents/skills/step-commit/scripts/*.test.ts",
+        "next/apps/fabrika/src/*{.test.ts,.test.tsx,Test.ts}",
+        "next/apps/fabrika/src/exam/**/*{.test.ts,.test.tsx,Test.ts}",
+        "next/packages/libfabrika/src/*{.test.ts,.test.tsx,Test.ts}",
+        "next/packages/libfabrika/src/gateway/**/*{.test.ts,.test.tsx,Test.ts}",
+        "next/packages/libfabrika/src/jobs/**/*{.test.ts,.test.tsx,Test.ts}",
+        "next/packages/libfabrika/src/ledger/**/*{.test.ts,.test.tsx,Test.ts}",
+        "next/packages/libfabrika/src/node/**/*{.test.ts,.test.tsx,Test.ts}",
+        "next/packages/libfabrika/src/runtime/**/*{.test.ts,.test.tsx,Test.ts}",
+        "next/packages/libfabrika/src/telemetry/**/*{.test.ts,.test.tsx,Test.ts}",
+        "next/packages/libfabrika/src/transport/**/*{.test.ts,.test.tsx,Test.ts}",
+        "next/programs/counter/src/*{.test.ts,.test.tsx,Test.ts}"
+      ],
+      "rules": { "fabrika/law-shape": "warn" }
+    },
+    {
+      "files": [
+        "next/packages/libfabrika/src/*{.test.ts,.test.tsx}",
+        "next/packages/libfabrika/src/access/**/*{.test.ts,.test.tsx}",
+        "next/packages/libfabrika/src/node/**/*{.test.ts,.test.tsx}",
+        "next/packages/libfabrika/src/runtime/**/*{.test.ts,.test.tsx}",
+        "next/packages/libfabrika/src/settings/**/*{.test.ts,.test.tsx}",
+        "next/packages/libfabrika/src/transport/**/*{.test.ts,.test.tsx}",
+        "next/programs/chaos/src/*{.test.ts,.test.tsx}",
+        "next/programs/pipeline/src/*{.test.ts,.test.tsx}"
+      ],
+      "rules": { "fabrika/prefer-schema-arbitrary": "warn" }
     }
   ]
 }

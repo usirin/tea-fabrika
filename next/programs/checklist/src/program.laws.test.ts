@@ -520,6 +520,7 @@ describe("ticket 806 the checklist's laws", () => {
     );
   });
 
+  // oxlint-disable-next-line fabrika/law-shape -- a type law: its @ts-expect-error lines are the check, so it is neither a property nor an example
   it("L11 type: an input key that is no Msg type, a query on a field the view lacks, or a check note that is not a string, does not compile", async () => {
     // A type law (plan, L11): the checks are the `@ts-expect-error` lines, read by the typecheck.
     const { checklist, checklistMachine } = await load();

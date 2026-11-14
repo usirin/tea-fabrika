@@ -16,11 +16,11 @@
 // only. In the pipeline this repo rebuilds it was registered at `warn` (Phase 1 of #2736; the flip
 // to `error` is the Phase-3 capstone #2753).
 //
-// In this repo it only advises: `lint.ts` prints its diagnostics and does not fail on them.
-// Experiment 125 read its 21 fires on main: all 21 kept their code, 18 of them in `experiments/`,
-// mostly plain Node calls at the edge, in functions with no Effect in them. A blocking check must
-// have about 0 such fires; advice may have up to 10% (Sadowski et al., CACM 2018). Narrowing it is
-// a later change with its own count.
+// In this repo it blocks in every folder at zero, and advises only in a folder that the config's
+// warn override at the end still names (0523). Experiment 125 read its 21 fires on main when it was
+// written: all 21 kept their code, 18 of them in `experiments/`, mostly plain Node calls at the
+// edge, in functions with no Effect in them. 0523 sets that count aside: a pull request that makes
+// a folder block reports the fires it met and each disable line.
 import type { CreateRule } from "@oxlint/plugins";
 import type { Node } from "./match.ts";
 
@@ -47,7 +47,7 @@ export const noRawTryCatch: CreateRule = {
         context.report({
           node,
           message:
-            "Advice, does not block: raw `try/catch` is discouraged in an effect-importing file: real Effect code models failure in the `E` channel, not a native throw (#2736). Fix: use `Effect.try({ try, catch })` (sync) or `Effect.tryPromise({ try, catch })` (async), mapping the cause into a `Schema.TaggedErrorClass`: copy `packages/fabrika-cli/src/ui/http.ts` (or `packages/fate-effect`). Exception (e.g. a pre-runtime bootstrap guard): // oxlint-disable-next-line fabrika/no-raw-try-catch -- <reason>.",
+            "Raw `try/catch` is discouraged in an effect-importing file: real Effect code models failure in the `E` channel, not a native throw (#2736). Fix: use `Effect.try({ try, catch })` (sync) or `Effect.tryPromise({ try, catch })` (async), mapping the cause into a `Schema.TaggedErrorClass`: copy `packages/fabrika-cli/src/ui/http.ts` (or `packages/fate-effect`). Exception (e.g. a pre-runtime bootstrap guard): // oxlint-disable-next-line fabrika/no-raw-try-catch -- <reason>.",
         });
       },
     };

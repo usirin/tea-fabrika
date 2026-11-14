@@ -1,8 +1,9 @@
 // Each law in a `next/` or `.agents/` test file is a property, or an example whose title starts with
 // `vector:`, `format:`, `pinned:` or `scenario:` and its reason (0093). One ticket or law id may
 // stand before the label (`T652 scenario: ...`, `R3 format: ...`): one token of letters, digits and
-// dots, then a space. A label deeper in the title, or only in a comment, does not count. Advice
-// only, until its false alarms on main are counted at about 0%; then it blocks.
+// dots, then a space. A label deeper in the title, or only in a comment, does not count. It blocks
+// in every folder at zero, and advises where the config's warn override still names the folder
+// (0523).
 //
 // A test is a call rooted at `it` or `test`: `it(...)`, `it.effect(...)`, `it.live(...)`,
 // `it.skip(...)`, `it.only(...)`, `it.fails(...)`, and the ones a first call makes:
@@ -20,7 +21,7 @@
 // A title is read only when it is written out: a string, or a template whose text before its first
 // `${}` already decides it. Any other title (a helper's parameter, `name + x`) is not judged, so a
 // helper that wraps `it` is read at its own `it` only when that one is a property. Under-reporting
-// is the safe side for advice.
+// is the safe side for a rule that blocks.
 import type { CreateRule, ESTree } from "@oxlint/plugins";
 import { below, dotted, type Node } from "./match.ts";
 
@@ -33,7 +34,7 @@ const RUNNERS = new Set(["propertyTrace", "propertyInvariant", "propertyTerminat
 /** Calls that make a test from their own call: `it.each(rows)` is not a test, `it.each(rows)(...)` is. */
 const MAKERS = new Set(["each", "for", "skipIf", "runIf"]);
 
-const MESSAGE = `Advice, does not block: a law here is a property (it.prop, it.effect.prop, a body that calls fc.assert, or a @demlik/tea/pbt runner) or an example whose title starts with ${LABELS.map((l) => `${l}:`).join(", ")} and its reason (0093).`;
+const MESSAGE = `A law here is a property (it.prop, it.effect.prop, a body that calls fc.assert, or a @demlik/tea/pbt runner) or an example whose title starts with ${LABELS.map((l) => `${l}:`).join(", ")} and its reason (0093).`;
 
 type Fn = ESTree.ArrowFunctionExpression | ESTree.Function;
 
