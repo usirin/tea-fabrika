@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0275, 0276, 0170 and S1 of the summon guidelines, with its leans for the owner to read; body 5a739c1a3482
+Approved by the lead agent, builds 0275, 0276, 0170 and S1 of the summon guidelines, with its leans for the owner to read; body 4de4300e7490
 Plancheck-Version: 3
 
 # fabsh in a tile: a regular program that takes a line, echoes each letter at once, and starts a program, in next/
@@ -65,6 +65,17 @@ These bind the steps. Where they and a line below differ, these win.
   reports that, rather than building a stub (0159).
 - **A5, the base.** The branch is made from the desk lane's branch once it exists, and this plan is
   refreshed against it as a dated amendment here before the tests step starts.
+
+- **A5's refresh, 2026-11-14, against the desk lane's branch at ad6cd78** (merged in at 6b3d33e).
+  The desk lane's slice S1 brings 0170's start check: a start a member's letter caused is checked
+  against that member with `mayStart` (`next/packages/libfabrika/src/access/StartRule.ts`), whose
+  first rule lets any member start any program, and `stop_child`. It does not bring the
+  `fabrika/tezgah` program, a tile that shows a process chosen at run time, `show`, or a tile's
+  monitor and `keep` (P18 slices 2 to 4). So: slice 1 is unchanged and keeps its fixed `fabsh:1`
+  tile. For slice 2, the desk's S1 now does what this plan waited on ticket 953's slice for: a
+  start from fabsh's submitted step is checked against that letter's member, with no grant for
+  fabsh, so L20, L21, L22, L23, L24 and L28 can be built on this branch now. Slice 2's tile half
+  (L25, L26, L27: `show`, `keep` on `DOWN`) still waits for the desk lane's tile pieces, as A4 says.
 
 ## The answer first
 
