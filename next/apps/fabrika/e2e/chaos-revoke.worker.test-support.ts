@@ -66,7 +66,6 @@ const heldOwner = (ctx: Parameters<typeof projectRuntime>[0], env: Parameters<ty
               }),
               inputs: {
                 schema: Schema.Json,
-                log: Schema.Json,
                 raw: [],
                 personOnly: [],
                 name: (m) =>

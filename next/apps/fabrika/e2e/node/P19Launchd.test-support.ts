@@ -388,7 +388,7 @@ const controller = Effect.fn("P19Host.controller")(function* (specFile: string, 
   yield* fs.writeFileString(`${spec.home}/controller.ready`, "ready");
 
   if (!process.argv.includes("--release")) {
-    yield* Effect.never;
+    return yield* Effect.never;
   }
 });
 
@@ -524,7 +524,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
     yield* acknowledgedGroups;
     const first = yield* status(config.target);
     yield* checked(first._tag === "loaded" && first.pid !== null, "no-running-brain");
-    yield* client.kill({ signal: "SIGKILL" });
+    yield* client.kill({ killSignal: "SIGKILL" });
     yield* checked(
       JSON.stringify(yield* status(config.target)) === JSON.stringify(first) && (yield* listening(url)),
       "controller-death-stopped-brain",

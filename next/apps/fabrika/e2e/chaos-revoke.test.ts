@@ -71,7 +71,7 @@ const identity = Effect.fn("RevokeTest.identity")(function* () {
         space: "fabrika-client",
         sign: (bytes) =>
           Effect.tryPromise({
-            try: () => crypto.subtle.sign("Ed25519", pair.privateKey, bytes),
+            try: () => crypto.subtle.sign("Ed25519", pair.privateKey, new Uint8Array(bytes)),
             catch: (cause) => new WireFailure({ cause }),
           }).pipe(Effect.map((signed) => new Uint8Array(signed))),
       }),
@@ -88,7 +88,7 @@ const Frame = Schema.Struct({
 
 /** Masked client frame, RFC 6455 section 5.2; the payload is a complete small JSON request. */
 const encode = (value: unknown) => {
-  const payload = Buffer.from(JSON.stringify(value));
+  const payload = new TextEncoder().encode(JSON.stringify(value));
 
   if (payload.length > 65535) {
     throw new RangeError("test request exceeds the short frame limit");
@@ -213,8 +213,10 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
       }
     }
   });
+  // A JSON-RPC 2.0 id only has to be unique among this client's open requests.
+  let calls = 0;
   const call = Effect.fnUntraced(function* (method: string, params: unknown) {
-    const id = crypto.randomUUID();
+    const id = `call-${++calls}`;
     socket.write(encode({ jsonrpc: "2.0", id, method, params }));
     return yield* next((value) => value.id === id);
   });
@@ -241,13 +243,22 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
   };
 });
 
+/** A local binding's calls, as the dev command sees them. */
+type Binding = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
+
 const invoke = Effect.fn("RevokeTest.control")(function* (
-  binding: object,
+  binding: Binding,
   method: string,
   args: ReadonlyArray<unknown>,
 ) {
+  const target = binding[method];
+
+  if (target === undefined) {
+    return yield* new WireFailure({ cause: new Error(`the binding has no ${method} call`) });
+  }
+
   return yield* Effect.tryPromise({
-    try: () => Reflect.apply(Reflect.get(binding, method), binding, args),
+    try: () => Reflect.apply(target, binding, args),
     catch: (cause) => new WireFailure({ cause }),
   });
 });
@@ -380,7 +391,14 @@ it.live(
         const { instance, old: oldKey, other: otherKey, root, pid } = fixture;
         const project = instance.project(RevokeTest.PROJECT);
         // The private Alchemy binding already implements the project's public ledger-call protocol.
-        const ledger = LedgerRemote.layer(project as LedgerCalls, { reader: "p17b-revoke-audit" });
+        const { append, read, wait } = project;
+
+        if (append === undefined || read === undefined || wait === undefined) {
+          return yield* Effect.die(new Error("the project binding has no ledger calls"));
+        }
+
+        const calls: LedgerCalls = { append, read, wait };
+        const ledger = LedgerRemote.layer(calls, { reader: "p17b-revoke-audit" });
         const rows = (stream: string) =>
           Ledger.use((service) => Stream.runCollect(service.read(stream, 0))).pipe(Effect.provide(ledger));
         const old = yield* RevokeTest.connect(instance.url, oldKey, "old");
