@@ -659,7 +659,8 @@ a class with only static members, which a class that extends `Context.Service` n
 is ours.
 
 **First-day count.** Replayed over all of `next/` on 2026-11-14, at `c0aaf4a24`, with the list
-widened to `next/**` in a scratch copy of the config and tests left out: 470 files, **26 fires, all
+widened to `next/**` in a scratch copy of the config and tests left out: oxlint read all 470 `.ts`
+and `.tsx` files in `next/`, tests included, and the rule ran on the 195 that are not tests. **26 fires, all
 read by hand, all real**: every one is a static member of a class that extends `Context.Service`.
 The plan's hand count was 27; the 27th, `access/SessionManager.ts:63` `static sign`, sits on
 `SavedInput`, which extends `Schema.Opaque`, so it is not a service class and the rule is right to

@@ -31,22 +31,48 @@ const SPELLINGS = {
 
 type Spelling = keyof typeof SPELLINGS;
 
-/** What the class extends. Only `service` makes it a service class (B1's cases 2 and 3). */
-type Base = "service" | "taggedError" | "opaque" | "none" | "local";
+/**
+ * What the class extends. Only `service` makes it a service class (B1's cases 2 and 3). The four
+ * look-alikes reach a `.Service` or a `Service` that is not Effect's `Context`: a `Context` from
+ * another package (alchemy's `Plugin.Service` in `node/dev/ControlPlugin.ts` is the real one), a
+ * `Service` from a module other than `effect/Context`, another member of the `effect` barrel, and a
+ * local `Context`.
+ */
+type Base =
+  | "service"
+  | "taggedError"
+  | "opaque"
+  | "none"
+  | "local"
+  | "foreignContext"
+  | "foreignService"
+  | "barrelOther"
+  | "localContext";
 
-const heritage = (base: Base, spelling: Spelling, name: string): string => {
+/** A class's `extends` clause, and the import line that stands in for the spelling's, if any. */
+const heritage = (base: Base, spelling: Spelling, name: string): { readonly line?: string; readonly text: string } => {
+  const shape = `<${name}, { readonly n: number }>()("t/${name}")`;
+
   switch (base) {
     case "service":
-      return ` extends ${SPELLINGS[spelling].callee}<${name}, { readonly n: number }>()("t/${name}")`;
+      return { text: ` extends ${SPELLINGS[spelling].callee}${shape}` };
     case "taggedError":
-      return ` extends Schema.TaggedError<${name}>()("${name}", {})`;
+      return { text: ` extends Schema.TaggedError<${name}>()("${name}", {})` };
     case "opaque":
-      return ` extends Schema.Opaque<${name}>()(Schema.Struct({}))`;
+      return { text: ` extends Schema.Opaque<${name}>()(Schema.Struct({}))` };
     case "none":
-      return "";
+      return { text: "" };
     // A local `Local.Service` that is not Effect's: the same shape, bound to nothing imported.
     case "local":
-      return ` extends Local.Service<${name}, {}>()("t/${name}")`;
+      return { text: ` extends Local.Service${shape}` };
+    case "foreignContext":
+      return { line: 'import { Context } from "alchemy";', text: ` extends Context.Service${shape}` };
+    case "foreignService":
+      return { line: 'import { Service } from "alchemy/Context";', text: ` extends Service${shape}` };
+    case "barrelOther":
+      return { line: 'import * as Fx from "effect";', text: ` extends Fx.Schema.Service${shape}` };
+    case "localContext":
+      return { line: "declare const Context: any;", text: ` extends Context.Service${shape}` };
   }
 };
 
@@ -70,7 +96,17 @@ const FORMS: ReadonlyArray<readonly [(n: string) => string, boolean]> = [
 const NAMES = ["layer", "make", "sign", "memory", "sql", "withLoader"] as const;
 
 const generated = fc.record({
-  base: fc.constantFrom<Base>("service", "taggedError", "opaque", "none", "local"),
+  base: fc.constantFrom<Base>(
+    "service",
+    "taggedError",
+    "opaque",
+    "none",
+    "local",
+    "foreignContext",
+    "foreignService",
+    "barrelOther",
+    "localContext",
+  ),
   spelling: fc.constantFrom<Spelling>("named", "renamed", "namespace", "barrel", "service"),
   // B1's case 5: a class expression is read as a declaration is.
   expression: fc.boolean(),
@@ -82,9 +118,10 @@ const generated = fc.record({
 it("fires exactly on the static members of a class that extends Context.Service, in every import spelling", () => {
   fc.assert(
     fc.property(generated, ({ base, spelling, expression, members }) => {
-      const open = `class Retries${heritage(base, spelling, "Retries")} {`;
+      const extended = heritage(base, spelling, "Retries");
+      const open = `class Retries${extended.text} {`;
       const head = [
-        SPELLINGS[spelling].line,
+        extended.line ?? SPELLINGS[spelling].line,
         'import { Schema } from "effect";',
         "declare const Local: any;",
         expression ? `export const Retries = ${open}` : `export ${open}`,
