@@ -12,6 +12,9 @@ const ErrorClass = Schema.NonEmptyString.check(Schema.isMaxLength(256));
 /**
  * Why a process ended, as OTP keeps it: `normal`, `shutdown`, `kill`, or `crashed` with the phase that
  * failed and the captured error class. Never an exception's message or stack.
+ *
+ * @stability unstable
+ * @category schemas
  */
 export const ExitReason = Schema.TaggedUnion({
   normal: {},
@@ -30,8 +33,20 @@ export const ExitReason = Schema.TaggedUnion({
  */
 export type ExitReason = typeof ExitReason.Type;
 
-/** Two reasons are the same exit when their fields are, wherever each copy came from. */
+/**
+ * Equivalence under which two exit reasons are the same exit when their fields are, wherever each
+ * copy came from.
+ *
+ * @stability unstable
+ * @category guards
+ */
 export const sameReason = Schema.toEquivalence(ExitReason);
 
-/** Untrusted input to one exit reason; a string, an unknown tag or an extra field is refused. */
+/**
+ * Decodes untrusted input to one exit reason, as a `Result`. A string, an unknown tag or an extra
+ * field is refused.
+ *
+ * @stability unstable
+ * @category decoding
+ */
 export const decodeExitReason = Schema.decodeUnknownResult(ExitReason, { onExcessProperty: "error" });
