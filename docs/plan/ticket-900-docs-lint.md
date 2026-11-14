@@ -3,6 +3,20 @@ Plancheck-Version: 3
 
 # Plan for ticket 900: a lint rule holds E6, every public export in a `next/` library has its doc block
 
+> **Replaced in part.** The merged plan
+> [Plan B, section "B2: the docs rule"](./effect-rules-big.md#b2-the-docs-rule) replaces the start
+> of this draft and keeps the rest: the tools looked at, the rule's shape, its edge cases, laws 1 to
+> 9 and the false-alarm proof.
+>
+> - **Goes:** every use of `next-ledger.json`, which 0168 deletes. That is the 833 first-day
+>   entries, the file's row in the files table, steps 4 and 5 of the trace, open question 1, and
+>   the finding about list files that can grow unseen.
+> - **The order changes:** the doc blocks are written first, module by module, and the rule turns
+>   on for a folder once that folder is at zero. This draft turned the rule on first and filled
+>   after.
+>
+> Where this draft and B2 differ, B2 wins.
+
 Everything here is about `next/` and the repo's lint tooling. Today's version is not changed.
 A draft. Nothing is built.
 
