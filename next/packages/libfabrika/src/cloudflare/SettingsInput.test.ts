@@ -77,6 +77,8 @@ describe("shared Worker settings reader, next/", () => {
               version: "0.0.0",
               gatewayLimit: StartsTest.rateLimit.limit,
               gatewayWindow: StartsTest.rateLimit.window,
+              // fabsh slice 1: drafts spend a budget of their own; no start fixture names one, so its default.
+              gatewayDraftLimit: 1_200,
               brainThrottle: current.settings.values["desktop.brain-throttle"],
               brainPoll: current.settings.values["desktop.brain-poll"],
               brainStartTimeout: current.settings.values["desktop.brain-start-timeout"],

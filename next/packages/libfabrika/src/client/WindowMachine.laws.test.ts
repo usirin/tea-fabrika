@@ -2069,9 +2069,12 @@ const draftMoves = (w: DraftWorld, c: DraftPick): ReadonlyArray<() => WindowMsg>
     );
   }
 
-  // The dial ends.
-  if (dial !== null && c.move % 9 === 0) {
-    out.push(() => ({ type: "closed", dial, code: 1006, fingerprint: "SHA256:k", ms: c.ms }));
+  // The dial ends, offered on a draw of its own: one tied to `move` is never the move `move` picks.
+  // While a draft call is in flight it is offered more often, so a walk drops one with its dial.
+  const closes = dial === null ? 0 : w.flying.length > 0 ? (c.ms % 3 === 0 ? 4 : 0) : c.ms % 7 === 0 ? 1 : 0;
+
+  for (let n = 0; n < closes; n++) {
+    out.push(() => ({ type: "closed", dial: dial!, code: 1006, fingerprint: "SHA256:k", ms: c.ms }));
   }
 
   return out;

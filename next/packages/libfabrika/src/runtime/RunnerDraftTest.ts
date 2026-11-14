@@ -225,8 +225,12 @@ const Move = Arbitrary.all({
 type Move = typeof Move extends Arbitrary.Arbitrary<infer A> ? A : never;
 const Walk = Arbitrary.array(Move, { minLength: 3, maxLength: 16 });
 
-/** A marker word planted in every draft, so a copy of draft text anywhere shows. */
-const marked = (m: Move) => `zq${m.pick}~${m.text.replace(/zq/g, "")}`.slice(0, MOST);
+/** A marker planted in every draft, so a copy of draft text anywhere shows. Its `~` is in no base64,
+ *  hex or id alphabet and it is 18 characters long, so no random key or id the stores write holds it. */
+const MARK = "~fabsh~draft~mark~";
+
+/** A draft text the program's check accepts (L8 covers the refused ones): the marker, then no newline. */
+const marked = (m: Move) => `${MARK}${m.pick}${m.text.replace(/\n/g, " ")}`.slice(0, MOST);
 
 export const suite = (harness: Harness) =>
   describe("fabsh slice 1: the runner's draft, next/", () => {
@@ -241,7 +245,7 @@ export const suite = (harness: Harness) =>
 
             for (const m of moves) {
               if (m.pick % 3 === 0) {
-                expect((yield* w.submit(m.line.replace(/zq/g, "")))._tag).toBe("accepted");
+                expect((yield* w.submit(m.line.replaceAll(MARK, "")))._tag).toBe("accepted");
                 continue;
               }
 
@@ -265,8 +269,8 @@ export const suite = (harness: Harness) =>
               expect(yield* drafting(w.runner())({ text, cursor: 0, n: 0 })).toEqual({ ok: { text, cursor: 0, n: 0 } });
             }
 
-            expect(w.rows().includes("zq"), "a database holds draft text").toBe(false);
-            expect(JSON.stringify(w.published).includes("zq"), "a published view holds draft text").toBe(false);
+            expect(w.rows().includes(MARK), "a database holds draft text").toBe(false);
+            expect(JSON.stringify(w.published).includes(MARK), "a published view holds draft text").toBe(false);
           }),
         ),
       { timeout: 50 * 10_000, arbitrary: { seed: SEED, runs: 200 } },

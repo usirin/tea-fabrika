@@ -281,6 +281,10 @@ const Submitted = Schema.TaggedStruct("submitted", { line: Schema.String });
 
 const reason = (a: typeof Answer.Type) => (a._tag === "refused" ? a.reason : a._tag);
 
+/** A marker planted in every draft, so a copy of draft text anywhere shows. Its `~` is in no base64,
+ *  hex or id alphabet and it is 18 characters long, so no random key the door writes holds it. */
+const MARK = "~fabsh~draft~mark~";
+
 /** Every row of every table of `sql`, as text. */
 const dump = (sql: Sql): string =>
   JSON.stringify(
@@ -353,12 +357,12 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
         const w = yield* world(open, { main: 1000, draft: 1000 });
 
         for (const [n, t] of texts.entries()) {
-          const text = `zq${n}~${t.replace(/zq/g, "")}`;
+          const text = `${MARK}${n}${t}`;
           const answer = yield* draft(w, w.first, { text, cursor: 0, n });
           expect(answer._tag, "the draft was echoed").toBe("ok");
         }
 
-        expect(dump(w.store.sql).includes("zq"), "the door's database holds draft text").toBe(false);
+        expect(dump(w.store.sql).includes(MARK), "the door's database holds draft text").toBe(false);
       }).pipe(Effect.scoped),
     { arbitrary: { seed: SEED, runs: 200 } },
   );

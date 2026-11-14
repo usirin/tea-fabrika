@@ -92,7 +92,11 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
       key: (letter) => run(() => field.press(letter)),
       retype: (line) => run(() => field.fill(line)),
       enter: run(() => field.press("Enter")),
-      drawn: run(() => region.locator("[aria-hidden='true']").first().innerText()).pipe(Effect.map((t) => t.trim())),
+      // The span layer by the contract L3 holds: the aria-hidden element whose children carry `data-role`.
+      // A tile's frame has aria-hidden parts of its own (its dot), so "the first aria-hidden" is not it.
+      drawn: run(() => region.locator("[aria-hidden='true']:has(> [data-role])").innerText()).pipe(
+        Effect.map((t) => t.trim()),
+      ),
       unechoed: Effect.sync(() => held.waiting.length > 0),
       description: describedBy(page),
       scroll: run(() => region.getByRole("log").innerText()).pipe(
