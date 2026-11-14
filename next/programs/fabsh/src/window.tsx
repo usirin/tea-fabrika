@@ -83,6 +83,16 @@ const FabshWindow = ({ data: view, tile: own, send }: Props) => {
 
   const edited = (el: HTMLInputElement) =>
     send({ type: "edited", text: el.value, cursor: el.selectionStart ?? el.value.length });
+  // A select is only a cursor move: React fires it on focus and in the same keydown as a recall,
+  // before the input shows the model's new line, so it never carries text and moves only a cursor
+  // that really moved.
+  const moved = (el: HTMLInputElement) => {
+    const at = el.selectionStart ?? el.value.length;
+
+    if (el.value === line.text && at !== line.cursor) {
+      send({ type: "edited", text: line.text, cursor: at });
+    }
+  };
 
   return (
     <div className="fabsh">
@@ -129,7 +139,7 @@ const FabshWindow = ({ data: view, tile: own, send }: Props) => {
             maxLength={LINE_MOST}
             value={line.text}
             onChange={(event) => edited(event.target)}
-            onSelect={(event) => edited(event.currentTarget)}
+            onSelect={(event) => moved(event.currentTarget)}
             onBlur={() => send({ type: "blurred" })}
             onKeyDown={(event) => {
               if (event.key === "Tab" && !event.shiftKey) {

@@ -37,11 +37,8 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
     bootstrap: [
       { name: "counter:1", id: "counter:1", program: "fabrika/counter" },
       { name: "checklist:1", id: "checklist:1", program: "fabrika/checklist" },
-      // The seam until the desk starts fabsh as a new tile's default process (0275). Booted only when
-      // this build carries the program, so a build of fewer programs boots what it has.
-      ...(Object.hasOwn(programs, "fabrika/fabsh")
-        ? [{ name: "fabsh:1", id: "fabsh:1", program: "fabrika/fabsh" }]
-        : []),
+      // The seam until the desk starts fabsh as a new tile's default process (0275).
+      { name: "fabsh:1", id: "fabsh:1", program: "fabrika/fabsh" },
     ],
     door: (options) =>
       Effect.gen(function* () {
