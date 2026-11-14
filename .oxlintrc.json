@@ -634,6 +634,7 @@
         "fabrika/no-effect-run-outside-edge": "error",
         "fabrika/edge-comment": "error",
         "fabrika/effect-functions": "error",
+        "fabrika/no-cause-squash": "error",
         "fabrika/no-of": "error",
         // A question word is never a name (0081). oxlint's own rule holds every name written as an
         // identifier; ours holds a quoted, computed or template key, which it does not decode.
@@ -711,6 +712,7 @@
         "fabrika/no-effect-run-outside-edge": "error",
         "fabrika/edge-comment": "error",
         "fabrika/effect-functions": "error",
+        "fabrika/no-cause-squash": "error",
         "fabrika/no-of": "error",
         // A question word is never a name (0081). oxlint's own rule holds every name written as an
         // identifier; ours holds a quoted, computed or template key, which it does not decode.
@@ -841,6 +843,18 @@
       // Shared law suites and helpers contain fixture machines, not exported product machines.
       "files": ["next/**/*Test.ts", "next/**/*.test-support.ts"],
       "rules": { "fabrika/one-machine-per-file": "off" }
+    },
+    {
+      // A test reads a failed `Exit` whole to assert on it, so tests, shared suites (0062) and test
+      // support may squash a cause. Product code may not: the `next/**` block above holds it.
+      "files": [
+        "next/**/*.test.ts",
+        "next/**/*.test.tsx",
+        "next/**/*Test.ts",
+        "next/**/*.test-support.ts",
+        ".agents/**/*.test.ts"
+      ],
+      "rules": { "fabrika/no-cause-squash": "off" }
     },
     {
       // A resource is released by the scope that acquired it, never by an after-hook that a thrown

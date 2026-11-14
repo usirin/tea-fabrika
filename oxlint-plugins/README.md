@@ -627,3 +627,45 @@ Paths below are relative to `oxlint-plugins/`, except `.oxlintrc.json`.
 
 All property replays used seed 119120. Every replay ran on Node 26.13.0 with one Vitest worker.
 The box refused `nice`'s priority change, so subsequent test commands ran without it.
+
+## No `Cause.squash`, ticket 907
+
+`no-cause-squash` refuses every use of Effect's `Cause.squash` in `next/` product code and in
+`.agents/` (E2 of [the Effect code guidelines](../docs/direction/effect-code-guidelines.md),
+decision 0168). A squashed cause is one unknown value, and the next line then has to ask what it
+is. Read the typed failure with `Cause.findErrorOption` or `Exit.findErrorOption`, and a thrown
+value with `Cause.findDefect`.
+
+It resolves the file's own imports, so it reads `Cause` from `effect` under any name, `effect/Cause`
+and the `effect` barrel as a namespace, a plain, optional or string member, a reference with no
+call, `const { squash } = Cause`, and `squash` imported by name, which fires once at the import.
+Another object's `squash`, a local or a parameter named `Cause`, a comment, a string and a type
+position pass. It misses an alias made at run time (`const c = Cause; c.squash(x)`) and a
+re-export. An edge that must name whatever failed takes
+`// oxlint-disable-next-line fabrika/no-cause-squash -- edge: <why>`, and an edge comment over a
+line with no squash fails as an unused directive.
+
+Tests, shared suites (`*Test.ts`) and test support (`*.test-support.ts`) are left out by one
+override in `.oxlintrc.json`: a test reads a failed `Exit` whole to assert on it. `.agents/` is held
+because its rule block repeats `next/**`'s (0033).
+
+Tools looked at first (0040), neither used:
+
+| Tool | Why not |
+|---|---|
+| oxlint's [`no-restricted-properties`](https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-restricted-properties) | `lint.ts` decides advice by rule code, and this rule's code only advises, for `JSON.parse`. It also misses `import { squash } from "effect/Cause"` |
+| oxlint's [`no-restricted-imports`](https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-restricted-imports) | It bans a named import, not a member read on a namespace, and every site reads `Cause.squash` |
+
+First-day count, 2026-11-13, on main at `c0aaf4a24`, one oxlint run over `next`, `.agents`,
+`oxlint-plugins`, `packages`, `programs` and `apps` with the repo's config, each fire read by hand:
+**10 fires in 8 files, 10 real, 0 false alarms**, all under `next/packages/libfabrika/src/`:
+`cloudflare/connection.ts:150`, `cloudflare/runtime.ts:346`, `cloudflare/tail.ts:57` and `:82`,
+`ledger/internal/ledgerStore.ts:273`, `runtime/Runner.ts:844` and `:1823`, `telemetry/Sink.ts:157`,
+`transport/Answer.ts:62` and `transport/Connection.ts:178`. A text search for `Cause.squash` in the
+same product files finds the same 10 lines, so none was missed. `.agents/` has 0. The 28 uses in 19
+test files of `next/` stay. The rule joins as an error with no ledger entry: the same pull request
+fixes all 10.
+
+`no-cause-squash.test.ts` holds the laws. Law 2 is a property through oxlint's `RuleTester`: an
+import spelling, uses and neighbors that must pass, 100 runs, seed 119120. Law 3 is one real oxlint
+run over one planted file per path kind, with the repo's config.
