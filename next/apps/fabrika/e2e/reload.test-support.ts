@@ -13,6 +13,7 @@ import { ChildProcess } from "effect/process";
 import { localInstance } from "../src/local-instance.ts";
 import { heldPort } from "../src/port.test-support.ts";
 import * as RecordWireTest from "../src/record-wire.test-support.ts";
+import { programs as selected } from "../src/table.ts";
 
 export const APP = new URL("..", import.meta.url).pathname.replace(/\/$/, "");
 export const ROOT = new URL("../../../..", import.meta.url).pathname.replace(/\/$/, "");
@@ -52,7 +53,9 @@ export const fixture = Effect.gen(function* () {
   return { home, file, write, relative: "counter/src/program.ts" };
 });
 
-/** Start and watch use the same root, entry and selection, so unchanged bytes have one hash. */
+/** Start and watch use the same root, entry and selection, so unchanged bytes have one hash. The
+ *  selection is the app's table with the counter swapped for the copy, as `src/build.ts` swaps a
+ *  program, so every program the brain boots is built. */
 export const fixtureBuild = Effect.fnUntraced(function* (
   copy: Pick<Effect.Success<typeof fixture>, "home" | "file">,
   out: string,
@@ -60,7 +63,7 @@ export const fixtureBuild = Effect.fnUntraced(function* (
   const watch = {
     root: copy.home,
     entry: `${APP}/src/brain.ts`,
-    programs: [{ name: PROGRAM, package: copy.file, export: "program" }],
+    programs: [...selected.filter((p) => p.name !== PROGRAM), { name: PROGRAM, package: copy.file, export: "program" }],
   };
   const built = yield* build({ ...watch, out, files: [], ledger: [], chaos: false });
   return { ...built, watch };
