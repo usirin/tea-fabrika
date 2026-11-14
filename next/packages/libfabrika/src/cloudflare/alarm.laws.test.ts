@@ -15,6 +15,7 @@ import { Alarm } from "../runtime/Entry.ts";
 import { ProgramRunner, Sent } from "../runtime/Runner.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
+import * as ProcessObject from "./ProcessObject.ts";
 import { processRuntime } from "./runtime.ts";
 
 type State = Parameters<typeof processRuntime>[0];
@@ -355,8 +356,6 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
             {},
             { get: (_target, key) => (key === "settingsStart" ? async () => StartsTest.reply(start) : unexpected()) },
           );
-          // The builder's file: read through its module when the law runs, so A1 runs without it.
-          const ProcessObject = yield* Effect.promise(() => import("./ProcessObject.ts"));
           ProcessObject.layer({ programs: {} });
           const constructor = platform<Constructor>(Option.getOrThrow(Option.fromUndefinedOr(made.value)));
           const state = fromDurableObjectState(
@@ -373,7 +372,7 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
           });
           const context = platform<RuntimeContext["Service"]>({});
           const object = yield* constructor.pipe(
-            Effect.flatMap((build) => build),
+            Effect.flatten,
             Effect.provideService(WorkerEnvironment, environment),
             Effect.provideService(ObjectState, state),
             Effect.provideService(RuntimeContext, context),
