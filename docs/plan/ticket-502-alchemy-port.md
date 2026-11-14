@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds 0041 and 0042; the owner answered its open question on 2026-11-13; body 7e12becf7583
 Plancheck-Version: 3
 
 # Ticket 502: the rest of the Alchemy port
@@ -41,11 +41,12 @@ flowchart LR
   name a raw platform type in 9 files, and `bundle: false` in the stack.
 - **The object slices change the shell only.** Each service keeps its code and its laws, as
   `RecordPart` did. The storage turn and the raw state move later, in S5 and S6.
-- **One question goes to the owner.** It is in [Open questions](#open-questions), and it holds
-  only the last slice.
+- **The one question for the owner is answered.** Both instances keep the same bytes from one
+  build; the answer is in [Decided here](#decided-here). It holds only the last slice.
 
 How sure: 90% on the counts, made today with the commands below. 75% on the slice order. 55% that
-S8 lands as 0041 wrote it; the first open question is about that.
+S8 lands as 0041 wrote it; the owner's answer under [Decided here](#decided-here) says what lands
+if it cannot.
 
 ## What is done and what is left
 
@@ -247,7 +248,17 @@ What each slice changes in that picture:
 
 ## Decided here
 
-Each is a choice a decided note already answers, so it is not a question.
+Each is a choice a decided note already answers, so it is not a question. The first is the
+owner's own answer.
+
+- **Both instances still get the same bytes from one build, once Alchemy bundles the brain (the
+  owner's answer of 2026-11-13).** 0041's amendment has Alchemy bundle the brain at the end, while
+  the Tier 1 detail serves the brain "byte for byte on both instances" and a law holds "no
+  rebundle" today. The build's hash is in every door hello and every loaded
+  program's id, so two bundles of one source would be two builds. S8 lands only if S0 shows one
+  Alchemy bundle that both instances take. If it cannot, `bundle: false` stays as one marked edge,
+  and the rest of S8 still lands. The cost: 0041's end state may be one line short. S0's third
+  question settles which way it goes.
 
 - **`Control` and the default `fetch` move, in this port.** 0041's second amendment and 0042's
   amendment of 2026-11-10 decide it. 0181 asked this plan to bring it to the owner only if no note
@@ -546,15 +557,9 @@ Estimate: 31 steps, $56
 
 ## Open questions
 
-1. **When Alchemy bundles the brain, must both instances still get the same bytes from one
-   build?** 0041's amendment says Alchemy bundles the brain at the end. The Tier 1 detail says the
-   brain is "served byte for byte on both instances", and a law holds "no rebundle" today. Both
-   cannot stay as written. Lean: yes, keep the same bytes. S8 lands only if S0 shows one Alchemy
-   bundle that both instances take; if it cannot, `bundle: false` stays as one marked edge and
-   the rest of S8 still lands. Why: the build's hash is in every door hello and every loaded
-   program's id, so two bundles of one source would be two builds. Cost: 0041's end state may be
-   one line short. How sure: 70%. The doubt is whether Alchemy can hand one bundle to two stacks;
-   S0's third question settles it. It holds only S8: S0 to S7 do not need its answer.
+None.
+
+The one question this plan had, whether both instances still get the same bytes once Alchemy bundles the brain, was answered by the owner on 2026-11-13, and the answer is the first item under [Decided here](#decided-here).
 
 ## Findings
 
