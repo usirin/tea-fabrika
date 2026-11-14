@@ -103,6 +103,12 @@ before `fabsh` is built, and S2 to S7 before `summon`; say yes after reading `al
 the first cloud deploy. The other open calls are listed in
 [the section](./tier-1.md#the-owners-walks-and-decisions-by-step), each tied to its step.
 
+*2026-11-12:* P19 slice 1, tracker ticket 881, is built on its branch in `next/`, awaiting
+review: the brain-service contracts, lifecycle machine and launchd adapter. The box checks only controlled services;
+the real launchd and Electron restart and cleanup check remains with the host lead.
+P19 stays open. Slice 2 adds sealed identities and founding storage, then slice 3 builds
+the Electron client and recovery with both windows.
+
 *2026-11-12:* ticket 893 slice 1 in `next/` saves process view watchers across object sleep
 and removes a watch on publish after its Project route leaves. Unknown delivery failures retain
 membership. [The storage pattern](../../.patterns/durable-objects-sleep.md). This finishes no
@@ -116,6 +122,12 @@ Brain letters under `noticeId(...)` reach a program without an input port. Clien
 refuse those ids; a refused or throwing notice is skipped and counted on its span.
 The tile and dismissal on each device are slice 2; the gateway's delivery is slice 3. Those slices
 wait on the owner. This finishes no Tier 1 row, so the merged count stays 21 of 44.
+
+*2026-11-12:* P21 slice 1, tracker ticket 887, builds `next/`'s menu bar extra machine,
+pure `Menu.view`, `PersonCheck` contract and declared `desktop.link-ttl`. The check keeps
+the row shown at the click, and browser passes expire and work once. It draws nothing and
+starts no Electron or gateway work. P21 stays open for slices 2 to 4; the finished-row count
+stays 21 of 44.
 
 *2026-11-12:* P17, Tier 1's chaos row, is done in `next/`: P17b's third slice, the checklist faults
 and the real local p90 revoke, merged as [PR 1058](https://github.com/usirin/tea-fabrika/pull/1058), and p90 passes on main. That makes

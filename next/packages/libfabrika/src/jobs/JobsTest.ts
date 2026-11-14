@@ -5,14 +5,16 @@
 // cut lands on a transition that is legal there. The oracle is this file's own record of what each
 // call was given and answered, never the product's machine.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Result as R, type Scope } from "effect";
+import { Effect, Layer, Result as R, type Scope, Schema, Arbitrary, Stream } from "effect";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
+import { LedgerStreams, LedgerStreamsError, Storage } from "../ledger/LedgerStreams.ts";
+import * as LedgerStreamsSql from "../ledger/LedgerStreamsSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import type { Sql } from "../Sql.ts";
-import { Command, type Executor, type Job, type Recorded, type Request, Result, State } from "./Job.ts";
+import { Command, type Executor, type Job, Request, Recorded, Result, State } from "./Job.ts";
 import { Jobs, JobsError } from "./Jobs.ts";
 import * as JobsLedger from "./JobsLedger.ts";
 
@@ -342,9 +344,11 @@ const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 const layer = (sql: Sql) =>
   JobsLedger.layer.pipe(
     Layer.provide(
-      Layer.mergeAll(LedgerSql.layer(sql, { reader: "connection:jobs-test" }), LedgerTransactionSql.layer(sql)).pipe(
-        Layer.provide(quiet),
-      ),
+      Layer.mergeAll(
+        LedgerSql.layer(sql, { reader: "connection:jobs-test" }),
+        LedgerTransactionSql.layer(sql),
+        LedgerStreamsSql.layer(sql),
+      ).pipe(Layer.provide(quiet)),
     ),
     Layer.provide(Id.Generator.layer),
   );
@@ -821,3 +825,140 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["bad", "request_new", "take_ok"],
     );
   });
+
+// A5: IDs intentionally disagree with request.process; the saved request decides membership.
+export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
+  it.effect(
+    "A5: process discovery keeps every saved job through page crossings and reopen",
+    () =>
+      Effect.gen(function* () {
+        const done = new Set<string>();
+        const measured = { scans: 0, queries: 0, rows: 0, jobs: 0 };
+        const tape = Schema.Struct({
+          request: Schema.Struct({ ...Request.fields, process: Id.Process }),
+          recorded: Recorded,
+          cells: Schema.Array(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))).check(
+            Schema.isMinLength(8),
+            Schema.isMaxLength(40),
+          ),
+          total: Schema.Int.check(Schema.isGreaterThanOrEqualTo(257), Schema.isLessThanOrEqualTo(530)),
+        });
+        const check = Effect.fnUntraced(function* (a: typeof tape.Type) {
+          const raw = yield* open;
+          const work = { queries: 0, rows: 0 };
+          const sql: Sql = {
+            exec: (query, ...params) => {
+              const rows = raw.sql.exec(query, ...params);
+              work.queries++;
+              work.rows += rows.length;
+              return rows;
+            },
+            transaction: (step) => raw.sql.transaction(step),
+            size: () => raw.sql.size(),
+          };
+          const store = { ...raw, sql };
+          let life = yield* Layer.build(layer(store.sql));
+          const call = <A, E>(f: (j: Jobs["Service"]) => Effect.Effect<A, E>) => Jobs.use(f).pipe(Effect.provide(life));
+          const wanted = a.request.process;
+          const other = wanted.replace(/.$/, (last) => (last === "0" ? "1" : "0"));
+          const said = { ...a.recorded, seen: 0 };
+          const expected = new Map<string, Job>();
+
+          for (let n = 0; n < a.total; n++) {
+            const request = { ...a.request, id: `opaque-${n}`, process: n % 3 === 0 ? other : wanted };
+            yield* call((j) => j.request(request, said));
+            expected.set(request.id, yield* call((j) => j.read(request.id)));
+          }
+
+          for (const choice of a.cells) {
+            const owned = [...expected.entries()].filter(([, j]) => j.state._tag === "requested");
+            const move = choice % (owned.length > 0 ? 3 : 2);
+
+            if (move === 0) {
+              yield* store.reopen;
+              life = yield* Layer.build(layer(store.sql));
+              done.add("reopen");
+            } else if (move === 2) {
+              const [id, saved] = choose(owned, choice);
+
+              if (saved.state._tag === "requested") {
+                yield* call((j) =>
+                  j.take(
+                    id,
+                    {
+                      key: saved.state._tag === "requested" ? saved.state.request.target : "",
+                      connection: "discovery",
+                      has: saved.state._tag === "requested" ? saved.state.request.needs : [],
+                      build: "hands",
+                    },
+                    said,
+                  ),
+                );
+                expected.set(id, yield* call((j) => j.read(id)));
+                done.add("taken");
+              }
+            }
+
+            for (const process of [wanted, other]) {
+              const before = { ...work };
+              const actual = yield* call((j) => Stream.runCollect(j.forProcess(process)));
+              measured.scans++;
+              measured.queries += work.queries - before.queries;
+              measured.rows += work.rows - before.rows;
+              measured.jobs += a.total;
+              const rows = [...actual];
+              const selected = [...expected.values()].filter(
+                (j) => j.state._tag !== "absent" && j.state.request.process === process,
+              );
+              const ids = (jobs: ReadonlyArray<Job>) =>
+                jobs.map((j) => (j.state._tag === "absent" ? "" : j.state.request.id)).sort();
+              expect(ids(rows)).toEqual(ids(selected));
+              expect(new Set(ids(rows)).size).toBe(rows.length);
+
+              for (const job of rows) {
+                expect(job).toEqual(expected.get(job.state._tag === "absent" ? "" : job.state.request.id));
+              }
+            }
+          }
+        });
+        const result = yield* Arbitrary.checkEffect(
+          Arbitrary.schema(tape),
+          (a) =>
+            Effect.scoped(check(a)).pipe(
+              Effect.as(true),
+              Effect.catchCause((cause) => Effect.fail(cause)),
+            ),
+          { seed: 119120, runs: 60, concurrency: 1 },
+        );
+        expect(result._tag, Arbitrary.formatCheckFailure(result)).toBe("Passed");
+        expect(done).toEqual(new Set(["reopen", "taken"]));
+        yield* Effect.logInfo("P39 process discovery work", measured);
+      }),
+    120_000,
+  );
+  it.effect.prop(
+    "A13: Jobs discovery keeps its own error and the lower cause",
+    { cause: Schema.String },
+    ({ cause }) =>
+      Effect.gen(function* () {
+        const store = yield* open;
+        const lower = new LedgerStreamsError({ reason: new Storage({ cause }) });
+        const dependencies = Layer.mergeAll(
+          Layer.succeed(LedgerStreams, { list: () => Stream.fail(lower) }),
+          LedgerSql.layer(store.sql, { reader: "jobs-discovery-error" }).pipe(Layer.provide(quiet)),
+          LedgerTransactionSql.layer(store.sql).pipe(Layer.provide(quiet)),
+          Id.Generator.layer,
+        );
+        const result = yield* Jobs.use((jobs) =>
+          Stream.runCollect(jobs.forProcess("process_01m6v5270hetdrt4r8h9vvjwjs")),
+        ).pipe(Effect.provide(JobsLedger.layer.pipe(Layer.provide(dependencies))), Effect.result);
+        expect(R.isFailure(result)).toBe(true);
+
+        if (R.isFailure(result)) {
+          expect(result.failure).toBeInstanceOf(JobsError);
+          expect(result.failure.cause).toBe(lower);
+        }
+      }).pipe(Effect.scoped),
+    { arbitrary: { seed: 119120, runs: 100 } },
+  );
+};

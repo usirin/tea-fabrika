@@ -1,3 +1,9 @@
+/**
+ * The local brain driver's two helpers on Node: the memory check that replaces a brain that grew
+ * too big, and the durable outbox for its lifecycle events.
+ *
+ * @stability unstable
+ */
 import { Effect, FileSystem, Path, Result, Schema, Semaphore } from "effect";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 
@@ -12,6 +18,18 @@ const PendingEvent = Schema.declare<typeof BrainEvent.Type>((raw): raw is typeof
   Result.isSuccess(Schema.decodeUnknownResult(BrainEvent, { onExcessProperty: "error" })(raw)),
 );
 
+/**
+ * Samples one process's memory and asks for a replacement when it holds 500 MB or more. Below
+ * that it does nothing.
+ *
+ * **Details**
+ *
+ * `sample` answers the bytes a pid holds. `replace` gets the reason, the pid and the bytes, and is
+ * the one that ends the process.
+ *
+ * @stability unstable
+ * @category combinators
+ */
 export const checkMemory = Effect.fn("brain.checkMemory")(function* <E, R>(options: {
   readonly pid: number;
   readonly sample: (pid: number) => Effect.Effect<number, E, R>;
@@ -24,6 +42,26 @@ export const checkMemory = Effect.fn("brain.checkMemory")(function* <E, R>(optio
   }
 });
 
+/**
+ * Creates the local brain's durable outbox: lifecycle events saved in `home` until the project has
+ * taken them.
+ *
+ * **Details**
+ *
+ * `add` checks an event and saves it. Adding the same event again changes nothing, and the same id
+ * with other content fails as `id_reused`. `flush` sends the saved events in order and drops each
+ * only after `send` succeeded, so an event is delivered at least once. `last` answers the newest
+ * start's id, kept in a file of its own so the next run can say which start it follows. One call
+ * runs at a time.
+ *
+ * **Gotchas**
+ *
+ * Every write goes to a temporary file that is synced and renamed, and then the folder is synced,
+ * so a crash leaves the old file or the new one, never half of one.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;

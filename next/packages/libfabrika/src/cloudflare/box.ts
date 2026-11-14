@@ -1,5 +1,6 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { Effect } from "effect";
+import * as Audit from "../runtime/Audit.ts";
 import { Declaration, type Execution, executionFailure, nodeExecution, Reply } from "../runtime/Execution.ts";
 import { ProgramDown, stepper } from "../runtime/Program.ts";
 
@@ -12,7 +13,7 @@ const checked = Effect.fnUntraced(function* <A>(work: Effect.Effect<A, ProgramDo
   );
 });
 
-const reply = Effect.fnUntraced(function* (execution: Execution, cmd: unknown, outcome: unknown) {
+const reply = Effect.fnUntraced(function* (execution: Pick<Execution, "reply">, cmd: unknown, outcome: unknown) {
   return yield* execution.reply(cmd, outcome).pipe(
     Effect.match({
       onSuccess: (value) => Reply.cases.ok.make({ value }),
@@ -22,7 +23,17 @@ const reply = Effect.fnUntraced(function* (execution: Execution, cmd: unknown, o
 });
 
 export const programBox = (declared: unknown, build: string) => {
-  const execution = nodeExecution(declared, build);
+  const program = nodeExecution(declared, build);
+  const execution = {
+    ...program,
+    audit: (msg: unknown) =>
+      program.audit(msg).pipe(
+        Effect.match({
+          onSuccess: (value) => Audit.Answer.cases.ok.make({ value }),
+          onFailure: Audit.failure,
+        }),
+      ),
+  };
   const declaration = Effect.fromResult(stepper(declared)).pipe(
     Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
     Effect.map((pure) =>
@@ -58,6 +69,21 @@ export const programBox = (declared: unknown, build: string) => {
     step(model: unknown, msg: unknown) {
       // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Worker Loader RPC must answer a Promise
       return Effect.runPromise(checked(execution.step(model, msg)));
+    }
+
+    fresh(model: unknown, msg: unknown) {
+      // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Worker Loader RPC must answer a Promise
+      return Effect.runPromise(checked(execution.fresh(model, msg)));
+    }
+
+    update(model: unknown, msg: unknown) {
+      // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Worker Loader RPC must answer a Promise
+      return Effect.runPromise(checked(execution.update(model, msg)));
+    }
+
+    audit(msg: unknown) {
+      // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Worker Loader RPC must answer a Promise
+      return Effect.runPromise(execution.audit(msg));
     }
 
     fold(model: unknown, msg: unknown) {

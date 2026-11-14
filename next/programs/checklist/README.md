@@ -59,15 +59,16 @@ input marked `personOnly: true` in `inputs` is refused by the runner when an age
 
 A program never reads a clock. `wake(model)` says when the program wants to hear the time next, in
 milliseconds since 1970, or `null` for never. When that time comes, the runner sends
-`{ type: "timer", at }` with its own clock, and the step reads `at`.
+`{ type: "timer", at, arrivedAt }`. `at` is the wake the program asked for; `arrivedAt` is the
+runner's clock when it delivered the timer. The step reads `arrivedAt` as the current time.
 
 The checklist answers:
 
 - `0` while any item is `new`: a time in the past, so the alarm fires at once and the timer stamps
-  every new item `open {since: at}`. An input's own `sentAt` is the sender's clock and decides
+  every new item `open {since: arrivedAt}`. An input's own `sentAt` is the sender's clock and decides
   nothing, so this is how an item gets a time it can trust.
 - else the oldest open item's `since` plus one day (`LATE`): that timer makes it `late`, exactly
-  when `at >= since + LATE`.
+  when `arrivedAt >= since + LATE`.
 - else `null`.
 
 ## The view, the query and the output
@@ -81,6 +82,21 @@ The checklist answers:
 - **Output `done`:** `finished(model)` is `{ items: [...names] }` once there is at least one item
   and every one is checked, else `null`. It is declared in `outputs`; the runner does not send
   outputs yet.
+
+## The window
+
+`@kampus/checklist/window` exports `checklistWindow`. Its `data` is `checklistView`, the schema
+that also types the program's view. The package's main entry stays free of React.
+
+The window shows each item's name, a box and its state in words, the count left and a remove
+button. Enter in the add field submits one `add` and clears the field. Its text lives in
+`src/tile.ts`, a child tea machine stepped by the window parent. It stays in that tab and is never
+saved as a record or shared with another tab. Boxes change only when the checked view arrives.
+
+The registration's `refused` function gives the program's words for `taken` and `missing`, naming
+the item. The parent keeps each tile's last refusal until its next press. The field describes that
+line, and the page says it once in its polite region. Unknown word reasons use `Not done (reason).`;
+free text uses `Not done.`. Keys and editing names arrive in a later slice.
 
 ## The agent's half
 

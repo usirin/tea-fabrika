@@ -12,6 +12,7 @@ import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
+import * as RecordWireTest from "./record-wire.test-support.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-09T04:00:00.000Z";
@@ -296,25 +297,27 @@ const world = async (
       yield* Effect.gen(function* () {
         // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
         const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
-        const instance = yield* localInstance(built, {
-          home,
-          name: PROJECT,
-          person: PERSON,
-          founder: key.line,
-          window: key.raw,
-          port: at.port,
-          rateLimit: { limit: 100_000, window: 60_000 },
-          mail: {
-            grants: granted
-              ? {
-                  "requester:1": ["responder:1"],
-                  "responder:1": ["requester:1"],
-                  "requester:2": ["responder:2"],
-                  "responder:2": ["requester:2"],
-                }
-              : {},
-          },
-        });
+        const instance = yield* localInstance(
+          built,
+          RecordWireTest.startupFixture({
+            home,
+            name: PROJECT,
+            person: PERSON,
+            founder: key.line,
+            window: key.raw,
+            port: at.port,
+            mail: {
+              grants: granted
+                ? {
+                    "requester:1": ["responder:1"],
+                    "responder:1": ["requester:1"],
+                    "requester:2": ["responder:2"],
+                    "responder:2": ["requester:2"],
+                  }
+                : {},
+            },
+          }),
+        );
         const scope = yield* Effect.scope;
         const from: From = {
           by: key.fingerprint,
@@ -716,15 +719,17 @@ const checklistWorld = async (
       const built = yield* build({ out: join(home, "dist"), programs: { "fabrika/checklist": wrapper } });
       const key = identity();
       const held = yield* Effect.acquireRelease(heldPort(), (port) => port.release);
-      const instance = yield* localInstance(built, {
-        home,
-        name: PROJECT,
-        person: PERSON,
-        founder: key.line,
-        window: key.raw,
-        port: held.port,
-        rateLimit: { limit: 100_000, window: 60_000 },
-      });
+      const instance = yield* localInstance(
+        built,
+        RecordWireTest.startupFixture({
+          home,
+          name: PROJECT,
+          person: PERSON,
+          founder: key.line,
+          window: key.raw,
+          port: held.port,
+        }),
+      );
       const scope = yield* Effect.scope;
       const from: From = {
         by: key.fingerprint,

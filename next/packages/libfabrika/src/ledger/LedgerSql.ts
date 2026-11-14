@@ -1,5 +1,9 @@
-// The Ledger as the referee in this process, on any `Sql`: in the project object, and on
-// node:sqlite in tests (0095). Tier 1, P6 (laws p18 to p20, p94 and p95).
+/**
+ * The `Ledger` as the referee in this process, on any `Sql`: in the project object, and on
+ * `node:sqlite` in tests (0095).
+ *
+ * @stability unstable
+ */
 import { Effect, Layer } from "effect";
 import type { Sql } from "../Sql.ts";
 import { pages } from "./internal/ledgerPages.ts";
@@ -7,8 +11,18 @@ import { type Doorbell, Ledger } from "./Ledger.ts";
 import { Referee } from "./Referee.ts";
 import * as RefereeSql from "./RefereeSql.ts";
 
-/** The referee in this process. `caller.reader` is the object's own name, such as
- *  `connection:t1`. */
+/**
+ * Layer that provides `Ledger` as the referee in this process, on the given `Sql`.
+ *
+ * **Details**
+ *
+ * It builds its own `Referee` over `sql` and asks only for a `Doorbell`. `read` pulls the
+ * referee's pages one after another as the Stream runs. `caller.reader` is the object's own name,
+ * such as `project:main`: the name a parked wait is rung under.
+ *
+ * @stability unstable
+ * @category layers
+ */
 export const layer = (sql: Sql, caller: { readonly reader: string }): Layer.Layer<Ledger, never, Doorbell> =>
   Layer.effect(
     Ledger,

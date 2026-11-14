@@ -1,3 +1,8 @@
+/**
+ * `Repositories` on Node, through the `git` command.
+ *
+ * @stability unstable
+ */
 import { Effect, Fiber, FileSystem, Layer, Path, Redacted, Schema, Stream } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -34,7 +39,28 @@ const safeConfig = [
   "protocol.ext.allow=never",
 ];
 
-/** Network commands use an empty bare Git directory, never the selected clone's transport config. */
+/**
+ * Layer that provides `Repositories` by running `git` as a child process.
+ *
+ * **Details**
+ *
+ * `open` asks the selected clone only for local facts: its root, its Git directory, its object
+ * format and its origin's address. Every command that reaches the network or reads objects runs
+ * in an empty bare Git directory made for the call, which borrows the clone's object store, so the
+ * clone's own config never steers a transport. Hooks are off for every command. It fetches the
+ * origin's default branch and pins the commit the origin advertised for it, and every later read
+ * names that commit. `options.person` is the person's fabrika folder, where a person file's source
+ * paths start.
+ *
+ * **Gotchas**
+ *
+ * Opening needs the origin to answer: with no `remote.origin.url`, or no way to reach it, it fails
+ * as `DefaultUnknown`. A root `fabrika.toml`, or a `.fabrika.jsonc` with no new settings file
+ * beside it, fails with a message that says where the file moved.
+ *
+ * @stability unstable
+ * @category layers
+ */
 export const layer = (options: { readonly person: string }) =>
   Layer.effect(
     Repositories,
