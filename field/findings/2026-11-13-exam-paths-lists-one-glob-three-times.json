@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-exam-paths-lists-one-glob-three-times",
+  "date": "2026-11-13",
+  "by": "plan",
+  "model": null,
+  "rule": "duplicate",
+  "location": {
+    "path": "exam-paths.json",
+    "line": 43
+  },
+  "says": "exam-paths.json lists the glob apps/fabrika/e2e.ts three times, each with a different why, so the list reads longer than it is and a reader cannot tell which why is current.",
+  "proof": "grep -n '\"apps/fabrika/e2e.ts\"' exam-paths.json on 59cb6a311 prints lines 34, 43 and 92, each with glob apps/fabrika/e2e.ts.",
+  "cost": "Small: dropping one of the three rows looks like removing an exam path when it is not, and the loosening read has to work that out by hand.",
+  "head": "59cb6a311b62cc6af2adc02d38aa26d41a84f120",
+  "ticket": "933",
+  "pr": "1201"
+}
