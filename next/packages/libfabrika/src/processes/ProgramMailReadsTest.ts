@@ -13,18 +13,13 @@ import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import type { Sql } from "../Sql.ts";
+import { property } from "../Testing.test-support.ts";
 import { type From, Mailbox } from "./Mailbox.ts";
 import { Owner, Recipient, Start } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
 import { type Grants, ProgramMail, type Receipt } from "./ProgramMail.ts";
 import * as ProgramMailLedger from "./ProgramMailLedger.ts";
 import type { Store } from "./ProgramMailTest.ts";
-
-const SEED = 119120;
-
-/** fast-check's own failure report, with its counterexample, as the law's typed failure. */
-class PropertyFailed extends Schema.TaggedError<PropertyFailed>()("PropertyFailed", { cause: Schema.Unknown }) {}
-const failed = (cause: unknown) => new PropertyFailed({ cause });
 
 const RUNS = 25;
 /** The largest history either law reaches: letters already in the outbox and the inbox. */
@@ -147,45 +142,38 @@ const accepted = (answer: Result.Result<Receipt, unknown>, message: string): Rec
   return Result.getOrThrow(answer);
 };
 
-/** Runs one law's property on fresh stores, `RUNS` times from the shared seed. */
-const property = <A>(arbitrary: fc.Arbitrary<A>, law: (value: A) => Effect.Effect<void, never, Scope.Scope>) =>
-  Effect.gen(function* () {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each walk
-    const checked = fc.asyncProperty(arbitrary, (value) => Effect.runPromise(Effect.scoped(law(value))));
-    const options = { seed: SEED, numRuns: RUNS, includeErrorInReport: true };
-    // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
-    yield* Effect.tryPromise({ try: () => fc.assert(checked, options), catch: failed });
-  });
-
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   describe("T936 slice 1: a delivery reads the same rows whatever the history", () => {
     it.effect(
       "L1: a new delivery returns as many rows after h earlier letters to the same target as after none",
       () =>
-        property(fc.record({ sizes: fc.tuple(History, History), bodies: Bodies }), ({ sizes, bodies }) =>
-          Effect.gen(function* () {
-            const { fresh } = yield* mail(open);
-            const body = (n: number) => bodies[n % bodies.length];
-            const counts: Array<{ readonly h: number; readonly rows: number }> = [];
-            let h = 0;
+        property(
+          fc.record({ sizes: fc.tuple(History, History), bodies: Bodies }),
+          ({ sizes, bodies }) =>
+            Effect.gen(function* () {
+              const { fresh } = yield* mail(open);
+              const body = (n: number) => bodies[n % bodies.length];
+              const counts: Array<{ readonly h: number; readonly rows: number }> = [];
+              let h = 0;
 
-            for (const point of points(0, sizes)) {
-              for (; h < point; h++) {
-                accepted((yield* fresh(body(h))).answer, `history letter ${h} is accepted`);
+              for (const point of points(0, sizes)) {
+                for (; h < point; h++) {
+                  accepted((yield* fresh(body(h))).answer, `history letter ${h} is accepted`);
+                }
+
+                const { answer, rows } = yield* fresh(body(h));
+                accepted(answer, `the counted delivery after ${h} letters is accepted`);
+                counts.push({ h, rows });
+                h++;
               }
 
-              const { answer, rows } = yield* fresh(body(h));
-              accepted(answer, `the counted delivery after ${h} letters is accepted`);
-              counts.push({ h, rows });
-              h++;
-            }
-
-            const first = counts[0]?.rows;
-            expect(
-              counts.map(({ rows }) => rows),
-              `L1: rows SQL returned during one new delivery, by earlier letters: ${counts.map(({ h, rows }) => `h=${h}: ${rows}`).join(", ")}`,
-            ).toEqual(counts.map(() => first));
-          }),
+              const first = counts[0]?.rows;
+              expect(
+                counts.map(({ rows }) => rows),
+                `L1: rows SQL returned during one new delivery, by earlier letters: ${counts.map(({ h, rows }) => `h=${h}: ${rows}`).join(", ")}`,
+              ).toEqual(counts.map(() => first));
+            }),
+          { numRuns: RUNS },
         ),
       600_000,
     );
@@ -239,6 +227,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                 `L2: rows SQL returned during one repeat delivery, by earlier letters: ${counts.map(({ h, rows }) => `h=${h}: ${rows}`).join(", ")}`,
               ).toEqual(counts.map(() => once));
             }),
+          { numRuns: RUNS },
         ),
       600_000,
     );

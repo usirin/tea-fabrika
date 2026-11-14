@@ -11,14 +11,9 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect, Exit, Schema, type Scope } from "effect";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
+import { property } from "../Testing.test-support.ts";
 import { Receipt } from "./internal/recovery.ts";
 import { recoveryStore } from "./RecoveryStore.ts";
-
-const SEED = 119120;
-
-/** fast-check's own failure report, with its counterexample, as the law's typed failure. */
-class PropertyFailed extends Schema.TaggedError<PropertyFailed>()("PropertyFailed", { cause: Schema.Unknown }) {}
-const failed = (cause: unknown) => new PropertyFailed({ cause });
 
 const NAME = "writer:1";
 const PROCESS = "process_0000000000e008000000000001";
@@ -107,20 +102,6 @@ const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
   return item;
 };
 
-/** Runs one law's property on fresh databases from the shared seed. */
-const property = <A>(
-  arbitrary: fc.Arbitrary<A>,
-  runs: number,
-  law: (value: A) => Effect.Effect<void, never, Scope.Scope>,
-) =>
-  Effect.gen(function* () {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-    const checked = fc.asyncProperty(arbitrary, (value) => Effect.runPromise(Effect.scoped(law(value))));
-    const options = { seed: SEED, numRuns: runs, includeErrorInReport: true };
-    // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
-    yield* Effect.tryPromise({ try: () => fc.assert(checked, options), catch: failed });
-  });
-
 /** One L5 save: how many new receipts it adds, and whether it changes one kept receipt. */
 const Grow = fc.record({
   adds: fc.integer({ min: 0, max: 3 }),
@@ -149,7 +130,7 @@ const Cell = fc.record({
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 const Tape = fc.array(Cell, { minLength: 5, maxLength: 40, size: "max" });
 
-const MOVES = ["save", "big", "cut", "retry", "other", "load", "receipt", "input"] as const;
+const MOVES = ["save", "big", "cut", "retry", "other", "again", "load", "receipt", "input"] as const;
 type Move = (typeof MOVES)[number];
 
 export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
@@ -157,62 +138,65 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
     it.effect(
       "L5: after a load every save returns one row from SQL, however many receipts are kept; a save with no load before it returns 1 + n rows once, then 1",
       () =>
-        property(Growth, 50, ({ kept, tape }) =>
-          Effect.gen(function* () {
-            const seen: Array<string> = [];
-            let wrong = false;
+        property(
+          Growth,
+          ({ kept, tape }) =>
+            Effect.gen(function* () {
+              const seen: Array<string> = [];
+              let wrong = false;
 
-            // The generated history, and the domain's end, so a failure prints the count at TOP; each
-            // through a store that loaded first and one that did not.
-            const runs = [...new Set([kept, TOP])]
-              .sort((a, b) => a - b)
-              .flatMap((history) => [true, false].map((loaded) => ({ history, loaded })));
+              // The generated history, and the domain's end, so a failure prints the count at TOP; each
+              // through a store that loaded first and one that did not.
+              const runs = [...new Set([kept, TOP])]
+                .sort((a, b) => a - b)
+                .flatMap((history) => [true, false].map((loaded) => ({ history, loaded })));
 
-            for (const { history, loaded } of runs) {
-              const sql = yield* open;
-              const world = new Map<string, number>(
-                Array.from({ length: history }, (_, i): [string, number] => [`l-${i}`, 0]),
-              );
-              yield* store(sql).save(journal(0, world)).pipe(Effect.orDie);
-              const { sql: watched, count } = counted(sql);
-              const saver = store(watched);
+              for (const { history, loaded } of runs) {
+                const sql = yield* open;
+                const world = new Map<string, number>(
+                  Array.from({ length: history }, (_, i): [string, number] => [`l-${i}`, 0]),
+                );
+                yield* store(sql).save(journal(0, world)).pipe(Effect.orDie);
+                const { sql: watched, count } = counted(sql);
+                const saver = store(watched);
 
-              if (loaded) {
-                yield* saver.load.pipe(Effect.orDie);
+                if (loaded) {
+                  yield* saver.load.pipe(Effect.orDie);
+                }
+
+                let made = world.size;
+                let last = { n: 0, rows: 0, expected: 0 };
+
+                for (const [i, grow] of tape.entries()) {
+                  if (grow.change && world.size > 0) {
+                    world.set(choose([...world.keys()], grow.pick), grow.value);
+                  }
+
+                  for (let a = 0; a < grow.adds; a++) {
+                    world.set(`l-${made++}`, grow.value);
+                  }
+
+                  const n = sql.exec("SELECT letter FROM process_receipts WHERE name=?", NAME).length;
+                  const before = count.rows;
+                  yield* saver.save(journal(0, world)).pipe(Effect.orDie);
+                  const got = count.rows - before;
+                  // The journal row is read on every save; the receipt rows once, by a store that never loaded.
+                  const expected = i === 0 && !loaded ? 1 + n : 1;
+                  last = { n, rows: got, expected };
+
+                  if (i === 0) {
+                    seen.push(`${loaded ? "loaded" : "cold"}, first save at n=${n}: ${got} rows (law: ${expected})`);
+                  }
+
+                  wrong ||= got !== expected;
+                }
+
+                seen.push(`last save at n=${last.n}: ${last.rows} rows (law: ${last.expected})`);
               }
 
-              let made = world.size;
-              let last = { n: 0, rows: 0, expected: 0 };
-
-              for (const [i, grow] of tape.entries()) {
-                if (grow.change && world.size > 0) {
-                  world.set(choose([...world.keys()], grow.pick), grow.value);
-                }
-
-                for (let a = 0; a < grow.adds; a++) {
-                  world.set(`l-${made++}`, grow.value);
-                }
-
-                const n = sql.exec("SELECT letter FROM process_receipts WHERE name=?", NAME).length;
-                const before = count.rows;
-                yield* saver.save(journal(0, world)).pipe(Effect.orDie);
-                const got = count.rows - before;
-                // The journal row is read on every save; the receipt rows once, by a store that never loaded.
-                const expected = i === 0 && !loaded ? 1 + n : 1;
-                last = { n, rows: got, expected };
-
-                if (i === 0) {
-                  seen.push(`${loaded ? "loaded" : "cold"}, first save at n=${n}: ${got} rows (law: ${expected})`);
-                }
-
-                wrong ||= got !== expected;
-              }
-
-              seen.push(`last save at n=${last.n}: ${last.rows} rows (law: ${last.expected})`);
-            }
-
-            expect(wrong, `L5: rows SQL returned during a save, by receipts kept: ${seen.join("; ")}`).toBe(false);
-          }),
+              expect(wrong, `L5: rows SQL returned during a save, by receipts kept: ${seen.join("; ")}`).toBe(false);
+            }),
+          { numRuns: 50 },
         ),
       600_000,
     );
@@ -230,6 +214,8 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
               const kept = store(cut);
               const world = { n: 0, receipts: new Map<string, number>() };
               let failed: Sent | null = null;
+              /** The long-lived store's last committed save, which its owner may send again. */
+              let mine: Sent | null = null;
               let made = 0;
               let others = 0;
 
@@ -248,8 +234,12 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                 // A left-out receipt stays stored, as the runner's old snapshots rely on.
                 return sent(n, new Map([...receipts].filter((_, i) => ((cell.drop >> (i % 30)) & 1) === 0)));
               };
-              const committed = (save: Sent) => {
+              const committed = (save: Sent, by: "kept" | "other" = "kept") => {
                 world.n = save.n;
+
+                if (by === "kept") {
+                  mine = save;
+                }
 
                 for (const [letter, v] of save.values) {
                   world.receipts.set(letter, v);
@@ -266,7 +256,8 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                 ).toBe(Exit.isSuccess(right));
                 return Exit.isSuccess(left);
               });
-              const possible = (): ReadonlyArray<Move> => MOVES.filter((move) => move !== "retry" || failed !== null);
+              const possible = (): ReadonlyArray<Move> =>
+                MOVES.filter((move) => (move === "retry" ? failed !== null : move === "again" ? mine !== null : true));
 
               for (const cell of tape) {
                 const move = choose(possible(), cell.move);
@@ -323,12 +314,47 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                     break;
                   }
                   case "other": {
-                    // A second store on the same database; its journal text is one no other save writes.
-                    const save = value(cell, 1000 + ++others);
+                    // A second store on the same database. Either it keeps the journal row's text and
+                    // changes a receipt the long-lived store last wrote, so only receipts move, or it
+                    // writes a journal text no other save writes.
+                    const base = value(cell, cell.keep ? world.n : 1000 + ++others);
+                    const own = cell.keep && mine !== null ? [...mine.values] : [];
+                    let save = base;
+
+                    if (own.length > 0) {
+                      const [letter, v] = choose(own, cell.pick);
+                      save = sent(base.n, new Map([...base.values, [letter, (v + 1 + (cell.value % 9)) % 10]]));
+                    }
+
                     expect(
                       yield* both(save.saved, fresh(a).save(save.saved)),
                       "L6: the second store's save commits",
                     ).toBe(true);
+
+                    if (save.n === world.n) {
+                      done.add("other_receipts_only");
+                    }
+
+                    committed(save, "other");
+                    break;
+                  }
+                  case "again": {
+                    // The owner sends its own last save again, blind to what a second store wrote since.
+                    if (mine === null) {
+                      return yield* Effect.die(new Error("an again ran with no save of its own"));
+                    }
+
+                    const save = mine;
+
+                    // The journal row is the one this store last wrote, but a receipt under it is not.
+                    if (
+                      save.n === world.n &&
+                      [...save.values].some(([letter, v]) => world.receipts.get(letter) !== v)
+                    ) {
+                      done.add("again_over_other");
+                    }
+
+                    expect(yield* both(save.saved, kept.save(save.saved)), "L6: a save sent again commits").toBe(true);
                     committed(save);
                     break;
                   }
@@ -364,9 +390,11 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                 expect(rows(a), `L6: after ${move}, both databases hold the same recovery rows`).toEqual(rows(twin));
               }
             });
-          yield* property(Tape, 100, law);
-          // An empty walk cannot pass: every move ran, and a cut landed inside a transaction.
-          expect([...done].sort()).toEqual([...MOVES, "cut_hit"].sort());
+          yield* property(Tape, law, { numRuns: 100 });
+          // An empty walk cannot pass: every move ran, a cut landed inside a transaction, a second store
+          // changed only receipts under a journal row it left as it was, and the long-lived store then
+          // sent its own last save over that change.
+          expect([...done].sort()).toEqual([...MOVES, "cut_hit", "other_receipts_only", "again_over_other"].sort());
         }),
       600_000,
     );

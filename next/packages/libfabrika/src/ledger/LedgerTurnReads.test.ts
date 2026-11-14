@@ -5,20 +5,15 @@
 // appended and in a later turn. L4: SQLite answers both through an index of `entries`, never a scan.
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit, Layer, Option, Schema } from "effect";
+import { Effect, Exit, Layer, Option } from "effect";
 import * as fc from "fast-check";
 import type { Sql, SqlValue } from "../Sql.ts";
+import { property } from "../Testing.test-support.ts";
 import { Doorbell } from "./Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "./LedgerTransaction.ts";
 import * as LedgerTransactionSql from "./LedgerTransactionSql.ts";
 import type { Line } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
-
-const SEED = 119120;
-
-/** fast-check's own failure report, with its counterexample, as the law's typed failure. */
-class PropertyFailed extends Schema.TaggedError<PropertyFailed>()("PropertyFailed", { cause: Schema.Unknown }) {}
-const failed = (cause: unknown) => new PropertyFailed({ cause });
 
 // A fresh in-memory node:sqlite, closed by the test's scope (0061).
 const memory = Effect.acquireRelease(
@@ -142,11 +137,7 @@ describe("T936 slice 1: the ledger turn's indexed reads", () => {
               }
             }).pipe(Effect.provide(store.layer));
           });
-        const property = fc.asyncProperty(Log, (log) => Effect.runPromise(Effect.scoped(law(log))));
-        yield* Effect.tryPromise({
-          try: () => fc.assert(property, { seed: SEED, numRuns: 50, includeErrorInReport: true }),
-          catch: failed,
-        });
+        yield* property(Log, law, { numRuns: 50 });
         // An empty walk cannot pass: appends landed, and reused ids were refused.
         expect([...outcomes].sort()).toEqual(["appended", "refused"]);
       }),
