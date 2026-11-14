@@ -394,9 +394,11 @@ export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError"
 - **Elm or OTP.** OTP 27's `-doc` attributes and Elm's documented packages (both secondary).
 - **What holds it.** The lint rule `fabrika/jsdocs` (`oxlint-plugins/jsdocs.ts`, ticket 913),
   which judges each block with Effect's own block grammar, copied from Effect's checker at
-  `effect@4.1.2` into `oxlint-plugins/effect-jsdocs.ts`, and asks for no `@since` (0118). It is on
-  for `ci/` and `codehost/` of `libfabrika`, and each folder joins as it is filled
-  ([Plan B, B2](../plan/effect-rules-big.md#b2-the-docs-rule)). The guess was a copy of Effect's
+  `effect@4.1.2` into `oxlint-plugins/effect-jsdocs.ts`, and asks for no `@since` (0118). Since
+  ticket 948 it blocks in every folder of `next/packages/*/src/**` that is at zero. A folder with
+  fires left has one warn line, where they only advise, until the fill that deletes it
+  ([0523](../../.decisions/0523-advice-rules-block-where-clean.md),
+  [Plan B, B2](../plan/effect-rules-big.md#b2-the-docs-rule)). The guess was a copy of Effect's
   rule with 0 false alarms, as 0023 ran it on Effect's 144 modules; measured on 2026-11-14 on
   Effect 4.1.2's 432 public files, it fires only where Effect's own checker reports, so 0 false
   alarms. Still to come: a plan-code rule on comments (`P\d+`, `law p\d+`, `flag \d+`), once its
