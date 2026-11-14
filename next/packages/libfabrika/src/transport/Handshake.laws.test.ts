@@ -13,7 +13,8 @@
 // - An answer whose id is not the state's own, or whose dial is another, does nothing. A challenge or
 //   a grant emits `hello` with its own nonce. The answer to `initializing` admits, decoded as the
 //   door's admission {version, ping, identity}, or on `not_granted` emits `knock`, or on any other
-//   reason is `refused {dial, reason}`, the reason kept when it is a word and `other` if not. The answer to
+//   reason is `refused {dial, reason}`, the reason kept when it is a word and `other` if not. Desk S2a: `admitted` keeps
+//   the admission's `identity.person` as `person`, so a window can name that person's tezgah. The answer to
 //   `knocking`, or a waiting notice, reaches `waiting`. `hello_err` with `key` is `failed`. `ms` is
 //   a measurement and never negative, whatever the clock said.
 //
@@ -35,6 +36,13 @@ const step = (s: State, m: Msg): readonly [State, ReadonlyArray<Cmd>] =>
   applyCell(handshakeMachine as never, s as never, m as never) as never;
 
 const ADMITTED = { version: 1, ping: 5_000, identity: { key: "SHA256:k", person: "person_x", as: "window" } };
+/** The door's admission of a generated person: Desk S2a keeps the person on `admitted`, so a window
+ *  can name that person's tezgah (the plan's "Where tezgah runs"). */
+const admission = (person: string) => ({ ...ADMITTED, identity: { ...ADMITTED.identity, person } });
+
+const isAdmission = Schema.is(
+  Schema.Struct({ ping: Schema.Number, identity: Schema.Struct({ person: Schema.String }) }),
+);
 
 /** A blind draw the fold reads in the state it reached. */
 const Pick = Schema.Struct({
@@ -48,6 +56,8 @@ const Pick = Schema.Struct({
   until: Schema.Number.check(Schema.isFinite()),
   // The door's reason on an error answer: one of its words, or any text a door could send.
   reason: Schema.Union([Schema.String.check(Schema.isPattern(/^[a-z_]{1,40}$/)), Schema.String]),
+  // The person the door admits: a person id, or any text a door could send.
+  person: Schema.Union([Schema.String.check(Schema.isPattern(/^person_[0-9a-hjkmnp-tv-z]{26}$/)), Schema.String]),
 });
 type Pick = typeof Pick.Type;
 const Picks = Schema.Array(Pick).check(Schema.isMinLength(10), Schema.isMaxLength(120));
@@ -90,6 +100,7 @@ const moves = (w: World, c: Pick): ReadonlyArray<() => Msg> => {
     for (let n = 0; n < 3; n++) {
       out.push(
         () => ({ type: "answer", dial: s.dial, id, result: ADMITTED, at }),
+        () => ({ type: "answer", dial: s.dial, id, result: admission(c.person), at }),
         () => ({ type: "answer", dial: s.dial, id, result: null, reason: "not_granted", at }),
         () => ({ type: "answer", dial: s.dial, id, result: { code: c.code, until: c.until }, at }),
         () => ({ type: "answer", dial: s.dial, id, result: null, reason: c.reason, at }),
@@ -223,9 +234,17 @@ describe("P18 L2: the handshake answers only its own request", () => {
           );
         }
 
-        // The door's admission, answered to the live `initialize`, admits.
-        if (matched && prev._tag === "initializing" && m["result"] === ADMITTED) {
-          expect(next).toMatchObject({ _tag: "admitted", dial: prev.dial, ping: ADMITTED.ping });
+        // The door's admission, answered to the live `initialize`, admits, and keeps the person it
+        // admitted (Desk S2a), whatever person that is.
+        const admitted = m["result"];
+
+        if (matched && prev._tag === "initializing" && m["reason"] === undefined && isAdmission(admitted)) {
+          expect(next, "Desk S2a: admitted keeps the door's person").toMatchObject({
+            _tag: "admitted",
+            dial: prev.dial,
+            ping: admitted.ping,
+            person: admitted.identity.person,
+          });
         }
 
         // A refused `initialize` knocks once.
