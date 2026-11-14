@@ -1,7 +1,7 @@
 ---
 id: 0411
 title: A new property draws its data from an existing Schema or its Effect Arbitrary, with tea's machine-law tools kept and fast-check only for unsupported data, and the lint for it only advises
-status: accepted
+status: amended-in-part by [0523](0523-advice-rules-block-where-clean.md)
 date: 2026-11-08
 tags: [tests, property-tests, effect, schema, lint]
 ---
