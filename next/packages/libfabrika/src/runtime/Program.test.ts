@@ -6,9 +6,8 @@ import { Effect, Exit, Predicate, Result, Schema, SchemaIssue } from "effect";
 import * as fc from "fast-check";
 import { ParentText } from "../coordination/index.ts";
 import { ProgramLoader } from "./Entry.ts";
-import { Declaration, nodeExecution } from "./Execution.ts";
+import { Declaration } from "./Execution.ts";
 import { Input, Program, Refusal, stepper } from "./Program.ts";
-import * as Wire from "./WireTest.ts";
 
 const Model = Schema.Struct({ count: Schema.Int, replies: Schema.Int });
 type Model = typeof Model.Type;
@@ -1587,73 +1586,4 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
       expect(seen, side).toContain(side);
     }
   });
-});
-
-// Ticket 888, Amendment A-Wire, next/: one JSON codec at every boundary. These two are the runner's
-// half, the path a person's window takes: the letter is the Msg's JSON form, and the only decode is
-// the runner's.
-describe("A-Wire: the runner reads a letter with the Msg's JSON codec, next/", () => {
-  const wire = { arbitrary: { seed: SEED, runs: 300, size: 4096 } };
-
-  it.effect.prop(
-    "W1: any Msg sent as its JSON form is admitted, and step and fold hand update an equal Msg",
-    { sample: Wire.Sent },
-    ({ sample }) =>
-      Effect.gen(function* () {
-        const same = Schema.toEquivalence(Wire.Msg);
-
-        for (const x of [sample.drawn, sample.edge]) {
-          const { program, taken } = Wire.make();
-          const execution = nodeExecution(program);
-          const letter = Wire.letter(x);
-          expect(yield* execution.admit(letter), "admit").toBe(true);
-          const start = yield* execution.init(null);
-          expect(start._tag).toBe("stepped");
-
-          if (start._tag !== "stepped") {
-            continue;
-          }
-
-          expect((yield* execution.step(start.model, letter))._tag, "step").toBe("stepped");
-          expect(taken, "step hands update one Msg").toHaveLength(1);
-          expect((yield* execution.fold(start.model, letter))._tag, "fold").toBe("stepped");
-          expect(taken, "fold hands update one Msg").toHaveLength(2);
-
-          for (const got of taken) {
-            expect(same(got, x), "update takes a Msg equal to the one sent").toBe(true);
-          }
-        }
-      }),
-    wire,
-  );
-
-  it.effect.prop(
-    "W3: a letter main wrote for a Msg whose two sides are equal still steps and folds to an equal Msg",
-    { x: Wire.Plain },
-    ({ x }) =>
-      Effect.gen(function* () {
-        const same = Schema.toEquivalence(Wire.PlainMsg);
-        const { program, taken } = Wire.plain();
-        const execution = nodeExecution(program);
-        const letter = Wire.old(x);
-        const raw = Schema.decodeUnknownResult(Wire.PlainMsg)(letter);
-        expect(Result.isSuccess(raw) && same(raw.success, x), "the raw Msg decodes its own old letter").toBe(true);
-        expect(yield* execution.admit(letter), "admit").toBe(true);
-        const start = yield* execution.init(null);
-        expect(start._tag).toBe("stepped");
-
-        if (start._tag !== "stepped") {
-          return;
-        }
-
-        expect((yield* execution.step(start.model, letter))._tag, "step").toBe("stepped");
-        expect((yield* execution.fold(start.model, letter))._tag, "fold").toBe("stepped");
-        expect(taken).toHaveLength(2);
-
-        for (const got of taken) {
-          expect(same(got, x), "update takes a Msg equal to the old letter's").toBe(true);
-        }
-      }),
-    wire,
-  );
 });

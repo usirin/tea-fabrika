@@ -1003,7 +1003,6 @@
               "packs",
               "access",
               "runtime",
-              "mcp",
               "gateway",
               "schedules",
               "desktop"
@@ -1276,7 +1275,6 @@
         "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/transport/**",
-        "next/packages/libfabrika/src/mcp/**",
         "next/packages/libfabrika/src/gateway/**",
         "next/packages/libfabrika/src/settings/**",
         "next/packages/libfabrika/src/schedules/**",
@@ -1298,7 +1296,6 @@
         "next/packages/libfabrika/src/access/internal/**",
         "next/packages/libfabrika/src/runtime/internal/**",
         "next/packages/libfabrika/src/transport/internal/**",
-        "next/packages/libfabrika/src/mcp/internal/**",
         "next/packages/libfabrika/src/gateway/internal/**",
         "next/packages/libfabrika/src/settings/internal/**",
         "next/packages/libfabrika/src/schedules/internal/**",

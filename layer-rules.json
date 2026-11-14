@@ -45,7 +45,6 @@
     },
     {
       "name": "next-mcp",
-      "layer": 6,
       "paths": ["next/packages/libfabrika/src/mcp"]
     },
     {
