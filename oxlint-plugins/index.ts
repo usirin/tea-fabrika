@@ -41,6 +41,7 @@ import { preferSchemaArbitrary } from "./prefer-schema-arbitrary.ts";
 import { programPackageLayout } from "./program-package-layout.ts";
 import { serviceId } from "./service-id.ts";
 import { useImportExtensions } from "./use-import-extensions.ts";
+import { writtenServiceType } from "./written-service-type.ts";
 
 const plugin: Plugin = {
   meta: { name: "fabrika" },
@@ -85,6 +86,7 @@ const plugin: Plugin = {
     "prefer-schema-arbitrary": preferSchemaArbitrary,
     "service-id": serviceId,
     "use-import-extensions": useImportExtensions,
+    "written-service-type": writtenServiceType,
   },
 };
 
