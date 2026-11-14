@@ -1,7 +1,9 @@
 // Law 6 of docs/plan/effect-rules-big.md, for B3: the folders where Effect's `preferNamespaceImport`
 // is on, in `tsconfig.base.json`, only grow until the list is all of `next/packages`. A folder
 // dropped in a merge is silent, since the type check just stops reading it, so the list the slices
-// left is saved here. `tsconfig.base.json` has comments, so it is read as a JS expression.
+// left is saved here. A folder counts as listed only where every override, read in order, leaves the
+// rule at error for `effect`: an `exclude`, or a later override that turns it down, drops it too.
+// `tsconfig.base.json` has comments, so it is read as a JS expression.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Expression, parseSync } from "oxc-parser";
@@ -44,8 +46,27 @@ const record = (x: unknown): Record<string, unknown> =>
 
 const list = (x: unknown): ReadonlyArray<unknown> => (Array.isArray(x) ? x : []);
 
-/** The `include` of every override that turns `preferNamespaceImport` to error for `effect`. */
-const namespaceFolders = (text: string): ReadonlyArray<unknown> => {
+/** Where a glob stops being fixed: the text before its first `*`. */
+const stem = (glob: string): string => glob.split("*")[0] ?? glob;
+
+/** `outer` reads every file `glob` reads: the same glob, or a `**` glob over a parent folder with the same ending. */
+const covers = (outer: string, glob: string): boolean => {
+  const [folder, ending] = outer.split("/**/");
+  return outer === glob || (ending !== undefined && glob.startsWith(`${folder}/`) && glob.endsWith(`/${ending}`));
+};
+
+/** The two globs can read one file: one's fixed start lies inside the other's. */
+const touches = (a: string, b: string): boolean => stem(a).startsWith(stem(b)) || stem(b).startsWith(stem(a));
+
+const strings = (x: unknown): ReadonlyArray<string> => list(x).filter((item) => typeof item === "string");
+
+/**
+ * Each glob whose files do not end with `preferNamespaceImport` at error for `effect`, after every
+ * override in order, as Effect's checker applies them (a scoped value replaces the one before).
+ * An override that turns the rule on counts only where it reads the whole glob and excludes none of
+ * it. One that turns it down or drops `effect` counts wherever it may read a file of the glob.
+ */
+const uncovered = (text: string, globs: ReadonlyArray<string>): ReadonlyArray<string> => {
   const parsed = parseSync("tsconfig.base.ts", `(${text})`);
   expect(parsed.errors).toEqual([]);
   const statement = parsed.program.body[0];
@@ -55,24 +76,45 @@ const namespaceFolders = (text: string): ReadonlyArray<unknown> => {
   }
 
   const plugins = list(record(record(value(statement.expression)).compilerOptions).plugins);
-  const effect = plugins.map(record).find((plugin) => plugin.name === "@effect/language-service");
+  const effect = record(plugins.map(record).find((plugin) => plugin.name === "@effect/language-service"));
+  const overrides = list(effect.overrides).map(record);
 
-  return list(effect?.overrides)
-    .map(record)
-    .filter((override) => {
+  return globs.filter((glob) => {
+    let packages: unknown = effect.namespaceImportPackages;
+    let severity: unknown = record(effect.diagnosticSeverity).preferNamespaceImport;
+
+    for (const override of overrides) {
       const options = record(override.options);
-      return (
-        list(options.namespaceImportPackages).includes("effect") &&
-        record(options.diagnosticSeverity).preferNamespaceImport === "error"
-      );
-    })
-    .flatMap((override) => list(override.include));
+      const include = strings(override.include);
+      const sets = {
+        packages: "namespaceImportPackages" in options,
+        severity: "preferNamespaceImport" in record(options.diagnosticSeverity),
+      };
+      const raises =
+        (!sets.packages || list(options.namespaceImportPackages).includes("effect")) &&
+        (!sets.severity || record(options.diagnosticSeverity).preferNamespaceImport === "error");
+      const reads = raises
+        ? include.some((outer) => covers(outer, glob)) &&
+          !strings(override.exclude).some((excluded) => touches(excluded, glob))
+        : include.some((outer) => touches(outer, glob));
+
+      if (reads && sets.packages) {
+        packages = options.namespaceImportPackages;
+      }
+
+      if (reads && sets.severity) {
+        severity = record(options.diagnosticSeverity).preferNamespaceImport;
+      }
+    }
+
+    return !(list(packages).includes("effect") && severity === "error");
+  });
 };
 
-it("pinned: law 6, every folder once listed for preferNamespaceImport is still listed, or the list is all of next/packages", () => {
+it("pinned: law 6, every folder once listed for preferNamespaceImport still ends at error for effect, and so does the whole tree once listed", () => {
   // pinned: the folders listed on the day each slice landed, since a folder dropped in a merge is silent.
-  const folders = namespaceFolders(readFileSync(CONFIG, "utf8"));
-  const whole = WHOLE.every((glob) => folders.includes(glob));
+  const text = readFileSync(CONFIG, "utf8");
+  const whole = WHOLE.filter((glob) => text.includes(`"${glob}"`));
 
-  expect(whole ? [] : LISTED.filter((folder) => !folders.includes(folder))).toEqual([]);
+  expect(uncovered(text, [...LISTED, ...whole])).toEqual([]);
 });
