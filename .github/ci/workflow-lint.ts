@@ -209,9 +209,42 @@ export const lintWorkflow = (text: string): string[] => {
     outputs = map(changes["outputs"]);
   require(!("if" in changes) && !("needs" in changes), "changes starts on every event");
 
-  for (const name of ["check", "typecheck", "test", "next", "e2e", "field", "build", "today"]) {
+  for (const name of ["check", "typecheck", "test", "e2e", "field", "build", "today"]) {
     require(compact(outputs[name]) === `steps.diff.outputs.${name}`, `changes exposes ${name}`);
   }
+
+  // The plan for CI paths, slice 2: the parser's pass (`--same`) prints `next` and `filter` again
+  // when it proved a next/ file is the same program, and the first pass's stand when it printed
+  // nothing. Its install and its run may fail without failing changes, which would run everything
+  // and turn ci-required red.
+  for (const name of ["next", "filter"]) {
+    require(compact(outputs[name]) ===
+      `steps.same.outputs.${name}||steps.diff.outputs.${name}`, `changes exposes ${name} from the parser's pass, else the first`);
+  }
+
+  const changeSteps = steps(changes);
+  const same = changeSteps.find((s) => s["id"] === "same");
+  require(same?.["run"] === "node .github/ci/changes.mjs --same" &&
+    same["continue-on-error"] === true, "changes runs the parser's pass, and its failure fails nothing");
+
+  for (const [key, expected] of Object.entries(classifier)) {
+    require(map(same?.["env"])[key] === expected, `the parser's pass gets event ${key} through env`);
+  }
+
+  for (const step of changeSteps.filter(
+    (s) =>
+      (typeof s["uses"] === "string" && /^(pnpm\/action-setup|actions\/setup-node)@/.test(s["uses"])) ||
+      (typeof s["run"] === "string" && s["run"].startsWith("pnpm install")),
+  )) {
+    require(step["continue-on-error"] === true &&
+      same !== undefined &&
+      changeSteps.indexOf(step) <
+        changeSteps.indexOf(same), "the parser's setup comes before its pass, and its failure fails nothing");
+  }
+
+  require(changeSteps.some(
+    (s) => typeof s["run"] === "string" && s["run"].startsWith("pnpm install"),
+  ), "changes installs the parser for its pass");
 
   // The typecheck is its own job, so its answer comes as soon as it ends and a lane can read it
   // alone (0133). check runs no second one.
@@ -378,13 +411,20 @@ export const lintWorkflow = (text: string): string[] => {
     Object.keys(matrix).length ===
       1, "next's legs are e2e-1 to e2e-N in order, then 1 to 5, all strings, with no other matrix entries");
   require(strategy["fail-fast"] === false, "next lets every shard finish");
+  // The plan for CI paths, slice 2: the path is `filter` from changes, the reader tests or `next/`,
+  // unquoted so each reader path is its own argument. A missing filter runs all of next/.
   // On a pull request CHANGED is `--changed=<base> --passWithNoTests`, so only the tests a change
   // reaches run; on the merge queue and main it is empty, so the whole suite runs as the backstop.
   const nextCommand =
-    'pnpm exec vitest run next/ $CHANGED --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
-  // The leg `e2e-k` with SHARD `e2e-k/N` asks Vitest for shard `k/N` of the end-to-end files.
+    'pnpm exec vitest run $FILTER $CHANGED --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
+  // The leg `e2e-k` with SHARD `e2e-k/N` asks Vitest for shard `k/N` of the end-to-end files. It
+  // takes no filter, so under the reader filter the e2e legs still run every end-to-end file a
+  // pull request's change reaches, and every one in the queue and on main.
   const e2eCommand = `node next/apps/fabrika/e2e.ts $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
   const changedOnPullRequests = `\${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
+  // The vitest step's own: empty when the filter names the reader tests too. They read files as
+  // text, so `--changed`, which follows imports, would drop them; there the filter alone decides.
+  const changedUnlessReaders = `\${{ github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
   const adviceCommand = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"';
   // Only these whole scripts are allowed; shell aliases and alternate paths cannot add work.
   const allowed = [
@@ -411,6 +451,8 @@ export const lintWorkflow = (text: string): string[] => {
     new RegExp(`^\\$\\{\\{\\s*matrix\\.shard\\s*\\}\\}/${VITEST_LEGS.length}$`).test(
       shard,
     ), "next's vitest step passes --shard <leg>/<the count of numbered legs>");
+  require(compact(map(testStep?.["env"])["FILTER"]) ===
+    "needs.changes.outputs.filter||'next/'", "next takes its path from filter, with the fallback next/");
   // E2. The same for the end-to-end step, over the count of e2e legs.
   const e2eStep = nextSteps.find((s) => s["run"] === e2eCommand);
   const e2eShard = map(e2eStep?.["env"])["SHARD"];
@@ -421,12 +463,13 @@ export const lintWorkflow = (text: string): string[] => {
 
   // Both test steps narrow to the changed files on a pull request only. Any other value could narrow
   // the merge queue or main, where the whole suite is the backstop for what the import graph misses.
-  for (const [step, name] of [
-    [testStep, "vitest"],
-    [e2eStep, "end-to-end"],
+  // The vitest step also leaves it empty when the filter names the reader tests.
+  for (const [step, name, expected] of [
+    [testStep, "vitest", changedUnlessReaders],
+    [e2eStep, "end-to-end", changedOnPullRequests],
   ] as const) {
     require(map(step?.["env"])["CHANGED"] ===
-      changedOnPullRequests, `next's ${name} step narrows with --changed on pull requests only`);
+      expected, `next's ${name} step narrows with --changed on pull requests only`);
   }
 
   // E3. Both kinds of leg write next.json, so the advice comes after both test steps.

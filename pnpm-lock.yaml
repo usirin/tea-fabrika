@@ -435,6 +435,9 @@ importers:
         specifier: 4.1.2
         version: 4.1.2(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
     devDependencies:
+      oxc-parser:
+        specifier: 'catalog:'
+        version: 0.157.0
       yaml:
         specifier: 'catalog:'
         version: 2.9.1
