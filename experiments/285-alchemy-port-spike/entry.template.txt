@@ -1,0 +1,46 @@
+// Experiment 285, next/. The built file of the `bundle: false` stack: the shape of
+// `next/apps/fabrika/src/brain.ts` on main, with the default export moved to the Effect `fetch`
+// through the Worker bridge, as slice S7 plans it. A plain class sits beside the bridge classes, so
+// a call can be timed each way in one run. Only the bundler reads this file, as `entry.ts` in the
+// run's temp home; Node never imports it. It is kept as text because its class exports are read by
+// workerd alone, which the repo's unused-export check cannot know.
+import { makeDurableObjectBridge, makeWorkerBridge } from "@alchemy.run/cloudflare/Bridge";
+import { DurableObject, WorkerEntrypoint, env } from "cloudflare:workers";
+import { Context, Effect, Layer, ManagedRuntime } from "effect";
+import probe from "./probe.ts";
+
+const meta = {
+  // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy's generated entry passes the Worker.make export here (Sources/Rolldown.ts); makeDurableObjectBridge's type names an Effect
+  entrypoint: probe as unknown as Effect.Effect<Record<string, unknown>>,
+  stack: { name: String(env.ALCHEMY_STACK_NAME), stage: String(env.ALCHEMY_STAGE) },
+};
+
+const Bridge = makeDurableObjectBridge(DurableObject, meta);
+
+export class Echo extends Bridge("Echo") {}
+export class Turn extends Bridge("Turn") {}
+
+class EchoService extends Context.Service<EchoService, { readonly echo: (n: number) => Effect.Effect<number> }>()(
+  "experiments/285/EchoService",
+) {}
+
+/** Today's shell: a plain class that holds a runtime, with one Promise edge per method. */
+export class PlainEcho extends DurableObject {
+  readonly runtime = ManagedRuntime.make(Layer.succeed(EchoService, { echo: (n) => Effect.succeed(n + 1) }));
+
+  echo(n: number) {
+    return this.runtime.runPromise(EchoService.use((service) => service.echo(n)));
+  }
+}
+
+/** Today's `Control`: a named entrypoint class that reads its token from `ctx.props`. */
+export class Control extends WorkerEntrypoint<unknown, { token: string }> {
+  fetch(request: Request) {
+    const ok = request.headers.get("authorization") === `Bearer ${this.ctx.props.token}`;
+    return Response.json(ok ? { branch: "named class", path: new URL(request.url).pathname } : { refused: "bearer" }, {
+      status: ok ? 200 : 401,
+    });
+  }
+}
+
+export default makeWorkerBridge(WorkerEntrypoint, meta);
