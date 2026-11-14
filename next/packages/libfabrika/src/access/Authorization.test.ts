@@ -118,7 +118,7 @@ const line = (body: string): Line =>
 
 type Observed = {
   turn: number;
-  op: "read" | "append";
+  op: "read" | "get" | "head" | "append";
   stream: string;
   after?: number;
   inside: boolean;
@@ -151,6 +151,14 @@ const worldOn = (db: DatabaseSync, path: string, fail: boolean) => {
             read: (stream, after) => {
               observations.push({ turn: n, op: "read", stream, after, inside: db.isTransaction });
               return turn.read(stream, after);
+            },
+            get: (stream, id) => {
+              observations.push({ turn: n, op: "get", stream, inside: db.isTransaction });
+              return turn.get(stream, id);
+            },
+            head: (stream) => {
+              observations.push({ turn: n, op: "head", stream, inside: db.isTransaction });
+              return turn.head(stream);
             },
             append: (stream, id, value) => {
               observations.push({ turn: n, op: "append", stream, inside: db.isTransaction });
