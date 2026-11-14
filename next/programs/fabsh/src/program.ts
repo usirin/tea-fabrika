@@ -62,13 +62,10 @@ const says = (m: Model, words: ReadonlyArray<string>): ReadonlyArray<string> => 
     return listed.map((line, i) => `${String(first + i).padStart(5)}  ${line}`);
   }
 
-  if (verb === "help") {
-    return word === undefined
-      ? builtins.map((b) => HELP[b] ?? b)
-      : [HELP[word] ?? `${word} is not a word fabsh knows. Type help to see them.`];
-  }
-
-  return [`${verb ?? ""} is a program; fabsh starts programs from its next version.`];
+  // `read` refused every other first word, and `clear` says nothing, so this is `help`.
+  return word === undefined
+    ? builtins.map((b) => HELP[b] ?? b)
+    : [HELP[word] ?? `${word} is not a word fabsh knows. Type help to see them.`];
 };
 
 const keep = <A>(all: ReadonlyArray<A>, most: number): ReadonlyArray<A> => (all.length > most ? all.slice(-most) : all);
