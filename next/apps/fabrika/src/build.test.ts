@@ -29,7 +29,8 @@ it("format: the page entry starts its one Effect program through runMain, once, 
   const source = readFileSync(file, "utf8");
   const parsed = parseSync(file, source);
   expect(parsed.errors).toEqual([]);
-  const isRunMain = (node: { readonly type: string; readonly name?: string }) =>
+  // Any oxc node: some carry a `name` that is itself a node (V8IntrinsicExpression), so it is read as unknown.
+  const isRunMain = (node: { readonly type: string; readonly name?: unknown }) =>
     node.type === "Identifier" && node.name === "runMain";
   const imported = parsed.program.body.filter(
     (node) =>
