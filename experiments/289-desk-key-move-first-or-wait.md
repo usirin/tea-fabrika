@@ -7,10 +7,12 @@ plain chat demo waits. Measured in local workerd
 p50 0.16 ms, p95 0.26 ms, p99 0.65 ms. With two people moving focus on one desk at about 8 keys a
 second each, a move-first window would see its own move overwritten mid-flight on about 1% of keys
 over loopback, on 17 to 23% with a 20 ms round trip, and on 64% with 80 ms. A version check
-refuses about as many. The Cloudflare-hosted half is not in yet. $0 beyond this session.
+refuses about as many. On a Cloudflare-hosted Durable Object, in the lead's own run, a key's round
+trip was p50 25 to 60 ms, and two people snapped back on about 56% of keys. Under $0.01 for the
+hosted run; $0 beyond this session for the rest.
 
 Run on 2026-11-14 (UTC) in a Claude cloud session: Linux, 4 cores, Node 22.23.4, Miniflare
-4.20260730.0 with workerd 1.20260730.1, both from the repo's lockfile. No deploy, no key. Part 1
+4.20260730.0 with workerd 1.20260730.1, both from the repo's lockfile. No deploy and no key from this box; the hosted rows are the lead's run. Part 1
 was read by one research agent on Opus; its quotes from tldraw, Liveblocks and Cloudflare's chat
 demo were checked against the source here.
 
@@ -18,10 +20,11 @@ demo were checked against the source here.
 and for one person at a desk it costs nothing: nobody else moves the focus, so no key ever snaps
 back. The cost shows only when two people steer one shared desk: at typing speed, the share of keys
 that snap back grows with the round trip, from about 1% over loopback to about 20% at 20 ms and
-about 64% at 80 ms. So the measurement also says: keep focus per person (Figma and Linear show each
-person's own selection: a guess, not read in any source here), and let only truly shared changes (split, close) clash. How sure: about 75%. The doubts
-are the deployed round trip, which the hosted half would measure, and what a snap looks like in a
-real window, which only a window test can show.
+about 64% at 80 ms, and about 56% on a real Cloudflare-hosted Durable Object. Waiting is no cure
+there: on the hosted brain a window that waits shows every key 25 to 60 ms late, two to four
+frames. So the measurement also says: keep focus per person (Figma and Linear show each
+person's own selection: a guess, not read in any source here), and let only truly shared changes (split, close) clash. How sure: about 75%. The main doubt
+is what a snap looks like in a real window, which only a window test can show.
 
 ```ts
 // Sketch: the move-first desk window, in tea terms. The window keeps the brain's last state and
@@ -142,18 +145,43 @@ What it means for the desk:
 - **The two are not exclusive.** The sketch above moves first and still lets the brain's answer
   win, which is tldraw's and Figma's shape.
 
-## What a desk on the Cloudflare-hosted brain would add
+## The same desk on a Cloudflare-hosted brain (the lead's run)
 
-Not measured yet: it waits on the owner's yes to deploy the same Worker. The deployed round trip
-decides how far the 20 ms and 80 ms rows apply; a guess, unmeasured, is 20 to 80 ms from a home
-connection to the nearest Cloudflare location and its Durable Object.
+The hosted half was run by the lead session from the owner's laptop on 2026-11-14, on a throwaway
+Worker plus Durable Object that was deleted afterward. It was not run from this box, and its raw
+output is not here; these are the numbers the lead reported:
+
+| Measure | Hosted result |
+|---|---|
+| One client, focus key round trip | p50 25 to 60 ms, p99 under 80 ms |
+| Node client and a browser tab on the same object | the same |
+| Where the object ran | varied, SJC or LAX |
+| Two clients, 8 keys/s each, one shared focus, last writer wins | about 56% of keys snap back |
+| The same with a version check | about 40% refused |
+| Cost | under $0.01 |
+
+These sit between this box's 20 ms and 80 ms simulated rows, nearer the 80 ms one (64% and about
+50% there), which fits a real round trip of tens of milliseconds. That the two agree is a check
+on the simulation, not a proof of either: the hosted run had real jitter and placement, and the
+simulation had neither.
+
+What the hosted numbers change:
+
+- **Waiting is visible there.** A window that waits for the hosted brain shows each key 25 to
+  60 ms late, two to four frames at 60 Hz, and sometimes near 80 ms. On the owner's Mac, with the
+  brain in local workerd, the same wait is under a millisecond.
+- **Moving first snaps there, but only on shared state.** With one shared focus, about half the
+  keys of two people at typing speed snap back. With focus per person, none would.
+- **The answer holds:** move first, with the brain's answer winning, and keep focus per person.
 
 ## What this cannot tell us
 
-- The deployed round trip, and whether a Durable Object far from one of the two people changes the
-  picture. That is the hosted half.
-- What a snap back looks like to a person. No window was built; the counts say how often, not how
-  bad.
+- What a snap back looks like to a person. No window was built and no shot of a snap was taken;
+  the counts say how often, not how bad.
+- The hosted numbers' detail. They are the lead's report of its own run from the owner's laptop,
+  not re-run or seen raw here; only one placement range (SJC or LAX) and one home connection.
+- Whether a Durable Object far from one of the two people changes the picture, as when the two
+  are on different continents. Both hosted clients were on one laptop.
 - Whether two people really share one desk's focus. If each person's focus is their own (likely; that
   selection is per person in Figma and Linear is a guess, not sourced here), no focus key ever clashes, and only the
   shared parts (split, close) can.
