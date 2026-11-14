@@ -945,6 +945,29 @@
       }
     },
     {
+      // E5 (0095): a service class holds no static member, so each layer is a sibling file. On
+      // where the count is zero (oxlint-plugins/README.md): a slice adds its folder when it moves
+      // that folder's layers, and the last one makes the list `next/**`. Tests, shared suites and
+      // test support are left out: a test may build a stand-in service any way it likes.
+      "files": [
+        "next/apps/**",
+        "next/programs/**",
+        "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/codehost/**",
+        "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/jobs/**",
+        "next/packages/libfabrika/src/ledger/**",
+        "next/packages/libfabrika/src/node/**",
+        "next/packages/libfabrika/src/packs/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/settings/**",
+        "next/packages/libfabrika/src/transport/**"
+      ],
+      "excludeFiles": ["next/**/*.test.ts", "next/**/*.test.tsx", "next/**/*Test.ts", "next/**/*.test-support.ts"],
+      "rules": { "fabrika/no-static-layer": "error" }
+    },
+    {
       // Each law is a property or a labeled example (0093). "warn" only advises: lint.ts prints it
       // and does not fail on it until its false alarms on main are counted at about 0%. A shared
       // suite (`SinkTest.ts`, 0062) holds laws too. Today's version's tests are left out: 0093 covers
