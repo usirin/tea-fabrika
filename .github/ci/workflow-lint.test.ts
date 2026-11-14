@@ -534,7 +534,7 @@ const plants: [string, (workflow: Workflow) => void][] = [
     `next end-to-end denominator ${fault === "" ? "absent" : fault}`,
     (w) => {
       const env = w.jobs.next.steps[2]!.env!;
-      const count = Number(/\/(\d+)$/.exec(env.SHARD)?.[1]);
+      const count = Number(/\/(\d+)$/.exec(env.SHARD ?? "")?.[1]);
       env.SHARD =
         typeof fault === "number"
           ? `\${{ matrix.shard }}/${count + fault}`
@@ -1140,7 +1140,7 @@ const faults: [string, (workflow: Workflow) => void, string][] = [
     "an end-to-end /N one more than the e2e legs",
     (w) => {
       const env = w.jobs.next.steps[2]!.env!;
-      env.SHARD = env.SHARD.replace(/\/(\d+)$/, (_, count: string) => `/${Number(count) + 1}`);
+      env.SHARD = (env.SHARD ?? "").replace(/\/(\d+)$/, (_, count: string) => `/${Number(count) + 1}`);
     },
     "next's end-to-end step passes --shard <leg>/<the count of e2e legs>",
   ],
