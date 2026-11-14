@@ -130,7 +130,9 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       }),
       catch: fail,
     });
-    // oxlint-disable-next-line fabrika/no-promises -- edge: the private runtime socket is an HTTP transport for object calls
+    // The Promise proxies below run this call with no context, so it has no `HttpClient` to ask for.
+    // One marker line serves both checks, since each reads only the line above the call.
+    // oxlint-disable-next-line fabrika/no-promises -- edge: the private runtime socket is an HTTP transport for object calls. @effect-diagnostics-next-line globalFetchInEffect:off
     const response = yield* Effect.tryPromise({ try: () => fetch(url, request), catch: fail });
     const badRow = (cause: unknown) => new ControlError({ reason: "bad_row", cause });
     // oxlint-disable-next-line fabrika/no-promises -- edge: the binding transport response returns a Promise
