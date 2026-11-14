@@ -1,7 +1,7 @@
 ---
 id: 0217
 title: The new version grows in next/ beside today's, imports nothing from it, and the pull request that switches a job over deletes the old part once its tests are ported
-status: accepted
+status: amended-in-part by [0525](0525-todays-version-is-frozen.md)
 date: 2026-10-31
 tags: [clean-slate, next, todays-version, strangler-fig, deletion]
 ---

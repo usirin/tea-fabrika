@@ -1,7 +1,7 @@
 ---
 id: 0465
 title: Render is pure, so a view never reads the clock, never touches a ref's current and never changes what it was given
-status: accepted
+status: amended-in-part by [0525](0525-todays-version-is-frozen.md)
 date: 2026-11-03
 tags: [react, compiler, render, purity, next]
 ---

@@ -1,7 +1,7 @@
 ---
 id: 0481
 title: A tile opened with content takes half the focused tile's share after it, folding its row's others under 220px, and takes focus on the same selection
-status: accepted
+status: amended-in-part by [0525](0525-todays-version-is-frozen.md)
 date: 2026-11-02
 tags: [ui, tiles, focus, inbox, today]
 ---
