@@ -768,6 +768,82 @@ const FrameInput = Schema.Struct({
   ).check(Schema.isMinLength(1), Schema.isMaxLength(12)),
 });
 
+type FrameShape = (typeof FrameInput.Type)["frames"][number]["shape"] | "parenName" | "pathName";
+
+/** One generated frame's raw text and the text the sink must keep, built from the same parts, never
+ *  by the sink's code. `root` is the folder the frame's location sits in. */
+const frameText = ({
+  shape,
+  name,
+  line,
+  column,
+  root,
+  word,
+}: {
+  readonly shape: FrameShape;
+  readonly name: string;
+  readonly line: number;
+  readonly column: number;
+  readonly root: string;
+  readonly word: string;
+}): { readonly raw: string; readonly kept: string } => {
+  const file = `${name}.ts:${line}:${column}`;
+  const location = `${root}/nested/${file}`;
+
+  switch (shape) {
+    case "url":
+      return { raw: `at ${name} (file:///${location})`, kept: `at ${name} (${file})` };
+    case "posix":
+      return { raw: `at ${name} (/${location})`, kept: `at ${name} (${file})` };
+    case "windows":
+      return { raw: `at ${name} (C:\\${root}\\nested\\${file})`, kept: `at ${name} (${file})` };
+    case "windowsUrl":
+      return { raw: `at ${name} (file:///C:/${location})`, kept: `at ${name} (${file})` };
+    case "node":
+      return {
+        raw: `at ${name} (node:internal/process/task_queues:${line}:${column})`,
+        kept: `at ${name} (node:internal/process/task_queues:${line}:${column})`,
+      };
+    case "bundle":
+      return { raw: `at ${name} (file:///bundle/${file})`, kept: `at ${name} (${file})` };
+    case "bare":
+      return { raw: `at ${name}`, kept: `at ${name}` };
+    case "anonymous":
+      return { raw: "at Array.map (<anonymous>)", kept: "at Array.map (<anonymous>)" };
+    case "async":
+      return { raw: `at async Promise.all (index ${line})`, kept: `at async Promise.all (index ${line})` };
+    case "unnamed":
+      return { raw: `at ${location}`, kept: `at ${file}` };
+    case "slashName":
+      return { raw: `at ${name}/${word} (${location})`, kept: `at ${name}/${word} (${file})` };
+    case "slashBare":
+      return { raw: `at ${name}/${word}`, kept: `at ${name}/${word}` };
+    case "query":
+      // A dev server's URL: the query can hold a folder, and the file name sits before it.
+      return {
+        raw: `at ${name} (http://localhost:5173/src/${name}.ts?t=${root}/${word}:${line}:${column})`,
+        kept: `at ${name} (${file})`,
+      };
+    case "nestedEval":
+      return {
+        raw: `at eval (eval at ${name} (eval at ${word} (${location}), <anonymous>:${line}:1), <anonymous>:1:${column})`,
+        kept: `at eval (eval at ${name} (eval at ${word} (${file}), <anonymous>:${line}:1), <anonymous>:1:${column})`,
+      };
+    case "parenName":
+      // A name that holds its own parenthesized word stays whole.
+      return { raw: `at ${name} (${word}) (${location})`, kept: `at ${name} (${word}) (${file})` };
+    case "pathName":
+      // A name that holds " (" and a path cannot be told from a folder, so it goes with the folder (ticket 955).
+      return { raw: `at ${name} (${root}) (${location})`, kept: `at ${name} (${file})` };
+    default:
+      // An eval frame names the caller it ran in: `eval at <name> (` stays, with its location's file.
+      return {
+        raw: `at eval (eval at ${name} (${location}), <anonymous>:1:1)`,
+        kept: `at eval (eval at ${name} (${file}), <anonymous>:1:1)`,
+      };
+  }
+};
+
 const frameCases = Arbitrary.schema(FrameInput).pipe(
   Arbitrary.map(({ word, rootKind, frames }) => {
     const root = {
@@ -782,70 +858,23 @@ const frameCases = Arbitrary.schema(FrameInput).pipe(
       slashed: frames.flatMap(({ shape, name }) =>
         shape === "slashName" || shape === "slashBare" ? [`${name}/${word}`] : [],
       ),
-      frames: frames.map(({ shape, name, line, column }) => {
-        const file = `${name}.ts:${line}:${column}`;
-        const location = `${root}/nested/${file}`;
-
-        switch (shape) {
-          case "url":
-            return { raw: `at ${name} (file:///${location})`, kept: `at ${name} (${file})` };
-          case "posix":
-            return { raw: `at ${name} (/${location})`, kept: `at ${name} (${file})` };
-          case "windows":
-            return { raw: `at ${name} (C:\\${root}\\nested\\${file})`, kept: `at ${name} (${file})` };
-          case "windowsUrl":
-            return { raw: `at ${name} (file:///C:/${location})`, kept: `at ${name} (${file})` };
-          case "node":
-            return {
-              raw: `at ${name} (node:internal/process/task_queues:${line}:${column})`,
-              kept: `at ${name} (node:internal/process/task_queues:${line}:${column})`,
-            };
-          case "bundle":
-            return { raw: `at ${name} (file:///bundle/${file})`, kept: `at ${name} (${file})` };
-          case "bare":
-            return { raw: `at ${name}`, kept: `at ${name}` };
-          case "anonymous":
-            return { raw: "at Array.map (<anonymous>)", kept: "at Array.map (<anonymous>)" };
-          case "async":
-            return { raw: `at async Promise.all (index ${line})`, kept: `at async Promise.all (index ${line})` };
-          case "unnamed":
-            return { raw: `at ${location}`, kept: `at ${file}` };
-          case "slashName":
-            return { raw: `at ${name}/${word} (${location})`, kept: `at ${name}/${word} (${file})` };
-          case "slashBare":
-            return { raw: `at ${name}/${word}`, kept: `at ${name}/${word}` };
-          case "query":
-            // A dev server's URL: the query can hold a folder, and the file name sits before it.
-            return {
-              raw: `at ${name} (http://localhost:5173/src/${name}.ts?t=${root}/${word}:${line}:${column})`,
-              kept: `at ${name} (${file})`,
-            };
-          case "nestedEval":
-            return {
-              raw: `at eval (eval at ${name} (eval at ${word} (${location}), <anonymous>:${line}:1), <anonymous>:1:${column})`,
-              kept: `at eval (eval at ${name} (eval at ${word} (${file}), <anonymous>:${line}:1), <anonymous>:1:${column})`,
-            };
-          default:
-            // An eval frame names the caller it ran in: `eval at <name> (` stays, with its location's file.
-            return {
-              raw: `at eval (eval at ${name} (${location}), <anonymous>:1:1)`,
-              kept: `at eval (eval at ${name} (${file}), <anonymous>:1:1)`,
-            };
-        }
-      }),
+      frames: frames.map(({ shape, name, line, column }) => frameText({ shape, name, line, column, root, word })),
     };
   }),
 );
 
-const storedFrames = Effect.fnUntraced(function* (
-  sample: typeof frameCases extends Arbitrary.Arbitrary<infer A> ? A : never,
+/** Throws the generated errors, outermost first and each the cause of the one before, inside an
+ *  `Effect.fn` span, and answers `Cause.pretty`'s text and the sink's stored text for that span. */
+const storedStack = Effect.fnUntraced(function* (
+  errors: ReadonlyArray<{ readonly message: string; readonly stack: string }>,
 ) {
   const { sql } = yield* walkHome;
   return yield* Effect.gen(function* () {
-    const inner = new Error("inner message /message/path stays");
-    inner.stack = [`Error: ${inner.message}`, ...sample.frames.map(({ raw }) => `    ${raw}`)].join("\n");
-    const outer = new Error("outer message C:\\message\\path stays", { cause: inner });
-    outer.stack = [`Error: ${outer.message}`, ...sample.frames.map(({ raw }) => `    ${raw}`)].join("\n");
+    const outer = errors.reduceRight<Error | undefined>((cause, { message, stack }) => {
+      const error = cause === undefined ? new Error(message) : new Error(message, { cause });
+      error.stack = stack;
+      return error;
+    }, undefined);
     const fail = Effect.fn("sink.frames")(function* () {
       return yield* Effect.sync(() => {
         // oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- A-Sink exercises a thrown Error and its nested cause
@@ -870,6 +899,15 @@ const storedFrames = Effect.fnUntraced(function* (
     return { pretty, message };
   }).pipe(Effect.provide(world(sql)));
 });
+
+/** S1 and S2's two errors, each stack its frames joined by `\n`, as before ticket 955. */
+const storedFrames = (sample: typeof frameCases extends Arbitrary.Arbitrary<infer A> ? A : never) =>
+  storedStack(
+    ["outer message C:\\message\\path stays", "inner message /message/path stays"].map((message) => ({
+      message,
+      stack: [`Error: ${message}`, ...sample.frames.map(({ raw }) => `    ${raw}`)].join("\n"),
+    })),
+  );
 
 describe("A-Sink, stored error frames keep no machine folders", () => {
   it.effect.prop(
@@ -930,6 +968,195 @@ describe("A-Sink, stored error frames keep no machine folders", () => {
         }
       }),
     { arbitrary: { seed: SEED, runs: 50 } },
+  );
+});
+
+// A-Sink S4 and S5 (0186, ticket 955): a folder with one unmatched parenthesis broke the cut's
+// parenthesis count, and a CRLF stack kept a `\r` on each line, which the frame regex's `.` does
+// not match. Folders also hold U+2028, the other line terminator `.` stops at. Three errors deep,
+// so a cause's last line takes ` {` after its own `\r`.
+const StrayInput = Schema.Struct({
+  word: FrameWord,
+  rootKind: Schema.Literals(["posix", "url", "windows", "relative"]),
+  // A relative root's start, as a bundler or a test runner prints it; `.\\` takes Windows separators.
+  prefix: Schema.Literals(["src/", "./", "../", "~/", ".\\"]),
+  // One unmatched parenthesis in one folder, with spaces around it, so " (" and ") " appear too.
+  before: Schema.String.check(Schema.isPattern(/^[a-z ]{0,8}$/)),
+  stray: Schema.Literals(["(", ")"]),
+  breaker: Schema.Literals(["", "\u2028"]),
+  after: Schema.String.check(Schema.isPattern(/^[a-z ]{0,8}$/)),
+  ending: Schema.Literals(["\n", "\r\n"]),
+  tail: Schema.Literals(["", "\n", "\r\n", "\r"]),
+  frames: Schema.Array(
+    Schema.Struct({
+      shape: Schema.Literals([
+        "url",
+        "posix",
+        "windows",
+        "windowsUrl",
+        "node",
+        "bundle",
+        "bare",
+        "anonymous",
+        "async",
+        "unnamed",
+        "eval",
+        "nestedEval",
+        "slashName",
+        "slashBare",
+        "query",
+        "parenName",
+        "pathName",
+      ]),
+      name: FrameWord,
+      line: FramePosition,
+      column: FramePosition,
+    }),
+  ).check(Schema.isMinLength(1), Schema.isMaxLength(12)),
+});
+
+const strayCases = Arbitrary.schema(StrayInput).pipe(
+  Arbitrary.map(({ word, rootKind, prefix, before, stray, breaker, after, ending, tail, frames }) => {
+    const folder = `${before}${stray}${breaker}${after}`;
+    const separator = prefix.endsWith("\\") ? "\\" : "/";
+    const root = {
+      posix: `/sink-${word}/${folder}/private`,
+      url: `file:///sink-${word}/${folder}/private`,
+      windows: `C:\\sink-${word}\\${folder}\\private`,
+      relative: `${prefix}sink-${word}${separator}${folder}${separator}private`,
+    }[rootKind];
+    const generated = frames.map(({ shape, name, line, column }) =>
+      frameText({ shape, name, line, column, root, word }),
+    );
+    return {
+      root,
+      slashed: frames.flatMap(({ shape, name }) =>
+        shape === "slashName" || shape === "slashBare" ? [`${name}/${word}`] : [],
+      ),
+      frames: generated,
+      errors: [
+        "outer message C:\\message\\path stays",
+        "inner message /message/path stays",
+        "innermost message stays",
+      ].map((message) => ({
+        message,
+        stack: `${[`Error: ${message}`, ...generated.map(({ raw }) => `    ${raw}`)].join(ending)}${tail}`,
+      })),
+    };
+  }),
+);
+
+/** A text's lines and the breaks between them, every break kept: `\r\n`, `\r` and `\n`. */
+const pieces = (text: string) => text.split(/(\r\n|\r|\n)/);
+
+describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
+  it.effect.prop(
+    "S4 [secrets]: with a stray parenthesis in a folder and any line ending, no stored frame names a folder",
+    { sample: strayCases },
+    ({ sample }) =>
+      Effect.gen(function* () {
+        const { message } = yield* storedStack(sample.errors);
+
+        for (const root of [
+          sample.root,
+          JSON.stringify(sample.root).slice(1, -1),
+          encodeURI(sample.root),
+          encodeURIComponent(sample.root),
+        ]) {
+          expect(message.includes(root), "stored content copied a generated root").toBe(false);
+        }
+
+        for (const line of message.split(/\r\n|\r|\n/).filter((line) => /^\s*at /.test(line))) {
+          // A third error gives the inner's last line ` {`, the mark of a cause that follows.
+          const frame = line.trim().replace(/ \{$/, "");
+          const named = sample.slashed.find((name) => frame === `at ${name}` || frame.startsWith(`at ${name} (`));
+          const location = named === undefined ? frame : frame.slice(`at ${named}`.length);
+          const withoutNode = location.replace(/node:[^)]*/g, "");
+          expect(withoutNode, `a stored frame names a folder: ${JSON.stringify(line)}`).not.toMatch(/[/\\]/);
+        }
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
+
+  it.effect.prop(
+    "S5: every line break, every non-frame byte and each frame's name and position survive, in order",
+    { sample: strayCases },
+    ({ sample }) =>
+      Effect.gen(function* () {
+        const { pretty, message } = yield* storedStack(sample.errors);
+        const before = pieces(pretty);
+        const after = pieces(message);
+        expect(after, "the stored text has the raw text's lines and breaks").toHaveLength(before.length);
+
+        for (const [index, piece] of before.entries()) {
+          const frame = index % 2 === 1 ? null : /^(\s*)at (.*?)( \{)?$/s.exec(piece);
+
+          if (frame === null) {
+            expect(after[index], "a line break or a non-frame line changed").toBe(piece);
+            continue;
+          }
+
+          const generated = sample.frames.find(({ raw }) => raw === `at ${frame[2]}`);
+
+          if (generated !== undefined) {
+            expect(after[index]).toBe(`${frame[1]}${generated.kept}${frame[3] ?? ""}`);
+          } else {
+            // Effect.fn contributes its own real frame, beside the generated Error stacks.
+            const own = /^(\s*at sink\.frames(?: \(definition\))? \().*[/\\]([^/\\]+:\d+:\d+\)(?: \{)?)$/s.exec(piece);
+            expect(own, `unexpected Effect.fn frame: ${JSON.stringify(piece)}`).not.toBeNull();
+            expect(after[index]).toBe(`${own?.[1]}${own?.[2]}`);
+          }
+        }
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
+
+  it.effect("pinned: ticket 955, a folder with one unmatched parenthesis", () =>
+    Effect.gen(function* () {
+      // The shapes the parenthesis count got wrong: a `)` stored the line whole, a `(` kept the
+      // folder before it. Plus a bare location with a `(`.
+      const { message } = yield* storedStack([
+        {
+          message: "m",
+          stack: [
+            "Error: m",
+            "    at fn (/root/a)b/c.ts:1:2)",
+            "    at fn (/root/a(b/c.ts:1:2)",
+            "    at eval (eval at g (/root/a)b/c.ts:3:4), <anonymous>:1:1)",
+            "    at /root/a(b/c.ts:5:6",
+            // A relative location: its start is a word and a separator, not a scheme or a "/".
+            "    at fn (src/a (b/c.ts:1:2)",
+            "    at fn (./a (b/c.ts:1:2)",
+            "    at fn (../a (b/c.ts:1:2)",
+            "    at fn (~/a (b/c.ts:1:2)",
+            "    at fn (.\\a (b\\c.ts:1:2)",
+            "    at eval (eval at g (src/a (b/c.ts:3:4), <anonymous>:1:1)",
+          ].join("\n"),
+        },
+      ]);
+      const lines = message.split("\n").map((line) => line.trim());
+      expect(lines.filter((line) => line === "at fn (c.ts:1:2)")).toHaveLength(7);
+      expect(lines.filter((line) => line === "at eval (eval at g (c.ts:3:4), <anonymous>:1:1)")).toHaveLength(2);
+      expect(lines).toContain("at c.ts:5:6");
+      expect(message).not.toContain("/root");
+      expect(message).not.toMatch(/a \(/);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("pinned: ticket 955, a CRLF stack keeps its line endings", () =>
+    Effect.gen(function* () {
+      // No law fed the sink a `\r` before: every CRLF frame line was stored whole, folder and all.
+      const { message } = yield* storedStack(
+        ["m", "m", "m"].map((message) => ({
+          message,
+          stack: "Error: m\r\n    at fn (/root/a/b/c.ts:1:2)\r\n    at g (/root/x.ts:3:4)\r",
+        })),
+      );
+      expect(message.match(/at fn \(c\.ts:1:2\)\r\n/g)).toHaveLength(3);
+      expect(message.match(/at g \(x\.ts:3:4\)\r/g)).toHaveLength(3);
+      expect(message).toContain("at g (x.ts:3:4)\r {");
+      expect(message).not.toContain("/root");
+    }).pipe(Effect.scoped),
   );
 });
 

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-sink-cut-keeps-relative-first-folder",
+  "date": "2026-11-14",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "next/packages/libfabrika/src/telemetry/Sink.ts",
+    "line": 157
+  },
+  "says": "A relative frame location whose first folder holds \" (\", a space or a parenthesis before its first separator still keeps part of that folder in the stored frame, because START's relative branch [^\\s()]*[/\\\\] stops at that character and opens falls back to a later \" (\"; StrayInput's relative root always starts with a fixed prefix and sink-<word>, so S4 never draws it, and two START plants survive the laws.",
+  "proof": "Running Sink.ts's START, opens, located and portable at 3e6fb58, copied into a scratch script: 'at fn (a (b/private/c.ts:1:2)' gives 'at fn (a (c.ts:1:2)', 'at fn (my (copy)/src/a.ts:1:2)' gives 'at fn (my (a.ts:1:2)', 'at fn (my dir/a (b/c.ts:1:2)' gives 'at fn (my dir/a (c.ts:1:2)', 'at fn (a)b/c (d/e.ts:1:2)' gives 'at fn (a)b/c (e.ts:1:2)', 'at fn (a(b/c (d/e.ts:1:2)' gives 'at fn (a(b/c (e.ts:1:2)'. The f83e0e9e8 cut stores each with no folder. Sink.test.ts:1026 builds the relative root as `${prefix}sink-${word}${separator}${folder}...`, and FrameWord (Sink.test.ts:739) is /^[a-z]{3,16}$/.",
+  "cost": "A stack with relative locations whose first folder is named with a space or a parenthesis, such as 'my (copy)/', stores part of that folder, against 0186; rare in next/ today, and no stored record of such a stack was read.",
+  "head": "3e6fb582a2d001ad0d1d2c1d2414ee613bdd1cda",
+  "ticket": "955",
+  "pr": null
+}
