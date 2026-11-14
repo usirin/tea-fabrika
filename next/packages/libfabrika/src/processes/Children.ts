@@ -1,8 +1,8 @@
 /**
  * The contract for starting a child process: OTP's `whereis` then `supervisor:start_child`, in one
- * step, for every caller, and for stopping one, OTP's `terminate_child`. Only a fresh start saves anything: the child's `started` line and its
- * first letter. This file holds the contract only (0095); `ChildrenLedger.layer(...)` starts on the
- * ledger.
+ * step, for every caller, and for stopping one, OTP's `terminate_child`. Only a fresh start saves
+ * anything: the child's `started` line and its first letter. This file holds the contract only
+ * (0095); `ChildrenLedger.layer(...)` starts on the ledger.
  *
  * @stability unstable
  */
@@ -155,9 +155,7 @@ export class ChildrenError extends Schema.TaggedError<ChildrenError>()("Children
  *
  * **Gotchas**
  *
- * A child is not linked to its requester: it keeps running when the requester ends. `stop` is left
- * out where the wiring has no way to stop a child yet, and a `stop_child` there is answered
- * `bad_cmd`.
+ * A child is not linked to its requester: it keeps running when the requester ends.
  *
  * @stability unstable
  * @category services
@@ -166,6 +164,6 @@ export class Children extends Context.Service<
   Children,
   {
     readonly start: (child: Child, from: From) => Effect.Effect<Started, ChildrenError>;
-    readonly stop?: (stop: ChildStop, from: From) => Effect.Effect<void, ChildrenError>;
+    readonly stop: (stop: ChildStop, from: From) => Effect.Effect<void, ChildrenError>;
   }
 >()("@kampus/libfabrika/processes/Children") {}

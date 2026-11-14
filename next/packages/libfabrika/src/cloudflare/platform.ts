@@ -183,6 +183,9 @@ export class ProjectClient extends Context.Service<
       processChild: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Project processChild RPC enters Effect
         Effect.tryPromise({ try: () => stub.processChild(...args), catch: unreachable }),
+      processStop: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Project processStop RPC enters Effect
+        Effect.tryPromise({ try: () => stub.processStop(...args), catch: unreachable }),
     };
   }
 }

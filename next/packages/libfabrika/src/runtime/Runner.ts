@@ -1574,14 +1574,13 @@ export class ProgramRunner extends Context.Service<
          *  stays dispatched. */
         const stopChild = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
           const input = decodeStopChild(job.cmd);
-          const stop = Option.flatMap(children, (c) => Option.fromUndefinedOr(c.stop));
 
-          if (!state.loaded.declaration.cmds.includes(STOP_CHILD) || Option.isNone(stop) || Option.isNone(input)) {
+          if (!state.loaded.declaration.cmds.includes(STOP_CHILD) || Option.isNone(children) || Option.isNone(input)) {
             return yield* err(job, "bad_cmd");
           }
 
-          const stopped = yield* stop
-            .value(
+          const stopped = yield* children.value
+            .stop(
               { name: input.value.name, requester: Recipient.cases.process.make({ process: process.id }) },
               yield* from(job.parent, job.traceId),
             )

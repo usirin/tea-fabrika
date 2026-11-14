@@ -3,7 +3,7 @@ import { Session, SigningRefused } from "../access/SessionManager.ts";
 import type { LedgerCalls } from "../ledger/Ledger.ts";
 import { Appended, Line } from "../ledger/Log.ts";
 import type { Connections } from "../presence/Connections.ts";
-import { type Child, ChildrenError, Started } from "../processes/Children.ts";
+import { type Child, ChildrenError, type ChildStop, Started } from "../processes/Children.ts";
 import type { From, Letter } from "../processes/Mailbox.ts";
 import { ProcessError, State, type Activity, type Start } from "../processes/Process.ts";
 import type { ProcessManager } from "../processes/ProcessManager.ts";
@@ -69,6 +69,12 @@ export type ProcessReply<A> =
 /** A child start's answer over Project RPC (P42): `Started`, or its refusal as data. Storage fails the call. */
 export const ChildReplies = Schema.TaggedUnion({
   ok: { value: Started },
+  ChildrenError: { reason: ChildrenError.fields.reason },
+});
+
+/** A child stop's answer over Project RPC: done, or its refusal as data. Storage fails the call. */
+export const StopReplies = Schema.TaggedUnion({
+  ok: {},
   ChildrenError: { reason: ChildrenError.fields.reason },
 });
 
@@ -179,6 +185,7 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
     processDown: ProcessCall<Processes["down"]>;
     processReceive: ProcessCall<(process: string, after: number) => Effect.Effect<ReadonlyArray<Letter>, ProcessError>>;
     processChild: RemoteCall<(child: Child, from: From) => Effect.Effect<typeof ChildReplies.Encoded>>;
+    processStop: RemoteCall<(stop: ChildStop, from: From) => Effect.Effect<typeof StopReplies.Encoded>>;
   };
 
 export type ProcessBinding = Rpc.DurableObjectBranded &

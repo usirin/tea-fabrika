@@ -10,6 +10,7 @@ import { run } from "@demlik/tea/effect";
 import { Clock, DateTime, Deferred, Effect, Option, Predicate, Queue, Random, Schema, Stream } from "effect";
 import { Socket } from "effect/socket";
 import * as Id from "../Id.ts";
+import { TileId } from "../tezgah/Workspace.ts";
 import { ClientKey, type Identity } from "../transport/ClientKey.ts";
 import { ClientRow, ClientRows, ErrorClass } from "../transport/ClientRows.ts";
 import { helloText } from "../transport/Hello.ts";
@@ -33,7 +34,7 @@ export const ClientInfo = Schema.Struct({
 });
 
 /**
- * What a start is given: the tiles to show, the window parent, the brain's origin, the build that
+ * What a start is given: the tiles to show or a desk, the window parent, the brain's origin, the build that
  * runs and the client's own facts. Plain data and the machine, so any client can pass it.
  *
  * @stability unstable
@@ -41,6 +42,8 @@ export const ClientInfo = Schema.Struct({
  */
 export type StartOptions = {
   readonly tiles: ReadonlyArray<{ readonly id: string; readonly name: string }>;
+  /** A desk: the window shows this workspace of its person's tezgah, in place of `tiles`. */
+  readonly desk?: { readonly workspace: number };
   readonly window: ReturnType<typeof windowMachineFor>;
   readonly origin: string;
   readonly build: string;
@@ -219,7 +222,7 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
     );
 
   return yield* run(options.window, {
-    ctx: { tiles: options.tiles },
+    ctx: { tiles: options.tiles, ...(options.desk === undefined ? {} : { desk: options.desk }) },
     interpret: {
       key: Effect.fn("ClientKey.current")(function* (cmd) {
         const key = yield* keys.current(cmd.rejected).pipe(Effect.mapError((error) => ({ ...error })));
@@ -229,6 +232,10 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
       now: Effect.fn("Client.now")(function* () {
         const letter = yield* ids.next(Id.Letter).pipe(Effect.mapError(() => F.entropy.make({})));
         return { letter, sentAt: yield* sentAt };
+      }),
+      mint: Effect.fn("Client.mint")(function* () {
+        const tile = yield* ids.next(TileId).pipe(Effect.mapError(() => F.entropy.make({})));
+        return { tile };
       }),
       write: Effect.fn("Client.write")(function* (cmd: Write) {
         const call = cmd.call;
