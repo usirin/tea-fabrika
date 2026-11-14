@@ -17,11 +17,11 @@
 // `error` is the Phase-3 capstone #2753; warn keeps CI green while every site is remediated). A
 // genuine exception is a per-line `// oxlint-disable-next-line fabrika/no-effect-promise -- <reason>`.
 //
-// In this repo it only advises: `lint.ts` prints its diagnostics and does not fail on them.
-// Experiment 125 read its 8 fires on main: all 8 kept their code, 7 of them for the case Effect's
-// docs give `Effect.promise` (a promise that cannot reject). A blocking check must have about 0 such
-// fires; advice may have up to 10% (Sadowski et al., CACM 2018). Narrowing it is a later change with
-// its own count.
+// In this repo it blocks in every folder at zero, and advises only in a folder that the config's
+// warn override at the end still names (0523). Experiment 125 read its 8 fires on main when it was
+// written: all 8 kept their code, 7 of them for the case Effect's docs give `Effect.promise` (a
+// promise that cannot reject). 0523 sets that count aside: a pull request that makes a folder block
+// reports the fires it met and each disable line, so a rule that needs a narrower scope shows there.
 import type { CreateRule } from "@oxlint/plugins";
 import { grouped, plainCall } from "./match.ts";
 
@@ -35,7 +35,7 @@ export const noEffectPromise: CreateRule = {
           context.report({
             node: node.arguments[0] ?? node,
             message:
-              "Advice, does not block: `Effect.promise(...)` is discouraged: a rejection becomes an uncatchable defect with an empty error channel (.patterns/index.md; #2736). Fix: use object-notation `Effect.tryPromise({ try, catch: (cause) => new SomeError({ cause }) })` with a `Schema.TaggedErrorClass`, or lift the pure core to an `Effect.fn` returning a typed `Effect`: copy `packages/fabrika-cli/src/capture/capture.ts` (or `packages/fate-effect`). Exception: // oxlint-disable-next-line fabrika/no-effect-promise -- <reason>.",
+              "`Effect.promise(...)` is discouraged: a rejection becomes an uncatchable defect with an empty error channel (.patterns/index.md; #2736). Fix: use object-notation `Effect.tryPromise({ try, catch: (cause) => new SomeError({ cause }) })` with a `Schema.TaggedErrorClass`, or lift the pure core to an `Effect.fn` returning a typed `Effect`: copy `packages/fabrika-cli/src/capture/capture.ts` (or `packages/fate-effect`). Exception: // oxlint-disable-next-line fabrika/no-effect-promise -- <reason>.",
           });
         }
 
@@ -51,7 +51,7 @@ export const noEffectPromise: CreateRule = {
           context.report({
             node: only ?? node,
             message:
-              "Advice, does not block: single-arg `Effect.tryPromise(() => ...)` is discouraged: with no `catch` a rejection becomes an uncatchable defect with an empty error channel (.patterns/index.md; #2736). Fix: use object-notation `Effect.tryPromise({ try, catch: (cause) => new SomeError({ cause }) })` with a `Schema.TaggedErrorClass`: copy `packages/fabrika-cli/src/capture/capture.ts` (or `packages/fate-effect`). Exception: // oxlint-disable-next-line fabrika/no-effect-promise -- <reason>.",
+              "Single-arg `Effect.tryPromise(() => ...)` is discouraged: with no `catch` a rejection becomes an uncatchable defect with an empty error channel (.patterns/index.md; #2736). Fix: use object-notation `Effect.tryPromise({ try, catch: (cause) => new SomeError({ cause }) })` with a `Schema.TaggedErrorClass`: copy `packages/fabrika-cli/src/capture/capture.ts` (or `packages/fate-effect`). Exception: // oxlint-disable-next-line fabrika/no-effect-promise -- <reason>.",
           });
         }
       },

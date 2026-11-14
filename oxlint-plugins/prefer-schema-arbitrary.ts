@@ -1,4 +1,5 @@
-// Today's tooling, advice for next/ tests. Match written schema evidence, never record keys or
+// Today's tooling for next/ tests: it blocks in every folder at zero, and advises where the config's
+// warn override still names the folder (0523). Match written schema evidence, never record keys or
 // capitalized names. Scope variables identify imports, aliases and callback inputs without types.
 import type { CreateRule } from "@oxlint/plugins";
 import { below, dotted, type Node } from "./match.ts";
@@ -516,7 +517,7 @@ export const preferSchemaArbitrary: CreateRule = {
 
           context.report({
             node,
-            message: `Advice, does not block: ${name} has a matching Schema. Use @effect/vitest it.prop or it.effect.prop with ${name}, or its exported Effect Arbitrary. Keep fast-check for edge cases or unsupported Effect data with a nearby reason.`,
+            message: `${name} has a matching Schema. Use @effect/vitest it.prop or it.effect.prop with ${name}, or its exported Effect Arbitrary. Keep fast-check for edge cases or unsupported Effect data with a nearby reason.`,
           });
         }
       },

@@ -462,12 +462,13 @@ describe("lint.ts, the first step of pnpm lint", () => {
       encoding: "utf8",
     });
 
-  const advice = join(plant, "advice.ts");
+  const tried = join(plant, "tried.ts");
   const blocking = join(plant, "blocking.ts");
 
-  it("prints an advice rule's fire and does not fail", () => {
+  // scenario: T930 L6, the plant folder has no warn line, so it is at zero and the old advice rule blocks (0523).
+  it("scenario: T930 L6 a no-raw-try-catch fire in a folder at zero blocks", () => {
     writeFileSync(
-      advice,
+      tried,
       [
         'import {Effect} from "effect";',
         "declare const f: () => void;",
@@ -477,10 +478,10 @@ describe("lint.ts, the first step of pnpm lint", () => {
         "",
       ].join("\n"),
     );
-    const out = lint(advice);
+    const out = lint(tried);
     expect(out.stdout).toContain("fabrika(no-raw-try-catch)");
-    expect(out.stdout).toContain("oxlint: 0 blocking, 1 advice");
-    expect(out.status).toBe(0);
+    expect(out.stdout).toContain("oxlint: 1 blocking, 0 advice");
+    expect(out.status).toBe(1);
   });
 
   it("fails on a warning from a blocking rule", () => {

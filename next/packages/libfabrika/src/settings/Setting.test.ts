@@ -136,6 +136,7 @@ describe("L1, a Setting remains a Config", () => {
 });
 
 describe("L2, metadata is required, scope is nonempty, and the decoded type is kept", () => {
+  // oxlint-disable-next-line fabrika/law-shape -- a type law: its @ts-expect-error lines are the check, so it is neither a property nor an example
   it("type: a declaration missing metadata or with an empty scope does not compile", () => {
     // Compiled by `pnpm typecheck`, never run: each call below must be refused by the compiler.
     const refused = () => [
@@ -170,6 +171,7 @@ describe("L2, metadata is required, scope is nonempty, and the decoded type is k
     expect(typeof refused).toBe("function");
   });
 
+  // oxlint-disable-next-line fabrika/law-shape -- a type law: its expectTypeOf lines are the check, so it is neither a property nor an example
   it("type: the decoded value, the default and the scope keep their inferred types", () => {
     expectTypeOf<Effect.Success<typeof Declarations.port>>().toEqualTypeOf<number>();
     expectTypeOf(Declarations.port.default).toEqualTypeOf<number>();

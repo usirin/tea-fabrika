@@ -26,7 +26,7 @@ type Leaky = {
   readonly save: (value: unknown) => Effect.Effect<void, { readonly _tag: "Own" } | { readonly _tag: "LedgerError" }>;
 };
 
-it("type: no service of access/ fails with an error tagged LedgerError", () => {
+it("pinned: a type law, checked at compile time, has no samples to draw: no service of access/ fails with an error tagged LedgerError", () => {
   // The helper finds a ledger error where one is, in a plain member and in a function's answer.
   expectTypeOf<FromLedger<Leaky>>().toEqualTypeOf<{ readonly _tag: "LedgerError" }>();
   expectTypeOf<Failures<Leaky>["_tag"]>().toEqualTypeOf<"Own" | "LedgerError">();

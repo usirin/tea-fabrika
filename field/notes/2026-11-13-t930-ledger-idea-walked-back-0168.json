@@ -1,0 +1,19 @@
+{
+  "id": "2026-11-13-t930-ledger-idea-walked-back-0168",
+  "date": "2026-11-13",
+  "lanes": [
+    "kamp-us/tea-fabrika#1199"
+  ],
+  "stage": "plan",
+  "kind": "friction",
+  "what": "Lint tooling for both versions. The lane brief for ticket 930 asked to put every existing hit of the five old advice rules into next-ledger.json and agents-ledger.json, 922 rows in all, 108 of them in today's code where no ledger exists. Decision 0168, accepted the same day, says no list file ever takes a new row and a rule turns on folder by folder at zero. The lane coordinator read 0168 before any row was written and asked the lead; the owner's ruling had said only that the five block, and the ledger part was the lead's own idea. The owner picked folder-by-folder blocking.",
+  "cause": "The brief summed 0168 up as 'the list only shrinks' and dropped its 'no new entry' clause, so a summary stood in for the decision's text.",
+  "person": true,
+  "primitive": "Check",
+  "fix": "A Check in stepcommit or CI that refuses any commit adding a row to next-ledger.json or agents-ledger.json, as 0168 says, so a brief that asks for rows fails before a step runs.",
+  "test": "Property: for any ledger file pair where the new entries are not a sub-multiset of the old, the Check refuses; for any pruned or unchanged pair, it passes.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1194",
+    "https://github.com/kamp-us/tea-fabrika/pull/1199"
+  ]
+}

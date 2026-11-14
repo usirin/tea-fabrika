@@ -13,7 +13,25 @@ Run oxlint and oxfmt through `lint.ts` and `format.ts`, not on their own. These 
 
 They began as GritQL rules in the `biome-plugins/` folder of [kamp-us/phoenix](https://github.com/kamp-us/phoenix), the pipeline this repo rebuilds, copied here unchanged. On 2026-10-31 they became TypeScript rules here, so this folder is where they change now. Each one fired on the same lines as its GritQL rule, on the whole tree and on a set of odd spellings; the note above has the numbers. The counts below are from when the GritQL rules were added and are kept as history. A name like `no-secret-env.grit` in them means the rule that is now `no-secret-env.ts`, and a mention of `biome-ignore` means what is now `oxlint-disable-next-line`.
 
-Five rules only advise: `law-shape`, `no-effect-promise`, `no-raw-try-catch`, `prefer-schema-arbitrary`, and since ticket 737 oxlint's own `no-restricted-properties` (a bare `JSON.parse` in `next/`). Their messages start with "Advice, does not block". Oxlint has no level below `warn`, so `lint.ts` runs oxlint once and decides: it prints every fire, and fails on any fire but these five. `service-id` advised from ticket 737 until ticket 909, and blocks since. Experiment 125 found the first two wrong far too often to block: 8 of 8 and 21 of 21 fires kept their code. Under Biome the same two gave their diagnostics at `"info"`, which `pnpm lint` (`biome check --error-on-warnings`) printed and did not fail on.
+Five rules that only advised now block wherever their folder is at zero ([0523](../.decisions/0523-advice-rules-block-where-clean.md)): `law-shape`, `no-effect-promise`, `no-raw-try-catch`, `prefer-schema-arbitrary`, and oxlint's own `no-restricted-properties` (a bare `JSON.parse` in `next/`). Each is `"error"` in its base scope. The config's last overrides set it to `"warn"` for the folders that still have fires, and `lint.ts` prints a fire there as `advice, this folder is not at zero yet`, without failing. Any other fire fails, a warning included. `service-id` advised from ticket 737 until ticket 909, and blocks since. Oxlint has no level below `warn`, so `lint.ts` runs oxlint once and decides (`advice.ts`). Experiment 125 found `no-effect-promise` and `no-raw-try-catch` wrong far too often to block when they were written (8 of 8 and 21 of 21 fires kept their code); 0523 sets that count aside, and each pull request that makes a folder block reports what it met.
+
+## Where a rule still advises
+
+A warn line names one folder: a package's `src/<name>/**`, the files right in `src/` as `src/*`, or, outside a `src/`, one folder's own files as `<folder>/*`. So a dirty folder never holds back its clean siblings. `law-shape` and `prefer-schema-arbitrary` lines keep the rule's file kinds (`<folder>/**/*{.test.ts,.test.tsx,Test.ts}`), so a warn line never turns a rule on where its base scope has it off. A warn line goes the moment its folder reaches zero: a whole `pnpm lint` run reads the lines from `oxlint --print-config` and fails on one with no fire left, or one that names a file, and says which line to delete. A run on a path skips that check, since it does not see every fire. A folder that blocks never goes back to a warn line (0523).
+
+`no-effect-promise` and `no-raw-try-catch` are `"error"` at the top level, so a new folder blocks from its first file. Today's version is frozen (0525): one override sets the two to `"warn"` for `apps/**`, `programs/**`, `packages/**` and `bin/**`, and a later one takes `packages/fabrika-design/**` back to `"error"`, since the design package stays live (0456). That frozen override is not a dirty-folder line: `advice.ts` names its globs, so the stale check never reads them, and both go when the freeze lane takes those paths out of lint. No warn line names a frozen path, and its 107 fires still print as advice.
+
+Count on 2026-11-13, ticket 930, on `origin/main` at `7ae7cea0f` (the same as `59cb6a311`, a docs-only change), outside today's version:
+
+| Rule | Fires | Folders that advise | Disable lines |
+|---|---|---|---|
+| `no-effect-promise` | 332 | 17 | 0 |
+| `no-raw-try-catch` | 36, 29 after the 7 in `.agents/skills/lead/scripts/` were fixed | 7 | 0 |
+| `no-restricted-properties` (`JSON.parse`) | 103 | 14 | 0 |
+| `law-shape` | 323, 319 after the disable lines | 14 | 4 |
+| `prefer-schema-arbitrary` | 21 | 8 | 0 |
+
+The per-folder counts are in the pull request for ticket 930, which made them block. A hand read of every fire in a folder with three or fewer found seven type laws, tests whose `@ts-expect-error` or `expectTypeOf` lines are the check, which `law-shape` cannot read as a property or an example: four take a disable line with that reason (`access/ClientManager.test.ts`, two in `settings/Setting.test.ts`, `checklist/src/program.laws.test.ts`), which brings three folders to zero, and three (`counter/src/window.types.test.ts` twice, `node/ErrorCause.types.test.ts`) wait for the fills that clear their folders. Whether a type law should get its own label is the owner's call.
 
 ## Isolate boundary
 
@@ -26,12 +44,12 @@ literal computed `exports` reads are checked. The rule uses oxlint's syntax visi
 checker cannot keep these names in one module. Main at `4359ea84` has zero hits. A temporary
 `TraceItem` use in the app entrypoint produced one blocking hit and was restored.
 
-## Decode and service-ID advice
+## Decode and service-ID guards
 
-Ticket 737 builds decision 0023 in `next/`: input is decoded with Effect Schema, and a service ID carries the package and its file's path, as Effect's own guide asks. Two guards keep it so. The parse guard is advice until its false alarms are counted. The service-ID guard was advice too, and blocks since ticket 909.
+Ticket 737 builds decision 0023 in `next/`: input is decoded with Effect Schema, and a service ID carries the package and its file's path, as Effect's own guide asks. Two guards keep it so. The `JSON.parse` one blocks in every folder at zero (0523). The service-ID guard was advice too, and blocks since ticket 909.
 
 ```ts
-JSON.parse(text);                                            // advice: Schema.fromJsonString(S) instead
+JSON.parse(text);                                            // blocks: Schema.fromJsonString(S) instead
 class Doorbell extends Context.Service<Doorbell, Shape>()(
   "@kampus/libfabrika/ledger/Ledger.Doorbell",               // passes in ledger/Ledger.ts
 ) {}
@@ -59,20 +77,20 @@ After that build, `service-id` found only Runner's ID; it was a named hit, not a
 |---|---|---|---|---|
 | `service-id`, libfabrika `src/` | 1 | 1: `ProgramRunner` in `runtime/Runner.ts`, written `@kampus/libfabrika/ProgramRunner` | 0 | 0 fires, with the ID as `@kampus/libfabrika/runtime/Runner.ProgramRunner` |
 
-The rule is at `error` in `.oxlintrc.json`, out of `lint.ts`'s advice set, and its messages no longer start with "Advice, does not block". `service-id.test.ts` replays it over libfabrika and expects nothing. `decode-guards.test.ts` runs `lint.ts` itself: a report of only the parse advice exits 0, and a wrong service ID or any other blocking diagnostic exits 1. `JSON.parse` keeps advising.
+The rule is at `error` in `.oxlintrc.json`, out of `lint.ts`'s advice set, and its messages no longer start with "Advice, does not block". `service-id.test.ts` replays it over libfabrika and expects nothing. `decode-guards.test.ts` runs `lint.ts` itself: a clean report exits 0, and a bare `JSON.parse` in a clean folder, a wrong service ID or any other blocking diagnostic exits 1. `JSON.parse` blocks wherever its folder is at zero (0523).
 
-## Effect property data advice
+## Effect property data
 
 `prefer-schema-arbitrary` is today's tooling for `next/**/*.test.{ts,tsx}`. It asks for Effect data only when a fast-check data constructor has written schema evidence: an `Arbitrary<typeof S.Type>` annotation, a map through `S.make` or `S.cases.x.make`, or a generated binding passed to a named Effect Schema check. Imports, callback scopes and simple aliases are resolved. Nested constructors give one message at the outer constructor. Property runners pass. Names and shared record keys alone prove nothing.
 
-The advice names the schema. A reason beside the declaration keeps an edge-case or unsupported generator:
+The message names the schema. A reason beside the declaration keeps an edge-case or unsupported generator:
 
 ```ts
 // fast-check: edge cases -- deliberately generate invalid fields to test refusal
 const invalid: fc.Arbitrary<typeof Input.Type> = fc.record({text: fc.string()});
 ```
 
-Use `unsupported Effect` in that comment for a generator Effect cannot make. This rule does not execute modules or read types from another file. Its generated syntax laws and four planted breaks are in `prefer-schema-arbitrary.test.ts`. One law runs `lint.ts` and proves advice exits 0 while another warning exits 1.
+Use `unsupported Effect` in that comment for a generator Effect cannot make. This rule does not execute modules or read types from another file. Its generated syntax laws and four planted breaks are in `prefer-schema-arbitrary.test.ts`. One law runs `lint.ts` and proves a fire in a clean folder exits 1, alone or beside another warning.
 
 Ticket 325, 2026-11-08, at [PR 532](https://github.com/usirin/tea-fabrika/pull/532)'s `1af180f6` next-test tree: the first scan found one false hit, `data/sink.test.ts:738`, where `Redacted.make` is not a schema. The match now excludes Effect modules other than Schema. The narrowed scan found 0 hits: 0 useful, 0 false and 0 unknown. Zero hits gives no false-alarm rate. The next-test files are unchanged in this tests commit, so its final-head count is the same. A separate parser scan found 189 named data constructors in 19 next-test files, including multiline calls. One useful miss is `data/log.test.ts:34`, checked through `parents(50).every(is)` at line 316. That helper flow needs review; it is outside the rule's direct binding matches. Effect 4.1.1 generated 10 valid `ParentText` values at seed 119120. Other constructor families exercise operation orders, invalid input or extra fields without direct schema evidence. These counts cannot show that every untyped generator should stay, or that Effect supports every domain schema.
 
@@ -104,7 +122,7 @@ Count by module on `origin/main` at `9276a9606`, by the check through an inline 
 
 B3.0 fixed the 10 names of `ci` and `codehost`, all in their two shared test suites, `CiTest.ts` and `CodeHostTest.ts`. A run of `effect-tsgo diagnostics` on libfabrika's project then gave 0 errors. A planted `import { Option } from "effect"` in `ci/Ci.ts` and in `codehost/CodeHost.test.ts` each gave one error, and the same line in `schedules/ScheduledJob.ts`, not listed, gave none.
 
-## Law shape advice
+## Law shape
 
 `law-shape` asks of every test in `next/**/*.test.{ts,tsx}`, a shared suite `next/**/*Test.ts` and `.agents/**/*.test.ts` what [0093](../.decisions/0093-laws-walk-plants-run-once.md) asks: is it a property, or is it labeled `vector:`, `format:`, `pinned:` or `scenario:` with its reason? The label starts the title, or comes right after one ticket or law id: one token of letters, digits and dots, then a space (`T652 scenario: ...`, `R3 format: ...`; the lead, 2026-11-11). A label deeper in the title, or only in a comment above the test, does not count.
 
@@ -112,10 +130,10 @@ B3.0 fixed the 10 names of `ci` and `codehost`, all in their two shared test sui
 it.prop("the window's client is the client machine's own fold", [Run], ([run]) => {/* ... */}); // a property
 it("adds one", () => { fc.assert(fc.property(fc.nat(), (n) => add(n) > n)); });           // a property
 it("format: every Msg the runner sends decodes", () => {/* ... */});                    // labeled
-it("adds one to zero", () => { expect(add(0)).toBe(1); });                              // advice
+it("adds one to zero", () => { expect(add(0)).toBe(1); });                              // blocks
 ```
 
-A property is `it.prop` or `it.effect.prop`, or a body that calls fast-check's `assert` or a `@demlik/tea/pbt` runner (`propertyTrace`, `propertyInvariant`, `propertyTerminates`), directly or through a function the same file declares. `syncTest` is not one: it checks one Msg list it is given. The rule's head comment lists what counts as a test, and `law-shape.test.ts` has one generated line per edge case. A title that is not written out (a helper's parameter) is not judged. Today's version's tests are left out: 0093 covers `next/`, and 0033 holds `.agents/` to `next/`'s rules. The exam's own rule tests under `next/apps/fabrika/src/exam/` are read too. 0093 says it covers laws on product code, so whether those tests belong in scope is still open; while the rule only advises, they stay in.
+A property is `it.prop` or `it.effect.prop`, or a body that calls fast-check's `assert` or a `@demlik/tea/pbt` runner (`propertyTrace`, `propertyInvariant`, `propertyTerminates`), directly or through a function the same file declares. `syncTest` is not one: it checks one Msg list it is given. The rule's head comment lists what counts as a test, and `law-shape.test.ts` has one generated line per edge case. A title that is not written out (a helper's parameter) is not judged. Today's version's tests are left out: 0093 covers `next/`, and 0033 holds `.agents/` to `next/`'s rules. The exam's own rule tests under `next/apps/fabrika/src/exam/` are read too. 0093 says it covers laws on product code, so whether those tests belong in scope is still open; they stay in, and their folder advises until its fill.
 
 The shared runner counts too: a call to `property` imported from a `Testing.test-support.ts` module, libfabrika's one runner, which calls `fc.assert` itself. The rule knows that module by its file name, as it knows `@demlik/tea/pbt` by its name, and does not read the file. A `property` from any other module is an imported helper, which the rule does not follow, so it still fires.
 
@@ -162,7 +180,7 @@ The other is `no-bare-tell.grit`. A `tell` or `offer` to a program's input is an
 
 `pnpm typecheck` catches every other dropped Effect statement through Effect's own `floatingEffect` check (`@effect/tsgo`, set up in `tsconfig.base.json`). That check does not look inside callbacks, so the callback shape stays this rule's job.
 
-`plants.test.ts` plants one line per rule that no other test plants, and the built-in rules that must not be lost (unused imports and variables, non-null, ts-ignore), and sees each fire. It also runs `lint.ts`: advice alone exits 0 and still prints; a blocking fire exits 1.
+`plants.test.ts` plants one line per rule that no other test plants, and the built-in rules that must not be lost (unused imports and variables, non-null, ts-ignore), and sees each fire. It also runs `lint.ts`: a fire of an old advice rule in a folder at zero exits 1, and so does any other blocking fire. `advice.test.ts` runs `lint.ts` in a small repo of its own for the advice in a dirty folder and the stale warn line.
 
 `builtin-plants.ts` holds a plant for each of oxlint's own rules that went on with 0 hits on 2026-11-09 (ticket 438): 124 rules from the eslint, oxc, unicorn, typescript, vitest, react, `import` and `promise` sets. With 0 hits a rule had shown nothing, so the plant is the only proof it works. Four quirks of oxlint 1.90.0 that the plants found: `no-implied-eval` reads `globalThis.setTimeout("...")` but not a bare `setTimeout("...")`; `no-non-null-asserted-nullish-coalescing` leaves a `declare const` alone; `promise/no-multiple-resolved` goes quiet when a second Promise follows in the file; and `require-awaited-expect-poll` and `import/no-commonjs` report one line twice. `react/preserve-manual-memoization` and `react/no-object-type-as-default-prop` stayed off: no plant made the first fire, and the second had 1 hit (`apps/fabrika/src/keys/window.tsx:98`). Two more stayed off after main moved on: `unicorn/prefer-type-error` had 12 hits once every `if` body got braces (it reads only a braced `throw`), and `eslint/no-unused-expressions` had 0 hits on the tree but refuses the bare `helper;` that `one-store-hook.test.ts` plants on purpose.
 

@@ -427,6 +427,7 @@ describe("p96, founded carries true facts and is never refused quietly", () => {
     ),
   );
 
+  // oxlint-disable-next-line fabrika/law-shape -- a type law: its @ts-expect-error lines are the check, so it is neither a property nor an example
   it("the layer's type requires the writer's key and build", () => {
     // Compile-time type law; the owner rule keeps the required-field checks as type checks.
     const base = { name: NAME, keys: ["pA"], window: "wA", person: P };

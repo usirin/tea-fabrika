@@ -105,7 +105,7 @@ import { Cmd, run } from "@demlik/tea/effect";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
-import { Cause, Effect, FileSystem, Layer, Option, Schema, Stream } from "effect";
+import { Cause, Effect, FileSystem, Layer, Option, Result, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import {
   type Agents,
@@ -1852,15 +1852,15 @@ export const dockerHolder = (lock: string | null, alive: (pid: number) => boolea
   return lock !== null && Number.isInteger(pid) && pid > 0 && alive(pid) ? pid : null;
 };
 
-const isAlive = (pid: number) => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    // EPERM: the process exists and is someone else's.
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
-};
+const isAlive = (pid: number) =>
+  Result.match(
+    Result.try(() => process.kill(pid, 0)),
+    {
+      onSuccess: () => true,
+      // EPERM: the process exists and is someone else's.
+      onFailure: (error) => (error as NodeJS.ErrnoException).code === "EPERM",
+    },
+  );
 
 /**
  * Whether drive holds `BOXES/state/electron.lock` for the whole step. The box cannot write the
@@ -1881,24 +1881,11 @@ const flag = (args: string[], name: string) => {
   return i === -1 ? undefined : args[i + 1];
 };
 
-const alive = (pid: number) => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
+const alive = (pid: number) => Result.isSuccess(Result.try(() => process.kill(pid, 0)));
 
 /** Takes the lock file for this pid; `false` when another process holds it. */
-const lockTaken = (lock: string): boolean => {
-  try {
-    writeFileSync(lock, String(process.pid), { flag: "wx" });
-    return true;
-  } catch {
-    return false;
-  }
-};
+const lockTaken = (lock: string): boolean =>
+  Result.isSuccess(Result.try(() => writeFileSync(lock, String(process.pid), { flag: "wx" })));
 
 /**
  * A pid lock file, the one kind the lead's tools keep: `null` once this process holds it (taken

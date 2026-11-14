@@ -307,8 +307,9 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
     cli();
   });
 
-  // Plant: remove the ADVICE entry. Exercise lint.ts's real exit, including a different warn.
-  it("applies only to next tests and prints advice without excusing other warnings", () => {
+  // T930 L8. Plant: leave the next/ tests override at "warn". Exercise lint.ts's real exit, including
+  // a different warn: a fire in a folder at zero blocks (0523).
+  it("T930 L8 applies only to next tests and blocks in a clean folder, beside another warning too", () => {
     fc.assert(
       fc.property(fc.record({ alias: name, ext: fc.constantFrom("ts", "tsx") }), ({ alias, ext }) => {
         const text = `${imports(alias)}export const data: ${alias}.Arbitrary<typeof S.Type> = ${alias}.record({x: ${alias}.string()});\n`;
@@ -318,12 +319,13 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
           "packages/unit.test.ts": text,
         });
         expect(hits).toHaveLength(1);
-        const advice = lint({ [`next/unit.test.${ext}`]: text }, true).ran;
-        expect(advice.stdout).toContain(code);
-        expect(advice.stdout).toContain("0 blocking, 1 advice");
-        expect(advice.status, advice.stdout + advice.stderr).toBe(0);
+        const blocked = lint({ [`next/unit.test.${ext}`]: text }, true).ran;
+        expect(blocked.stdout).toContain(code);
+        expect(blocked.stdout).toContain("1 blocking, 0 advice");
+        expect(blocked.status, blocked.stdout + blocked.stderr).toBe(1);
         const warned = lint({ [`next/unit.test.${ext}`]: `${text}\ndebugger;\n` }, true, ["--warn=no-debugger"]).ran;
         expect(warned.stdout).toContain("no-debugger");
+        expect(warned.stdout).toContain("2 blocking, 0 advice");
         expect(warned.status).toBe(1);
       }),
       options,
