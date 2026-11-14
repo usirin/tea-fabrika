@@ -1,7 +1,7 @@
 ---
 id: 0179
 title: An admin merge is started only by the owner, on the pull requests the owner names, and the lead says so when one qualifies
-status: accepted
+status: amended-in-part by [0183](0183-the-lead-admin-merges-docs-only.md)
 date: 2026-11-13
 tags: [merge, admin, queue, lead, owner, main]
 ---
