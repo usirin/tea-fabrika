@@ -6,7 +6,9 @@ import { it } from "@effect/vitest";
 import { encodeRpcError, ErrorTag, RpcCallError } from "alchemy/Rpc";
 import { Deferred, Effect, Fiber, Schema } from "effect";
 import { expect } from "vitest";
+import { Writer } from "../coordination/index.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
+import { Activity } from "../processes/Process.ts";
 import * as RepliesTest from "../runtime/RepliesTest.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient, rejected } from "./platform.ts";
 
@@ -265,18 +267,49 @@ it.effect.prop(
   { arbitrary: { runs: 100, seed: 119120 } },
 );
 
-// T502 S1 [secrets], next/. What the platform throws on a call through `reach` can hold a letter's
-// text (for `notify`, the `news`), and `lost` puts it in the LedgerError's message. No span the call
-// makes may keep it, in its name, attributes, events or failed exit (docs/plan/ticket-502-alchemy-port.md,
-// the `reach.ts` and `platform.test.ts` rows). The thrown value is each fault class above, bare text,
-// or an object holding the text. Plants: `Effect.fn` back on `reach`; a span named with the message.
-const letter = (call: string, secret: string): ReadonlyArray<unknown> =>
-  call === "notify" ? ["client-1", { news: secret }] : call === "ring" ? ["stream-1", 1] : ["session-1"];
+// T502 S1 and S2 [secrets], next/. What the platform throws on a call through `reach` can hold a
+// letter's text (for `notify`, the `news`; for a Process call, the letter it was given), and `lost`
+// puts it in the LedgerError's message. No span the call makes may keep it, in its name, attributes,
+// events or failed exit (docs/plan/ticket-502-alchemy-port.md, the `reach.ts` and `platform.test.ts`
+// rows). The calls are every Connection call and every Process call, from each client's own keys.
+// The thrown value is each fault class above, bare text, or an object holding the text. Plants:
+// `Effect.fn` back on `reach`, with Process's own tracer switch gone; a span named with the message.
+const reachedCalls = [...calls.map((call) => `Gateway.${call}`), ...processMethods.map((call) => `Process.${call}`)];
+
+const PID = "process_01m6v5270hetdrt4r8h9vvjwjs";
+
+/** What each call is given: the secret where the call takes a letter-like value, plain made-up
+ *  values where it takes others, and nothing where it takes nothing. */
+const letter = (call: string, secret: string): ReadonlyArray<unknown> => {
+  const given: Record<string, ReadonlyArray<unknown>> = {
+    "Gateway.notify": ["client-1", { news: secret }],
+    "Gateway.ring": ["stream-1", 1],
+    "Gateway.probe": ["session-1"],
+    "Process.msg": [{ text: secret }],
+    "Process.usage": [[{ process: secret, method: "msg", cpuMs: 1, wallMs: 2, outcome: "ok" }]],
+    "Process.activity": [Activity.cases.stepping.make({ process: PID, letter: secret, build: "build-1" })],
+    "Process.configure": [
+      {
+        id: PID,
+        name: "counter:1",
+        program: "counter",
+        build: "build-1",
+        owner: Writer.cases.person.make({ key: "SHA256:fixture", for: "person-test" }),
+      },
+      true,
+    ],
+    "Process.open": ["client-1"],
+    "Process.mailed": [{ traceId: "0af7651916cd43dd8448eb211c80319c", spanId: "b7ad6b7169203331" }],
+    "Process.due": [1_700_000_000_000],
+    "Process.restart": [{ id: PID, build: "build-2" }],
+  };
+  return given[call] ?? [];
+};
 
 it.effect.prop(
-  "[secrets] a Connection call the platform rejects with a letter's text makes no span that keeps it",
+  "[secrets] a Connection or Process call the platform rejects with a letter's text makes no span that keeps it",
   {
-    call: Schema.Literals(calls),
+    call: Schema.Literals(reachedCalls),
     secret: RepliesTest.sentinel,
     name: Schema.Literals([...faults.map((fault) => fault.name), "text", "object"]),
   },
@@ -286,16 +319,23 @@ it.effect.prop(
       const thrown: unknown =
         fault !== undefined ? fault.make(secret) : name === "text" ? secret : { message: secret, news: secret };
       const captured = RepliesTest.capture();
-      const method = (stub: Parameters<typeof GatewayClient.make>[0]): Effect.Effect<unknown, unknown> =>
-        Reflect.apply(Reflect.get(GatewayClient.make(stub), call), undefined, letter(call, secret));
-      const failure = yield* Effect.flip(method(rejecting(thrown))).pipe(Effect.withTracer(captured.tracer));
+      const [client = "", method = ""] = call.split(".");
+      const service =
+        client === "Gateway" ? GatewayClient.make(rejecting(thrown)) : ProcessClient.make(rejecting(thrown));
+      const lost: Effect.Effect<unknown, unknown> = Reflect.apply(
+        Reflect.get(service, method),
+        undefined,
+        letter(call, secret),
+      );
+      const failure = yield* Effect.flip(lost).pipe(Effect.withTracer(captured.tracer));
 
       // The text did go through: the caller gets the lost call, with what the platform threw inside.
       expect(failure).toMatchObject({ _tag: "LedgerError", reason: "unreachable" });
       expect(Reflect.get(Object(Reflect.get(Object(failure), "cause")), "cause")).toBe(thrown);
       RepliesTest.unleaked(captured.text(), [secret]);
     }),
-  { arbitrary: { runs: 100, seed: 119120 } },
+  // 100 runs walked the three Connection calls; 500 keep that reach over all fifteen.
+  { arbitrary: { runs: 500, seed: 119120 } },
 );
 
 // `rejected` turns that message back into the thrown class for a failed span. Plants: rebuild every
