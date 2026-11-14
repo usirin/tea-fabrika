@@ -24,6 +24,7 @@
 // - The runner's answers have its shape (`runtime/Runner.ts`, `ok` and `err`): `{type:
 //   "start_child_ok", cmd: {type, program, name}, value, at}`, and `{type: "start_child_err", cmd:
 //   {type}, error: {_tag: reason}, reason, at}`, whose echo names no start.
+import { msgKeysOf } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { stepper, type Step } from "@kampus/libfabrika";
 import { ProcessName } from "@kampus/libfabrika/processes/Process";
@@ -32,7 +33,7 @@ import { Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { fabsh } from "./program.ts";
+import { fabsh, fabshMachine } from "./program.ts";
 import { builtins, read } from "./read.ts";
 import { tile } from "./tile.ts";
 import { fabshWindow } from "./window.tsx";
@@ -164,32 +165,95 @@ const answer = (outcome: Outcome, cmd: Cmd, process: string, at: number) =>
       ? startOk(cmd, { _tag: outcome, process, name: cmd["name"] }, at)
       : startErr(outcome, at);
 
-/** One move of L20's walk. The fold reads its `pick` against the state it reached: a line, an answer
- *  to a start that is really waiting, or the runner's programs answer with a new table. */
-const Move = fc.record({
-  pick: fc.nat({ max: 1_000 }),
-  line: fc.oneof(ProgramLine, fc.constantFrom("help", "history", "clear")),
-  outcome: fc.constantFrom(...OUTCOMES),
-  table: Table,
+/** The runner's answer when its programs command fails: the shape `runtime/Runner.ts`'s `err` writes. */
+const programsErr = (at: number) => ({
+  type: "programs_err",
+  cmd: { type: "programs" },
+  error: { _tag: "UnknownError" },
+  reason: "unknown",
+  at,
 });
 
+/** The runner's timer letter, as `runtime/Runner.ts` sends it at a wake. */
+const timer = (at: number, arrivedAt: number) => ({ type: "timer", at, arrivedAt });
+
+/** One move of L20's walk. `pick` chooses the letter's key from the machine's own update keys, and
+ *  `n` is read against the state the walk reached: which start to answer, with what, and when the
+ *  timer comes. */
+const Move = fc.record({
+  pick: fc.nat({ max: 1_000 }),
+  n: fc.nat({ max: 1_000 }),
+  line: fc.oneof(ProgramLine, fc.constantFrom("help", "history", "clear")),
+  onWake: fc.boolean(),
+  table: Table,
+});
+type Move = typeof Move extends fc.Arbitrary<infer A> ? A : never;
+
+/** What the walk reached: the starts still waiting for their answer, and the wake the model asks for. */
+type Walk = { readonly waiting: Array<Cmd>; readonly wake: number | null };
+
+/** How L20's walk builds a letter for each update key, or null when none can be built from the
+ *  state it reached (no start is waiting). `submitted` is the person's line, stepped as a fresh
+ *  letter; every other key is the runner's own, folded. A key the machine gains is not here, and
+ *  the law fails until the walk delivers it too. */
+const LETTERS: Readonly<Record<string, (move: Move, walk: Walk) => object | null>> = {
+  submitted: (move) => submit(move.line),
+  timer: (move, walk) =>
+    move.onWake && walk.wake !== null ? timer(walk.wake, walk.wake + move.n) : timer(move.n, move.n + 1),
+  programs_ok: (move) => programsOk(move.table, move.n),
+  programs_err: (move) => programsErr(move.n),
+  start_child_ok: (move, walk) =>
+    walk.waiting.length === 0
+      ? null
+      : answer(
+          OUTCOMES[move.n % 3]!,
+          walk.waiting.splice(move.n % walk.waiting.length, 1)[0]!,
+          processAt(move.n),
+          move.n,
+        ),
+  start_child_err: (move, walk) =>
+    walk.waiting.length === 0
+      ? null
+      : answer(
+          StartRefusal.literals[move.n % StartRefusal.literals.length]!,
+          walk.waiting.splice(move.n % walk.waiting.length, 1)[0]!,
+          processAt(move.n),
+          move.n,
+        ),
+};
+
+/** Every Msg type fabsh's machine has an update cell for, read from the machine itself. */
+const KEYS = msgKeysOf(fabshMachine);
+
 describe("L20: a start comes from the submitted step", () => {
-  it("L20: for any walk of lines and answers, only a submitted line's own step returns start_child, so its parent is the member's input", () => {
-    const seen = { starts: 0, programs: 0, answers: 0 };
+  it("pinned: L20: the walk builds a letter for every update key the machine has, so a step added later cannot escape the law", () => {
+    expect(
+      KEYS.filter((key) => !Object.hasOwn(LETTERS, key)),
+      "update keys L20's walk cannot build a letter for",
+    ).toEqual([]);
+  });
+
+  it("L20: for any walk of lines, timers and answers, only a submitted line's own step returns start_child, so its parent is the member's input", () => {
+    const seen: Record<string, number> = {};
+    const count = (reached: string) => {
+      seen[reached] = (seen[reached] ?? 0) + 1;
+    };
     fc.assert(
       fc.property(Table, fc.array(Move, { minLength: 1, maxLength: 40, size: "max" }), (table, moves) => {
         let model = told(table);
-        const waiting: Array<Cmd> = [];
+        let walk: Walk = { waiting: [], wake: stepped(steps.init(model)).wake };
 
         for (const move of moves) {
-          const kind = move.pick % 3;
+          const key = KEYS[move.pick % KEYS.length]!;
+          const build = LETTERS[key] ?? expect.fail(`L20's walk cannot build a ${key} letter`);
+          const letter = key === "submitted" ? null : build(move, walk);
 
-          if (kind === 0 || (kind === 1 && waiting.length === 0)) {
+          if (letter === null) {
             const known = viewed(steps.init(model)).programs;
             const step = steps.step(model, submit(move.line));
             const begun = starts(step);
             const want = expected(move.line, known);
-            seen.starts += begun.length;
+            count("submitted");
             expect(
               begun.map((c) => c["program"]),
               `${JSON.stringify(move.line)} over ${JSON.stringify(known)}`,
@@ -203,26 +267,28 @@ describe("L20: a start comes from the submitted step", () => {
               ).toBe(false);
             }
 
-            waiting.push(...begun);
             model = stepped(step).model;
+            walk = { waiting: [...walk.waiting, ...begun], wake: stepped(step).wake };
             continue;
           }
 
-          const reply =
-            kind === 1
-              ? answer(move.outcome, waiting.splice(move.pick % waiting.length, 1)[0]!, processAt(move.pick), move.pick)
-              : programsOk(move.table, move.pick);
-          seen[kind === 1 ? "answers" : "programs"]++;
-          const step = steps.fold(model, reply);
-          expect(starts(step), `the ${reply.type} step returned a start`).toEqual([]);
+          if (key === "timer") {
+            count(move.onWake && walk.wake !== null ? "timerOnWake" : "timerOffWake");
+          }
+
+          count(key);
+          const step = steps.fold(model, letter);
+          expect(starts(step), `the ${key} step returned a start`).toEqual([]);
           model = stepped(step).model;
+          walk = { waiting: walk.waiting, wake: stepped(step).wake };
         }
       }),
       { seed: SEED, numRuns: 200 },
     );
-    expect(seen.starts, "some lines started a program").toBeGreaterThan(0);
-    expect(seen.programs, "some programs answers were folded").toBeGreaterThan(0);
-    expect(seen.answers, "some start answers were folded").toBeGreaterThan(0);
+
+    for (const reached of [...KEYS, "timerOnWake", "timerOffWake"]) {
+      expect(seen[reached] ?? 0, `the walk reached ${reached}`).toBeGreaterThan(0);
+    }
   });
 });
 
@@ -230,26 +296,30 @@ describe("L22: words to a start", () => {
   it("L22: a bare word is the one program whose last part matches, pack/program always resolves, two matches start nothing, no as names <program>:1, and as needs a ProcessName", () => {
     const seen = { bare: 0, whole: 0, named: 0, ambiguous: 0, bad: 0 };
     fc.assert(
-      fc.property(Table, fc.array(ProgramLine, { minLength: 1, maxLength: 8 }), (table: ReadonlyArray<string>, lines) => {
-        let model = told(table);
+      fc.property(
+        Table,
+        fc.array(ProgramLine, { minLength: 1, maxLength: 8 }),
+        (table: ReadonlyArray<string>, lines) => {
+          let model = told(table);
 
-        for (const line of lines) {
-          const step = steps.step(model, submit(line));
-          const want = expected(line, table);
-          const begun = starts(step).map((c) => ({ program: c["program"], name: c["name"] }));
-          expect(begun, `${JSON.stringify(line)} over ${JSON.stringify(table)}`).toEqual(want === null ? [] : [want]);
-          const [first = "", keyword, name] = line.trim().split(/\s+/);
-          const matches = table.includes(first) ? 1 : table.filter((p) => last(p) === first).length;
-          seen.ambiguous += matches > 1 ? 1 : 0;
-          seen.bad += matches === 1 && keyword === "as" && name !== undefined && !isName(name) ? 1 : 0;
+          for (const line of lines) {
+            const step = steps.step(model, submit(line));
+            const want = expected(line, table);
+            const begun = starts(step).map((c) => ({ program: c["program"], name: c["name"] }));
+            expect(begun, `${JSON.stringify(line)} over ${JSON.stringify(table)}`).toEqual(want === null ? [] : [want]);
+            const [first = "", keyword, name] = line.trim().split(/\s+/);
+            const matches = table.includes(first) ? 1 : table.filter((p) => last(p) === first).length;
+            seen.ambiguous += matches > 1 ? 1 : 0;
+            seen.bad += matches === 1 && keyword === "as" && name !== undefined && !isName(name) ? 1 : 0;
 
-          if (want !== null) {
-            seen[keyword === undefined ? (first.includes("/") ? "whole" : "bare") : "named"]++;
+            if (want !== null) {
+              seen[keyword === undefined ? (first.includes("/") ? "whole" : "bare") : "named"]++;
+            }
+
+            model = stepped(step).model;
           }
-
-          model = stepped(step).model;
-        }
-      }),
+        },
+      ),
       { seed: SEED, numRuns: 300 },
     );
 
