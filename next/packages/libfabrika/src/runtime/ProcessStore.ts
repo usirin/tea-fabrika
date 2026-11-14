@@ -35,7 +35,7 @@ export const Checkpoint = Schema.Struct({
  * What a process saves between turns, as `Checkpoint` decodes it.
  *
  * @stability unstable
- * @category schemas
+ * @category models
  */
 export type Checkpoint = typeof Checkpoint.Type;
 
@@ -50,7 +50,7 @@ export const Placed = Schema.Struct({ id: Schema.String, rev: Rev, pos: Rev });
  * Where an accepted letter sits in its inbox, as `Placed` decodes it.
  *
  * @stability unstable
- * @category schemas
+ * @category models
  */
 export type Placed = typeof Placed.Type;
 

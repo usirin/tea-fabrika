@@ -124,7 +124,7 @@ export const Sent = Schema.TaggedUnion({
  * What `msg` answers, as `Sent` decodes it.
  *
  * @stability unstable
- * @category schemas
+ * @category models
  */
 export type Sent = typeof Sent.Type;
 

@@ -56,7 +56,7 @@ export const Refusal = Schema.Struct({
  * A program's own no to a fresh Msg, as `Refusal` decodes it.
  *
  * @stability unstable
- * @category schemas
+ * @category models
  */
 export type Refusal = typeof Refusal.Type;
 
@@ -180,7 +180,7 @@ export const EventPolicy = Schema.Struct({ schema: Schemas, personOnly: Schema.B
  * One row of a program's `writes`, as `EventPolicy` decodes it.
  *
  * @stability unstable
- * @category schemas
+ * @category models
  */
 export type EventPolicy = typeof EventPolicy.Type;
 
@@ -461,7 +461,7 @@ export const Write = Schema.TaggedUnion({
  * What a program asks the runner to write, as `Write` decodes it.
  *
  * @stability unstable
- * @category schemas
+ * @category models
  */
 export type Write = typeof Write.Type;
 
@@ -485,7 +485,7 @@ export const Step = Schema.TaggedUnion({
  * One pure step's answer, as `Step` decodes it.
  *
  * @stability unstable
- * @category schemas
+ * @category models
  */
 export type Step = typeof Step.Type;
 
@@ -502,7 +502,7 @@ export const Admission = Schema.TaggedUnion({ admitted: {}, invalid: {}, refused
  * An admission answer, as `Admission` decodes it.
  *
  * @stability unstable
- * @category schemas
+ * @category models
  */
 export type Admission = typeof Admission.Type;
 
