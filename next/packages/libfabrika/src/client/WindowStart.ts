@@ -189,7 +189,13 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
           Effect.flatMap((texts) =>
             Effect.map(Clock.currentTimeMillis, (at) => {
               for (const text of texts) {
-                const sent = Option.flatMap(answerId(text), ({ id }) => Option.fromUndefinedOr(written.get(id)));
+                // A call's write time lives until its answer comes, so the map only holds calls in
+                // flight.
+                const sent = Option.flatMap(answerId(text), ({ id }) => {
+                  const at = Option.fromUndefinedOr(written.get(id));
+                  written.delete(id);
+                  return at;
+                });
                 emit({
                   type: "frame",
                   dial,

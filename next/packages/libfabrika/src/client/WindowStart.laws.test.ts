@@ -776,7 +776,15 @@ const Act = Schema.Union([
   // A beat that names a past dial while a newer one is open: the scripted window below answers it
   // with a ping and a write for that past dial, which only that dial's own writer may take.
   Schema.TaggedStruct("stale", {}),
+  // The door answers every call written on the live socket and not answered yet, then answers each
+  // one again: the second answer shows whether the start still holds the call's write time.
+  Schema.TaggedStruct("answer", {}),
 ]);
+
+/** The number id of a call the start wrote, read from the text it sent. */
+const callId = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ id: Schema.Number })));
+
+type FrameMsg = { readonly type: "frame"; readonly dial: number; readonly text: string; readonly ms?: number };
 
 /** The id of the scripted window's write for a past dial, past any id the real window names. */
 const STALE = 1_000_000;
@@ -784,9 +792,12 @@ const STALE = 1_000_000;
 /**
  * The real window, except that a beat for a dial its link is not on hands the start a ping and a
  * write for that dial, as a Cmd made before a redial and run after it would. Each one's answer is
- * kept in `answers` before the real window takes it.
+ * kept in `answers` before the real window takes it, and each frame the start hands it in `frames`.
  */
-const scripted = (answers: Array<{ readonly type: string; readonly dial: number }>): typeof window => {
+const scripted = (
+  answers: Array<{ readonly type: string; readonly dial: number }>,
+  frames: Array<FrameMsg>,
+): typeof window => {
   const real = window.update;
   const kept = (m: { readonly type: string; readonly cmd: { readonly dial: number } }) => {
     answers.push({ type: m.type, dial: m.cmd.dial });
@@ -795,6 +806,10 @@ const scripted = (answers: Array<{ readonly type: string; readonly dial: number 
     ...window,
     update: {
       ...real,
+      frame: (s, m) => {
+        frames.push(m);
+        return real.frame(s, m);
+      },
       beat: (s, m) =>
         socketDialIn(s.link) === m.dial
           ? real.beat(s, m)
@@ -842,6 +857,9 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
         const rows: Array<ClientRow> = [];
         const made: Array<{ readonly ws: MemorySocket; readonly dial: number | null; sentBefore: number | null }> = [];
         const answers: Array<{ readonly type: string; readonly dial: number }> = [];
+        const frames: Array<FrameMsg> = [];
+        // The call ids the door has answered, per socket.
+        const replied = new Map<MemorySocket, Set<number>>();
         let read: () => { readonly link: { readonly _tag: string; readonly dial?: number } } = () => ({
           link: { _tag: "dialing", dial: 1 },
         });
@@ -903,7 +921,7 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
         const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void));
         const booting = yield* start({
           tiles,
-          window: scripted(answers),
+          window: scripted(answers, frames),
           build: BUILD,
           origin: ORIGIN,
           client: BROWSER,
@@ -926,6 +944,7 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
           const ws = live();
           let closed: { readonly dial: number; readonly code: number } | null = null;
           let stale: { readonly dial: number; readonly newer: MemorySocket; readonly before: number } | null = null;
+          let probe: { readonly ids: ReadonlyArray<number>; readonly first: ReadonlyArray<FrameMsg> } | null = null;
           const past = made.find((m) => m.dial !== null && m.dial !== dial);
 
           if (act._tag === "open" && ws !== undefined && ws.readyState === 0) {
@@ -968,6 +987,24 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
             stale = { dial: past.dial, newer: ws, before: ws.sent.length };
             answers.length = 0;
             yield* run.dispatch({ type: "beat", dial: past.dial });
+          } else if (act._tag === "answer" && ws?.readyState === 1) {
+            const done = replied.get(ws) ?? new Set<number>();
+            replied.set(ws, done);
+            const ids = ws.sent
+              .flatMap((text) => Option.toArray(callId(text)).map((c) => c.id))
+              .filter((id) => !done.has(id));
+            const replyAll = () => {
+              for (const id of ids) {
+                ws.receive(JSON.stringify({ jsonrpc: "2.0", id, result: null }));
+                done.add(id);
+              }
+            };
+            frames.length = 0;
+            replyAll();
+            yield* settle;
+            const first = frames.splice(0);
+            replyAll();
+            probe = { ids, first };
           }
 
           // Every Cmd finishes: a write or ping on a dial with no open writer fails at once.
@@ -1004,6 +1041,19 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
               { type: "write_err", dial: stale.dial },
             ]);
             expect(stale.newer.sent.slice(stale.before), "the newer dial took a past dial's bytes").toEqual([]);
+          }
+
+          // A written call's time lives until its answer: the first answer is timed, and once every
+          // written call is answered the start holds no write time, so a second answer is untimed.
+          if (probe !== null) {
+            const timed = (list: ReadonlyArray<FrameMsg>) =>
+              list.map((f) => [Option.getOrUndefined(callId(f.text))?.id, f.ms !== undefined]);
+            expect(timed(probe.first), "each first answer is timed from its write").toEqual(
+              probe.ids.map((id) => [id, true]),
+            );
+            expect(timed(frames), "the start still holds an answered call's write time").toEqual(
+              probe.ids.map((id) => [id, false]),
+            );
           }
 
           if (closed !== null) {

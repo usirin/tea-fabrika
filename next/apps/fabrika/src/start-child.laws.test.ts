@@ -5,13 +5,15 @@ import { it as effectIt } from "@effect/vitest";
 // supervision test is. Needs ports and its own processes, so it runs in the step's container (0045).
 import type { Descriptor } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
+import { Started } from "@kampus/libfabrika/processes/Children";
 import { letterLine } from "@kampus/libfabrika/processes/Mailbox";
 import { Recipient } from "@kampus/libfabrika/processes/Process";
+import * as StartChild from "@kampus/libfabrika/runtime/StartChild";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
 import { Effect, Exit, Layer, Logger, ManagedRuntime, Result, Schema, Scope } from "effect";
 import * as fc from "fast-check";
-import { assert, describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   childProject,
   childInstance,
@@ -165,11 +167,14 @@ type Client = Effect.Success<ReturnType<typeof wire>>;
  * One real instance for the length of `test`, given back with its scope whatever `test` answers.
  * `connect` acquires a client in that scope, so each socket closes before the instance it reached.
  */
-const world = (test: (fixture: Fixture, connect: (tab: string) => Promise<Client>) => Promise<void>) =>
+const world = (
+  test: (fixture: Fixture, connect: (tab: string) => Promise<Client>) => Promise<void>,
+  starts: ReadonlyArray<{ readonly source: string; readonly to: string }> = STARTS,
+) =>
   Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const fixture = yield* childInstance(STARTS);
+        const fixture = yield* childInstance(starts);
         const scope = yield* Effect.scope;
         const connect = (tab: string) =>
           Effect.runPromise(Scope.provide(scope)(wire(fixture.instance as Instance, fixture.key, tab)));
@@ -865,6 +870,49 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
     );
   });
 
+  // scenario: Desk S1 L1, L2. Only the real door stamps a letter's sender and keeps it where the
+  // runner signs: generated members and programs walk on real runners in `StartChildTest.ts`, and
+  // this one founder's letters prove the same rule end to end, on an instance with no start grant.
+  it("scenario: Desk S1 L1, L2: the founder's letter starts any program with no start grant at all", async () => {
+    await world(async (fixture, connect) => {
+      const { start, live, facts } = helpers(fixture);
+      const starter = await start("starter:1", "starter");
+      const client = await connect("desk-s1");
+      const asks = [
+        { program: "p42/child", name: "child:desk-s1" },
+        { program: "p42/starter", name: "starter:desk-s1" },
+      ];
+
+      for (const [n, ask] of asks.entries()) {
+        expect(
+          await client.call("process.send", letter(starter, `desk-s1-${n}`, { type: "start", ...ask })),
+          "the starter takes the founder's letter",
+        ).toMatchObject({ result: { _tag: "accepted" } });
+      }
+
+      const view = await until(
+        "the starter was told both answers",
+        () => client.call("view.open", { pid: starter }),
+        (opened) => (opened.result?.view?.told?.length ?? 0) >= asks.length,
+      );
+      const told = view.result.view.told as Array<unknown>;
+      expect(told, "L1: no start was refused, though no grant names its program").not.toContain("forbidden");
+
+      for (const [n, ask] of asks.entries()) {
+        expect(
+          Schema.decodeUnknownOption(Started)(told[n])._tag,
+          `L1: the start of ${ask.program} answers in Started's shape`,
+        ).toBe("Some");
+        expect(told[n], `L1: ${ask.program} started fresh`).toMatchObject({ _tag: "started", name: ask.name });
+        expect(await live(ask.name), `L1: ${ask.name} is live`).toBeDefined();
+        expect(
+          (await facts(`processes/${ask.name}`)).filter((fact) => fact._tag === "started"),
+          "L2: the start's requester is the starter's life, the program that asked",
+        ).toMatchObject([{ requester: { process: starter } }]);
+      }
+    }, []);
+  });
+
   // scenario: L9. Only the real project holds the client list a notify would reach, so one real
   // instance with one connected client is the check; generated Node laws cannot see that list.
   it("scenario: L9: a code start sends nothing to any client: no view, no notify, no focus", async () => {
@@ -1017,5 +1065,42 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         "L10: another life of the child's program has no restart",
       ).toEqual([]);
     });
+  });
+});
+
+// Desk S1 L4: `stop_child`'s refusals and `StartRefusal` are closed lists of names, so any client,
+// this app included, decodes a refusal by its name. The type half is compiled, never executed: the
+// lead and CI run the compiler; Vitest does not typecheck.
+const checkRefusalTypes = () => {
+  expectTypeOf<(typeof StartChild.stopChild.errTags)[number]>().toEqualTypeOf<"not_child" | "noproc">();
+  expectTypeOf<typeof StartChild.StartRefusal.Type>().toEqualTypeOf<
+    "no_program" | "forbidden" | "stale_sender" | "bad_name" | "bad_input" | "id_reused" | "name_taken"
+  >();
+  expectTypeOf<(typeof StartChild.startChild.errTags)[number]>().toEqualTypeOf<typeof StartChild.StartRefusal.Type>();
+  // A refusal widened to `string` would let this through.
+  // @ts-expect-error a stop refusal is one of its names, never any string
+  const widened: (typeof StartChild.stopChild.errTags)[number] = "anything";
+  return widened;
+};
+
+describe("Desk S1: start and stop refusals decode by name", () => {
+  it("L4: every stop_child and start_child refusal decodes by its name, and no other word does", () => {
+    expectTypeOf(checkRefusalTypes).toBeFunction(); // The function above stays uncalled.
+    const stops = Schema.Literals(StartChild.stopChild.errTags);
+    const named = [...StartChild.stopChild.errTags, ...StartChild.StartRefusal.literals];
+    fc.assert(
+      fc.property(fc.constantFrom(...named), fc.string(), (reason, other) => {
+        const decoded = Schema.decodeUnknownOption(Schema.Union([stops, StartChild.StartRefusal]))(reason);
+        expect(decoded._tag === "Some" ? decoded.value : null, `L4: ${reason} decodes by name`).toBe(reason);
+        expect(
+          Schema.is(Schema.Union([stops, StartChild.StartRefusal]))(other),
+          `L4: ${JSON.stringify(other)} is no refusal`,
+        ).toBe(named.includes(other as never));
+      }),
+      { seed: 119120, numRuns: 200 },
+    );
+    expect(new Set(StartChild.stopChild.errTags), "L4: stop_child declares both of its refusals").toEqual(
+      new Set(["not_child", "noproc"]),
+    );
   });
 });

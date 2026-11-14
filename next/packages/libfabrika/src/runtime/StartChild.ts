@@ -1,7 +1,8 @@
 /**
- * The built-in start_child and exit commands: a program asks the host to start a program under a
- * name, as a process asks its supervisor, and ends its own life with `normal`. Their only operands
- * are these; the runner binds the requester, the hash and the life that exits.
+ * The built-in start_child, stop_child and exit commands: a program asks the host to start a program
+ * under a name, as a process asks its supervisor, to stop a child it started, as OTP's
+ * `terminate_child`, and ends its own life with `normal`. Their only operands are these; the runner
+ * binds the requester, the hash and the life that exits.
  *
  * @stability unstable
  */
@@ -69,3 +70,30 @@ export const ExitInput = Schema.Struct({});
  * @category commands
  */
 export const exit = Cmd.make("exit", { input: ExitInput, ok: Schema.Null, err: [] });
+
+/**
+ * Schema for the stop_child operands: the `name` of a child this process started. It is a plain
+ * string, so the host judges it once: a name that is not this process's child is `not_child`.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const StopChildInput = Schema.Struct({ name: Schema.String });
+
+/** Why a stop is refused, by name: the name is not the requester's child, or that child has ended. */
+const StopRefusal = Schema.Literals(["not_child", "noproc"]);
+
+/** What a step's own check takes for a stop: any object, as for a start; the host decodes it strictly. */
+const AskedStop = Schema.declare<typeof StopChildInput.Type>(
+  (value): value is typeof StopChildInput.Type => typeof value === "object" && value !== null,
+);
+
+/**
+ * The stop_child command, OTP's `terminate_child`: the requester's own child ends with `shutdown`,
+ * and each of its watchers gets one `DOWN`. A name the requester did not start is `not_child`, and a
+ * child that already ended is `noproc`. The runner performs it itself.
+ *
+ * @stability unstable
+ * @category commands
+ */
+export const stopChild = Cmd.make("stop_child", { input: AskedStop, ok: Schema.Null, err: StopRefusal.literals });
