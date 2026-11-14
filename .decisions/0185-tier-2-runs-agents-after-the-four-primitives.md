@@ -46,12 +46,19 @@ outside our own computers, each on its person's own key, was ruled on 2026-10-25
   Tiers 4 and 5. Tier 2's plan is written for that goal: a person starts an agent run and it
   happens, with nothing to think about first.
 - **It comes after the 4 primitives, never before or beside them.**
+- **It comes right after them. Recovery and the other cloud rows (P26, P27, P28, P29, P36) wait
+  behind Tier 2.** This amends 0159's amendment of 2026-11-13, which made those rows the first work
+  after the 4 primitives. None of them leaves the plan. The owner's reason: losing the laptop in
+  the coming weeks is unlikely, and the owner keeps direct access to the instance's Worker on
+  Cloudflare, so its data can be reached without a recovery flow.
 
 ## Consequences
 
 - The tiers page changes in this pull request: the name, and the two rows of its core idea table.
   Its Tier 2, Tier 4 and Tier 5 sections still show the old sorting until the Tier 2 plan is
   written.
+- Until recovery lands, daily work on the laptop lives only in the laptop's ledger. The owner
+  accepted that risk on 2026-11-13 for the 4 primitives, and now for Tier 2 as well.
 - A Tier 2 plan is owed. It names what the old Tier 2 rows (tracker, ticket, notes, typed pipes)
   do: stay in Tier 2, or move later.
 - What this cannot tell us: how big Tier 2 becomes. If it grows too big it splits, by the tiers
@@ -62,6 +69,12 @@ outside our own computers, each on its person's own key, was ruled on 2026-10-25
 - Where hands get their machine: a Cloudflare container, a Mac, a VM, or a box from the agent
   maker's own cloud sessions, which have no machine bill but draw on the person's plan. An
   experiment picks.
-- The order against recovery and the other cloud rows, which 0159's amendments made the first work
-  after the 4 primitives.
+- When recovery and the other cloud rows are built, beyond "after Tier 2".
 - What is left in Tiers 4 and 5 once this moves.
+
+## Amendments
+
+- 2026-11-13 (owner): Tier 2 comes right after the 4 primitives, and recovery and the other cloud
+  rows (P26, P27, P28, P29, P36) wait behind it. The bullet under Decision, the line under
+  Consequences and the "Not decided here" item on that order were added the same day, after this
+  file first landed.

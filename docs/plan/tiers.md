@@ -9,7 +9,7 @@ the order from before that day: `fabsh` and pipes in Tier 2, agents in Tier 5, r
 and thin slices in Tier 1. The changed Tier 1 is written, and 0159 and that section win wherever
 this page differs.
 
-**Changed 2026-11-13 ([0185](../../.decisions/0185-tier-2-runs-agents-after-the-four-primitives.md)): the changed Tier 1 is the milestone named "4 primitives", and Tier 2 then builds hands and an agent fabrika starts for real.** They move forward from Tiers 4 and 5. The Tier 2, Tier 4 and Tier 5 sections below still show the old sorting until the Tier 2 plan is written.
+**Changed 2026-11-13 ([0185](../../.decisions/0185-tier-2-runs-agents-after-the-four-primitives.md)): the changed Tier 1 is the milestone named "4 primitives", and Tier 2 then builds hands and an agent fabrika starts for real.** They move forward from Tiers 4 and 5. The Tier 2, Tier 4 and Tier 5 sections below still show the old sorting until the Tier 2 plan is written. Recovery and the other cloud rows (P26, P27, P28, P29, P36) wait behind Tier 2, which amends 0159's amendment of the same day.
 
 **Approved by the owner on 2026-11-13: what Tier 1 is now.** Tier 1 is the four primitives,
 `fabsh`, pipes, `summon` and `join`, working for real in `next/`, on the base its built rows
@@ -42,7 +42,8 @@ Three of Tier 1's own rows come with them (owner, 2026-11-13,
   as it lands.
 
 The 12 rows the four do not need wait, and none leaves the plan. Recovery and the rest of the
-cloud rows (P26, P27, P28, P29, P36) are the first work after done. Until then daily work lives
+cloud rows (P26, P27, P28, P29, P36) are the first work after done (changed by 0185: they wait
+behind Tier 2). Until then daily work lives
 only in the laptop's ledger; the owner accepted that risk on 2026-11-13. The tables below still
 show the order from before 2026-11-13.
 
@@ -443,4 +444,5 @@ Git history keeps the old wording.
   beside them; 12 rows wait, and recovery is the first work after done.
 - 2026-11-13, [0185](../../.decisions/0185-tier-2-runs-agents-after-the-four-primitives.md): the
   changed Tier 1 is named "4 primitives", and hands and an agent fabrika starts move forward from
-  Tiers 4 and 5 to Tier 2; the Tier 2, 4 and 5 sections are not resorted yet.
+  Tiers 4 and 5 to Tier 2; the Tier 2, 4 and 5 sections are not resorted yet. Tier 2 comes right
+  after the 4 primitives, and recovery and the other cloud rows wait behind it.
