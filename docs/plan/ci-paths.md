@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds 0175 and experiment 288 with the owner's yes to narrowing two laws; body aefe6564da75
 Plancheck-Version: 3
 
 # Plan: CI stops running every `next` test for a change that cannot reach them
@@ -488,11 +488,17 @@ Estimate: 6 steps, $12
 - **The savings for cases 2 to 4 are small in count:** 21 of 600 merged pull requests. Case 1 is
   where the time is.
 
+## Answered questions
+
+Both were answered on 2026-11-14:
+
+1. A comment-only change under `next/` runs the reader tests, in the pull request and in the
+   queue. Experiment 288 (two plants, `experiments/288-ci-reader-list-two-plants.md`) found the
+   reader list complete, so the lean holds; the lead approved it as building that experiment.
+2. The owner said yes to narrowing the two laws, so lint rule files run only the reader tests of
+   `next/`, and experiments and skill files run none. That is the owner's ruling, so a
+   loosening.sh hit on those two laws is expected and read against this line.
+
 ## Open questions
 
-1. A comment-only change under `next/`: run the reader tests, in the pull request and in the
-   queue? The other choices: run no `next` test at all, or go light on the pull request and run
-   every test in the queue. Lean: reader tests in both, 75% sure. The doubt is the list's
-   completeness, and slice 0 settles most of it.
-2. Yes to narrow two laws, so lint rule files run only the reader tests of `next/`, and
-   experiments and skill files run none? Lean: yes, 90% sure.
+None.
