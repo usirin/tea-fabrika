@@ -65,6 +65,14 @@ jobs:
         if: ${{ !cancelled() }}
       - run: node oxlint-plugins/gitignore.mjs
         if: ${{ !cancelled() }}
+      # The freeze guard (0525): a change may delete a file of today's version, never add or change
+      # one. It reads the same diff as the classifier, so its BASE, HEAD and EVENT are the same.
+      - run: node .github/ci/freeze.mjs
+        if: ${{ !cancelled() }}
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVENT: ${{ github.event_name }}
 
   # Start beside changes. No workspace setup for Markdown alone.
   # Filtered install uses the root lockfile and all workspace supply-chain rules.

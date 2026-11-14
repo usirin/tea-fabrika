@@ -62,8 +62,9 @@ const valid = (label: string, extra: string) => ({
         diff,
         { run: "sh .agents/skills/lead/scripts/skillscheck.sh", if: "!cancelled()" },
         { run: "node oxlint-plugins/gitignore.mjs", if: "!cancelled()" },
+        { run: "node .github/ci/freeze.mjs", if: `\${{ !cancelled() }}`, env },
         { name: extra, run: "echo checked" },
-      ],
+      ] as Record<string, unknown>[],
     },
     check: {
       name: `\${{ github.event.pull_request.draft && 'lint' || 'check' }}`,
@@ -607,6 +608,43 @@ const plants: [string, (workflow: Workflow) => void][] = [
     "next edges without event guard",
     (w) => {
       w.jobs.next.steps[3]!.if = "matrix.shard == 1";
+    },
+  ],
+  // F8: the freeze guard (0525) runs on every event and reads the classifier's own diff.
+  [
+    "F8: the changes job loses the freeze guard",
+    (w) => {
+      w.jobs.changes.steps.splice(4, 1);
+    },
+  ],
+  [
+    "F8: the freeze guard runs only when the classifier succeeded",
+    (w) => {
+      w.jobs.changes.steps[4]!["if"] = `\${{ steps.diff.outcome == 'success' }}`;
+    },
+  ],
+  [
+    "F8: the freeze guard skips a failure before it",
+    (w) => {
+      w.jobs.changes.steps[4]!["if"] = "success()";
+    },
+  ],
+  [
+    "F8: the freeze guard's failure is ignored",
+    (w) => {
+      w.jobs.changes.steps[4]!["continue-on-error"] = true;
+    },
+  ],
+  ...(["BASE", "HEAD", "EVENT"] as const).map((key): [string, (w: Workflow) => void] => [
+    `F8: the freeze guard reads another ${key} than the classifier`,
+    (w) => {
+      w.jobs.changes.steps[4]!["env"] = { ...env, [key]: `\${{ github.sha }}` };
+    },
+  ]),
+  [
+    "F8: the freeze guard runs twice",
+    (w) => {
+      w.jobs.changes.steps.push({ ...w.jobs.changes.steps[4]! });
     },
   ],
   [

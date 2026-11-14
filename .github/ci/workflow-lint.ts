@@ -184,6 +184,17 @@ export const lintWorkflow = (text: string): string[] => {
     ), "small scans still run after classifier failure");
   }
 
+  // F8: the freeze guard (0525) runs on every event, after a classifier failure too, and reads the
+  // same diff: the same BASE, HEAD and EVENT as the classifier's own step.
+  const guards = steps(changes).filter((s) => s["run"] === "node .github/ci/freeze.mjs");
+  const diffEnv = map(steps(changes).find((s) => s["id"] === "diff")?.["env"]);
+  require(guards.length === 1 &&
+    compact(guards[0]?.["if"]) === "!cancelled()" &&
+    guards[0]?.["continue-on-error"] === undefined &&
+    Object.entries(env).every(
+      ([key, expected]) => map(guards[0]?.["env"])[key] === expected && diffEnv[key] === expected,
+    ), "changes runs the freeze guard on the classifier's diff");
+
   const field = map(jobs["field"]);
   require(!("needs" in field) && !("if" in field), "field starts independently on every event");
   require(field["continue-on-error"] !== true, "field failures block");

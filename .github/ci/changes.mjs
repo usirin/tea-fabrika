@@ -131,12 +131,41 @@ export const jobs = (paths, event, draft) => {
 /** @param {string} sha */
 export const validSha = (sha) => /^[a-f0-9]{40}$/.test(sha) && !/^0+$/.test(sha);
 /** @type {Runner} */
-const git = (args) => spawnSync("git", args, { encoding: "utf8", maxBuffer: 2 ** 28 });
+export const git = (args) => spawnSync("git", args, { encoding: "utf8", maxBuffer: 2 ** 28 });
 
 /**
- * No shell interpolation. PR paths start at the merge base; pushes use before, and a merge
- * queue's group uses its own base, the commit it was built on, so the diff is the group's change.
- * A rename is a deletion and an addition. NUL preserves all legal Git names.
+ * The commit a run's diff starts from: a pull request's merge base, or, for a push and a merge
+ * queue's group, the base itself (a push uses before; a group uses its own base, the commit it was
+ * built on, so the diff is the group's change). `null` when either end is no SHA or Git cannot
+ * say. freeze.mjs reads its diff from the same commit.
+ * @param {string} base
+ * @param {string} head
+ * @param {string} event
+ * @param {Runner} [run]
+ * @returns {string | null}
+ */
+export const diffBase = (base, head, event, run = git) => {
+  if (!validSha(base) || !validSha(head)) {
+    return null;
+  }
+
+  if (event !== "pull_request") {
+    return base;
+  }
+
+  const merged = run(["merge-base", base, head]);
+
+  if (merged.status !== 0) {
+    return null;
+  }
+
+  const from = merged.stdout.trim();
+  return validSha(from) ? from : null;
+};
+
+/**
+ * No shell interpolation. Paths start at `diffBase`. A rename is a deletion and an addition. NUL
+ * preserves all legal Git names.
  * @param {string} base
  * @param {string} head
  * @param {string} event
@@ -144,24 +173,10 @@ const git = (args) => spawnSync("git", args, { encoding: "utf8", maxBuffer: 2 **
  * @returns {string[] | null}
  */
 export const readPaths = (base, head, event, run = git) => {
-  if (!validSha(base) || !validSha(head)) {
+  const from = diffBase(base, head, event, run);
+
+  if (from === null) {
     return null;
-  }
-
-  let from = base;
-
-  if (event === "pull_request") {
-    const merged = run(["merge-base", base, head]);
-
-    if (merged.status !== 0) {
-      return null;
-    }
-
-    from = merged.stdout.trim();
-
-    if (!validSha(from)) {
-      return null;
-    }
   }
 
   const diff = run(["diff", "--no-renames", "--name-only", "-z", from, head, "--"]);
