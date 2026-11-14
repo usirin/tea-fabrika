@@ -164,8 +164,6 @@ const memberWriter = (member: string) => Writer.cases.person.make({ key: `SHA256
 
 /** Programs a member's letter may start; no grant names `starter` or `plain` as a start's target. */
 const ANY_PROGRAM = ["starter", "plain", "merger"] as const;
-/** Programs no start grant names as a target, so only a member's check can let a start of one through. */
-const UNGRANTED = ["starter", "plain"] as const;
 
 /** Desk S1, L3: one stopper program. It asks for starts and stops, and keeps every answer, in order,
  *  as `childStarter` does. Built on first use: `stopChild` is the build's. */
@@ -1338,10 +1336,12 @@ const walk = (
         }
         case "outsider_start": {
           // L2: the sender of the start's parent is checked, never the life that asked: its owner
-          // is a member, and a check of it would let this start through.
+          // is a member, and a check of it would let this start through. Every program, `merger`
+          // included, which the requester's own grant names: no grant lets a non-member's start
+          // through (0170).
           const name = choose(starters(), cell.pick);
-          const target = fresh(choose(UNGRANTED, cell.alt));
-          const program = target.slice(0, target.indexOf(":"));
+          const program = choose(ANY_PROGRAM, cell.alt);
+          const target = fresh(program);
           const before = (yield* answers(name)).length;
           const revBefore = yield* head;
           yield* door(name, { type: "start", ask: { program, name: target } }, outsider);
@@ -1351,7 +1351,7 @@ const walk = (
           });
           expect(yield* processRows(revBefore), "L2: a refused start writes no process row").toEqual([]);
           expect(yield* registered(target), "L2: a refused start registers nothing").toBe(false);
-          seen.add("outsider_refused");
+          seen.add(`outsider_${program}`);
           break;
         }
         case "stopper_start": {
@@ -1780,7 +1780,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       open,
       ["member_start", "outsider_start"],
       ["member_start", "outsider_start"],
-      ["member_starter", "member_plain", "outsider_refused"],
+      [...ANY_PROGRAM.map((program) => `member_${program}`), ...ANY_PROGRAM.map((program) => `outsider_${program}`)],
       200,
     );
     prop(
