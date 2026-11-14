@@ -54,7 +54,13 @@ const folder = Effect.acquireRelease(
 
 const openDb = (path: string) =>
   Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(path)),
+    Effect.sync(() => {
+      const db = new DatabaseSync(path);
+      // A test process never loses power, so it skips the sync and keeps the rollback journal in memory,
+      // as Process.test-support does. Every byte a law reads stays in the file and survives reopen.
+      db.exec("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF");
+      return db;
+    }),
     (db) =>
       Effect.sync(() => {
         if (db.isOpen) {

@@ -69,7 +69,13 @@ const from = {
 
 const connection = (file: string): Effect.Effect<Sql, never, Scope.Scope> =>
   Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(file)),
+    Effect.sync(() => {
+      const db = new DatabaseSync(file);
+      // A test process never loses power, so it skips the sync and keeps the rollback journal in memory,
+      // as Process.test-support does. Every byte a law reads stays in the file and survives reopen.
+      db.exec("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF");
+      return db;
+    }),
     (db) => Effect.sync(() => db.close()),
   ).pipe(Effect.map(nodeSql));
 
