@@ -22,7 +22,8 @@
     "next/programs/inbox": "next-program",
     "next/programs/chaos": "next-program",
     "next/programs/counter": "next-program",
-    "next/programs/pipeline": "next-program"
+    "next/programs/pipeline": "next-program",
+    "next/programs/fabsh": "next-program"
   },
   "libraryRoots": ["next"],
   "acrossDeployables": ["relative-import-crosses-workspace"]

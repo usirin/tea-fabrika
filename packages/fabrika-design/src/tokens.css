@@ -44,6 +44,7 @@
 
   /* The design's text. */
   --done: light-dark(#203c25, #71d083); /* light grass 12; dark grass 11 */
+  --role-unknown: light-dark(#641723, #ff9592); /* light red 12; dark red 11 */
   --running: light-dark(#4f3422, #ffca16); /* light amber 12; dark amber 11 */
   --stuck: light-dark(#641723, #ff9592); /* light red 12; dark red 11 */
   --text-faint: light-dark(#0007149f, #f1f7feb5); /* slate a11 */
@@ -53,6 +54,9 @@
 
   /* The design's names for other tokens. */
   --closed: var(--text-faint);
+  --role-keyword: var(--text-faint);
+  --role-name: var(--text-primary);
+  --role-verb: var(--text-primary);
 
   /* The tile's backgrounds. */
   --tile-wash: light-dark(#00005506, #d8f4f609); /* slate a2 */

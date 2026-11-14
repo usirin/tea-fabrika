@@ -1,0 +1,6 @@
+tier = "shared"
+owner = "design"
+description = "a line's keyword, such as as: the quiet word between the parts that say what the line does"
+
+[colors]
+extends = "text-faint"

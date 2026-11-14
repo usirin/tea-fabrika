@@ -1,0 +1,6 @@
+tier = "shared"
+owner = "design"
+description = "a line's verb: a built-in or a program word, as the line reader marks it (summon guidelines S1). The line's main text: indigo says your turn and nothing else (law 10)"
+
+[colors]
+extends = "text-primary"

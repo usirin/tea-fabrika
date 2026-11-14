@@ -1,0 +1,6 @@
+tier = "shared"
+owner = "design"
+description = "a new name a line gives, and a plain word: read as the line's main text"
+
+[colors]
+extends = "text-primary"

@@ -278,3 +278,52 @@ function admissionTypeErrors(pure: Stepper, admitted: Admission) {
 }
 
 void admissionTypeErrors;
+
+// fabsh in a tile, slice 1 (docs/plan/lanes/fabsh-PLAN.md), law L9: a program may declare one draft,
+// a schema and a check. Its value is shown and never saved, so the check answers a refusal or null,
+// never a step with Cmds. The runtime half is red until `Program.make` keeps `draft`; tsc checks the
+// uncalled cases.
+const Draft = Schema.Struct({
+  text: Schema.String.check(Schema.isMaxLength(40)),
+  cursor: Schema.Int,
+  n: Schema.Int,
+});
+
+it("L9: a program's draft keeps its schema and check, typed as that schema, and a program without one has none", () => {
+  fc.assert(
+    fc.property(fc.string({ maxLength: 40 }), fc.integer({ min: -2, max: 42 }), (text, cursor) => {
+      const p = Program.make({
+        ...fields,
+        view: (m) => m,
+        draft: {
+          schema: Draft,
+          refuse: (d) => (d.cursor < 0 || d.cursor > d.text.length ? { reason: "bad_cursor" } : null),
+        },
+      });
+      expect(p.draft?.schema, "the program keeps its draft schema").toBe(Draft);
+      expectTypeOf(p.draft!.schema.Type).toEqualTypeOf<typeof Draft.Type>();
+      expectTypeOf(p.draft!.refuse).parameter(0).toEqualTypeOf<typeof Draft.Type>();
+      const answer = p.draft!.refuse({ text, cursor, n: 1 });
+      expect(answer === null, "the check is the program's own").toBe(cursor >= 0 && cursor <= text.length);
+      expect(Program.make({ ...fields, view: (m) => m }).draft, "no draft unless declared").toBeUndefined();
+    }),
+    { seed: 119120, numRuns: 100 },
+  );
+});
+
+// Every rejection has a valid neighbor. This function is never called, even by Vitest.
+function draftTypeErrors() {
+  const save2 = save({ count: 1 });
+  Program.make({ ...fields, view: (m) => m, draft: { schema: Draft, refuse: () => null } });
+  Program.make({ ...fields, view: (m) => m, draft: { schema: Draft, refuse: () => ({ reason: "bad_cursor" }) } });
+  // @ts-expect-error A draft check answers a refusal or null, never a step with Cmds.
+  Program.make({ ...fields, view: (m) => m, draft: { schema: Draft, refuse: () => [{ count: 0 }, [save2]] as const } });
+  // @ts-expect-error A draft check takes its own schema's value, not another.
+  Program.make({ ...fields, view: (m) => m, draft: { schema: Draft, refuse: (_d: { other: string }) => null } });
+  // @ts-expect-error A draft is a schema, not a function.
+  Program.make({ ...fields, view: (m) => m, draft: { schema: () => null, refuse: () => null } });
+  // @ts-expect-error A draft check is synchronous.
+  Program.make({ ...fields, view: (m) => m, draft: { schema: Draft, refuse: () => Promise.resolve(null) } });
+}
+
+void draftTypeErrors;

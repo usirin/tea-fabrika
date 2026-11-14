@@ -55,6 +55,8 @@ const TOKENS = [
   "scrim",
   ...["tile-edge", "tile-edge-on", "tile-edge-hover", "tile-edge-loud"],
   ...["tile-text", "tile-text-on", "tile-wash", "tile-wash-on"],
+  // fabsh's line roles (summon guidelines S1, docs/plan/lanes/fabsh-PLAN.md).
+  ...["role-verb", "role-keyword", "role-name", "role-unknown"],
 ];
 
 /** The tokens that point at another, and what each points at: tokens.css's var() today. */
@@ -67,6 +69,9 @@ const EXTENDS: Record<string, string> = {
   "tile-text": "text-faint",
   "tile-text-on": "text-primary",
   "tile-wash-on": "surface-hover",
+  "role-verb": "text-primary",
+  "role-keyword": "text-faint",
+  "role-name": "text-primary",
 };
 
 /** The type of each token with values of its own: surface and fill are background, line is border. */
@@ -79,7 +84,10 @@ const TYPES: Record<string, string> = {
   ),
   ...Object.fromEntries(["border-faint", "border", "border-strong", "wire", "focus"].map((t) => [t, "border"])),
   ...Object.fromEntries(
-    ["text-primary", "text-faint", "turn-text", "turn-fg", "done", "running", "stuck"].map((t) => [t, "text"]),
+    ["text-primary", "text-faint", "turn-text", "turn-fg", "done", "running", "stuck", "role-unknown"].map((t) => [
+      t,
+      "text",
+    ]),
   ),
   "turn-fill": "background",
   "turn-fill-hover": "background",
@@ -164,7 +172,7 @@ const writeByHand = (dir: string, line: string) => {
 
 describe("one TOML file per color token, flat in tokens/color/", () => {
   // format: the committed tokens/color/*.toml file names are the public token names, exactly.
-  it("format: holds exactly today's 30 color tokens, under today's names", () => {
+  it("format: holds exactly today's 34 color tokens, under today's names", () => {
     const files = readdirSync(COLOR).sort();
     expect(files).toEqual(TOKENS.map((t) => `${t}.toml`).sort());
   });
@@ -314,7 +322,7 @@ describe("tokens.css keeps one :root, with two marked regions the build writes",
   });
 
   // format: the generated CSS region writes each public custom-property name exactly once.
-  it("format: writes the 30 color tokens in the colors region, and no color outside it", () => {
+  it("format: writes the 34 color tokens in the colors region, and no color outside it", () => {
     const css = TOKENS_CSS();
     const colors = declarationsIn(regionOf(css, "colors"));
     const rest = rootOf(css).replace(regionOf(css, "colors"), "").replace(regionOf(css, "manti"), "");

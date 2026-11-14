@@ -186,6 +186,12 @@ const TOKENS: Record<string, Record<Look, string>> = {
   "--tile-text-on": both("text"),
   "--tile-wash": WASH,
   "--tile-wash-on": both("hover"),
+  // A line's roles, as fabsh's reader marks them (summon guidelines S1): the line's own two text
+  // steps, and stuck's red for a refused word, which also gets an underline and its reason in words.
+  "--role-verb": both("text"),
+  "--role-keyword": both("faint"),
+  "--role-name": both("text"),
+  "--role-unknown": both("stuck"),
   // Manti's tokens, set from ours (ui-on-manti, section 3).
   "--manti-bg": both("desk"),
   "--manti-bg-subtle": both("ground"),
@@ -540,7 +546,16 @@ describe("law 4: every color is a Radix step, or a named bend (principle 5)", ()
 // ---- laws 5 to 7: text and lines read ----------------------------------------------------------
 
 describe("law 5: text and state words read 4.5:1 where they sit (WCAG 1.4.3)", () => {
-  const TEXT = ["--text-primary", "--text-faint", "--turn-text", "--done", "--running", "--stuck", "--closed"];
+  const TEXT = [
+    "--text-primary",
+    "--text-faint",
+    "--turn-text",
+    "--done",
+    "--running",
+    "--stuck",
+    "--closed",
+    "--role-unknown",
+  ];
 
   it.each(LOOKS)(
     "on the desk, the ground, raised, cards, and hovered and selected rows over the ground and raised, %s",

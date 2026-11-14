@@ -1872,3 +1872,397 @@ describe("P18 L10: every frame family the parent reads decodes or reaches its ty
     );
   }
 });
+
+// --- fabsh slice 1: L12 and L19 at the parent --------------------------------------------------
+//
+// fabsh in a tile, slice 1 (docs/plan/lanes/fabsh-PLAN.md), laws L12 and L19 at the parent. Written
+// before the parent's draft call; until the build adds it, a tile's `draft` Cmd is dropped and these
+// laws fail for that reason. The shape they hold `WindowMachine.ts` to, from the plan's "The draft
+// frame in the library" (the build may add more):
+// - A tile machine may send a second Cmd beside `press`: `draft {m}`, any JSON. The parent writes it
+//   as the call `draft {pid, m}` (the wire's `process.draft`), on the tile's open pid, at most one in
+//   flight per tile; a newer draft replaces the one waiting, so the newest is always the last sent.
+// - Each draft call's answer goes back to its tile as the tile's own Msg: `echoed {value, ms}` for a
+//   result, `echo_refused {reason}` for an error, and `echo_refused` too when the call's dial ends
+//   before its answer, so a tile never waits on a frame that cannot come back.
+// - One `draft` client row per press a drafting tile hands up, written in the step that takes the
+//   press: `{pid, frames, echoes, slowest}`, the draft calls written for that tile since its last
+//   press, the echoes handed back, and the slowest echo's ms. A tile that never drafts writes none.
+//   No row holds draft text.
+//
+// The walk brings the window online with both tiles open, then picks each move from what is possible
+// now: a tile's edit or Enter, an answer to the draft call really in flight (a result or an error,
+// as the door's frame), a dial that ends, and the moves that bring a new dial's tiles open again.
+const DRAFT_PID = "process_01m6v5270hf3c8x2q7w9z4k5mp";
+const PLAIN_PID = "process_01m6v5270hf3c8x2q7w9z4k5mq";
+const DRAFT_NAMES = { "fabsh:1": DRAFT_PID, "plain:1": PLAIN_PID } as const;
+
+const DRAFT_TILES = [
+  { id: "tile_d", name: "fabsh:1" },
+  { id: "tile_p", name: "plain:1" },
+];
+
+const draftCmd = TeaCmd.make("draft", { input: Schema.Struct({ m: Schema.Json }), ok: Schema.Null, err: [] });
+
+/** A naive drafting tile: a frame per edit, never waiting, and every hand-back kept in its Model. */
+const draftingTile = Machine.make({
+  model: Schema.Struct({
+    text: Schema.String,
+    n: Schema.Int,
+    back: Schema.Array(
+      Schema.Struct({
+        _tag: Schema.String,
+        value: Schema.optionalKey(Schema.Json),
+        ms: Schema.optionalKey(Schema.Number),
+      }),
+    ),
+  }),
+  msg: Schema.Union([
+    Schema.Struct({ type: Schema.Literal("edited"), text: Schema.String }),
+    Schema.Struct({ type: Schema.Literal("enter") }),
+    Schema.Struct({ type: Schema.Literal("echoed"), value: Schema.Json, ms: Schema.Number }),
+    Schema.Struct({ type: Schema.Literal("echo_refused"), reason: Schema.String }),
+  ]),
+  cmds: [press, draftCmd],
+  init: () => [{ text: "", n: 0, back: [] }, []],
+  update: {
+    edited: (s, m) => [{ ...s, text: m.text, n: s.n + 1 }, [draftCmd({ m: { text: m.text, n: s.n + 1 } })]],
+    enter: (s) => [
+      { ...s, text: "", n: s.n + 1 },
+      [press({ m: { type: "submitted", line: s.text } }), draftCmd({ m: { text: "", n: s.n + 1 } })],
+    ],
+    echoed: (s, m) => [{ ...s, back: [...s.back, { _tag: "echoed", value: m.value, ms: m.ms }] }, []],
+    echo_refused: (s) => [{ ...s, back: [...s.back, { _tag: "echo_refused" }] }, []],
+    press_ok: (s) => [s, []],
+    press_err: (s) => [s, []],
+    draft_ok: (s) => [s, []],
+    draft_err: (s) => [s, []],
+  },
+});
+
+const draftMachine = windowMachineFor({
+  decode: () => Schema.decodeUnknownSync(Schema.Json),
+  tile: (name) =>
+    name === "fabsh:1" ? (draftingTile as never) : name === "plain:1" ? (draftTile as never) : undefined,
+});
+
+const draftCtx = { tiles: DRAFT_TILES };
+
+const draftStep = (s: WindowModel, m: WindowMsg): readonly [WindowModel, ReadonlyArray<Cmd>] =>
+  applyCell(draftMachine, s, m);
+
+const DraftPick = Schema.Struct({
+  move: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 })),
+  ms: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 5_000 })),
+  word: Schema.String.check(Schema.isPattern(/^[a-z]{1,8}$/)),
+});
+type DraftPick = typeof DraftPick.Type;
+const DraftWalk = Arbitrary.array(Arbitrary.schema(DraftPick), { minLength: 10, maxLength: 120 });
+
+type DraftWorld = {
+  s: WindowModel;
+  /** Draft calls written and not answered or dropped: by write id and dial. */
+  flying: Array<Write>;
+  /** Every tea Cmd handed out and not answered, so a `now` can be answered. */
+  waiting: Array<Cmd>;
+  /** Per tile: every draft the tile sent, in order, and the index of each one written. */
+  sentByTile: Map<string, Array<unknown>>;
+  writtenByTile: Map<string, Array<unknown>>;
+};
+
+type DraftEvent = {
+  readonly prev: WindowModel;
+  readonly m: WindowMsg;
+  readonly next: WindowModel;
+  readonly cmds: ReadonlyArray<Cmd>;
+  readonly world: DraftWorld;
+  /** The draft writes this step dropped with their dial, and those it answered. */
+  readonly dropped: ReadonlyArray<Write>;
+  readonly answered: ReadonlyArray<{ readonly write: Write; readonly ok: boolean; readonly ms: number }>;
+};
+
+const openTile = (s: WindowModel, pid: string) => s.tiles.find((t) => t.reach._tag === "open" && t.reach.pid === pid);
+
+const draftMoves = (w: DraftWorld, c: DraftPick): ReadonlyArray<() => WindowMsg> => {
+  const s = w.s;
+  const out: Array<() => WindowMsg> = [];
+  const dial = socketDial(s);
+
+  if (s.link._tag === "dialing") {
+    const d = s.link.dial;
+
+    for (let n = 0; n < 4; n++) {
+      out.push(() => ({ type: "admitted", dial: d, ping: 30_000, ms: c.ms }));
+    }
+  }
+
+  const timer = linkTimer(s.link);
+
+  if (timer !== null && s.link._tag !== "online") {
+    out.push(() => timer.msg);
+  }
+
+  // Bring a dial's tiles open: answer its reads and opens as the door would.
+  for (const f of s.flight) {
+    if (f.call._tag === "read") {
+      const name = String(f.call.stream).replace(/^processes\//, "") as keyof typeof DRAFT_NAMES;
+      out.push(() => ({
+        type: "read_ok",
+        id: f.id,
+        dial: f.dial,
+        value: [{ _tag: "started", by: "brain", body: { process: DRAFT_NAMES[name], name }, rev: 1, arrivedAt: "t" }],
+        ms: c.ms,
+      }));
+    }
+
+    if (f.call._tag === "open") {
+      out.push(() => ({ type: "open_ok", id: f.id, dial: f.dial, value: { rev: 1, view: {} }, ms: c.ms }));
+    }
+  }
+
+  // The person types in the drafting tile, presses Enter, or uses the plain tile.
+  for (let n = 0; n < 3; n++) {
+    out.push(() => ({ type: "tile", id: "tile_d", msg: { type: "edited", text: `${DRAFT}${c.word}${c.ms}` } }));
+  }
+
+  out.push(() => ({ type: "tile", id: "tile_d", msg: { type: "enter" } }));
+  out.push(() => ({ type: "tile", id: "tile_p", msg: { type: "typed", text: c.word } }));
+  out.push(() => ({ type: "tile", id: "tile_p", msg: { type: "submit" } }));
+
+  // The door answers the draft call really in flight: a result, or an error.
+  const f = w.flying[c.move % Math.max(1, w.flying.length)];
+
+  if (f !== undefined && dial === f.dial) {
+    for (let n = 0; n < 3; n++) {
+      out.push(() => ({
+        type: "frame",
+        dial: f.dial,
+        text: rpc({ id: f.id, result: f.call["m"] }),
+        at: c.ms,
+        ms: c.ms,
+      }));
+    }
+
+    out.push(() => ({
+      type: "frame",
+      dial: f.dial,
+      text: rpc({
+        id: f.id,
+        error: { code: -32000, message: "no", data: { reason: c.move % 2 === 0 ? "rate_limited" : "bad_draft" } },
+      }),
+      at: c.ms,
+      ms: c.ms,
+    }));
+  }
+
+  // A press's clock answer, so its letter is dated.
+  const now = w.waiting.find((cmd) => cmd.type === "now");
+
+  if (now !== undefined) {
+    out.push(
+      () =>
+        ({
+          type: "now_ok",
+          cmd: now,
+          value: { letter: `letter_${c.word}_${c.move}`, sentAt: "2026-11-14T00:00:00.000Z" },
+        }) as WindowMsg,
+    );
+  }
+
+  // The dial ends.
+  if (dial !== null && c.move % 9 === 0) {
+    out.push(() => ({ type: "closed", dial, code: 1006, fingerprint: "SHA256:k", ms: c.ms }));
+  }
+
+  return out;
+};
+
+const foldDrafts = (list: ReadonlyArray<DraftPick>, each: (e: DraftEvent) => void): DraftWorld => {
+  const [first, cmds0] = draftMachine.init(null, draftCtx);
+  const w: DraftWorld = {
+    s: first,
+    flying: [],
+    waiting: [...cmds0],
+    sentByTile: new Map(),
+    writtenByTile: new Map(),
+  };
+
+  for (const c of list) {
+    const options = draftMoves(w, c);
+    const m = options[c.move % options.length]!();
+    const prev = w.s;
+    const [next, cmds] = draftStep(prev, m);
+    const answered: Array<{ write: Write; ok: boolean; ms: number }> = [];
+
+    if (m.type === "frame") {
+      const id = Option.getOrUndefined(
+        Schema.decodeUnknownOption(
+          Schema.fromJsonString(Schema.Struct({ id: Schema.Number, error: Schema.optionalKey(Schema.Unknown) })),
+        )(m.text),
+      );
+      const write = w.flying.find((x) => x.id === id?.id && x.dial === m.dial);
+
+      if (write !== undefined) {
+        answered.push({ write, ok: id?.error === undefined, ms: m.ms ?? 0 });
+        w.flying = w.flying.filter((x) => x !== write);
+      }
+    }
+
+    if (m.type === "now_ok") {
+      w.waiting = w.waiting.filter((x) => x !== (m as { cmd: Cmd }).cmd);
+    }
+
+    // A draft write whose dial is no longer the socket's was dropped with it.
+    const open = socketDial(next);
+    const dropped = w.flying.filter((x) => x.dial !== open);
+    w.flying = w.flying.filter((x) => x.dial === open);
+
+    // What the drafting tile sent this step, read off its own machine.
+    // A step the parent kept: a submit while the tile is not open is dropped whole, its frame with it.
+    if (
+      m.type === "tile" &&
+      m.id === "tile_d" &&
+      next.tiles.find((t) => t.id === "tile_d")!.own !== prev.tiles.find((t) => t.id === "tile_d")!.own
+    ) {
+      const before = prev.tiles.find((t) => t.id === "tile_d")!;
+      const [, out] = applyCell(draftingTile, before.own as never, m.msg as never) as readonly [
+        unknown,
+        ReadonlyArray<Cmd>,
+      ];
+      const sent = w.sentByTile.get("tile_d") ?? [];
+      sent.push(...out.filter((x) => x.type === "draft").map((x) => x["m"]));
+      w.sentByTile.set("tile_d", sent);
+    }
+
+    for (const cmd of cmds) {
+      if (isWrite(cmd) && cmd.call._tag === "draft") {
+        w.flying.push(cmd);
+        const tile = next.tiles.find((t) => t.reach._tag === "open" && t.reach.pid === cmd.call["pid"]);
+        const written = w.writtenByTile.get(tile?.id ?? "?") ?? [];
+        written.push(cmd.call["m"]);
+        w.writtenByTile.set(tile?.id ?? "?", written);
+      }
+
+      if (cmd.type === "now") {
+        w.waiting.push(cmd);
+      }
+    }
+
+    w.s = next;
+    each({ prev, m, next, cmds, world: w, dropped, answered });
+  }
+
+  return w;
+};
+
+const handBacks = (s: WindowModel) =>
+  (
+    s.tiles.find((t) => t.id === "tile_d")!.own as {
+      readonly back: ReadonlyArray<{ readonly _tag: string; readonly value?: unknown; readonly ms?: number }>;
+    }
+  ).back;
+
+describe("fabsh L12 at the parent: one draft call in flight per tile, the newest last, every one answered to its tile", () => {
+  it.prop(
+    "L12: a tile has at most one draft call in flight, each on its own open pid, and with none in flight its newest draft is the last one written",
+    { list: DraftWalk },
+    ({ list }) => {
+      let written = 0;
+      foldDrafts(list, ({ next, world }) => {
+        const flying = world.flying.filter((f) => f.call["pid"] === DRAFT_PID);
+        expect(flying.length, "two draft calls in flight for one tile").toBeLessThanOrEqual(1);
+        expect(
+          world.flying.every((f) => f.call["pid"] === DRAFT_PID),
+          "a draft call for a tile that never drafts",
+        ).toBe(true);
+        const tile = openTile(next, DRAFT_PID);
+        const sent = world.sentByTile.get("tile_d") ?? [];
+        const wrote = world.writtenByTile.get("tile_d") ?? [];
+        written = wrote.length;
+
+        if (next.link._tag === "online" && tile !== undefined && flying.length === 0 && sent.length > 0) {
+          expect(wrote.at(-1), "with nothing in flight, the newest draft is the last one written").toEqual(sent.at(-1));
+        }
+      });
+      return written >= 0;
+    },
+    { arbitrary: { seed: SEED, runs: 300, size: 200 } },
+  );
+
+  it.prop(
+    "L12: each draft call gets exactly one hand-back to its tile: echoed with the result and its ms, echo_refused for an error or a dial that ended",
+    { list: DraftWalk },
+    ({ list }) => {
+      foldDrafts(list, ({ prev, next, answered, dropped }) => {
+        const added = handBacks(next).slice(handBacks(prev).length);
+        const expected = [
+          ...answered.map((a) =>
+            a.ok ? { _tag: "echoed", value: a.write.call["m"], ms: a.ms } : { _tag: "echo_refused" },
+          ),
+          ...dropped.filter((d) => d.call["pid"] === DRAFT_PID).map(() => ({ _tag: "echo_refused" })),
+        ];
+        expect(added, "the tile's hand-backs this step").toEqual(expected);
+      });
+      return true;
+    },
+    { arbitrary: { seed: SEED, runs: 300, size: 200 } },
+  );
+
+  it.prop(
+    "some walks write, answer and drop draft calls",
+    { list: Arbitrary.array(DraftWalk, { minLength: 30, maxLength: 30 }) },
+    ({ list }) => {
+      const seen = { written: 0, answered: 0, dropped: 0 };
+
+      for (const walk of list) {
+        foldDrafts(walk, ({ cmds, answered, dropped }) => {
+          seen.written += cmds.filter((c) => isWrite(c) && c.call._tag === "draft").length;
+          seen.answered += answered.length;
+          seen.dropped += dropped.length;
+        });
+      }
+
+      expect(seen.written).toBeGreaterThan(0);
+      expect(seen.answered).toBeGreaterThan(0);
+      expect(seen.dropped).toBeGreaterThan(0);
+      return true;
+    },
+    { arbitrary: { seed: SEED, runs: 2, size: 200 } },
+  );
+});
+
+describe("fabsh L19 at the parent: one draft row per submitted line", () => {
+  it.prop(
+    "L19: each press a drafting tile hands up writes one draft row with its frames, echoes and slowest echo since the last press, a tile that never drafts writes none, and no row holds draft text",
+    { list: DraftWalk },
+    ({ list }) => {
+      let since = { frames: 0, echoes: 0, slowest: 0 };
+      foldDrafts(list, ({ m, cmds, answered }) => {
+        const rows = cmds.map(recordIn).filter((r): r is Row => r !== null);
+        expect(JSON.stringify(rows).includes(DRAFT), "a row holds draft text").toBe(false);
+        const draftRows = rows.filter((r) => r._tag === "draft");
+        const pressed = cmds.some((c) => c.type === "now");
+        const fromDrafting = m.type === "tile" && m.id === "tile_d" && pressed;
+        // The press comes before the frame its Enter sends: a frame written in this step counts for the next line.
+        expect(draftRows, fromDrafting ? "the press's draft row" : `a draft row after ${m.type}`).toEqual(
+          fromDrafting ? [{ _tag: "draft", pid: DRAFT_PID, ...since }] : [],
+        );
+
+        if (fromDrafting) {
+          since = { frames: 0, echoes: 0, slowest: 0 };
+        }
+
+        since.frames += cmds.filter((c) => isWrite(c) && c.call._tag === "draft").length;
+
+        for (const a of answered) {
+          if (a.ok) {
+            since.echoes++;
+            since.slowest = Math.max(since.slowest, a.ms);
+          }
+        }
+      });
+      return true;
+    },
+    { arbitrary: { seed: SEED, runs: 100, size: 200 } },
+  );
+});

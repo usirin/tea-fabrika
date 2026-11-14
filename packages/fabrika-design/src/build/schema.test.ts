@@ -329,7 +329,7 @@ describe("what a value is", () => {
       closed: own.includes("closed"),
       focus: own.includes("focus"),
     }).toEqual({
-      count: 22,
+      count: 23,
       closed: false,
       focus: true,
     });
