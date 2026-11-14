@@ -34,7 +34,7 @@ export const ClientInfo = Schema.Struct({
 });
 
 /**
- * What a start is given: the tiles to show or a desk, the window parent, the brain's origin, the build that
+ * What a start is given: the tiles to show or a tezgah workspace, the window parent, the brain's origin, the build that
  * runs and the client's own facts. Plain data and the machine, so any client can pass it.
  *
  * @stability unstable
@@ -42,8 +42,8 @@ export const ClientInfo = Schema.Struct({
  */
 export type StartOptions = {
   readonly tiles: ReadonlyArray<{ readonly id: string; readonly name: string }>;
-  /** A desk: the window shows this workspace of its person's tezgah, in place of `tiles`. */
-  readonly desk?: { readonly workspace: number };
+  /** The window shows this workspace of its person's tezgah, in place of `tiles`. */
+  readonly tezgah?: { readonly workspace: number };
   readonly window: ReturnType<typeof windowMachineFor>;
   readonly origin: string;
   readonly build: string;
@@ -222,7 +222,7 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
     );
 
   return yield* run(options.window, {
-    ctx: { tiles: options.tiles, ...(options.desk === undefined ? {} : { desk: options.desk }) },
+    ctx: { tiles: options.tiles, ...(options.tezgah === undefined ? {} : { tezgah: options.tezgah }) },
     interpret: {
       key: Effect.fn("ClientKey.current")(function* (cmd) {
         const key = yield* keys.current(cmd.rejected).pipe(Effect.mapError((error) => ({ ...error })));

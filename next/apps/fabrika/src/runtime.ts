@@ -15,9 +15,6 @@ import { Gateway } from "./door.ts";
 
 export { projectJobsLayer } from "@kampus/libfabrika/workers/runtime";
 
-/** The window manager's program: one process per person. */
-const TEZGAH = "fabrika/tezgah";
-
 export interface Env extends Bindings {
   readonly INSTANCE: string;
 }
@@ -38,14 +35,11 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
     input: checkedSettings(env),
     programs,
     // The program is the core pack's `fabrika/counter`; its registered name stays `counter:1`. Each
-    // person has one tezgah, named after them; the boot starts the founder's when the build holds
-    // the program.
+    // person has one tezgah, named after them; the boot starts the founder's.
     bootstrap: (person) => [
       { name: "counter:1", id: "counter:1", program: "fabrika/counter" },
       { name: "checklist:1", id: "checklist:1", program: "fabrika/checklist" },
-      ...(Object.hasOwn(programs, TEZGAH)
-        ? [{ name: tezgahName(person), id: tezgahName(person), program: TEZGAH }]
-        : []),
+      { name: tezgahName(person), id: tezgahName(person), program: "fabrika/tezgah" },
     ],
     door: (options) =>
       Effect.gen(function* () {

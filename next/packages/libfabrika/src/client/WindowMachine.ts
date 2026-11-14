@@ -61,14 +61,14 @@ const CallError = Schema.TaggedUnion({
 const OnWrite = { id: Schema.Int, dial: Schema.Int };
 const Via = Schema.Literals(["button", "key"]);
 
-// A desk window's own attach to its workspace: nothing asked yet, a tile id being minted for it,
+// A tezgah window's own attach to its workspace: nothing asked yet, a tile id being minted for it,
 // or its letter written.
 const Attach = Schema.Literals(["waiting", "minting", "sent"]);
 
-/** A desk window's tie to its person's tezgah: how far the window reached tezgah's process, the
+/** A tezgah window's tie to its person's tezgah: how far the window reached tezgah's process, the
  *  window's tezgah child, and its own attach. */
-const Desk = Schema.Struct({ reach: Reach, tezgah: TezgahClient, attach: Attach });
-type Desk = typeof Desk.Type;
+const TezgahLink = Schema.Struct({ reach: Reach, client: TezgahClient, attach: Attach });
+type TezgahLink = typeof TezgahLink.Type;
 
 /**
  * Schema for a window's whole state, which a client may save and load again.
@@ -78,8 +78,8 @@ type Desk = typeof Desk.Type;
  * `link` is where the connection is, `handshake` the hello exchange of its dial, and `fingerprint`
  * the key the window dials with, once the key store has answered. `flight` holds each written call
  * by its id and dial until its answer comes. `client` holds the program client's letters and views.
- * `desk` is null for a window given fixed tiles; a window with a desk takes its tiles from its
- * person's tezgah, whose view its tezgah child holds.
+ * `tezgah` is null for a window given fixed tiles; a window started on tezgah takes its tiles
+ * from its person's tezgah, whose view its tezgah child holds.
  *
  * @stability unstable
  * @category models
@@ -113,7 +113,7 @@ export const WindowModel = Schema.Struct({
   // Slot ownership survives reconnects and identifies the tile whose answer is refused.
   from: Schema.Record(Schema.String, Schema.Struct({ tile: Schema.String, via: Via })),
   redate: Schema.Array(Schema.Int),
-  desk: Schema.NullOr(Desk),
+  tezgah: Schema.NullOr(TezgahLink),
 });
 
 /**
@@ -176,7 +176,7 @@ const enroll = Cmd.make("enroll", {
   err: ["closed"],
 });
 
-// A fresh tile id for the desk window's own attach, minted as a letter id is.
+// A fresh tile id for the tezgah window's own attach, minted as a letter id is.
 const mint = Cmd.make("mint", {
   input: Schema.Struct({}),
   ok: Schema.Struct({ tile: Schema.String }),
@@ -278,8 +278,8 @@ type WindowChecks<P extends AnyProgram> = {
 
 type WindowCtx = {
   readonly tiles: ReadonlyArray<{ readonly id: string; readonly name: string }>;
-  /** A desk: the window takes its tiles from this workspace of its person's tezgah. */
-  readonly desk?: { readonly workspace: number };
+  /** The window takes its tiles from this workspace of its person's tezgah. */
+  readonly tezgah?: { readonly workspace: number };
 };
 
 type Shown = { readonly id: string; readonly name: string };
@@ -333,11 +333,11 @@ const answered = (s: WindowModel, m: { readonly id: number; readonly dial: numbe
 /** The brain's own writer, the one a client trusts for process facts. */
 const brainWriter = (by: string): boolean => by === "brain" || by.startsWith("brain:");
 
-/** A desk whose tezgah read `id` failed: its process is missing. */
-const lostRead = (desk: Desk | null, id: number): Desk | null =>
-  desk !== null && desk.reach._tag === "resolving" && desk.reach.id === id
-    ? { ...desk, reach: Reach.cases.missing.make({}) }
-    : desk;
+/** A tezgah link whose read `id` failed: its process is missing. */
+const lostRead = (link: TezgahLink | null, id: number): TezgahLink | null =>
+  link !== null && link.reach._tag === "resolving" && link.reach.id === id
+    ? { ...link, reach: Reach.cases.missing.make({}) }
+    : link;
 
 const runEnd = (s: WindowModel, pid: string): ReadonlyArray<ReturnType<typeof record>> =>
   (s.patches[pid] ?? 0) === 0
@@ -435,11 +435,11 @@ const pressed = (s: WindowModel, step: ClientStep, tile: string, m: Schema.Json,
   ];
 };
 
-/** The tiles of a desk's workspace in its drawn state, in reading order, each named by the process
+/** The tiles of a tezgah link's workspace in its drawn state, in reading order, each named by the process
  *  it shows. */
-const deskShown = (desk: Desk): ReadonlyArray<Shown> => {
-  const view = optimisticState(desk.tezgah);
-  const space = view?.workspaces.find((w) => w.n === desk.tezgah.workspace);
+const tezgahTiles = (link: TezgahLink): ReadonlyArray<Shown> => {
+  const view = optimisticState(link.client);
+  const space = view?.workspaces.find((w) => w.n === link.client.workspace);
   return view === null || space === undefined
     ? []
     : order(space.layout).flatMap((id) =>
@@ -447,14 +447,14 @@ const deskShown = (desk: Desk): ReadonlyArray<Shown> => {
       );
 };
 
-/** A desk window's tiles follow tezgah's drawn state: a tile tezgah added joins, and is read at
+/** A tezgah window's tiles follow tezgah's drawn state: a tile tezgah added joins, and is read at
  *  once while online; a tile it removed leaves; a kept tile keeps its reach and its own state. */
 const followed = (s: WindowModel, fresh: (t: Shown) => TileRow): Step => {
-  if (s.desk === null) {
+  if (s.tezgah === null) {
     return [s, []];
   }
 
-  const want = deskShown(s.desk);
+  const want = tezgahTiles(s.tezgah);
   const kept = new Map(s.tiles.map((t) => [t.id, t]));
   const added = want.filter((t) => !kept.has(t.id));
   const tiles = want.map((t) => kept.get(t.id) ?? fresh(t));
@@ -487,20 +487,20 @@ const followed = (s: WindowModel, fresh: (t: Shown) => TileRow): Step => {
   ];
 };
 
-/** tezgah's view reached the desk window, whole or as a patch: its tezgah child takes it, the tiles
+/** tezgah's view reached the tezgah window, whole or as a patch: its tezgah child takes it, the tiles
  *  follow, a patch it cannot apply opens the view again, and a first look at a workspace tezgah does
  *  not have yet mints the tile id for the window's own attach. */
-const deskTook = (s: WindowModel, pid: string, msg: TezgahMsg, fresh: (t: Shown) => TileRow): Step => {
-  if (s.desk === null) {
+const tezgahTook = (s: WindowModel, pid: string, msg: TezgahMsg, fresh: (t: Shown) => TileRow): Step => {
+  if (s.tezgah === null) {
     return [s, []];
   }
 
-  const desk = s.desk;
-  const [tezgah, asks] = applyCell(tezgahMachine, desk.tezgah, msg);
-  const view = tezgah.serverState;
-  const due = desk.attach === "waiting" && view !== null && !view.workspaces.some((w) => w.n === tezgah.workspace);
+  const link = s.tezgah;
+  const [client, asks] = applyCell(tezgahMachine, link.client, msg);
+  const view = client.serverState;
+  const due = link.attach === "waiting" && view !== null && !view.workspaces.some((w) => w.n === client.workspace);
   const [after, reads] = followed(
-    { ...s, desk: { reach: Reach.cases.open.make({ pid }), tezgah, attach: due ? "minting" : desk.attach } },
+    { ...s, tezgah: { reach: Reach.cases.open.make({ pid }), client, attach: due ? "minting" : link.attach } },
     fresh,
   );
   const reopen =
@@ -523,7 +523,7 @@ const Patched = Schema.Struct({
   patch: Schema.Unknown,
 });
 
-const decodeDeskNote = Schema.decodeUnknownOption(Schema.Union([Whole, Patched]));
+const decodeTezgahNote = Schema.decodeUnknownOption(Schema.Union([Whole, Patched]));
 
 const dated = (
   s: WindowModel,
@@ -632,7 +632,7 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
           reach: Reach.cases.unresolved.make({}),
           recovery: Recovery.make("ready"),
         })),
-        desk: next.desk === null ? null : { ...next.desk, reach: Reach.cases.unresolved.make({}) },
+        tezgah: next.tezgah === null ? null : { ...next.tezgah, reach: Reach.cases.unresolved.make({}) },
         sent: [],
         patches: s.link._tag === "online" ? {} : s.patches,
       },
@@ -644,14 +644,14 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
     return [next, out];
   }
 
-  // A desk window reads its person's tezgah first: the person is the one the door admitted.
+  // A tezgah window reads its person's tezgah first: the person is the one the door admitted.
   const person = next.handshake._tag === "admitted" ? next.handshake.person : null;
-  const desk =
-    next.desk === null || person === null
+  const first =
+    next.tezgah === null || person === null
       ? []
       : [Call.cases.read.make({ stream: `processes/${tezgahName(person)}`, after: 0 })];
   const [reading, reads] = wrote(next, link.dial, [
-    ...desk,
+    ...first,
     ...s.tiles.map((t) => Call.cases.read.make({ stream: `processes/${t.name}`, after: 0 })),
   ]);
   next = {
@@ -659,12 +659,12 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
     trouble: null,
     tiles: reading.tiles.map((t, i) => ({
       ...t,
-      reach: Reach.cases.resolving.make({ id: next.serial + desk.length + i }),
+      reach: Reach.cases.resolving.make({ id: next.serial + first.length + i }),
     })),
-    desk:
-      reading.desk === null || desk.length === 0
-        ? reading.desk
-        : { ...reading.desk, reach: Reach.cases.resolving.make({ id: next.serial }) },
+    tezgah:
+      reading.tezgah === null || first.length === 0
+        ? reading.tezgah
+        : { ...reading.tezgah, reach: Reach.cases.resolving.make({ id: next.serial }) },
   };
   const askPersist = next.persist === "due";
 
@@ -935,8 +935,8 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
     init: (loaded, ctx) => [
       loaded ??
         WindowModel.make({
-          // A window with a desk shows no given tile: its tiles come from tezgah's view.
-          tiles: ctx.desk === undefined ? ctx.tiles.map(fresh) : [],
+          // A window on tezgah shows no given tile: its tiles come from tezgah's view.
+          tiles: ctx.tezgah === undefined ? ctx.tiles.map(fresh) : [],
           link: linkMachine.init(null, {})[0],
           // Dial 1's exchange waits for its challenge; its socket opening times it.
           handshake: applyCell(handshakeMachine, handshakeMachine.init(null, {})[0], { type: "opened", dial: 1 })[0],
@@ -954,12 +954,12 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           trouble: null,
           from: {},
           redate: [],
-          desk:
-            ctx.desk === undefined
+          tezgah:
+            ctx.tezgah === undefined
               ? null
               : {
                   reach: Reach.cases.unresolved.make({}),
-                  tezgah: tezgahMachine.init(null, { workspace: ctx.desk.workspace })[0],
+                  client: tezgahMachine.init(null, { workspace: ctx.tezgah.workspace })[0],
                   attach: "waiting",
                 },
         }),
@@ -1044,7 +1044,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           {
             ...s,
             flight: found.rest,
-            desk: call._tag === "read" ? lostRead(s.desk, m.cmd.id) : s.desk,
+            tezgah: call._tag === "read" ? lostRead(s.tezgah, m.cmd.id) : s.tezgah,
             sent: call._tag === "send" ? s.sent.filter((l) => l !== call.letter) : s.sent,
             tiles:
               call._tag === "read"
@@ -1065,20 +1065,20 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           return [s, []];
         }
 
-        const desk = s.desk;
+        const link = s.tezgah;
 
-        if (desk !== null && desk.reach._tag === "resolving" && desk.reach.id === m.id && found.call._tag === "read") {
+        if (link !== null && link.reach._tag === "resolving" && link.reach.id === m.id && found.call._tag === "read") {
           const name = found.call.stream.slice("processes/".length);
           const pid = C.resolveName(m.value, name, brainWriter);
           const next = { ...s, flight: found.rest };
 
           if (pid === null) {
-            return [{ ...next, desk: { ...desk, reach: Reach.cases.missing.make({}) } }, []];
+            return [{ ...next, tezgah: { ...link, reach: Reach.cases.missing.make({}) } }, []];
           }
 
           const [written, cmds] = wrote(next, m.dial, [Call.cases.open.make({ pid })]);
           return [
-            { ...written, desk: { ...desk, reach: Reach.cases.opening.make({ pid, id: written.serial - 1 }) } },
+            { ...written, tezgah: { ...link, reach: Reach.cases.opening.make({ pid, id: written.serial - 1 }) } },
             cmds,
           ];
         }
@@ -1131,7 +1131,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
                 ...s,
                 flight: found.rest,
                 trouble: "No process",
-                desk: lostRead(s.desk, m.id),
+                tezgah: lostRead(s.tezgah, m.id),
                 tiles: s.tiles.map((t) =>
                   t.reach._tag === "resolving" && t.reach.id === m.id
                     ? { ...t, reach: Reach.cases.missing.make({}) }
@@ -1150,10 +1150,10 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
 
         const pid = found.call.pid;
 
-        // tezgah's view is the desk's own, decoded as `TezgahView` by its tezgah child, never by a
+        // tezgah's view is the window's tezgah link's own, decoded as `TezgahView` by its tezgah child, never by a
         // program's decoder.
-        if (s.desk !== null && "pid" in s.desk.reach && s.desk.reach.pid === pid) {
-          return deskTook({ ...s, flight: found.rest, trouble: null }, pid, { type: "server", ...m.value }, fresh);
+        if (s.tezgah !== null && "pid" in s.tezgah.reach && s.tezgah.reach.pid === pid) {
+          return tezgahTook({ ...s, flight: found.rest, trouble: null }, pid, { type: "server", ...m.value }, fresh);
         }
 
         const [next, rows, asks] = noticed({ ...s, flight: found.rest }, step, pid, { type: "whole", ...m.value });
@@ -1244,11 +1244,11 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         return f === null ? [s, []] : [{ ...s, flight: f.rest }, []];
       },
       view: (s, m): Step => {
-        if (s.desk !== null && "pid" in s.desk.reach && s.desk.reach.pid === m.pid) {
-          const note = decodeDeskNote(m.note);
+        if (s.tezgah !== null && "pid" in s.tezgah.reach && s.tezgah.reach.pid === m.pid) {
+          const note = decodeTezgahNote(m.note);
           return Option.isNone(note)
             ? [s, []]
-            : deskTook(
+            : tezgahTook(
                 s,
                 m.pid,
                 note.value.type === "whole"
@@ -1314,23 +1314,23 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
       ping_err: (s): Step => [s, []],
       // The window's own attach, as a letter to its tezgah: it makes the workspace when it is missing.
       mint_ok: (s, m): Step => {
-        const desk = s.desk;
+        const link = s.tezgah;
 
-        if (desk === null || desk.attach !== "minting") {
+        if (link === null || link.attach !== "minting") {
           return [s, []];
         }
 
-        if (desk.reach._tag !== "open") {
-          return [{ ...s, desk: { ...desk, attach: "waiting" } }, []];
+        if (link.reach._tag !== "open") {
+          return [{ ...s, tezgah: { ...link, attach: "waiting" } }, []];
         }
 
         const n = s.client.written;
-        const attach = { type: "attach", workspace: desk.tezgah.workspace, tile: m.value.tile };
-        const [client] = step(s.client, { type: "press", pid: desk.reach.pid, m: attach });
-        return [{ ...s, client, desk: { ...desk, attach: "sent" } }, [now({ n })]];
+        const attach = { type: "attach", workspace: link.client.workspace, tile: m.value.tile };
+        const [client] = step(s.client, { type: "press", pid: link.reach.pid, m: attach });
+        return [{ ...s, client, tezgah: { ...link, attach: "sent" } }, [now({ n })]];
       },
       mint_err: (s): Step =>
-        s.desk?.attach === "minting" ? [{ ...s, desk: { ...s.desk, attach: "waiting" } }, []] : [s, []],
+        s.tezgah?.attach === "minting" ? [{ ...s, tezgah: { ...s.tezgah, attach: "waiting" } }, []] : [s, []],
     },
     subs: [
       { type: "timer", deps: (s) => timerDeps(s.link) },
