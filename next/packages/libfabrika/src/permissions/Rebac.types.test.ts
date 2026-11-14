@@ -8,6 +8,7 @@ import { Effect, type Result, Schema } from "effect";
 import { Model, StartProgram } from "./Model.ts";
 import * as Rebac from "./Rebac.ts";
 import type { Tuples } from "./Relation.ts";
+import { Relations } from "./Relations.ts";
 import type { Sender } from "./Senders.ts";
 
 /** The proof a right's check gives, read off its `within`. */
@@ -26,6 +27,7 @@ class OtherStart extends Rebac.Permission<OtherStart>()("permissions/test/OtherS
 const checkTypes = (
   proof: Granted<typeof StartProgram>,
   other: Granted<typeof OtherStart>,
+  widened: Rebac.Proof<unknown>,
   tuples: Tuples,
   sender: typeof Sender.Type,
 ) => {
@@ -44,6 +46,23 @@ const checkTypes = (
     Result.Result<Granted<typeof StartProgram>, Rebac.Denied>
   >();
   expectTypeOf(Rebac.recheck(proof, tuples)).toEqualTypeOf<boolean>();
+
+  // L5, review send-back: a proof widened to `Proof<unknown>`, or a proof of another right, never
+  // removes `StartProgram`, and `provide` never removes a requirement that is not a right, such as
+  // `Relations`. Red on 5aa8a5e: `Proof` is covariant and `Exclude<R, unknown>` is `never`, so the
+  // widened line compiles, types as needing nothing, and dies at run time with "Service not found".
+  const needsBoth = Effect.gen(function* () {
+    const held = yield* StartProgram;
+    const relations = yield* Relations;
+    return [held.object, relations] as const;
+  });
+  expectTypeOf<Needs<typeof needsBoth>>().toEqualTypeOf<StartProgram | Relations>();
+  const keptRelations = needsBoth.pipe(Rebac.provide(proof));
+  expectTypeOf<Needs<typeof keptRelations>>().toEqualTypeOf<Relations>();
+  const keptBoth = needsBoth.pipe(Rebac.provide(other));
+  expectTypeOf<Needs<typeof keptBoth>>().toEqualTypeOf<StartProgram | Relations>();
+  // @ts-expect-error A proof widened to `Proof<unknown>` names no right, so `provide` refuses it.
+  const widenedAway = needsBoth.pipe(Rebac.provide(widened));
 
   // L6. Plant: type the builder's names as `string`; each line below then compiles.
   const checkNames = () => {
@@ -86,9 +105,19 @@ const checkTypes = (
     const forged: Granted<typeof StartProgram> = { sender, permission: "start", object: "fabrika:demo" };
     // @ts-expect-error A forged proof cannot discharge the requirement either.
     const smuggled = needs.pipe(Rebac.provide({ sender, permission: "start", object: "fabrika:demo" }));
-    return [minted, forged, smuggled];
+    // Review send-back: a spread of a real proof is built outside the module too, so it is no proof,
+    // whatever it changes. Red on 5aa8a5e: the spread keeps the type's key, so each line compiles.
+    // @ts-expect-error A spread copy of a real proof is not a proof.
+    const copied: Granted<typeof StartProgram> = { ...proof };
+    // @ts-expect-error A spread of a real proof moved to another object is not a proof of that object.
+    const moved: Granted<typeof StartProgram> = { ...proof, object: "fabrika:other" };
+    // @ts-expect-error A spread of a real proof with another sender is not a proof for that sender.
+    const resent: Granted<typeof StartProgram> = { ...proof, sender };
+    // @ts-expect-error A spread copy cannot discharge the requirement either.
+    const respread = needs.pipe(Rebac.provide({ ...proof, object: "fabrika:other" }));
+    return [minted, forged, smuggled, copied, moved, resent, respread];
   };
-  return [discharged, wrong, checkNames, checkSeal];
+  return [discharged, wrong, keptRelations, keptBoth, widenedAway, checkNames, checkSeal];
 };
 
 it.prop(
