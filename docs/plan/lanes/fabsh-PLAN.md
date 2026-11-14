@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0275, 0276, 0170 and S1 of the summon guidelines, with its leans for the owner to read; body 8b0da02aa98a
+Approved by the lead agent, builds 0275, 0276, 0170 and S1 of the summon guidelines, with its leans for the owner to read; body 315f75026377
 Plancheck-Version: 3
 
 # fabsh in a tile: a regular program that takes a line, echoes each letter at once, and starts a program, in next/
@@ -87,6 +87,15 @@ These bind the steps. Where they and a line below differ, these win.
   `keep`): the `show` letter to the desk and L23's `show` part, `exit`, L25, L26 and L27. Until 2b,
   a started program runs and fabsh names it, but no tile shows it; the pull request says so.
   2a's `says()` and reader never mention 2b's words, so no "not yet" line ships.
+
+- **A7, L28's second half and the init ask, 2026-11-14.** On a real instance a letter's step and its
+  `start_child` run inside the letter's own delivery, before `process.send` answers, so no outside
+  move can remove the writer's key between input and step. L28 keeps its first half; its second
+  half is held by the desk lane's runner law (a non-member sender's start is `forbidden`, Desk S1 L2
+  in `runtime/StartChildTest.ts`) and by L23 (fabsh says each refusal, `forbidden` included, in
+  words). And the library's stepper drops the Cmds `init` returns (`runtime/Program.ts`, `init`), so
+  fabsh cannot ask `programs` in `init`; when it asks is the build's choice, held by L28: fabsh
+  knows its table before a person's first line, and no start ever comes from that answer (L20).
 
 ## The answer first
 
