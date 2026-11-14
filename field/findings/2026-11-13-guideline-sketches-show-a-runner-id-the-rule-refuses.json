@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-guideline-sketches-show-a-runner-id-the-rule-refuses",
+  "date": "2026-11-13",
+  "by": "build",
+  "model": "claude-fable-5-2",
+  "rule": "doc_drift",
+  "location": {
+    "path": "docs/direction/effect-code-guidelines.md",
+    "line": 40
+  },
+  "says": "The two \"after\" sketches of the runner's service id, at lines 40 and 420, show `@kampus/libfabrika/runtime/ProgramRunner` for a class in `runtime/Runner.ts`, an id the now blocking `fabrika/service-id` rule refuses; and the \"before\" blocks at lines 316 and 410, which the page says are real code at commit `5eb5fd0ee`, now show the fixed id, as the plan for ticket 909 asked.",
+  "proof": "docs/direction/effect-code-guidelines.md:420 reads `>()(\"@kampus/libfabrika/runtime/ProgramRunner\") {}` under a comment that places it in `runtime/Runner.ts` (line 27); docs/plan/effect-rules-small.md:334 gives the id the rule asks for in that file as `>()(\"@kampus/libfabrika/runtime/Runner.ProgramRunner\") {`, and the lint run on c9a630f53 asked for the same id at next/packages/libfabrika/src/runtime/Runner.ts:333.",
+  "cost": "A reader who copies the page's sketch writes an id that fails lint, and section E7's before and after no longer show the change the section teaches.",
+  "head": "c9a630f53fc6dc16e275984345226bc3c175bc8e",
+  "ticket": "kamp-us/tea-fabrika#909",
+  "pr": null
+}

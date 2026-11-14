@@ -33,18 +33,35 @@ it("pinned: L13 bundles keep native dependencies resolvable outside root node_mo
         expect(yield* fs.readFileString(output)).toContain(files[0]);
 
         // Compile both host entries without executing launchd, Electron or the local runtime.
-        for (const [entry, name] of [
-          [path.resolve(import.meta.dirname, "node/P19Launchd.test-support.ts"), "controller"],
-          [path.resolve(import.meta.dirname, "../src/local-instance.ts"), "brain"],
+        for (const [entry, name, modes] of [
+          [
+            path.resolve(import.meta.dirname, "node/P19Launchd.test-support.ts"),
+            "controller",
+            ["p19:guard", "p19:controller"],
+          ],
+          [path.resolve(import.meta.dirname, "node/P19Brain.test-support.ts"), "brain", ["p19:brain"]],
         ] as const) {
           const compiled = path.join(home, `${name}.mjs`);
-          const linked = yield* Host.bundle(`export * from ${JSON.stringify(entry)};`, compiled, root);
+          // Bundled as check bundles them, by a bare import: an `export *` entry keeps a main the
+          // treeshake rule would drop.
+          const linked = yield* Host.bundle(`import ${JSON.stringify(entry)};`, compiled, root);
           expect(yield* fs.exists(compiled)).toBe(true);
           // The app's "sideEffects": false once emptied the helper's bundle, and its mains with it.
-          expect(yield* fs.readFileString(compiled)).toContain(name === "controller" ? "p19:guard" : "localInstance");
+          // Each main is known by its dispatch, since check's own body also names the modes as argv.
+          const text = yield* fs.readFileString(compiled);
+
+          for (const mode of modes) {
+            expect(text).toContain(`process.argv[2] === "${mode}"`);
+          }
 
           for (const file of linked) {
             expect(yield* fs.exists(file)).toBe(true);
+          }
+
+          if (name === "brain") {
+            // The brain Electron starts carries the local instance, never the host check's bundler.
+            expect(text).toContain("brain.localInstance");
+            expect(linked.filter((file) => /rolldown/.test(file))).toEqual([]);
           }
         }
       }),

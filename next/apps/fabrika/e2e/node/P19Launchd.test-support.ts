@@ -39,6 +39,7 @@ import { FetchHttpClient, HttpClient } from "effect/http";
 import { ChildProcess } from "effect/process";
 import { rolldown, type PreRenderedChunk } from "rolldown";
 import { build } from "../../src/build.ts";
+import { BrainInput } from "./P19Brain.test-support.ts";
 
 class HostError extends Schema.TaggedError<HostError>()("HostError", {
   reason: Schema.String,
@@ -233,8 +234,9 @@ export const bundle = Effect.fn("P19Host.bundle")(function* (source: string, out
           cwd: root,
           platform: "node",
           external: [/^node:/],
-          // The app's package.json says "sideEffects": false, which drops this helper's guard and controller mains.
-          treeshake: { moduleSideEffects: [{ test: /P19Launchd\.test-support\.ts$/, sideEffects: true }] },
+          // The app's package.json says "sideEffects": false, which drops this helper's guard and controller mains
+          // and the brain file's main.
+          treeshake: { moduleSideEffects: [{ test: /P19(?:Launchd|Brain)\.test-support\.ts$/, sideEffects: true }] },
           plugins: [
             {
               name: "p19-entry",
@@ -418,9 +420,24 @@ export const check = Effect.fn("P19Host.check")(function* () {
   const runtime = `${home}/brain.mjs`,
     controllerFile = `${home}/controller.mjs`,
     guardFile = `${home}/guard.mjs`;
-  const boot = `import { NodeRuntime, NodeServices } from "@effect/platform-node"; import { Effect } from "effect"; import { Digest, SecureRandom } from "effect/crypto";`;
+  const brainFile = `${home}/brain.json`;
+  yield* fs.writeFileString(
+    brainFile,
+    JSON.stringify(
+      yield* Schema.encodeEffect(BrainInput)({
+        built: { build: built.build, brain: built.brain, programs: built.programs },
+        options: {
+          name: "p19-isolated",
+          founding: { person: "person_01m6v5270hf3c8x2q7w9z4k5mn", founder: "public-host-test", window: null },
+          settings,
+          repo: null,
+          home,
+        },
+      }),
+    ),
+  );
   yield* bundle(
-    `${boot} import { localInstance } from ${JSON.stringify(path.join(app, "src/local-instance.ts"))}; import { FileSystem } from "effect"; NodeRuntime.runMain(Effect.scoped(Effect.gen(function*(){ const fs=yield* FileSystem.FileSystem; yield* localInstance(${JSON.stringify(built)}, { name:"p19-isolated", person:"person_01m6v5270hf3c8x2q7w9z4k5mn", founder:"public-host-test", window:null, rateLimit:{limit:${Number(settings.values["gateway.limit"])},window:${Number(settings.values["gateway.window"])}}, port:${chosen}, home:${JSON.stringify(home)} }); yield* fs.writeFileString(${JSON.stringify(`${home}/ready.json`)}, JSON.stringify({pid:process.pid,build:${JSON.stringify(built.build)},node:process.versions.node,electron:process.versions.electron})); yield* Effect.never; })).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto, SecureRandom.layerWebCrypto])));`,
+    `import ${JSON.stringify(path.resolve(import.meta.dirname, "P19Brain.test-support.ts"))};`,
     runtime,
     root,
   );
@@ -429,7 +446,8 @@ export const check = Effect.fn("P19Host.check")(function* () {
   const spec = yield* Schema.decodeUnknownEffect(BrainSpec)({
     home,
     executable,
-    args: [runtime, "spaces & <angles> 雪"],
+    // The brain's mode and input go first; the last argument checks that launchd keeps argv as given.
+    args: [runtime, "p19:brain", brainFile, "spaces & <angles> 雪"],
     url,
     build: built.build,
   });
