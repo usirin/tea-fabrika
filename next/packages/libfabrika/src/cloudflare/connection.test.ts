@@ -1,20 +1,26 @@
+import { createHash } from "node:crypto";
 // next/, 0140. Only the platform and project answer are fake. The call handler and sink are real.
 // node:sqlite is the edge: Effect has no synchronous in-memory SQLite handle.
 import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import type * as Tracer from "effect/Tracer";
 import { vi } from "vitest";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
+import * as StartsTest from "../settings/StartsTest.ts";
 import type { SpanRow } from "../telemetry/Trace.ts";
 import * as Trace from "../telemetry/Trace.ts";
 import { Answer, Attached } from "../transport/Wire.ts";
 import { ConnectionService, connectionLayer } from "./connection.ts";
 import { ProjectClient } from "./platform.ts";
 import type { BrainOptions, Env } from "./runtime.ts";
+import * as SettingsRecorded from "./SettingsRecorded.ts";
+import * as SettingsStartsLedger from "./SettingsStartsLedger.ts";
 
-import { Arbitrary, Cause, Clock, Exit, Layer, Stream } from "effect";
+import { Arbitrary, Cause, Clock, Context, Exit, Layer, Scope, Stream } from "effect";
+import * as fc from "fast-check";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
@@ -23,6 +29,10 @@ import { Chain } from "../telemetry/Trace.ts";
 import * as Runtime from "./runtime.ts";
 
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
+
+/** The codes a close frame from an endpoint may carry: the WebSocket API's `close(code)` takes 1000 or
+ *  3000 to 4999 and throws for any other (WHATWG WebSockets, `close`; RFC 6455, 7.4.2). */
+const sendable = (code: number) => code === 1000 || (code >= 3000 && code <= 4999);
 
 const HOUR = 3_600_000;
 const H = 1_790_002_800_000;
@@ -34,7 +44,21 @@ const database = Effect.acquireRelease(
 );
 
 const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "unreachable") => {
-  const sql = nodeSql(db);
+  const base = nodeSql(db);
+  let settingsReads = 0;
+  const sql = {
+    ...base,
+    exec: (query: string, ...args: Parameters<typeof base.exec> extends [string, ...infer A] ? A : never) => {
+      if (/SELECT \* FROM entries WHERE stream = \? AND rev > \?/i.test(query)) {
+        settingsReads++;
+      }
+
+      return base.exec(query, ...args);
+    },
+  };
+  const input = StartsTest.fixture({ name: "test-project", port: 8787 }, (algorithm, data) =>
+    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  );
   let attached: typeof Attached.Type = Attached.cases.online.make({
     client: "test-client",
     identity: { key: "test-key", person: "test-person", as: "window" },
@@ -45,13 +69,22 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
   });
   const frames: Array<string> = [];
   const closes: Array<number> = [];
+  const left: Array<string> = [];
+  let gone = false;
   const socket = fake<WebSocket>({
     deserializeAttachment: () => attached,
     serializeAttachment: (next: typeof Attached.Type) => {
       attached = next;
     },
     send: (frame: string) => frames.push(frame),
-    close: (code: number) => closes.push(code),
+    // As the platform's socket: it throws for a code no close frame may carry, and once it is gone.
+    close: (code: number) => {
+      if (gone || !sendable(code)) {
+        throw new Error("the socket takes no such close frame");
+      }
+
+      closes.push(code);
+    },
   });
   const state = fake<DurableObjectState>({
     id: { name: "test-connection" },
@@ -73,12 +106,24 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
   const saved: Array<SpanRow> = [];
   const stats = { writes: 0, archives: 0 };
   const env = fake<Env>({
+    INSTANCE: JSON.stringify(input),
     PROJECT: {
       getByName: () => ({
+        settingsStart: async () => StartsTest.reply(input),
         route: (_client: string, method: string, params: unknown) => {
           calls.push({ method, params });
           // edge: the platform RPC returns a Promise
           return Promise.resolve(answer);
+        },
+        leave: (client: string) => {
+          left.push(`leave ${client}`);
+          // edge: the platform RPC returns a Promise
+          return Promise.resolve();
+        },
+        disconnect: (client: string) => {
+          left.push(`disconnect ${client}`);
+          // edge: the platform RPC returns a Promise
+          return Promise.resolve();
         },
       }),
     },
@@ -102,22 +147,25 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
       head: () => Promise.resolve(null),
     },
   });
-  const config = fake<BrainOptions>({
-    name: "test-project",
-    port: 8787,
-    rateLimit: { limit: 100_000, window: 60_000 },
-  });
+  const config = fake<BrainOptions>(input);
+  const recorded = SettingsRecorded.layer(input).pipe(Layer.provide(SettingsStartsLedger.layer(sql)));
   return {
     socket,
     frames,
     closes,
+    left,
+    /** From now on the socket is already closed: it takes no frame. */
+    lose: () => {
+      gone = true;
+    },
     calls,
     saved,
     stats,
+    settingsReads: () => settingsReads,
     answer: (value: typeof Answer.Type) => {
       answer = value;
     },
-    layer: connectionLayer(state, env, config),
+    layer: connectionLayer(state, env, config).pipe(Layer.provide(recorded), Layer.provide(Digest.layerWebCrypto)),
   };
 };
 
@@ -131,6 +179,91 @@ const tableCounts = (db: DatabaseSync) =>
         db.prepare(`SELECT count(*) AS n FROM "${String(name).replaceAll('"', '""')}"`).get()?.n,
       ]),
   );
+
+StartsTest.law(
+  "T753 L11 counted refusals stay bounded across hours and Connection reopens",
+  fc.tuple(
+    fc.array(fc.nat(), { minLength: 15, maxLength: 60 }),
+    fc.constantFrom<"unreachable" | "mismatch">("unreachable", "mismatch"),
+  ),
+  ([choices, archiveFailure]) =>
+    Effect.gen(function* () {
+      const db = yield* database;
+      let hour = H;
+      yield* TestClock.setTime(hour - 16 * 24 * HOUR);
+      const open = Effect.fnUntraced(function* () {
+        const scope = yield* Effect.acquireRelease(Scope.make(), (owned) => Scope.close(owned, Exit.void));
+        const w = world(db, archiveFailure);
+        const context = yield* Layer.build(w.layer).pipe(Effect.provideService(Scope.Scope, scope));
+        return { scope, w, context, service: Context.get(context, ConnectionService) };
+      });
+      let owner = yield* open();
+      owner.w.answer(Answer.cases.ok.make({ result: { delivered: true } }));
+      const accepted = () =>
+        owner.service
+          .message(owner.w.socket, JSON.stringify({ jsonrpc: "2.0", id: "prime", method: "process.send", params: {} }))
+          .pipe(Effect.provideContext(owner.context));
+      yield* accepted();
+      yield* TestClock.setTime(hour + 1000);
+      yield* accepted();
+      expect(owner.w.stats.archives).toBeGreaterThan(0);
+      owner.w.answer(Answer.cases.refused.make({ reason: "reserved" }));
+      const firstInHour = new Map<number, ReturnType<typeof tableCounts>>();
+      const totals = new Map<number, number>();
+
+      for (const [index, choice] of choices.entries()) {
+        const moves = totals.size === 0 ? ["refuse"] : ["refuse", "refuse", "reopen", "hour"];
+        const move = moves[choice % moves.length];
+
+        if (move === "reopen") {
+          yield* Scope.close(owner.scope, Exit.void);
+          owner = yield* open();
+          firstInHour.delete(hour);
+          continue;
+        }
+
+        if (move === "hour") {
+          hour += (1 + (choice % 4)) * HOUR;
+          yield* TestClock.setTime(hour);
+          continue;
+        }
+
+        const writes = owner.w.stats.writes;
+        const archives = owner.w.stats.archives;
+        const reads = owner.w.settingsReads();
+        const starts = db.prepare("SELECT count(*) AS n FROM entries").get()?.n;
+        yield* owner.service
+          .message(
+            owner.w.socket,
+            JSON.stringify({ jsonrpc: "2.0", id: index, method: "process.send", params: { by: `forged-${index}` } }),
+          )
+          .pipe(Effect.provideContext(owner.context));
+        expect(owner.w.stats.writes).toBe(writes);
+        expect(owner.w.stats.archives).toBe(archives);
+        expect(owner.w.settingsReads()).toBe(reads);
+        expect(db.prepare("SELECT count(*) AS n FROM entries").get()?.n).toBe(starts);
+        const rows = tableCounts(db);
+
+        if (firstInHour.has(hour)) {
+          expect(rows).toEqual(firstInHour.get(hour));
+        } else {
+          firstInHour.set(hour, rows);
+        }
+
+        const count = (totals.get(hour) ?? 0) + 1;
+        totals.set(hour, count);
+        expect(
+          db
+            .prepare("SELECT piece,count FROM sums WHERE hour=? AND refused='reserved' ORDER BY piece")
+            .all(hour)
+            .map((row) => ({ ...row })),
+        ).toEqual([
+          { piece: "connection.frame", count },
+          { piece: "runtime.rpc", count },
+        ]);
+      }
+    }).pipe(Effect.provide(TestClock.layer())),
+);
 
 it.effect.prop(
   "T843 RPC: ordinary and parked rate refusals keep delay and bounded frame/RPC sums (50 runs)",
@@ -680,4 +813,39 @@ it.effect.prop(
       expect([...reached].sort()).toEqual(["new", "waiting"]);
     }),
   { arbitrary: { seed: 119120, runs: 50 } },
+);
+
+// The codes a peer's close arrives with: the ones a browser really reports (1001 on leaving a page,
+// 1005 for a frame with no code, 1006 for a socket that dropped), any code an app may send, and any
+// 16-bit number at all.
+const PeerClose = Schema.Union([
+  Schema.Literals([1000, 1001, 1005, 1006, 1011]),
+  Schema.Int.check(Schema.isBetween({ minimum: 3000, maximum: 4999 })),
+  Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 65_535 })),
+]);
+
+it.effect.prop(
+  "T828 L25: a peer's close frame is answered once, with its own code when a frame may carry it and 1000 when not, and the connection leaves even when the socket is already gone (200 runs)",
+  { code: PeerClose, gone: Schema.Boolean },
+  ({ code, gone }) =>
+    Effect.gen(function* () {
+      const db = yield* database;
+      const w = world(db);
+
+      if (gone) {
+        w.lose();
+      }
+
+      yield* ConnectionService.use((service) => service.close(w.socket, code)).pipe(Effect.provide(w.layer));
+      // Without this answer a browser keeps its socket closing for 10 s and then reports 1006.
+      expect(w.closes, "one close frame back, never a code the socket refuses").toEqual(
+        gone ? [] : [sendable(code) ? code : 1000],
+      );
+      expect(w.left, "the connection leaves and is disconnected once").toEqual([
+        "leave test-client",
+        "disconnect test-client",
+      ]);
+      expect(w.frames, "a close is answered by a close frame, never a message").toEqual([]);
+    }),
+  { arbitrary: { seed: 119120, runs: 200 } },
 );

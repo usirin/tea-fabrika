@@ -1,5 +1,6 @@
 /**
- * The settings fabrika itself declares: `instance.port`, `fabrika-version`, `gateway.limit` and `gateway.window`, and `all`, the group of the four.
+ * The settings fabrika itself declares: `instance.port`, `fabrika-version`, `gateway.limit`, `gateway.window`, the
+ * four local brain settings under `desktop.brain-*`, `desktop.link-ttl`, and `all`, the group of the nine.
  *
  * **Details**
  *
@@ -92,13 +93,104 @@ export const gatewayWindow = Setting.make("gateway.window", {
 });
 
 /**
- * Group of every setting fabrika declares, ready to load, validate and print.
- *
- * **Details**
- *
- * Holds `port`, `version`, `gatewayLimit` and `gatewayWindow`. Making the group checked their paths, environment names and defaults together.
+ * Setting for a one-time browser link's lifetime in whole milliseconds.
  *
  * @stability unstable
  * @category settings
  */
-export const all = Setting.group({ port, version, gatewayLimit, gatewayWindow });
+export const desktopLinkTtl = Setting.make("desktop.link-ttl", {
+  schema: Positive,
+  default: 60_000,
+  doc: "How long a one-time browser link lives in milliseconds.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+/**
+ * Setting for the delay in whole seconds that the service manager waits between crash restarts
+ * of the local brain.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const brainThrottle = Setting.make("desktop.brain-throttle", {
+  schema: Positive,
+  default: 2,
+  doc: "The delay in whole seconds between crash restarts of the local brain.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+/**
+ * Setting for the interval in milliseconds between two readiness or shutdown checks of the local
+ * brain. A native command that is interrupted gets the same interval to exit before it is killed.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const brainPoll = Setting.make("desktop.brain-poll", {
+  schema: Positive,
+  default: 100,
+  doc: "The interval in milliseconds between brain readiness and shutdown checks.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+/**
+ * Setting for the most milliseconds one attempt to start or reuse the local brain may take
+ * before it fails.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const brainStartTimeout = Setting.make("desktop.brain-start-timeout", {
+  schema: Positive,
+  default: 60000,
+  doc: "The maximum time in milliseconds to start or reuse a ready local brain.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+/**
+ * Setting for the most milliseconds one stop may take to confirm that the local brain and what
+ * it owns are gone, before it fails.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const brainStopTimeout = Setting.make("desktop.brain-stop-timeout", {
+  schema: Positive,
+  default: 5000,
+  doc: "The maximum time in milliseconds to confirm the local brain and its children have stopped.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+/**
+ * Group of every setting fabrika declares, ready to load, validate and print.
+ *
+ * **Details**
+ *
+ * Holds `port`, `version`, `gatewayLimit`, `gatewayWindow`, the four local brain settings
+ * (`brainThrottle`, `brainPoll`, `brainStartTimeout` and `brainStopTimeout`) and `desktopLinkTtl`.
+ * Making the group checked their paths, environment names and defaults together.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const all = Setting.group({
+  port,
+  version,
+  gatewayLimit,
+  gatewayWindow,
+  brainThrottle,
+  brainPoll,
+  brainStartTimeout,
+  brainStopTimeout,
+  desktopLinkTtl,
+});

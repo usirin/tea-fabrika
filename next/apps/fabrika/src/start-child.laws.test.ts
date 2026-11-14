@@ -25,6 +25,8 @@ import {
 vi.mock("virtual:fabrika-built", () => ({
   programs: {
     "fabrika/counter": { hash: "counter-test", source: "counter" },
+    // P14 slice 2: the app boots `checklist:1` after `counter:1`, so the table holds its program too.
+    "fabrika/checklist": { hash: "checklist-test", source: "checklist" },
     "p42/child": { hash: "child-test", source: "child" },
   },
   assets: {},

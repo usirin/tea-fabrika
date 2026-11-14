@@ -145,7 +145,7 @@ describe("the land-decision flow", () => {
       ["act", "bot-push", false],
       ["act", "open-pr", false],
       ["listen", "ci", false],
-      ["act", "catchup", true],
+      ["act", "queue", true],
     ]);
   });
 

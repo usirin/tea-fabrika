@@ -1,7 +1,7 @@
 // Who belongs: signed events in, a grant tree out (p28), as one tea machine, `access` (0037, 0046).
 // Pure, so the door's rule and the view are one update and never drift. Tier 1, P9, building
 // account recovery's calls 6 to 9 and a key per client. Every device the person owns is a master:
-// devices are equal roots, and only tabs and agents hang under the device that let them in. The
+// devices are equal roots, and client keys hang under the device that let them in. The
 // sheet belongs to the person and works once.
 //
 // It never checks a signature: the door does, then hands the event here. The Model is never
@@ -9,7 +9,7 @@
 import { Machine } from "@demlik/tea/effect";
 import { Result, Schema } from "effect";
 
-/** What the person saw when they let a tab or an agent in. Recorded, never trusted. */
+/** What the person saw when they let a client in. Recorded, never trusted. */
 export const Saw = Schema.Struct({
   code: Schema.String,
   label: Schema.String,
@@ -19,7 +19,7 @@ export const Saw = Schema.Struct({
   has: Schema.Array(Schema.String),
 });
 
-/** A tab's or an agent's key, let in by a person key. In the signed text whole. */
+/** A client's key, let in by a person key. In the signed text whole. */
 export const Grant = Schema.Struct({
   id: Schema.String,
   key: Schema.String,
@@ -27,7 +27,7 @@ export const Grant = Schema.Struct({
   for: Schema.String,
   /** This ledger's name, so a grant cannot be replayed on another. */
   to: Schema.String,
-  as: Schema.Literals(["window", "agent"]),
+  as: Schema.Literals(["window", "agent", "hands"]),
   saw: Saw,
   /** The signer's own clock, never trusted. */
   sentAt: Schema.String,
@@ -127,7 +127,7 @@ export const MemberEvent = Schema.TaggedUnion({
 export type MemberEvent = typeof MemberEvent.Type;
 
 /** Rank `email`, the brain's own key, waits for P36. */
-const Rank = Schema.Literals(["person", "window", "agent", "recovery"]);
+const Rank = Schema.Literals(["person", "window", "agent", "hands", "recovery"]);
 type Rank = typeof Rank.Type;
 
 /** A key's one standing, with the rank and place it joined with. Only a sheet is spent or
@@ -314,7 +314,7 @@ const found = ({ id, name, keys, window }: Event<"founded">): Folded => {
   return Model.cases.founded.make({ person: id, name, keys: change.keys, ids, reply: ACCEPTED });
 };
 
-/** A window or an agent let in by a live person key. */
+/** A client let in by a live person key. */
 const grant = (model: Founded, { grant, signed }: Event<"granted">) =>
   Result.flatMap(standing(model, signed.signer, grant.for), (rank) => {
     if (rank !== "person") {
@@ -489,13 +489,13 @@ const chainLive = (members: Access, key: string): boolean => {
   return true;
 };
 
-/** Who a dialing key is: a live window or agent with every key above it live. Person and recovery
+/** Who a dialing key is: a live client key with every key above it live. Person and recovery
  *  keys never dial. The same shape as transport's `Who`; wiring joins them. */
 export const admitted = (
   members: Access,
   key: string,
 ):
-  | { readonly key: string; readonly person: string; readonly as: "window" | "agent" }
+  | { readonly key: string; readonly person: string; readonly as: "window" | "agent" | "hands" }
   | { readonly reason: "not_granted" } => {
   const known = members.keys.get(key);
 
@@ -503,7 +503,7 @@ export const admitted = (
     return { reason: "not_granted" };
   }
 
-  if (known.rank !== "window" && known.rank !== "agent") {
+  if (known.rank !== "window" && known.rank !== "agent" && known.rank !== "hands") {
     return { reason: "not_granted" };
   }
 

@@ -20,35 +20,51 @@ const run = Effect.gen(function* () {
   const path = yield* Path.Path;
   const folder = path.join(import.meta.dirname, "e2e");
   const names = (yield* fs.exists(folder)) ? yield* fs.readDirectory(folder) : [];
-  const files = names.filter((name) => name.endsWith(".test.ts")).sort();
+  const files = [
+    ...names
+      .filter((name) => name.endsWith(".test.ts"))
+      .sort()
+      .map((name) => path.join(folder, name)),
+    path.resolve(import.meta.dirname, "../../packages/tuval/src/browser/key.laws.test.ts"),
+  ];
+  const selected = process.argv.slice(2);
+  const targets = selected.length === 0 ? files : files.filter((file) => selected.includes(path.basename(file)));
 
-  if (files.length === 0) {
+  if (selected.length > 0 && targets.length !== selected.length) {
+    return yield* new E2eFailed({ exitCode: 2 });
+  }
+
+  if (targets.length === 0) {
     yield* Console.log("e2e: no e2e/*.test.ts yet, nothing to run");
     return;
   }
 
-  yield* Console.log(`e2e: ${files.length} file(s): ${files.join(", ")}`);
+  yield* Console.log(`e2e: ${targets.length} file(s): ${targets.map((file) => path.basename(file)).join(", ")}`);
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const exitCode = yield* spawner.exitCode(
-    ChildProcess.make(
-      "pnpm",
-      [
-        "exec",
-        "vitest",
-        "run",
-        "--maxWorkers=1",
-        "--root",
-        folder,
-        "--fileParallelism=false",
-        `--testTimeout=${LIMIT}`,
-        `--hookTimeout=${LIMIT}`,
-      ],
-      { cwd: import.meta.dirname, stdin: "ignore", stdout: "inherit", stderr: "inherit" },
-    ),
-  );
 
-  if (exitCode !== 0) {
-    return yield* new E2eFailed({ exitCode });
+  for (const file of targets) {
+    const exitCode = yield* spawner.exitCode(
+      ChildProcess.make(
+        "pnpm",
+        [
+          "exec",
+          "vitest",
+          "run",
+          "--maxWorkers=1",
+          "--root",
+          path.dirname(file),
+          path.basename(file),
+          "--fileParallelism=false",
+          `--testTimeout=${LIMIT}`,
+          `--hookTimeout=${LIMIT}`,
+        ],
+        { cwd: import.meta.dirname, stdin: "ignore", stdout: "inherit", stderr: "inherit" },
+      ),
+    );
+
+    if (exitCode !== 0) {
+      return yield* new E2eFailed({ exitCode });
+    }
   }
 });
 

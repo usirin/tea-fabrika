@@ -9,6 +9,7 @@ import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenera
 import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { vi } from "vitest";
+import * as RecordWireTest from "./record-wire.test-support.ts";
 
 // P12, next/. Exercise startDev twice with one real home. Deployment and HTTP are fake.
 // The link law skips only the flush-to-disk waits. The outbox's own law in
@@ -113,11 +114,12 @@ it.live.prop(
             founder: "public-test-key",
             window: null,
             port: 18787,
-            rateLimit: { limit: 100_000, window: 60_000 },
           };
 
           for (const build of builds) {
-            yield* Effect.scoped(startDev({ build, brain: "unused.mjs", programs: {} }, config)).pipe(
+            yield* Effect.scoped(
+              startDev({ build, brain: "unused.mjs", programs: {} }, RecordWireTest.startupFixture(config)),
+            ).pipe(
               Effect.provide(ProcessIdGenerator.layer),
               Effect.provide(SecureRandom.layerWebCrypto),
               Effect.provide(filesWithoutSync),
@@ -162,15 +164,14 @@ it.live.prop(
         const starting = yield* Effect.forkChild(
           startDev(
             { build, brain: "unused.mjs", programs: {} },
-            {
+            RecordWireTest.startupFixture({
               home: folder,
               name: "life-contract",
               person: "person-test",
               founder: "public-test",
               window: null,
               port: 18787,
-              rateLimit: { limit: 100_000, window: 60_000 },
-            },
+            }),
           ),
         );
         yield* Deferred.await(reached);

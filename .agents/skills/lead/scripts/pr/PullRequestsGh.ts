@@ -4,7 +4,7 @@
 import { Effect, Layer, Option, Schema } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { lastLine, run } from "./command.ts";
-import { type PullRequest, PullRequests, PullRequestsError, type Text } from "./PullRequests.ts";
+import { type Detail, type PullRequest, PullRequests, PullRequestsError, type Text } from "./PullRequests.ts";
 
 /** The most pull requests one `all` read takes; a repo with this many fails it, never cuts it. */
 export const LIMIT = 5000;
@@ -22,6 +22,37 @@ const Listed = Schema.fromJsonString(
 );
 
 const FIELDS = "number,headRefName,headRefOid,state,isDraft";
+
+const Viewed = Schema.fromJsonString(
+  Schema.Struct({
+    number: Schema.Number,
+    headRefName: Schema.String,
+    headRefOid: Schema.String,
+    baseRefName: Schema.String,
+    state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
+    isDraft: Schema.Boolean,
+    title: Schema.String,
+    body: Schema.String,
+    mergeCommit: Schema.NullOr(Schema.Struct({ oid: Schema.String })),
+  }),
+);
+
+const VIEW_FIELDS = `${FIELDS},baseRefName,title,body,mergeCommit`;
+
+/**
+ * The one merge call the lead tooling makes: a squash, pinned to the head that was checked. It
+ * carries no `--admin`, no `--auto` and no other merge method (0162).
+ */
+export const mergeArgs = (repo: string, number: number, oid: string): ReadonlyArray<string> => [
+  "pr",
+  "merge",
+  String(number),
+  "-R",
+  repo,
+  "--squash",
+  "--match-head-commit",
+  oid,
+];
 
 /** `owner/name` from an origin URL GitHub serves, https or ssh; `null` for any other. */
 export const repoFromUrl = (url: string): string | null =>
@@ -111,6 +142,26 @@ export const layer = (
 
       const ready = (number: number) => Effect.asVoid(gh(["pr", "ready", String(number), "-R", repo]));
 
-      return PullRequests.of({ openOn, all, draft, edit, ready });
+      const view = Effect.fn("PullRequestsGh.view")(function* (number: number) {
+        const out = yield* gh(["pr", "view", String(number), "-R", repo, "--json", VIEW_FIELDS]);
+        const v = yield* Schema.decodeUnknownEffect(Viewed)(out).pipe(
+          Effect.mapError(() => new PullRequestsError({ reason: "gh pr view answered a shape we do not read" })),
+        );
+        return {
+          number: v.number,
+          head: v.headRefName,
+          oid: v.headRefOid,
+          base: v.baseRefName,
+          state: v.state,
+          draft: v.isDraft,
+          title: v.title,
+          body: v.body,
+          mergeCommit: v.mergeCommit?.oid ?? null,
+        } satisfies Detail;
+      });
+
+      const enqueue = (number: number, oid: string) => Effect.asVoid(gh(mergeArgs(repo, number, oid)));
+
+      return PullRequests.of({ openOn, all, draft, edit, ready, view, enqueue });
     }),
   );

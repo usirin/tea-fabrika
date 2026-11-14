@@ -24,6 +24,8 @@ import { chromium } from "playwright";
 import { describe, expect, it } from "vitest";
 import type { Built } from "../src/build.ts";
 import { heldPort } from "../src/port.test-support.ts";
+import * as RecordWireTest from "../src/record-wire.test-support.ts";
+import { programs } from "../src/table.ts";
 
 const APP = resolve(import.meta.dirname, ".."),
   ROOT = resolve(APP, "../../..");
@@ -111,9 +113,12 @@ describe("P16 real browser from a copied one-file build", () => {
                   root: home,
                   entry: join(home, "src/brain.ts"),
                   out: join(home, "dist"),
-                  // The app's brain starts `counter:1` on the core pack's `fabrika/counter` (runtime.ts), so
-                  // the build must hold that name, which is also the re-exported program's own.
-                  programs: [{ name: "fabrika/counter", package: "@p16/browser", export: "program" }],
+                  // The app's brain starts every name on its boot list (runtime.ts), so the build holds the
+                  // app's whole table. Only `fabrika/counter` comes from this fixture's package, which
+                  // re-exports the real counter and keeps its name.
+                  programs: programs.map((p) =>
+                    p.name === "fabrika/counter" ? { ...p, package: "@p16/browser", export: "program" } : p,
+                  ),
                   chaos: false,
                   files: [],
                   ledger: [],
@@ -136,15 +141,14 @@ describe("P16 real browser from a copied one-file build", () => {
             const instance = await Effect.runPromise(
               localInstance(
                 { ...built, brain: join(alone, "brain.mjs") },
-                {
+                RecordWireTest.startupFixture({
                   home,
                   name: "p16-browser",
                   person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
                   founder: `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(Buffer.from(raw, "base64url"))]).toString("base64")}`,
                   window: null,
                   port,
-                  rateLimit: { limit: 100_000, window: 60_000 },
-                },
+                }),
               ).pipe(
                 Effect.provideService(Scope.Scope, scope),
                 Effect.provide(localState()),
@@ -345,7 +349,8 @@ const servedCounter = Effect.gen(function* () {
       root: home,
       entry: join(home, "src/brain.ts"),
       out: join(home, "dist"),
-      programs: [{ name: "fabrika/counter", package: "@kampus/counter", export: "counter" }],
+      // The brain starts every name on its boot list, so the build holds the app's whole table.
+      programs,
       chaos: false,
       files: [],
       ledger: [],
@@ -360,15 +365,17 @@ const servedCounter = Effect.gen(function* () {
   const { localState } = yield* Effect.promise(() => import("alchemy/State/LocalState"));
   const instance = yield* owned(
     "server",
-    localInstance(built, {
-      home,
-      name: "p14-browser",
-      person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
-      founder: `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(Buffer.from(raw, "base64url"))]).toString("base64")}`,
-      window: null,
-      port,
-      rateLimit: { limit: 100_000, window: 60_000 },
-    }).pipe(
+    localInstance(
+      built,
+      RecordWireTest.startupFixture({
+        home,
+        name: "p14-browser",
+        person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+        founder: `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(Buffer.from(raw, "base64url"))]).toString("base64")}`,
+        window: null,
+        port,
+      }),
+    ).pipe(
       Effect.provide(localState()),
       Effect.provide(SecureRandom.layerWebCrypto),
       Effect.provide(NodeServices.layer),

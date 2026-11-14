@@ -56,6 +56,31 @@ const hashValues = Effect.fnUntraced(function* (values: Snapshot["values"]) {
   return yield* digest.digestHex(Digest.sha256, new TextEncoder().encode(text));
 });
 
+const declaredOrigin = (declaration: Setting.Setting<unknown>) =>
+  Origin.check(
+    Schema.makeFilter((origin: Origin) => {
+      if (origin._tag === "flag") {
+        return origin.name === `--${declaration.path}`;
+      }
+
+      if (origin._tag === "env") {
+        return origin.name === declaration.env;
+      }
+
+      if (origin._tag === "file") {
+        const file = origin.file;
+        return (
+          file.length > 0 &&
+          !/^(?:[\\/]|[A-Za-z]:)/.test(file) &&
+          (!file.startsWith("~") || file === "~" || file.startsWith("~/")) &&
+          (!file.startsWith("$") || file === "$FABRIKA_HOME" || file.startsWith("$FABRIKA_HOME/"))
+        );
+      }
+
+      return true;
+    }),
+  );
+
 /**
  * Builds a snapshot from resolved settings.
  *
@@ -93,7 +118,7 @@ export const make = Effect.fnUntraced(function* <A, R extends Record<string, Set
  *
  * **Details**
  *
- * The input must hold exactly the group's declared paths in `values` and `origins`, with no extra keys. Values are decoded and encoded again to their canonical form, and the saved hash must equal the hash of those canonical values. Returns the decoded values beside the snapshot. Fails with `SnapshotError`, and needs the `Digest` service.
+ * The input must hold exactly the group's declared paths in `values` and `origins`, with no extra keys. Each origin must fit its own declaration: a flag named `--` and the path, the declaration's own environment name, or a file named by a relative path, `~`, `~/...`, `$FABRIKA_HOME` or `$FABRIKA_HOME/...`. Values are decoded and encoded again to their canonical form, and the saved hash must equal the hash of those canonical values. Returns the decoded values beside the snapshot. Fails with `SnapshotError`, and needs the `Digest` service.
  *
  * @stability unstable
  * @category decoding
@@ -108,7 +133,11 @@ export const read = Effect.fnUntraced(function* <A, R extends Record<string, Set
     paths.length === 0
       ? Schema.Record(Schema.String, Schema.Never)
       : Schema.Struct(Object.fromEntries(paths.map((path) => [path, schema])));
-  const envelope = Schema.Struct({ values: fields(Schema.Json), origins: fields(Origin), hash: Schema.String });
+  const origins =
+    paths.length === 0
+      ? fields(Origin)
+      : Schema.Struct(Object.fromEntries(group.declarations.map((d) => [d.path, declaredOrigin(d)])));
+  const envelope = Schema.Struct({ values: fields(Schema.Json), origins, hash: Schema.String });
   const refused = (cause: unknown) =>
     new SnapshotError({
       message: "The saved settings are invalid.",
