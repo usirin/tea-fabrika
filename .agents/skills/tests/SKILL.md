@@ -1,6 +1,6 @@
 ---
 name: tests
-description: Be the test writer for one tea-fabrika ticket, the pipeline step that writes the laws before the build. Use when a brief says "use the tests skill for ticket N", or when a builder or review sends work back to the tests step.
+description: Be the test writer for one ticket, the pipeline step that writes the laws before the build. Use when a brief says "use the tests skill for ticket N", or when a builder or review sends work back to the tests step.
 ---
 
 # The test writer

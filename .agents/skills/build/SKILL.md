@@ -1,6 +1,6 @@
 ---
 name: build
-description: Be the builder for one tea-fabrika ticket, the pipeline step that makes the test writer's red laws green in product code. Use when a brief says "use the build skill for ticket N", or when a review or the lead sends product fixes back to the build.
+description: Be the builder for one ticket, the pipeline step that makes the test writer's red laws green in product code. Use when a brief says "use the build skill for ticket N", or when a review or the lead sends product fixes back to the build.
 ---
 
 # The builder
@@ -54,11 +54,10 @@ The test config and typecheck.sh hold worker, home and typecheck limits.
 - Step-commit checks staged formatting. Run `pnpm lint` once.
 - A host-only law the plan names runs on the real machine before any review, and the build is not
   done until it has passed there ([0178](../../../.decisions/0178-host-only-laws-run-first.md)). You do not
-  start it on the owner's Mac yourself: on 2026-11-13 one such run ended every process the owner
-  had open. In your report, list each line the test can reach that signals a process or calls
-  launchd (`kill`, `process.kill`, `launchctl bootout`, `launchctl kill`), and for each one what
-  makes a wrong target impossible. The lead reads those lines, asks the owner, and then runs it or
-  tells you to.
+  start it on the owner's Mac yourself. In your report, list each line the test can reach that
+  signals a process or calls launchd (`kill`, `process.kill`, `launchctl bootout`,
+  `launchctl kill`), and for each one what makes a wrong target impossible. The lead reads those
+  lines, asks the owner, and then runs it or tells you to.
 - On the real machine a test touches only its own label, files and processes. It uses its own temp
   home, never takes focus, and leaves nothing behind. One Electron test app at a time.
 

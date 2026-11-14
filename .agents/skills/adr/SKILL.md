@@ -34,38 +34,7 @@ your PR is open, so check again just before you open it. If another PR took it f
 first keeps it, and you renumber yours.
 
 The slug is kebab-case, at most five words. The file is `NNNN-slug.md`, with the next free
-four-digit number:
-
-```markdown
----
-id: 0002
-title: <the decision in one clause, not the topic>
-status: accepted
-date: YYYY-MM-DD
-tags: [a, few, words]
----
-
-# 0002: <the same title>
-
-**What this decides:** one plain sentence.
-
-## Context
-
-Why it came up. Link the note, ticket or pull request.
-
-## Decision
-
-**One bold sentence first.** Then the rules, as short bullets.
-
-## Consequences
-
-What changes, what it costs, what is not decided here.
-```
-
-`status` is `accepted`, `superseded` or `amended` (step 4 says how it changes). Nobody deletes a
-decision. Keep it short: the long reasoning goes in a `docs/direction/` note. A decision moved in
-from elsewhere leaves only a one-line link behind
-([0002](../../../.decisions/0002-moving-a-decision-removes-it-from-its-source.md)).
+four-digit number.
 
 ## 2. Write the decision
 
@@ -177,31 +146,8 @@ glossary row was added.
 
 ## Diagrams
 
-**Rule one: diagrams are Mermaid wherever possible.** Only when Mermaid really cannot express the
-thing may a decision use ASCII art or another form, and then it says in one line, right above the
-picture, why Mermaid could not.
-
-- The diagram shows the real mechanism, with real names: the files, functions, Msgs, states and
-  commands a reader will grep for. No decorative boxes, no "System" or "Service" placeholders.
-- Dark-mode safe: no `style`, `classDef`, `linkStyle` or `%%{init}` theme lines. GitHub picks the
-  colors for each theme.
-- About 12 nodes at most. A bigger idea gets two diagrams.
-- At most one table per section (AGENTS.md).
-
-Which diagram fits which idea. All of these render on GitHub:
-
-| The idea | Mermaid type |
-|---|---|
-| who calls whom, in time order | `sequenceDiagram` |
-| a machine's states and the Msgs that move it | `stateDiagram-v2` |
-| a route, a choice, a process with steps | `flowchart TD` or `flowchart LR` |
-| types and what holds or extends what | `classDiagram` |
-| stored records and their keys | `erDiagram` |
-| branches, merges, a stack of pull requests | `gitGraph` |
-
-Things that break on GitHub: quote a label with punctuation (`a["gh stack merge --squash"]`); write
-`<` and `>` in a label as `#lt;` and `#gt;`; keep a node id one plain word, and never `end` in
-lowercase; `%%` starts a comment.
+The Mermaid rules, which diagram fits which idea and what breaks on GitHub are in
+[the diagram reference](../write-pattern/references/diagrams.md). Read it before you draw.
 
 ### Before and after
 

@@ -1,6 +1,6 @@
 ---
 name: pr
-description: Write or rewrite one tea-fabrika pull request's title and description, in the fixed order every pull request here uses, starting with what the change does. Use whenever a step or the lead writes a PR body file, a lane brief's `## pr` section or the words of an open pull request, and on "write the PR description", "fix this PR's title" or "this PR does not say what it does".
+description: Write or rewrite one pull request's title and description, what the change does first. Use whenever a PR body file, a lane brief's `## pr` section or the words of an open pull request are written, and on "write the PR description" or "fix this PR's title".
 ---
 
 # pr

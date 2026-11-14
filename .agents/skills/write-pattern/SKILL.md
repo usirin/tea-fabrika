@@ -1,6 +1,6 @@
 ---
 name: write-pattern
-description: Write or re-ground one `.patterns/<name>.md` doc, the record of how the code is shaped now. Use on "write a pattern doc", "record this pattern", "the patterns drifted", "re-ground .patterns/X", and whenever a shape you just relied on turns out to be undocumented, or a pattern doc you just trusted turns out to be wrong. Not for why a choice was made (that is the adr skill) or for what a word means (that is the glossary).
+description: Write or re-ground one `.patterns/<name>.md` doc, the record of how the code is shaped now. Use on "write a pattern doc" or "the patterns drifted", and whenever a shape you relied on is undocumented or a pattern doc you trusted is wrong. Not for why a choice was made (the adr skill) or what a word means (the glossary).
 ---
 
 # write-pattern
@@ -202,35 +202,8 @@ reader knows they need it: a trigger, not a summary. Match the rows already ther
 
 ## Diagrams
 
-**Rule one: diagrams are Mermaid wherever possible.** Only when Mermaid really cannot express the
-thing may a doc use ASCII art or another form, and then it says in one line, right above the
-picture, why Mermaid could not.
-
-- The diagram shows the real mechanism, with real names from the code: the functions, Msgs, states
-  and files a reader will grep for. No decorative boxes, no "System" or "Service" placeholders.
-- Dark-mode safe: no `style`, `classDef`, `linkStyle` or `%%{init}` theme lines. GitHub picks the
-  colors for each theme.
-- About 12 nodes at most. A bigger mechanism gets two diagrams, each one part.
-- At most one table per section (AGENTS.md).
-
-Which diagram fits which idea. All of these render on GitHub:
-
-| The idea | Mermaid type |
-|---|---|
-| who calls whom, in time order (a Cmd, a reply, a restart) | `sequenceDiagram` |
-| a machine's states and the Msgs that move it | `stateDiagram-v2` |
-| a route, a choice, data flowing through steps | `flowchart TD` or `flowchart LR` |
-| types and what holds or extends what | `classDiagram` |
-| stored records and their keys | `erDiagram` |
-| branches, merges, a stack of commits | `gitGraph` |
-
-Things that break on GitHub:
-
-- Quote a label that holds punctuation: `a["act(name, spec)"]`. Write `<` and `>` in a label as
-  `#lt;` and `#gt;`.
-- A node id is one plain word. `end` as a lowercase id breaks a flowchart.
-- `%%` starts a comment. Use it to name the source file a diagram was read from.
-- In `stateDiagram-v2`, a transition label is the Msg's real `type`: `idle --> asking : ask_sent`.
+The Mermaid rules, which diagram fits which idea and what breaks on GitHub are in
+[`references/diagrams.md`](references/diagrams.md). Read it before you draw.
 
 ## End as exactly one of these
 
