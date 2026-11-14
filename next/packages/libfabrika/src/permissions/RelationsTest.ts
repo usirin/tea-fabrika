@@ -67,6 +67,9 @@ const PROBES = [
   { relation: "member", right: IsMember },
 ] as const;
 
+/** One check's answer, whichever right gave it. */
+type Answer = Result.Result<Rebac.Proof<unknown>, Rebac.Denied>;
+
 /** A change's row, from small pools, so an id is often reused with the same row and often with another. */
 const ChangeIn = Schema.Struct({
   id: Schema.Literals(["c0", "c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10", "c11"]),
@@ -151,10 +154,12 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                 for (const fabrika of FABRIKAS) {
                   for (const { relation, right } of PROBES) {
                     const object = Probe.ref("fabrika", fabrika);
-                    expect(
-                      Result.isSuccess(right.within(a, sender, object)),
-                      `person:${person}#${relation}@${object}`,
-                    ).toBe(Result.isSuccess(right.within(b, sender, object)));
+                    // Each right's proof is its own type (L5), so a loop over rights widens the answer.
+                    const ledgerAnswer: Answer = right.within(a, sender, object);
+                    const memoryAnswer: Answer = right.within(b, sender, object);
+                    expect(Result.isSuccess(ledgerAnswer), `person:${person}#${relation}@${object}`).toBe(
+                      Result.isSuccess(memoryAnswer),
+                    );
                   }
                 }
               }

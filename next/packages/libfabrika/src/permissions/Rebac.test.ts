@@ -204,6 +204,9 @@ const tuplesFrom = (store: Relations["Service"], rows: ReadonlyArray<HistoryRow>
   return Result.getOrThrow(answer);
 };
 
+/** One check's answer, whichever right gave it: each right's proof is its own type (L5), so a loop over rights widens it. */
+type Answer = Result.Result<Rebac.Proof<unknown>, Rebac.Denied>;
+
 /** Every sender the laws ask about: each person's window and an agent for each person. */
 const SENDERS = PERSONS.flatMap((person) => [
   { person, sender: Sender.cases.person.make({ key: `SHA256:win-${person}`, for: person }) },
@@ -226,7 +229,7 @@ describe("T953 slice 1: the permission core", () => {
             for (const { person, sender } of SENDERS) {
               for (const fabrika of FABRIKAS) {
                 const object = Model.ref("fabrika", fabrika);
-                const answer = right.within(tuples, sender, object);
+                const answer: Answer = right.within(tuples, sender, object);
                 const expected = holds(truth, UNIONS, personRef(person), permission, fabrikaRef(fabrika));
                 expect(Result.isSuccess(answer), `${permission} for ${sender._tag} ${person} on ${object}`).toBe(
                   expected,
@@ -313,7 +316,7 @@ describe("T953 slice 1: the permission core", () => {
             for (const { person, sender } of SENDERS) {
               for (const thing of ["t1", "t2"] as const) {
                 const object = Loop.ref("thing", thing);
-                const answer = right.within(tuples, sender, object);
+                const answer: Answer = right.within(tuples, sender, object);
                 const expected = holds(truth, unions, personRef(person), permission, `thing:${thing}`);
                 expect(Result.isSuccess(answer), `${permission} for ${person} on ${object}`).toBe(expected);
 
@@ -347,7 +350,7 @@ describe("T953 slice 1: the permission core", () => {
                 }
 
                 const object = Model.ref("fabrika", fabrika);
-                const answer = right.within(tuples, sender, object);
+                const answer: Answer = right.within(tuples, sender, object);
                 expect(Result.isFailure(answer)).toBe(true);
 
                 if (Result.isFailure(answer)) {
@@ -378,7 +381,7 @@ describe("T953 slice 1: the permission core", () => {
         Effect.gen(function* () {
           const store = yield* relations;
           const kept = removed === "demo" ? "other" : "demo";
-          const grant = (fabrika: string): ReadonlyArray<HistoryRow> =>
+          const grant = (fabrika: (typeof FABRIKAS)[number]): ReadonlyArray<HistoryRow> =>
             RELATIONS.map((relation) => ({ _tag: "related", by: BRAIN, person, relation, fabrika }) as const);
           const before = [...rows, ...grant(removed), ...grant(kept)];
           const sender = Sender.cases.person.make({ key: `SHA256:win-${person}`, for: person });
