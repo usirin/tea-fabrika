@@ -151,16 +151,6 @@
 			"code": "import { type Entry, fromHere, lineFor, valueFor } from \"../ledger/Log.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/access/SessionManager.test.ts",
-			"rule": "eslint(no-restricted-imports)",
-			"code": "import { type InputId } from \"../ledger/Log.ts\";"
-		},
-		{
-			"file": "next/packages/libfabrika/src/access/SessionManager.test.ts",
-			"rule": "eslint(no-restricted-imports)",
-			"code": "import { nodeSql } from \"../ledger/NodeSqlite.ts\";"
-		},
-		{
 			"file": "next/packages/libfabrika/src/access/SessionManager.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { LedgerError } from \"../ledger/Ledger.ts\";"
@@ -339,11 +329,6 @@
 			"file": "next/packages/libfabrika/src/runtime/RecoveryGaps.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { InputId, lineFor } from \"../ledger/Log.ts\";"
-		},
-		{
-			"file": "next/packages/libfabrika/src/runtime/RecoveryStore.test.ts",
-			"rule": "eslint(no-restricted-imports)",
-			"code": "import type { LedgerError } from \"../ledger/Ledger.ts\";"
 		},
 		{
 			"file": "next/packages/libfabrika/src/runtime/RecoveryStore.ts",
