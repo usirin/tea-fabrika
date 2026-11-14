@@ -3,7 +3,7 @@
 // error mark read the same spans, never a regex of their own. Pure: no clock, no service.
 //
 //   line      blank | builtin | run
-//   builtin   'help' [word] | 'clear' | 'history'
+//   builtin   'help' [word] | 'clear' | 'history' | 'programs'
 //   run       program ['as' name]      program: one known program, by its last part or whole name
 import { ProcessName } from "@kampus/libfabrika/processes/Process";
 import { Schema } from "effect";
@@ -31,11 +31,11 @@ export type Known = { readonly builtins: ReadonlyArray<string>; readonly program
 /** The line being typed, as a draft frame carries it. */
 type Line = { readonly text: string; readonly cursor: number; readonly n: number };
 
-/** The built-in words of this slice. */
-export const builtins: ReadonlyArray<string> = ["help", "clear", "history"];
+/** The built-in words. */
+export const builtins: ReadonlyArray<string> = ["help", "clear", "history", "programs"];
 
 /** How many words each built-in takes after itself, at most. */
-const TAKES: Readonly<Record<string, number>> = { help: 1, clear: 0, history: 0 };
+const TAKES: Readonly<Record<string, number>> = { help: 1, clear: 0, history: 0, programs: 0 };
 
 const isName = Schema.is(ProcessName);
 
@@ -126,6 +126,32 @@ export const read = (line: string, known: Known): Reading => {
   spans.push(span(name, "name-new"));
   const extra = ws[3];
   return extra === undefined ? { spans, expects: [] } : refused(extra, "extra");
+};
+
+/** What a line `read` takes as a run starts: one program, under its name. */
+export type Run = { readonly program: string; readonly name: string };
+
+/**
+ * The start a line asks for, read with `read`: the one program its first word names, under the
+ * name after `as`, or `<last part>:1` with no `as`. `null` for a line that is no whole run: a
+ * built-in, a refused line, or one that ends at `as` and still waits for its name.
+ */
+export const run = (line: string, known: Known): Run | null => {
+  const { spans } = read(line, known);
+  const [verb, as, name] = spans;
+  const first = verb === undefined ? "" : line.slice(verb.start, verb.end);
+
+  if (verb === undefined || known.builtins.includes(first) || spans.some((s) => s.role === "unknown")) {
+    return null;
+  }
+
+  const [program] = named(first, known.programs);
+
+  if (program === undefined || (as !== undefined && name === undefined)) {
+    return null;
+  }
+
+  return { program, name: name === undefined ? `${last(program)}:1` : line.slice(name.start, name.end) };
 };
 
 /** The words a role takes from what the reader knows: a verb is a built-in or a program, `as` a keyword. */

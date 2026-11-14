@@ -117,14 +117,19 @@ const BUILT_IN = new Set(["send"]);
  * `Declaration`, and `handler`, which gives the handler a Cmd type may use, or none. It fails with
  * `ProgramDown`: `no_program` for a name it does not know, and `load` for a program whose
  * declaration does not pass its check. `build` names the build of the code; the in-process layer
- * stamps it on state the program saves.
+ * stamps it on state the program saves. `names` lists every name `load` knows, for the built-in
+ * `programs` Cmd; the in-process layer reads its table each time.
  *
  * @stability unstable
  * @category services
  */
 export class ProgramLoader extends Context.Service<
   ProgramLoader,
-  { readonly load: (name: string, build?: string) => Effect.Effect<Loaded, ProgramDown> }
+  {
+    readonly load: (name: string, build?: string) => Effect.Effect<Loaded, ProgramDown>;
+    /** Every name `load` knows, read each time it runs. A loader without it answers no list. */
+    readonly names?: Effect.Effect<ReadonlyArray<string>>;
+  }
 >()("@kampus/libfabrika/runtime/Entry.ProgramLoader") {
   /** The in-process loader, for Node: each program's declaration, decoded when it is loaded, and
    *  the handlers its Cmds may use. A handler names its Cmd; `fire` runs only for `fabrika/chaos`. */
@@ -137,6 +142,7 @@ export class ProgramLoader extends Context.Service<
       Effect.gen(function* () {
         const context = yield* Effect.context<R>();
         return {
+          names: Effect.sync(() => Object.keys(programs)),
           load: Effect.fn("loader.load")(function* (name: string, build = "node") {
             if (!Object.hasOwn(programs, name)) {
               return yield* new ProgramDown({ reason: "no_program" });

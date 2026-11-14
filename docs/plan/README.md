@@ -86,7 +86,9 @@ on the laptop, which the owner accepts. The merge line is decided
 trigger in CI ([PR 1120](https://github.com/kamp-us/tea-fabrika/pull/1120)), the queue turned on,
 and the bot's plain tooling. Nothing in `next/` names `summon` or a room yet; *2026-11-14:* `fabsh`
 slice 1 is built on its branch ([the plan](./lanes/fabsh-PLAN.md)): the program in a fixed tile,
-its reader and the `process.draft` frame. Open pull
+its reader and the `process.draft` frame. Slice 2a is built there too: a program word starts that
+program, checked against the line's member with no grant for `fabsh`, and the runner's `programs`
+Cmd says what can be started; the tile that shows a started process waits on the desk. Open pull
 requests on Tier 1 rows: [1028](https://github.com/usirin/tea-fabrika/pull/1028)
 (P14), [1044](https://github.com/usirin/tea-fabrika/pull/1044) (P13),
 [1054](https://github.com/usirin/tea-fabrika/pull/1054) (P38),

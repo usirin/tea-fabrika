@@ -1374,6 +1374,7 @@ const processLogic = Effect.fnUntraced(function* (
           );
           return yield* loader.load(name, process, tail);
         }),
+      names: Effect.sync(() => Object.keys(programs)),
     },
     { policy: defaultPolicy, recovery: { sql, name: saved.name, capacity: 1024 ** 3 } },
   ).pipe(Layer.provide(dependencies), Layer.provide(Layer.succeedContext(services)));

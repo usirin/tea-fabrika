@@ -80,6 +80,7 @@ import { defaultPolicy, supervisor, Supervision, type SupervisorMsg } from "./in
 import { MailDelivery } from "./MailDelivery.ts";
 import { diff } from "./Patch.ts";
 import { Admission, ProgramDown, Refusal, Step, Write } from "./Program.ts";
+import { ProgramsInput } from "./Programs.ts";
 import { recoveryStore } from "./RecoveryStore.ts";
 import { Replies, type RepliesError } from "./Replies.ts";
 import * as RepliesSql from "./RepliesSql.ts";
@@ -197,6 +198,9 @@ const START_CHILD = "start_child";
 const STOP_CHILD = "stop_child";
 const EXIT = "exit";
 
+/** The Cmd a program asks for the names it can start; the runner reads its own loader. */
+const PROGRAMS = "programs";
+
 /** The Cmds the runner performs as the host: each is owed by this life until it is answered. */
 const HOST = new Set([SEND, START_CHILD, STOP_CHILD, EXIT]);
 
@@ -219,6 +223,8 @@ const strictStopChild = Schema.decodeUnknownOption(StopChildInput, { onExcessPro
 const decodeStartChild = (cmd: unknown) => Option.flatMap(operands(cmd, StartChildInput.fields), strictStartChild);
 const decodeExit = (cmd: unknown) => Option.flatMap(operands(cmd, ExitInput.fields), strictExit);
 const decodeStopChild = (cmd: unknown) => Option.flatMap(operands(cmd, StopChildInput.fields), strictStopChild);
+const strictPrograms = Schema.decodeUnknownOption(ProgramsInput, { onExcessProperty: "error" });
+const decodePrograms = (cmd: unknown) => Option.flatMap(operands(cmd, ProgramsInput.fields), strictPrograms);
 const isName = Schema.is(ProcessName);
 const encoder = new TextEncoder();
 
@@ -392,6 +398,8 @@ export class ProgramRunner extends Context.Service<
     initial: Descriptor,
     loader: {
       readonly load: (name: string, build?: string) => Effect.Effect<Omit<Loaded, "stepper">, ProgramDown>;
+      /** Every name `load` knows, read when a `programs` Cmd runs. Without it, `programs` is `bad_cmd`. */
+      readonly names?: Effect.Effect<ReadonlyArray<string>>;
     },
     options: RunnerOptions,
   ): Layer.Layer<
@@ -1602,6 +1610,20 @@ export class ProgramRunner extends Context.Service<
           return reason === "storage" ? yield* new LedgerError({ reason: "storage" }) : yield* err(job, reason);
         });
 
+        /** The built-in programs: every name this runner's loader knows, sorted, read now and never
+         *  kept, so a new build's table is the next answer. */
+        const listed = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
+          if (
+            !state.loaded.declaration.cmds.includes(PROGRAMS) ||
+            loader.names === undefined ||
+            Option.isNone(decodePrograms(job.cmd))
+          ) {
+            return yield* err(job, "bad_cmd");
+          }
+
+          return yield* ok(job, [...(yield* loader.names)].sort());
+        });
+
         /** The built-in exit: this life ends with `normal`, as OTP's `{stop, normal, State}`, and
          *  answers nothing. `null` is the ended life; a malformed exit is answered `bad_cmd`. */
         const stop = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
@@ -1701,7 +1723,9 @@ export class ProgramRunner extends Context.Service<
                   ? cmdSpan(job, stopChild(state, job))
                   : type === EXIT
                     ? cmdSpan(job, stop(state, job))
-                    : handle(state, job);
+                    : type === PROGRAMS
+                      ? cmdSpan(job, listed(state, job))
+                      : handle(state, job);
 
           if (m === null) {
             // The life ended: what it still owed, the Cmds listed after its exit included, never runs.

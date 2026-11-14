@@ -6,7 +6,7 @@
 import { defineWindow, type TileProps, type WindowProps } from "@kampus/libfabrika";
 import { Input } from "@manti-ui/react";
 import { Schema } from "effect";
-import { type ReactNode, useId, useLayoutEffect, useRef } from "react";
+import { type ReactElement, type ReactNode, useId, useLayoutEffect, useRef } from "react";
 import { fabsh, LINE_MOST } from "./program.ts";
 import { builtins, read, Reason, type Span } from "./read.ts";
 import { drawn, tile } from "./tile.ts";
@@ -23,10 +23,20 @@ const data = Schema.Struct({
         end: Schema.Int,
         reason: Schema.String,
       }),
+      Schema.TaggedStruct("starting", { line: Schema.String, program: Schema.String, name: Schema.String }),
+      Schema.TaggedStruct("started", {
+        line: Schema.String,
+        process: Schema.String,
+        name: Schema.String,
+        fresh: Schema.Boolean,
+      }),
+      Schema.TaggedStruct("failed", { line: Schema.String, reason: Schema.String }),
     ]),
   ),
   programs: Schema.Array(Schema.String),
 });
+
+type Entry = (typeof data.Type.scroll)[number];
 
 const WORDS: Readonly<Record<Reason, (word: string, verb: string) => string>> = {
   no_word: (w) => `${w} is not a built-in or a program.`,
@@ -61,6 +71,57 @@ const layered = (line: string, spans: ReadonlyArray<Span>): ReadonlyArray<ReactN
 
   out.push(line.slice(at));
   return out;
+};
+
+/** Why a start did not give a live process, in words: `already_present` and each host refusal. */
+const FAILED: Readonly<Record<string, string>> = {
+  already_present: "That name's process has ended, so nothing was started.",
+  no_program: "No program by that name is built here.",
+  forbidden: "You may not start that program here.",
+  stale_sender: "This shell's process ended before the start.",
+  bad_name: "That is not a name a process can have.",
+  bad_input: "The program could not take its first input.",
+  id_reused: "This start's id was already used for another start.",
+  name_taken: "That name belongs to a process of another program.",
+};
+
+/** What one scrollback entry says under its line, in words. */
+const answer = (entry: Entry): ReactElement | ReadonlyArray<ReactElement> => {
+  if (entry._tag === "answered") {
+    return entry.says.map((say, j) => (
+      <p className="fabsh-says" key={j}>
+        {say}
+      </p>
+    ));
+  }
+
+  if (entry._tag === "refused") {
+    return (
+      <p className="fabsh-refused">
+        {said({ start: entry.start, end: entry.end, role: "unknown", reason: toReason(entry.reason) }, entry.line)}
+      </p>
+    );
+  }
+
+  if (entry._tag === "starting") {
+    return <p className="fabsh-says">{`Starting ${entry.program} as ${entry.name}.`}</p>;
+  }
+
+  if (entry._tag === "started") {
+    return (
+      <p className="fabsh-says">
+        {entry.fresh
+          ? `Started ${entry.name}, process ${entry.process}.`
+          : `${entry.name} is already running, process ${entry.process}.`}
+      </p>
+    );
+  }
+
+  return (
+    <p className="fabsh-refused">
+      {FAILED[entry.reason] ?? `The start was refused for a reason fabsh does not know: ${entry.reason}.`}
+    </p>
+  );
 };
 
 type Props = WindowProps<typeof fabsh> & TileProps<typeof tile>;
@@ -114,20 +175,7 @@ const FabshWindow = ({ data: view, tile: own, send }: Props) => {
         {view.scroll.map((entry, i) => (
           <div className="fabsh-entry" key={i}>
             <p className="fabsh-ran">{entry.line}</p>
-            {entry._tag === "answered" ? (
-              entry.says.map((say, j) => (
-                <p className="fabsh-says" key={j}>
-                  {say}
-                </p>
-              ))
-            ) : (
-              <p className="fabsh-refused">
-                {said(
-                  { start: entry.start, end: entry.end, role: "unknown", reason: toReason(entry.reason) },
-                  entry.line,
-                )}
-              </p>
-            )}
+            {answer(entry)}
           </div>
         ))}
       </div>

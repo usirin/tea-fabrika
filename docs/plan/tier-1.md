@@ -123,7 +123,9 @@ All on main in `next/`, read 2026-11-13.
 No code in `next/` names `summon`, a room or a registry of names (searched 2026-11-13). *2026-11-14:*
 `fabsh` slice 1 is built on its branch: the program `fabrika/fabsh` (`next/programs/fabsh`) in a
 fixed `fabsh:1` tile, the reader (S1), and the ephemeral lane's first client frame,
-`process.draft`.
+`process.draft`. Slice 2a is built on the same branch: a program word starts that program from the
+line's own step, checked against the line's member, and the runner's built-in `programs` Cmd tells
+`fabsh` what it can start.
 
 ### What is missing, piece by piece
 
@@ -210,8 +212,10 @@ In build order. "Decide first" lists only what no decision answers yet.
 - Not built: P42 past slice 1; `fabrika/tezgah` with split, close and the prefix key, its layout
   and focus as a process in the brain (0274); each window running the prefix itself (0278).
 - Decide first: whether focus is the window's own or the desk process's, where 0279 and 0274 read
-  two ways (below; the first walk due). *2026-11-13: settled, see below; the open part is how a focus move fits 0278.* How `fabsh` may start any program when a start right names
-  one exact pair (open; no decision found). Whether the desk's commands need the palette now: 0278 says every command also
+  two ways (below; the first walk due). *2026-11-13: settled, see below; the open part is how a focus move fits 0278.* How `fabsh` may start any program: *settled
+  2026-11-13 by [0170](../../.decisions/0170-a-start-is-checked-against-its-sender.md), a start is
+  checked against the member whose input caused it and `fabsh` holds no permission of its own; it
+  said "open; no decision found".* Whether the desk's commands need the palette now: 0278 says every command also
   has a shell word and a palette entry (`.decisions/0278-each-window-runs-its-own-prefix.md:33`), and the palette is in Tier 6 (open).
 
 **3. `fabsh`, a program in a tile.**
@@ -225,9 +229,17 @@ In build order. "Decide first" lists only what no decision answers yet.
   `gateway.draft-limit`, and the runner's memory-only draft. The tile is a fixed `fabsh:1` beside
   the checklist until the desk starts it. Today's `tsh` (`packages/fabrika/src/shell/grammar.ts:83`)
   mapped the jobs and is not copied.
-- Not built: slice 2, a program word that starts a program in a tile beside fabsh's, with
-  `programs` and `exit` (it waits on ticket 953's start check and the desk lane); the Electron run
-  of L17 (L18, owed to P19 slice 3).
+- In code now (*2026-11-14,* slice 2a on the same branch, the plan's A6): a program word
+  (`counter`, `counter as <name>`, `pack/program`) starts it with `start_child` from the submitted
+  line's own step, so the start is checked against that line's member with no grant for `fabsh`
+  (0170); the answer settles the line's scrollback entry once, as `started` with its process or
+  `failed` with its reason in words; the runner's built-in `programs` Cmd, which `fabsh` asks once
+  from its first timer, and the built-in word `programs` that lists its answer. A started program
+  runs, and `fabsh` names it, but no tile shows it yet.
+- Not built: slice 2b, the `show` letter that opens a started process in a tile beside fabsh's,
+  `exit`, and L25 to L27 (they wait on the desk lane's tile pieces); the Electron run of L17 (L18,
+  owed to P19 slice 3). `fabsh` asks `programs` once per process, so a later build's new program
+  shows in its table only after the process starts again.
 - Decide first: S1, and with it what a line may hold and which built-in words `fabsh` has (both
   listed as not decided in 0159).
 
@@ -340,7 +352,7 @@ them.
 | 0 | Nothing: the merge queue is decided (0162) |
 | 1 | Nothing: the lead picks on PR 1028 and PR 1044, past their budget stop with red laws (0162) |
 | the first cloud deploy | A yes after reading `alchemy plan` (0295); whether one yes covers the quick deploys after it |
-| 2 | How a focus move fits 0278's "no network wait" (applied in the window at once and then confirmed by the brain, or not), and whether a window opens a project from the brain's list in a browser tab; how `fabsh` may start any program; whether the palette comes now (0278, 0157) |
+| 2 | How a focus move fits 0278's "no network wait" (applied in the window at once and then confirmed by the brain, or not), and whether a window opens a project from the brain's list in a browser tab; whether the palette comes now (0278, 0157) |
 | 3 | S1, with what a line may hold and which built-in words `fabsh` has |
 | 4 | How a pipe carries one output to the next input |
 | 6 | S2 to S7 (proposed; S6 carries a decided part); where a summoned agent runs; 0517 against 0157; S3 against A5 on names, since the one list of names is built here |
