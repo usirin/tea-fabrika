@@ -7,7 +7,7 @@ import { delimiter, dirname, join } from "node:path";
 import * as fc from "fast-check";
 import { afterAll, expect, it } from "vitest";
 import { oxfmtArgs } from "./format.ts";
-import { frozen, livePackages, liveRoots, shared } from "./frozen.mjs";
+import { frozen, isFrozen, livePackages, liveRoots, shared } from "./frozen.mjs";
 import { oxlintArgs } from "./lint.ts";
 
 const options = { seed: 119120, numRuns: 200 };
@@ -226,4 +226,13 @@ it("S8: scenario: pnpm typecheck runs each live package's typecheck and no froze
         .sort(),
     ).toEqual([...LIVE].sort());
   }
+});
+
+it("D1: scenario: no tracked test file sits under a frozen path (0525)", () => {
+  // scenario: the real index. Today's tests and their test-only support left with 0525.
+  const listed = spawnSync("git", ["ls-files", "-z"], { cwd: ROOT, encoding: "utf8", maxBuffer: 2 ** 28 });
+  expect(listed.status).toBe(0);
+  const files = listed.stdout.split("\0").filter(Boolean);
+  expect(files.length).toBeGreaterThan(0);
+  expect(files.filter((file) => isFrozen(file) && /\.test[.-]/.test(file))).toEqual([]);
 });

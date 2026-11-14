@@ -1,13 +1,14 @@
-// Today's CI for both versions. No installed dependencies: changes and field can
-// decide what to run before pnpm setup or cache restoration.
+// The CI classifier. No installed dependencies: changes and field can decide what to run before
+// pnpm setup or cache restoration. Today's version is frozen (0525): no job runs for it, so its
+// paths start none of their own checks, and `e2e`, whose end-to-end tests were today's, is off.
 import { spawnSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { isFrozen } from "../../oxlint-plugins/frozen.mjs";
 
-/** @typedef {{check: boolean, typecheck: boolean, test: boolean, next: boolean, e2e: boolean, field: boolean, today: boolean}} Flags */
+/** @typedef {{check: boolean, typecheck: boolean, test: boolean, next: boolean, e2e: boolean, field: boolean}} Flags */
 /** @typedef {(args: string[]) => {status: number | null, stdout: string}} Runner */
-const all = { check: true, typecheck: true, test: true, next: true, e2e: true, field: true, today: true };
-const trees = ["apps/", "programs/", "packs/", "wip/", "legacy/", "packages/"];
+const all = { check: true, typecheck: true, test: true, next: true, e2e: false, field: true };
 const helper = "next/apps/fabrika/src/exam/plant.ts";
 const commits = "next/apps/fabrika/src/exam/commits.ts";
 /**
@@ -46,19 +47,8 @@ const markdown = (path) => path.endsWith(".md") && !reads(path) && !skillTrees.s
 /** @param {string} path */
 const safe = (path) => rows(path) || markdown(path);
 
-/** @param {string} path */
-const old = (path) => trees.some((tree) => path.startsWith(tree)) && !path.startsWith("packages/fabrika-design/");
-
 /** Paths no heavy job reads: field rows, plain Markdown and skill prose. @param {string} path */
 const quiet = (path) => safe(path) || prose(path);
-
-/**
- * A file of today's version: its trees, the design package today's app imports, and the toy
- * projects its tests read. Only these start today's own checks (0175): its tests, e2e and build.
- * A file that reruns every test, such as the lockfile or a root config, is not one.
- * @param {string} path
- */
-const todays = (path) => (trees.some((tree) => path.startsWith(tree)) || path.startsWith("fixtures/")) && !quiet(path);
 
 /**
  * An event whose jobs follow its changed paths, because it can read them: a pull request, a merge
@@ -72,10 +62,9 @@ const scoped = (event) => event === "pull_request" || event === "merge_group" ||
  * A scoped event skips a job only when every path is explicitly safe for that job.
  * Amendment 3: field's runner starts on every event; this flag gates its install
  * and row check, so Markdown in field/ alone does not install Effect.
- * `today` and `e2e` are true only when a path is one of today's version's files.
- * `test` starts the test job, which runs today's tests when `today` is true and only the tooling
- * tests when it is false. History that cannot be read, no path at all, or an event that is not
- * scoped runs everything.
+ * `e2e` is false for every input: its job ran today's end-to-end tests, which are gone (0525),
+ * so it skips wherever changes succeeds. History that cannot be read, no path at all, or an event
+ * that is not scoped runs every other job.
  * @param {readonly string[] | null} paths
  * @param {string} event
  * @returns {Flags}
@@ -85,10 +74,8 @@ export const classify = (paths, event) => {
     return { ...all };
   }
 
-  const touched = paths.some(todays);
-
   if (paths.some(reads)) {
-    return { ...all, today: touched, e2e: touched, field: paths.some(rows) };
+    return { ...all, field: paths.some(rows) };
   }
 
   // The typecheck is its own job so it answers at once, beside lint and build; it reads the same
@@ -98,34 +85,30 @@ export const classify = (paths, event) => {
     check,
     typecheck: check,
     test: !paths.every((path) => quiet(path) || (path.startsWith("next/") && path !== helper && path !== commits)),
-    next: !paths.every((path) => quiet(path) || script(path) || old(path)),
-    e2e: touched,
+    next: !paths.every((path) => quiet(path) || script(path) || isFrozen(path)),
+    e2e: false,
     field: paths.some(rows),
-    today: touched,
   };
 };
 
-/** @typedef {Flags & {build: boolean}} Jobs */
-
 /**
- * What one event runs: classify's flags, plus `build`, the slow half of check (its promises gate
- * and `pnpm build`), which belongs to today's version and so follows `today`. A draft pull request runs only the fast jobs: changes, field, typecheck and
+ * What one event runs: classify's flags. A draft pull request runs only the fast jobs: changes, field, typecheck and
  * check's lint (owner, 2026-11-11, 0134's amendment). Marking it ready starts a run with
  * `draft` false, so the full set runs on that head before it can merge. Only a pull request can
  * be a draft; on any other event, a merge queue's group and a push included, the flag is ignored.
  * @param {readonly string[] | null} paths
  * @param {string} event
  * @param {boolean} draft
- * @returns {Jobs}
+ * @returns {Flags}
  */
 export const jobs = (paths, event, draft) => {
   const flags = classify(paths, event);
 
   if (event === "pull_request" && draft) {
-    return { ...flags, test: false, next: false, e2e: false, build: false };
+    return { ...flags, test: false, next: false, e2e: false };
   }
 
-  return { ...flags, build: flags.today };
+  return flags;
 };
 
 /** @param {string} sha */

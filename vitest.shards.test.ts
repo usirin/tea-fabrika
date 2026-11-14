@@ -1,13 +1,12 @@
-import { readdirSync, statSync } from "node:fs";
+import { statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { BaseSequencer, createVitest } from "vitest/node";
-import { inLaneStep } from "./.github/ci/workflow-lint.ts";
 import { testConfig } from "./vitest.config.ts";
-import { assign, measured, Shards, wall, WORKERS, restLoads } from "./vitest.shards.ts";
+import { assign, measured, Shards, wall, WORKERS } from "./vitest.shards.ts";
 
 // Vitest's own matcher, as vitest.config.ts uses it.
 const picomatch = createRequire(import.meta.resolve("vitest/package.json"))("picomatch") as {
@@ -230,9 +229,8 @@ it("L8: generated sharding assigns once to the least load including starts, inde
 it("vector: real CI medians include the previously unweighted scripts", () => {
   // Fixed medians from runs 42579837468, 42573088027 and 42571265116, rounded to one decimal.
   // T554 refresh: plancheck.test.ts is the median of runs 42803733957, 42807559589 and 42801440878.
+  // 0525: the two rows of today's tests left with them.
   expect(measured[".agents/skills/plan/scripts/plancheck.test.ts"]).toBe(106.2);
-  expect(measured["apps/fabrika/src/bundles.test.ts"]).toBe(3.7);
-  expect(measured["packages/pipeline/src/laws/standard.test.ts"]).toBe(3.5);
 });
 
 it("vector: the four build files carry their times from CI run 42922102030", () => {
@@ -270,7 +268,6 @@ const HEAVY = Array.from({ length: 12 }, (_, i) => ({ path: `lane.${i}.test.ts`,
 const LIGHT = Array.from({ length: 300 }, (_, i) => ({ path: `small.${i}.test.ts`, seconds: 1 }));
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
-const LANES = "packages/pipeline/src/stages/pipeline";
 
 /** How many files each of `count` machines got. */
 const perMachine = (machines: readonly number[], count: number) =>
@@ -324,6 +321,7 @@ describe("assign", () => {
 });
 
 describe("measured", () => {
+  // D2 (0525): a row of a deleted test of today's version fails this, so those rows go too.
   it("names only files that are in the repo, so a renamed file cannot quietly count 1", () => {
     const keys = Object.keys(measured);
     expect(keys.length).toBeGreaterThan(0);
@@ -339,75 +337,32 @@ describe("Shards", () => {
     expect(Shards.prototype.sort).toBe(BaseSequencer.prototype.sort);
   });
 
-  it("scenario: L13 lane-only shards cover every lane once and balance on top of the rest", async () => {
-    // The real repo config selects lanes before sharding. Plant: start lanes from zero.
-    const lanes = readdirSync(join(ROOT, LANES))
-      .filter((name) => /^lane\..*\.test\.ts$/.test(name))
-      .map((name) => `${LANES}/${name}`);
-    const kept: string[][] = [];
-
-    for (const index of [1, 2, 3, 4, 5, 6]) {
-      // This repo's config, as `vitest run --shard k/6` reads it; nothing runs.
-      const vitest = await createVitest("test", { root: ROOT, watch: false, shard: `${index}/6` });
-
-      try {
-        const specs = (await vitest.globTestSpecifications()).filter((spec) =>
-          inLaneStep(relative(ROOT, spec.moduleId)),
-        );
-        const Sequencer = vitest.config.sequence.sequencer;
-        const mine = await new Sequencer(vitest).shard(specs);
-        kept.push(mine.map((spec) => relative(ROOT, spec.moduleId)));
-      } finally {
-        await vitest.close();
-      }
-    }
-
-    expect(
-      kept
-        .flat()
-        .filter((p) => lanes.includes(p))
-        .toSorted(),
-    ).toEqual(lanes.toSorted());
-    const rest = Object.entries(measured)
-      .filter(([path]) => !path.startsWith("next/") && !inLaneStep(path))
-      .map(([path, seconds]) => ({ path, seconds }));
-    const placed = assign(rest, 6);
-    const loads = Array.from({ length: 6 }, (_, i) =>
-      wall(rest.filter((_, j) => placed[j] === i).map((file) => file.seconds)),
+  it("scenario: D2 every list, one of old lane-named files alone included, is split as `assign` does, from zeros", async () => {
+    // scenario: today's lane step left with today's tests (0525), so no list starts from the rest
+    // step's loads. Plant: keep the lane branch, which starts a list of lane files from them.
+    const lanes = ["asked", "decided", "github", "whole"].map(
+      (name) => `packages/pipeline/src/stages/pipeline/lane.${name}.test.ts`,
     );
-    expect(restLoads(6)).toEqual(loads);
-    const seconds = kept.map((paths, i) => paths.reduce((sum, p) => sum + (measured[p] ?? 1), loads[i]!));
-    const heaviestLane = Math.max(...lanes.map((path) => measured[path] ?? 1));
-    const biggest = Math.max(
-      ...Object.entries(measured)
-        .filter(([path]) => !path.startsWith("next/"))
-        .map(([, seconds]) => seconds),
-    );
-    expect(Math.max(...seconds)).toBeLessThanOrEqual(Math.max(Math.min(...seconds) + heaviestLane, biggest));
-  });
+    const others = Object.keys(measured).filter((path) => !path.startsWith("next/"));
 
-  it("scenario: a list holding a lane file and another file is split as `assign` does, from zeros", async () => {
-    // Only a list of lane files only starts from `restLoads`: the rest step shares those machines.
-    // Plant: start from `restLoads` when any file is a lane file.
-    const lanes = readdirSync(join(ROOT, LANES))
-      .filter((name) => /^lane\..*\.test\.ts$/.test(name))
-      .map((name) => `${LANES}/${name}`);
-    const others = Object.keys(measured).filter((path) => !path.startsWith("next/") && !inLaneStep(path));
-    const paths = [...lanes, ...others];
-    const files = paths.map((path) => ({ path, seconds: measured[path] ?? 1 }));
-    const placed = assign(files, 6);
+    for (const paths of [lanes, [...lanes, ...others], others]) {
+      const files = paths.map((path) => ({ path, seconds: measured[path] ?? 1 }));
+      const placed = assign(files, 6);
 
-    for (const index of [1, 2, 3, 4, 5, 6]) {
-      const vitest = await createVitest("test", { root: ROOT, watch: false, shard: `${index}/6` });
+      for (const index of [1, 2, 3, 4, 5, 6]) {
+        const vitest = await createVitest("test", { root: ROOT, watch: false, shard: `${index}/6` });
 
-      try {
-        const Sequencer = vitest.config.sequence.sequencer;
-        const mine = await new Sequencer(vitest).shard(paths.map((path) => ({ moduleId: join(ROOT, path) })) as never);
-        expect(mine.map((spec) => relative(ROOT, spec.moduleId))).toEqual(
-          paths.filter((_, i) => placed[i] === index - 1),
-        );
-      } finally {
-        await vitest.close();
+        try {
+          const Sequencer = vitest.config.sequence.sequencer;
+          const mine = await new Sequencer(vitest).shard(
+            paths.map((path) => ({ moduleId: join(ROOT, path) })) as never,
+          );
+          expect(mine.map((spec) => relative(ROOT, spec.moduleId))).toEqual(
+            paths.filter((_, i) => placed[i] === index - 1),
+          );
+        } finally {
+          await vitest.close();
+        }
       }
     }
   });
@@ -434,12 +389,12 @@ it("vector: L12 stale non-lane rows hold the three T554 run medians", () => {
   // check run 42874119130, attempts 5 to 14, a median of 10.
   // Plant: restore plancheck's older median. Lane rows await the PR's own run.
   // catchup.test.ts had a row here until catchup.sh was retired for GitHub's merge queue (0162).
+  // fence.laws.test.ts had one until today's tests left (0525).
   const expected = {
     ".agents/skills/lead/scripts/box.test.ts": 348.7,
     ".agents/skills/lead/scripts/boxrm.test.ts": 295.0,
     ".agents/skills/lead/scripts/loosening.test.ts": 234.6,
     "oxlint-plugins/program-package-layout.test.ts": 80.3,
-    "packages/fabrika/src/host/fence.laws.test.ts": 117.1,
     "scripts/caps.test.ts": 108.5,
     ".agents/skills/plan/scripts/plancheck.test.ts": 106.2,
     "oxlint-plugins/plants.test.ts": 48.2,
