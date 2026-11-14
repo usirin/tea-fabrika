@@ -42,8 +42,11 @@ export type Harness = {
   readonly services: (inbox: Sql, manager: Sql) => Layer.Layer<StoreNeeds | Mailbox | ProcessManager>;
 };
 
-/** The tables main's runner, inbox and process table write. Any other table a runner writes here
- *  holds terminal replies. */
+/** The table that keeps terminal replies, by its own name, so the reply fault lands only on a reply write. */
+const REPLIES = "process_replies";
+
+/** The tables main's runner, inbox and process table write. Every other table a runner writes here is
+ *  read for a stored reply and scanned for leaked secrets, so a new table cannot hide one. */
 const KNOWN = new Set([
   "entries",
   "rings",
@@ -149,15 +152,15 @@ const Malformed = Schema.TaggedStruct("refused", { reason: Schema.Struct({ text:
 /** A letter the record answered: the delivery as first sent, and its first terminal answer. */
 type Answered = { readonly letter: Incoming; readonly first: Sent; readonly note: string; readonly base: number };
 
-/** The armed faults: the recording flush, and the next write to a reply table. */
+/** The armed faults: the recording flush, and the next write to the reply table. */
 type Control = { flush: boolean; reply: boolean; hits: number };
 
-/** The recovery connection with one armed fault: its next write to a table main never had. */
+/** The recovery connection with one armed fault: its next write to the reply table, never another's. */
 const faulty = (sql: Sql, control: Control): Sql => ({
   exec: (query, ...params) => {
     const table = WRITE.exec(query)?.[1];
 
-    if (control.reply && table !== undefined && !KNOWN.has(table)) {
+    if (control.reply && table === REPLIES) {
       control.reply = false;
       control.hits++;
       throw new Error("disk I/O error");

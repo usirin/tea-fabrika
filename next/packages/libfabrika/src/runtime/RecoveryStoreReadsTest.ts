@@ -6,7 +6,8 @@
 // time. L6 runs one tape on two databases: on the first through one long-lived store, on the twin
 // through a fresh store for every call. After each cell both hold the same rows, and a fresh store
 // on each answers the same, so the long-lived store never answers or writes from text that was not
-// committed.
+// committed. L7 records every row write `Sql.exec` is sent during a save that changes nothing, and
+// there must be none.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Exit, Schema, type Scope } from "effect";
 import * as fc from "fast-check";
@@ -61,6 +62,23 @@ const counted = (sql: Sql) => {
     size: () => sql.size(),
   };
   return { sql: wrapped, count };
+};
+
+/** The store's Sql, recording every statement it is sent that writes a row. */
+const writing = (sql: Sql) => {
+  const writes: Array<string> = [];
+  const wrapped: Sql = {
+    exec: (query, ...params) => {
+      if (/^\s*(?:INSERT|UPDATE|DELETE|REPLACE)\b/i.test(query)) {
+        writes.push(query);
+      }
+
+      return sql.exec(query, ...params);
+    },
+    transaction: (step) => sql.transaction(step),
+    size: () => sql.size(),
+  };
+  return { sql: wrapped, writes };
 };
 
 /** The store's Sql, with a cut that throws on the `after`-th INSERT once armed. */
@@ -129,6 +147,13 @@ const Cell = fc.record({
 });
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 const Tape = fc.array(Cell, { minLength: 5, maxLength: 40, size: "max" });
+
+/** One L7 case: a journal, and who sends it again unchanged. */
+const Same = fc.record({
+  n: fc.integer({ min: 0, max: 2 }),
+  values: fc.array(fc.integer({ min: 0, max: 9 }), { maxLength: 30 }),
+  again: fc.constantFrom("same store", "same store after a load", "fresh store"),
+});
 
 const MOVES = ["save", "big", "cut", "retry", "other", "again", "load", "receipt", "input"] as const;
 type Move = (typeof MOVES)[number];
@@ -399,5 +424,33 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
           expect([...done].sort()).toEqual([...MOVES, "cut_hit", "other_receipts_only", "again_over_other"].sort());
         }),
       600_000,
+    );
+
+    it.effect(
+      "L7: a save that changes no row writes no row, through the same store, after a load, or a fresh one",
+      () =>
+        property(
+          Same,
+          ({ n, values, again }) =>
+            Effect.gen(function* () {
+              const sql = yield* open;
+              const { sql: watched, writes } = writing(sql);
+              const saved = journal(n, new Map(values.map((value, i): [string, number] => [`l-${i}`, value])));
+              const first = store(watched);
+              yield* first.save(saved).pipe(Effect.orDie);
+              const before = rows(sql);
+              const sender = again === "fresh store" ? store(watched) : first;
+
+              if (again === "same store after a load") {
+                yield* sender.load.pipe(Effect.orDie);
+              }
+
+              const from = writes.length;
+              yield* sender.save(saved).pipe(Effect.orDie);
+              expect(writes.slice(from), `L7: rows written by a save sent again unchanged, ${again}`).toEqual([]);
+              expect(rows(sql), "L7: the rows are as the first save left them").toEqual(before);
+            }),
+          { numRuns: 100 },
+        ),
     );
   });
