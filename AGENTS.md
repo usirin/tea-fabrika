@@ -297,8 +297,8 @@ agents. This table adds no rule, and `pnpm format` comes first in every row.
   [0006](./.decisions/0006-no-unused-exports.md)). Check each finding
   by hand. If it is right, delete the code or drop its `export`. If it is wrong, stop and tell the
   owner: that is a code-graph bug to file. `unreachable-ledger.json` only shrinks, the run prunes
-  it, and CI fails until that is committed. Adding an entry is the owner's call, in a change of its
-  own ([nobody writes their own exam](./docs/direction/nobody-writes-their-own-exam.md)).
+  it, and CI fails until that is committed. No entry is added: its last ones are fixed, then the
+  file is deleted ([0524](./.decisions/0524-no-list-lets-broken-code-pass.md)).
 - **A check on the shape of code is a lint rule, never a test:** oxlint's own rule where one exists
   (`no-restricted-imports`), else ours in `oxlint-plugins/`. A plan asks "lint, type or test?" of
   every law.

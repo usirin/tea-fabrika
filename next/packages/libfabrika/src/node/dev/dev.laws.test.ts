@@ -11,6 +11,7 @@ import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import type { BrainEvent } from "../../runtime/BrainEvent.ts";
+import { bodyText, fetchClient } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
 import { brainOutbox } from "./local-dev.ts";
@@ -45,6 +46,7 @@ it("the control plugin returns a typed error for malformed platform port data", 
                 }),
               ),
             ).pipe(
+              Effect.provide(fetchClient),
               Effect.provide(ProcessIdGenerator.layer),
               Effect.provide(SecureRandom.layerWebCrypto),
               Effect.provide(rssLayer(() => 0)),
@@ -92,7 +94,7 @@ it("every observed exit is durable once across restart or brake, with its reason
       vi.stubEnv("FABRIKA_HOME", home);
       const kill = vi.spyOn(process, "kill").mockReturnValue(true);
       const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
-        const call = JSON.parse(String(options?.body)) as { method: string };
+        const call = JSON.parse(bodyText(options)) as { method: string };
         // Keep lifecycle events in the real outbox while the real record sink still flushes.
         return Response.json(
           call.method === "brain" ? { error: { reason: "offline" } } : { value: { _tag: "written" } },
@@ -107,7 +109,7 @@ it("every observed exit is durable once across restart or brake, with its reason
               platform.rss = 0;
               // The first info call succeeds. Startup flush has no events until deployment yields.
               fetch.mockImplementation(async (_url, options) => {
-                const call = JSON.parse(String(options?.body)) as { method: string };
+                const call = JSON.parse(bodyText(options)) as { method: string };
                 return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
               });
               yield* startDev({ name: "life-test", port: 18787, build: "test", home }, (local) =>
@@ -121,7 +123,7 @@ it("every observed exit is durable once across restart or brake, with its reason
                 }),
               );
               fetch.mockImplementation(async (_url, options) => {
-                const call = JSON.parse(String(options?.body)) as Call;
+                const call = JSON.parse(bodyText(options)) as Call;
                 calls.push(call);
                 return Response.json(
                   call.method === "brain" ? { error: { reason: "offline" } } : { value: { _tag: "written" } },
@@ -225,6 +227,7 @@ it("every observed exit is durable once across restart or brake, with its reason
               expect(kill.mock.calls).toEqual(memoryPids.map((pid) => [pid, "SIGTERM"]));
             }),
           ).pipe(
+            Effect.provide(fetchClient),
             Effect.provide(ProcessIdGenerator.layer),
             Effect.provide(SecureRandom.layerWebCrypto),
             Effect.provide(

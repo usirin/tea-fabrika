@@ -1,7 +1,7 @@
 ---
 id: 0454
 title: Each story and each layout gets an ARIA snapshot law that advises first, on today's app first
-status: accepted
+status: amended-in-part by [0525](0525-todays-version-is-frozen.md)
 date: 2026-11-07
 tags: [design, accessibility, aria, laws, today]
 ---

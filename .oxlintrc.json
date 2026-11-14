@@ -635,6 +635,8 @@
         "fabrika/no-effect-run-outside-edge": "error",
         "fabrika/edge-comment": "error",
         "fabrika/effect-functions": "error",
+        "fabrika/written-service-type": "error",
+        "fabrika/no-cause-squash": "error",
         "fabrika/no-of": "error",
         // A question word is never a name (0081). oxlint's own rule holds every name written as an
         // identifier; ours holds a quoted, computed or template key, which it does not decode.
@@ -717,6 +719,8 @@
         "fabrika/no-effect-run-outside-edge": "error",
         "fabrika/edge-comment": "error",
         "fabrika/effect-functions": "error",
+        "fabrika/written-service-type": "error",
+        "fabrika/no-cause-squash": "error",
         "fabrika/no-of": "error",
         // A question word is never a name (0081). oxlint's own rule holds every name written as an
         // identifier; ours holds a quoted, computed or template key, which it does not decode.
@@ -854,6 +858,24 @@
       "rules": { "fabrika/one-machine-per-file": "off" }
     },
     {
+      // A test's stand-in service is not a contract file, so its type may be inferred from a local
+      // value. Product code writes a service's type out (0095).
+      "files": ["next/**/*.test.ts", "next/**/*.test.tsx", "next/**/*Test.ts", "next/**/*.test-support.ts"],
+      "rules": { "fabrika/written-service-type": "off" }
+    },
+    {
+      // A test reads a failed `Exit` whole to assert on it, so tests, shared suites (0062) and test
+      // support may squash a cause. Product code may not: the `next/**` block above holds it.
+      "files": [
+        "next/**/*.test.ts",
+        "next/**/*.test.tsx",
+        "next/**/*Test.ts",
+        "next/**/*.test-support.ts",
+        ".agents/**/*.test.ts"
+      ],
+      "rules": { "fabrika/no-cause-squash": "off" }
+    },
+    {
       // A resource is released by the scope that acquired it, never by an after-hook that a thrown
       // error or a killed test can skip (0061). Setup hooks stay.
       "files": ["next/**/*.ts", "next/**/*.tsx"],
@@ -959,6 +981,29 @@
           }
         ]
       }
+    },
+    {
+      // E5 (0095): a service class holds no static member, so each layer is a sibling file. On
+      // where the count is zero (oxlint-plugins/README.md): a slice adds its folder when it moves
+      // that folder's layers, and the last one makes the list `next/**`. Tests, shared suites and
+      // test support are left out: a test may build a stand-in service any way it likes.
+      "files": [
+        "next/apps/**",
+        "next/programs/**",
+        "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/codehost/**",
+        "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/jobs/**",
+        "next/packages/libfabrika/src/ledger/**",
+        "next/packages/libfabrika/src/node/**",
+        "next/packages/libfabrika/src/packs/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/settings/**",
+        "next/packages/libfabrika/src/transport/**"
+      ],
+      "excludeFiles": ["next/**/*.test.ts", "next/**/*.test.tsx", "next/**/*Test.ts", "next/**/*.test-support.ts"],
+      "rules": { "fabrika/no-static-layer": "error" }
     },
     {
       // Each law is a property or a labeled example (0093). It blocks in every folder at zero, and
@@ -1398,11 +1443,10 @@
       // Ticket 737 (decision 0023): next/ decodes input with Effect Schema, so a bare JSON.parse is
       // reported, and a service ID carries the package and its file's path. The parse rule blocks in
       // every folder at zero, and advises where the warn override at the end still names the folder
-      // (0523). The ID rule still only advises: lint.ts prints it and does not fail on it. A test
-      // oracle may keep a parse with a line exception and a reason. The ID rule reads only
-      // libfabrika's source folder, so its glob can stay wide. Its glob is `next/**/*`, the same
-      // files as `next/**`: that exact key names the exam block above, which `.agents/` repeats
-      // (0033), and this rule holds next/ alone.
+      // (0523). A test oracle may keep a parse with a line exception and a reason. The ID rule
+      // blocks since ticket 909 (decision 0168). It reads only libfabrika's source folder, so its glob
+      // can stay wide. Its glob is `next/**/*`, the same files as `next/**`: that exact key names the
+      // exam block above, which `.agents/` repeats (0033), and this block holds next/ alone.
       "files": ["next/**/*"],
       "rules": {
         "eslint/no-restricted-properties": [
@@ -1413,7 +1457,7 @@
             "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
           }
         ],
-        "fabrika/service-id": ["warn", { "package": "@kampus/libfabrika", "src": "next/packages/libfabrika/src" }]
+        "fabrika/service-id": ["error", { "package": "@kampus/libfabrika", "src": "next/packages/libfabrika/src" }]
       }
     },
     {
@@ -1975,6 +2019,28 @@
         "next/programs/pipeline/src/*{.test.ts,.test.tsx}"
       ],
       "rules": { "fabrika/prefer-schema-arbitrary": "warn" }
+    },
+    {
+      // E6 (0023, 0120): every public export of a next/ library has an Effect-shaped doc block, and
+      // its file a module block (`oxlint-plugins/jsdocs.ts`). On for the folders at zero; each fill
+      // adds its folder here when it lands, and the list ends as `next/packages/*/src/**` (Plan B,
+      // B2). `since` stays `absent` until libfabrika's first release (0118).
+      "files": ["next/packages/libfabrika/src/ci/**", "next/packages/libfabrika/src/codehost/**"],
+      "rules": { "fabrika/jsdocs": ["error", { "since": "absent" }] }
+    },
+    {
+      // Not public, so no doc block is asked: `internal/` (the modules rule asks `@internal` there),
+      // tests, test support, shared suites (`*Test.ts`), fixtures and declaration files.
+      "files": [
+        "next/**/internal/**",
+        "next/**/*.test.ts",
+        "next/**/*.test.tsx",
+        "next/**/*.test-support.ts",
+        "next/**/*Test.ts",
+        "next/**/fixtures/**",
+        "next/**/*.d.ts"
+      ],
+      "rules": { "fabrika/jsdocs": "off" }
     }
   ]
 }

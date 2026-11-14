@@ -230,7 +230,14 @@ export const Activity = Schema.TaggedUnion({
   stepping: { process: ProcessId, letter: Text, build: Text },
 });
 
-const Recovered = Schema.TaggedUnion({
+/**
+ * Schema for what `recoverActivity` answers after a wake: `idle`, or `interrupted` with the
+ * process, letter and build of the step that was cut short.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const Recovered = Schema.TaggedUnion({
   idle: { process: Schema.optionalKey(ProcessId) },
   interrupted: {
     process: ProcessId,

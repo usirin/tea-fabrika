@@ -13,7 +13,7 @@ Run oxlint and oxfmt through `lint.ts` and `format.ts`, not on their own. These 
 
 They began as GritQL rules in the `biome-plugins/` folder of [kamp-us/phoenix](https://github.com/kamp-us/phoenix), the pipeline this repo rebuilds, copied here unchanged. On 2026-10-31 they became TypeScript rules here, so this folder is where they change now. Each one fired on the same lines as its GritQL rule, on the whole tree and on a set of odd spellings; the note above has the numbers. The counts below are from when the GritQL rules were added and are kept as history. A name like `no-secret-env.grit` in them means the rule that is now `no-secret-env.ts`, and a mention of `biome-ignore` means what is now `oxlint-disable-next-line`.
 
-Five rules that only advised now block wherever their folder is at zero ([0523](../.decisions/0523-advice-rules-block-where-clean.md)): `law-shape`, `no-effect-promise`, `no-raw-try-catch`, `prefer-schema-arbitrary`, and oxlint's own `no-restricted-properties` (a bare `JSON.parse` in `next/`). Each is `"error"` in its base scope. The config's last overrides set it to `"warn"` for the folders that still have fires, and `lint.ts` prints a fire there as `advice, this folder is not at zero yet`, without failing. Any other fire fails, a warning included. `service-id` still only advises, at any level, until its own pull request makes it block. Oxlint has no level below `warn`, so `lint.ts` runs oxlint once and decides (`advice.ts`). Experiment 125 found `no-effect-promise` and `no-raw-try-catch` wrong far too often to block when they were written (8 of 8 and 21 of 21 fires kept their code); 0523 sets that count aside, and each pull request that makes a folder block reports what it met.
+Five rules that only advised now block wherever their folder is at zero ([0523](../.decisions/0523-advice-rules-block-where-clean.md)): `law-shape`, `no-effect-promise`, `no-raw-try-catch`, `prefer-schema-arbitrary`, and oxlint's own `no-restricted-properties` (a bare `JSON.parse` in `next/`). Each is `"error"` in its base scope. The config's last overrides set it to `"warn"` for the folders that still have fires, and `lint.ts` prints a fire there as `advice, this folder is not at zero yet`, without failing. Any other fire fails, a warning included. `service-id` advised from ticket 737 until ticket 909, and blocks since. Oxlint has no level below `warn`, so `lint.ts` runs oxlint once and decides (`advice.ts`). Experiment 125 found `no-effect-promise` and `no-raw-try-catch` wrong far too often to block when they were written (8 of 8 and 21 of 21 fires kept their code); 0523 sets that count aside, and each pull request that makes a folder block reports what it met.
 
 ## Where a rule still advises
 
@@ -46,12 +46,15 @@ checker cannot keep these names in one module. Main at `4359ea84` has zero hits.
 
 ## Decode and service-ID guards
 
-Ticket 737 builds decision 0023 in `next/`: input is decoded with Effect Schema, and a service ID carries the package and its file's path, as Effect's own guide asks. Two guards keep it so. The `JSON.parse` one blocks in every folder at zero (0523); `service-id` still advises.
+Ticket 737 builds decision 0023 in `next/`: input is decoded with Effect Schema, and a service ID carries the package and its file's path, as Effect's own guide asks. Two guards keep it so. The `JSON.parse` one blocks in every folder at zero (0523). The service-ID guard was advice too, and blocks since ticket 909.
 
 ```ts
 JSON.parse(text);                                            // blocks: Schema.fromJsonString(S) instead
 class Doorbell extends Context.Service<Doorbell, Shape>()(
   "@kampus/libfabrika/ledger/Ledger.Doorbell",               // passes in ledger/Ledger.ts
+) {}
+class Bell extends Context.Service<Bell, Shape>()(
+  "@kampus/libfabrika/Bell",                                 // blocks in ledger/Ledger.ts: no path
 ) {}
 ```
 
@@ -66,7 +69,15 @@ Replay on 2026-11-11, at `8594eebc6` with this ticket's laws, before its build:
 | `service-id`, libfabrika `src/` | 35 | 35: 33 services, 1 Reference, `ProgramRunner` (next slice) | 0 | 0 | the app's `t502/RecordLaws.Wire` test service, outside the rule's folder |
 | `JSON.parse`, `next/` | 75 | 2 in product code: `transport/Connection.ts` (this ticket) and `Testing.ts` (its round trip, outside it); 73 in tests and test kits, not yet read one by one | none in the 2 product hits; the 73 are unread, and the shadow case is possible | 0 | aliases |
 
-After the build, `service-id` should find only Runner's ID, which the next slice renames; it is a named hit, not an exemption. `decode-guards.test.ts` runs `lint.ts` itself: a service-ID report alone passes, and a bare `JSON.parse` in a clean folder, or any other blocking diagnostic, fails.
+After that build, `service-id` found only Runner's ID; it was a named hit, not an exemption. Promotion to blocking needs about 0% false alarms on main (Google, CACM 2018), measured by a fresh replay; up to 10% may keep advising, and above that the rule is repaired first.
+
+**`service-id` blocks since ticket 909** (decision 0168: the pull request that turns a rule on fixes every break, so the rule starts at zero). The fresh replay, on 2026-11-13 at `c0aaf4a24`, `node oxlint-plugins/lint.ts next/packages/libfabrika/src`:
+
+| Guard | Fires | True | False alarms | After the fix |
+|---|---|---|---|---|
+| `service-id`, libfabrika `src/` | 1 | 1: `ProgramRunner` in `runtime/Runner.ts`, written `@kampus/libfabrika/ProgramRunner` | 0 | 0 fires, with the ID as `@kampus/libfabrika/runtime/Runner.ProgramRunner` |
+
+The rule is at `error` in `.oxlintrc.json`, out of `lint.ts`'s advice set, and its messages no longer start with "Advice, does not block". `service-id.test.ts` replays it over libfabrika and expects nothing. `decode-guards.test.ts` runs `lint.ts` itself: a clean report exits 0, and a bare `JSON.parse` in a clean folder, a wrong service ID or any other blocking diagnostic exits 1. `JSON.parse` blocks wherever its folder is at zero (0523).
 
 ## Effect property data
 
@@ -82,6 +93,34 @@ const invalid: fc.Arbitrary<typeof Input.Type> = fc.record({text: fc.string()});
 Use `unsupported Effect` in that comment for a generator Effect cannot make. This rule does not execute modules or read types from another file. Its generated syntax laws and four planted breaks are in `prefer-schema-arbitrary.test.ts`. One law runs `lint.ts` and proves a fire in a clean folder exits 1, alone or beside another warning.
 
 Ticket 325, 2026-11-08, at [PR 532](https://github.com/usirin/tea-fabrika/pull/532)'s `1af180f6` next-test tree: the first scan found one false hit, `data/sink.test.ts:738`, where `Redacted.make` is not a schema. The match now excludes Effect modules other than Schema. The narrowed scan found 0 hits: 0 useful, 0 false and 0 unknown. Zero hits gives no false-alarm rate. The next-test files are unchanged in this tests commit, so its final-head count is the same. A separate parser scan found 189 named data constructors in 19 next-test files, including multiline calls. One useful miss is `data/log.test.ts:34`, checked through `parents(50).every(is)` at line 316. That helper flow needs review; it is outside the rule's direct binding matches. Effect 4.1.1 generated 10 valid `ParentText` values at seed 119120. Other constructor families exercise operation orders, invalid input or extra fields without direct schema evidence. These counts cannot show that every untyped generator should stay, or that Effect supports every domain schema.
+
+## Effect modules imported by path
+
+A library in `next/packages` imports each Effect module by its path (E7, [0023](../.decisions/0023-next-follows-effects-code-style.md)). This is not an oxlint rule: it is Effect's own type check, `preferNamespaceImport` in `@effect/tsgo` 0.63.0, turned on by one override in `tsconfig.base.json`, so `pnpm typecheck` is what fails. An oxlint ignore comment does not reach it.
+
+```ts
+import { Effect, Schema } from "effect";   // error in a listed folder: two names imported by name
+import * as Effect from "effect/Effect";    // passes, and so does `import type * as Effect from "effect/Effect"`
+import * as Schema from "effect/Schema";
+```
+
+The override sets `namespaceImportPackages: ["effect"]` and `preferNamespaceImport` to `error` for a list of folders, tests included. Its message names the module path for each name. Plan B of the Effect rules ([`docs/plan/effect-rules-big.md`](../docs/plan/effect-rules-big.md), B3) closes the list folder by folder: each slice fixes one group of modules and adds its folders in the same pull request, so there is no list of known breaks (0168). The last slice, `runtime/`, replaces the list with `next/packages/**/*.ts` and `next/packages/**/*.tsx`.
+
+Listed today: `next/packages/libfabrika/src/ci/` and `next/packages/libfabrika/src/codehost/`, from B3.0 (ticket 912). `namespace-imports.test.ts` keeps the saved list and fails when a listed folder no longer ends at `error` for `effect` after every override in order: dropped from the list, excluded, or turned down or narrowed by a later override (law 6). Once the whole-tree globs are listed, it checks them the same way. Each slice adds its folders to that list too.
+
+Tools looked at: the same check's quick fix in an editor, one import at a time; its oxlint form, `effecttsgo/prefer-namespace-import`, run by `effect-tsgo oxlint --type-aware`, which needs `oxlint-tsgolint` (not in the lockfile), and which B3.0 tried once in a scratch copy; ast-grep and jscodeshift, neither in the lockfile. The tryout's result: at `@effect/tsgo` 0.63.0 with oxlint 1.90.0 and `oxlint-tsgolint` 7.0.2005, `effect-tsgo oxlint --type-aware` lists the hits from the command line, but `--fix`, `--fix-suggestions` and `--fix-dangerously` each changed 0 files, so later slices fix imports by hand.
+
+Count by module on `origin/main` at `9276a9606`, by the check through an inline config: 1,353 names in 299 files of `next/packages`, 125 product files and 174 tests.
+
+| Module | Names | Module | Names | Module | Names |
+|---|---|---|---|---|---|
+| `node` | 309 | `ledger` | 85 | top files | 32 |
+| `runtime` | 287 | `telemetry` | 72 | `packs` | 28 |
+| `processes` | 129 | `access` | 52 | `jobs` | 20 |
+| `cloudflare` | 119 | `transport` | 51 | `presence` | 8 |
+| `settings` | 92 | `gateway` | 47 | `repositories`, `schedules`, `ci`, `codehost` | 6, 6, 5, 5 |
+
+B3.0 fixed the 10 names of `ci` and `codehost`, all in their two shared test suites, `CiTest.ts` and `CodeHostTest.ts`. A run of `effect-tsgo diagnostics` on libfabrika's project then gave 0 errors. A planted `import { Option } from "effect"` in `ci/Ci.ts` and in `codehost/CodeHost.test.ts` each gave one error, and the same line in `schedules/ScheduledJob.ts`, not listed, gave none.
 
 ## Law shape
 
@@ -293,6 +332,37 @@ The oxlint rules see syntax. A `.catch` is told apart by the name it is called o
 and `Effect.promise` and the run functions by their written names. P12 adds the typed
 check below for Promises passed through helpers. `no-hand-tag` misses `x._tag = "a"`,
 which the plan does not name. Report any miss.
+
+### The docs rule, E6
+
+Ticket 913, slice B2.1 of [Plan B](../docs/plan/effect-rules-big.md#b2-the-docs-rule), for `next/`: `fabrika/jsdocs` asks every public export of a `next/` library for a doc block in Effect's shape, and its file for a module block (E6, [0023](../.decisions/0023-next-follows-effects-code-style.md), [0120](../.decisions/0120-effect-code-guidelines.md)). `jsdocs.ts` finds the exports and their blocks through oxlint's syntax tree. Whether a block is right is Effect's own grammar: `effect-jsdocs.ts` is lines 973 to 1608 of `packages/tools/jsdocs/src/Jsdocs.ts` in [Effect-TS/effect at `effect@4.1.2`](https://github.com/Effect-TS/effect/blob/effect%404.1.2/packages/tools/jsdocs/src/Jsdocs.ts), with what those lines call, copied with Effect's MIT notice; its head lists every line taken and every change. On an Effect bump, diff those lines again.
+
+| Rule | Asks | Edges | Tests |
+|---|---|---|---|
+| `jsdocs` | a block on `export const`, `let`, `function` (first overload), `class`, `interface`, `type`, `declare namespace` and each export in it, `export * as`, and each name of `export { a }`, with one description paragraph, Effect's sections, `**Example** (Title)` examples, and `@deprecated`, `@see`, `@stability`, `@category` in that order (`@stability` and `@category` required); tags alone on a re-export; a module block with `@stability` and no `@category` in a file with a checked export; a member's block, when there is one | `@internal` takes an export out; a type directly under its same-name schema shares its block (the owner, 2026-11-13: a kept difference in 0023); `since` is `absent` until libfabrika's first release (0118) | left out |
+
+Which tools were looked at, and why none could hold the shape here, is the draft plan's table (`docs/plan/ticket-900-docs-lint.md` on the branch of [pull request 1131](https://github.com/kamp-us/tea-fabrika/pull/1131)): Effect's checker (private, needs TypeScript's JS API below 7, asks `@since`), oxlint's `jsdoc` rules (no rule that asks for a block), `eslint-plugin-jsdoc` (2,770 false alarms on Effect's own source), and TypeDoc and API Extractor (a block's presence only).
+
+**On for the folders at zero, off for what is not public.** One `.oxlintrc.json` block turns it on at `error` for `ci/` and `codehost/` of libfabrika; each fill adds its folder in its own pull request, and the list ends as `next/packages/*/src/**` once the barrels become namespace re-exports (B2.8). A second block turns it off for `internal/`, tests, test support, shared suites (`*Test.ts`), fixtures and declaration files. A folder not yet listed has no ignore: the rule has not reached it ([0168](../.decisions/0168-old-lint-breaks-are-fixed.md)).
+
+Count on 2026-11-14, on main at `c0aaf4a24`: `ci` 9 of 9 exports pass and `codehost` 12 of 12, with both module blocks, so 0 fires, as the draft's prototype found. With every block stripped from the two files, it fired 23 times: the 21 exports and the 2 files. On Effect 4.1.2's own source, 432 files outside `internal/`, with `since` set to `required`, it fires 10 times: the 6 exports of `StandardSchema.ts`, the one file Effect's config leaves out, and the 4 files whose only block above their first statement is that statement's own, as Effect's checker reads it (`encoding/Ini.ts`, `encoding/Yaml.ts`, `http/HttpStatus.ts`, `index.ts`). So 0 false alarms against Effect's own verdict.
+
+Not yet on, for the fills to count against: all 136 public files of libfabrika fire 666 times, 346 exports with no block, 232 with a block out of shape (most lack `@stability` and `@category`) and 88 files with no module block or a wrong one.
+
+| Module | Files | No block | Out of shape | Module block | Module | Files | No block | Out of shape | Module block |
+|---|---|---|---|---|---|---|---|---|---|
+| top files | 7 | 69 | 13 | 7 | `node` | 15 | 17 | 16 | 15 |
+| `access` | 7 | 18 | 21 | 7 | `packs` | 4 | 11 | 2 | 4 |
+| `ci` | 1 | 0 | 0 | 0 | `presence` | 1 | 1 | 0 | 1 |
+| `cloudflare` | 16 | 65 | 11 | 15 | `processes` | 11 | 6 | 34 | 0 |
+| `codehost` | 1 | 0 | 0 | 0 | `repositories` | 1 | 10 | 2 | 1 |
+| `coordination` | 1 | 72 | 0 | 1 | `runtime` | 31 | 3 | 60 | 0 |
+| `gateway` | 5 | 4 | 0 | 3 | `schedules` | 1 | 3 | 1 | 1 |
+| `jobs` | 3 | 3 | 11 | 3 | `settings` | 11 | 26 | 23 | 10 |
+| `ledger` | 9 | 8 | 16 | 9 | `telemetry` | 5 | 11 | 19 | 5 |
+| | | | | | `transport` | 6 | 19 | 3 | 6 |
+
+`jsdocs.test.ts` holds laws 3 to 9 of the draft: generated files through RuleTester at seed 119120 for which exports fire, the tag order, the module block, `@internal` and tags alone, and the `since` option; the real oxlint over Effect's source; and one planted file per left-out kind at its real path with this config. A `fixtures/` folder is also in the top `ignorePatterns`, which oxlint obeys even with `--no-ignore`, so no planted file there is linted. What the rule cannot see: whether a description is true, whether a `@see {@link x}` names a real thing, whether an example compiles, and a name sent on under a new binding.
 
 ### Ticket 682: question words are never names
 
@@ -645,3 +715,158 @@ Paths below are relative to `oxlint-plugins/`, except `.oxlintrc.json`.
 
 All property replays used seed 119120. Every replay ran on Node 26.13.0 with one Vitest worker.
 The box refused `nice`'s priority change, so subsequent test commands ran without it.
+
+## A service's type is written out, ticket 908
+
+`fabrika/written-service-type` blocks in `next/` product code. A service's type is the contract a
+reader looks up, so it is written out and never taken from the implementation
+([0095](../.decisions/0095-a-service-file-holds-only-its-contract.md),
+[the Effect code guidelines](../docs/direction/effect-code-guidelines.md)). Slice A2 of
+[the plan](../docs/plan/effect-rules-small.md) fixes every site and turns the rule on in one pull
+request, so it starts at zero with no list file
+([0168](../.decisions/0168-old-lint-breaks-are-fixed.md)).
+
+It reads the last type argument of Effect's `Context.Service`, in the class form
+`Context.Service<Self, Type>()("id")` and the direct form `Context.Service<Type>("id")`. It fires
+when that type holds, at any depth, `ReturnType<...>`, `Effect.Success<...>` or a `typeof` query.
+A type alias or an interface declared in the same file is read through, an interface's `extends`
+list included, so the break cannot hide one line up. One `typeof` passes: `typeof X.Type`, the type of a schema's value, inside a member of
+a written object type. As the whole type, or joined to one with `&`, it fires. A name imported from
+another file passes, since the rule reads one file. A `Context.Reference` is not read. The rule's
+head comment lists the import forms it resolves and what it misses.
+
+Tools looked at first (0040): Effect's checker has no check for a service type built from these
+three forms, and `serviceNotAsClass` and `leakingRequirements` pass every site. oxlint 1.90.0 has
+no `no-restricted-syntax`, and a selector could not resolve a renamed import or read through an
+alias.
+
+Tests are left out by `*.test.ts`, `*.test.tsx`, `*Test.ts` and `*.test-support.ts` under `next/`:
+a test's stand-in service is not a contract file.
+
+First replay, 2026-11-13, over `next/` with the repo's config: 50 lines in 38 product files write
+`Context.Service<`, and the rule fires on **4**. Each fire was read, and none is a false alarm.
+
+| Site | The type it holds | In the plan's count |
+|---|---|---|
+| `next/packages/libfabrika/src/cloudflare/runtime.ts:928` | `Effect.Success<ReturnType<typeof projectLogic>>` | yes |
+| `next/packages/libfabrika/src/cloudflare/runtime.ts:1114` | `Effect.Success<ReturnType<typeof processLogic>>` | yes |
+| `next/packages/libfabrika/src/gateway/Gateway.ts:1693` | `Effect.Success<ReturnType<typeof make>>` | yes |
+| `next/packages/libfabrika/src/cloudflare/connection.ts:280` | `Effect.Success<ReturnType<typeof gatewayLogic>>` | no: the class is written over four lines, and the plan counted with a one-line search |
+
+`written-service-type.test.ts` holds the law: a property over generated files, each with one to six
+services drawn from every service spelling and type form, run through oxlint's `RuleTester`, then
+one real oxlint run that proves the config's wiring. This count says nothing about the false alarms
+of forms nobody has written yet.
+
+## No static member on a service class, decision 0095
+
+`fabrika/no-static-layer` blocks in the `next/` folders where its count is zero. A service file
+holds only its contract, and each layer is a sibling file that exports `layer`
+([0095](../.decisions/0095-a-service-file-holds-only-its-contract.md), E5 in
+[`docs/direction/effect-code-guidelines.md`](../docs/direction/effect-code-guidelines.md)). The
+rule refuses every static member of a class that extends `Context.Service`, not only one that
+returns a Layer (owner, 2026-11-13): a syntax rule cannot read a member's type, and a guess from
+names would miss.
+
+```ts
+export class Retries extends Context.Service<Retries, Shape>()("@kampus/libfabrika/jobs/Retries") {
+  static readonly layer = Layer.succeed(Retries, shape); // fires: move it to RetriesMemory.ts
+}
+```
+
+It fires on a static field (with or without a value), method, getter, setter, accessor and
+`static {}` block, on a class declaration or a class expression. `Context` is resolved through the
+file's scope, as `service-id` resolves it: a named, renamed or namespace import of `Context`, the
+`effect` barrel as a namespace, and `Service` imported from `effect/Context`. An instance member, a
+`declare` field and a class that extends anything else (`Schema.TaggedError`, `Schema.Opaque`) or
+nothing pass. It misses a static added from outside (`Ledger.layer = ...`, which the type check
+refuses) and a `Context.Service` reached through a local alias or a helper.
+
+**Tools looked at** ([0040](../.decisions/0040-existing-tools-before-hand-written.md)):
+Effect's checker, `@effect/tsgo` 0.63.0, has no check on a service class's static members;
+oxlint 1.90.0 has no `no-restricted-syntax`; and oxlint's `typescript/no-extraneous-class` refuses
+a class with only static members, which a class that extends `Context.Service` never is. So the rule
+is ours.
+
+**First-day count.** Replayed over all of `next/` on 2026-11-14, at `c0aaf4a24`, with the list
+widened to `next/**` in a scratch copy of the config and tests left out: oxlint read all 470 `.ts`
+and `.tsx` files in `next/`, tests included, and the rule ran on the 195 that are not tests. **26 fires, all
+read by hand, all real**: every one is a static member of a class that extends `Context.Service`.
+The plan's hand count was 27; the 27th, `access/SessionManager.ts:63` `static sign`, sits on
+`SavedInput`, which extends `Schema.Opaque`, so it is not a service class and the rule is right to
+pass it.
+
+| Module | Fires | Where |
+|---|---|---|
+| top | 1 | `Id.ts:153` |
+| `access` | 1 | `SessionManager.ts:102` |
+| `gateway` | 1 | `Gateway.ts:1696` |
+| `presence` | 1 | `Connections.ts:40` |
+| `processes` | 3 | `Mailbox.ts:168`, `ProcessIdGenerator.ts:28`, `ProcessManager.ts:132` |
+| `runtime` | 7 | `Entry.ts:115`, `Entry.ts:210`, `ProcessStore.ts:136`, `RecoveryStore.ts:220`, `Runner.ts:335`, `Runner.ts:345`, `Execution.ts:270` (`static make`) |
+| `telemetry` | 6 | `Archive.ts:40`, `Archive.ts:53`, `Records.ts:420`, `Records.ts:424`, `Records.ts:429`, `Sink.ts:246` |
+| `cloudflare` | 6 | `platform.ts:67`, `:188`, `:237`, `:258`, `:274`, `:305` (`static make`) |
+
+All paths are under `next/packages/libfabrika/src/`. Nothing fired in `next/apps/`,
+`next/programs/` or the other libfabrika folders.
+
+**The folder list.** One block in `.oxlintrc.json`, its `files` the 13 folders at zero:
+`next/apps/`, `next/programs/`, and libfabrika's `ci`, `codehost`, `coordination`, `jobs`,
+`ledger`, `node`, `packs`, `repositories`, `schedules`, `settings` and `transport`. Its
+`excludeFiles` leaves out tests, shared suites and test support (`*.test.ts`, `*.test.tsx`,
+`*Test.ts`, `*.test-support.ts`): a test may build a stand-in service any way it likes. The top
+files of libfabrika's `src/` are not listed yet: they share a folder with `Id.ts`, which still
+fires.
+
+**How it closes.** One folder a slice, each in the pull request that moves that folder's layers
+(0168): `presence`, `access`, `gateway`, `Id.ts` with the top files, `processes`, `telemetry`,
+`runtime`. `cloudflare/` closes last, when the Alchemy port (ticket 502) deletes
+`cloudflare/platform.ts`, and that pull request makes the list `next/**`.
+
+The laws are in `no-static-layer.test.ts`: a property through oxlint's RuleTester over generated
+classes (a superclass kind, an import spelling, class declaration or expression, and a list of
+static and instance members; 100 runs, seed 119120), one real lint run over a planted file per
+listed folder and per left-out kind, and the saved list of the folders listed on the day the rule
+landed, which only grows.
+
+## No `Cause.squash`, ticket 907
+
+`no-cause-squash` refuses every use of Effect's `Cause.squash` in `next/` product code and in
+`.agents/` (E2 of [the Effect code guidelines](../docs/direction/effect-code-guidelines.md),
+decision 0168). A squashed cause is one unknown value, and the next line then has to ask what it
+is. Read the typed failure with `Cause.findErrorOption` or `Exit.findErrorOption`, and a thrown
+value with `Cause.findDefect`.
+
+It resolves the file's own imports, so it reads `Cause` from `effect` under any name, `effect/Cause`
+and the `effect` barrel as a namespace, a plain, optional or string member, a reference with no
+call, `const { squash } = Cause`, and `squash` imported by name, which fires once at the import.
+Another object's `squash`, a local or a parameter named `Cause`, a comment, a string and a type
+position pass. It misses an alias made at run time (`const c = Cause; c.squash(x)`) and a
+re-export. An edge that must name whatever failed takes
+`// oxlint-disable-next-line fabrika/no-cause-squash -- edge: <why>`, and an edge comment over a
+line with no squash fails as an unused directive.
+
+Tests, shared suites (`*Test.ts`) and test support (`*.test-support.ts`) are left out by one
+override in `.oxlintrc.json`: a test reads a failed `Exit` whole to assert on it. `.agents/` is held
+because its rule block repeats `next/**`'s (0033).
+
+Tools looked at first (0040), neither used:
+
+| Tool | Why not |
+|---|---|
+| oxlint's [`no-restricted-properties`](https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-restricted-properties) | `lint.ts` decides advice by rule code, and this rule's code only advises, for `JSON.parse`. It also misses `import { squash } from "effect/Cause"` |
+| oxlint's [`no-restricted-imports`](https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-restricted-imports) | It bans a named import, not a member read on a namespace, and every site reads `Cause.squash` |
+
+First-day count, 2026-11-13, on main at `c0aaf4a24`, one oxlint run over `next`, `.agents`,
+`oxlint-plugins`, `packages`, `programs` and `apps` with the repo's config, each fire read by hand:
+**10 fires in 8 files, 10 real, 0 false alarms**, all under `next/packages/libfabrika/src/`:
+`cloudflare/connection.ts:150`, `cloudflare/runtime.ts:346`, `cloudflare/tail.ts:57` and `:82`,
+`ledger/internal/ledgerStore.ts:273`, `runtime/Runner.ts:844` and `:1823`, `telemetry/Sink.ts:157`,
+`transport/Answer.ts:62` and `transport/Connection.ts:178`. A text search for `Cause.squash` in the
+same product files finds the same 10 lines, so none was missed. `.agents/` has 0. The 28 uses in 19
+test files of `next/` stay. The rule joins as an error with no ledger entry: the same pull request
+fixes all 10.
+
+`no-cause-squash.test.ts` holds the laws. Law 2 is a property through oxlint's `RuleTester`: an
+import spelling, uses and neighbors that must pass, 100 runs, seed 119120. Law 3 is one real oxlint
+run over one planted file per path kind, with the repo's config.

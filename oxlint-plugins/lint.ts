@@ -14,10 +14,6 @@ import { checkTracked } from "./gitignore.mjs";
 import { type Finding, fingerprint, LEDGERS, outside, settle } from "./ledger.ts";
 import { load, scriptReads } from "./script-reads.mjs";
 
-// Ticket 737: service IDs advise at any level until their own pull request makes them block (0523,
-// "not decided here").
-const SERVICE_ID = "fabrika(service-id)";
-
 interface Diagnostic {
   readonly code?: string;
   readonly message: string;
@@ -144,8 +140,7 @@ const finding = (d: Diagnostic): Finding => {
   };
 };
 
-const advice = (d: Diagnostic) => advises(d) || d.code === SERVICE_ID;
-const found = diagnostics.filter((d) => !advice(d));
+const found = diagnostics.filter((d) => !advises(d));
 const findings = found.map(finding);
 
 // Each ledger settles what the one before left blocking. A file sits in at most one ledger's folder,
@@ -165,7 +160,7 @@ const blocks = found.filter((_, i) => {
   return at === undefined || !waived.has(at);
 });
 
-const advised = diagnostics.filter(advice);
+const advised = diagnostics.filter((d) => advises(d));
 // The hint oxlint keeps apart from the message, such as the JSON.parse rule's Schema hint.
 const text = (d: Diagnostic) => (d.help === undefined ? d.message : `${d.message} ${d.help}`);
 
