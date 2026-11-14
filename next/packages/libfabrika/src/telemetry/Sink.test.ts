@@ -977,7 +977,9 @@ describe("A-Sink, stored error frames keep no machine folders", () => {
 // so a cause's last line takes ` {` after its own `\r`.
 const StrayInput = Schema.Struct({
   word: FrameWord,
-  rootKind: Schema.Literals(["posix", "url", "windows"]),
+  rootKind: Schema.Literals(["posix", "url", "windows", "relative"]),
+  // A relative root's start, as a bundler or a test runner prints it; `.\\` takes Windows separators.
+  prefix: Schema.Literals(["src/", "./", "../", "~/", ".\\"]),
   // One unmatched parenthesis in one folder, with spaces around it, so " (" and ") " appear too.
   before: Schema.String.check(Schema.isPattern(/^[a-z ]{0,8}$/)),
   stray: Schema.Literals(["(", ")"]),
@@ -1014,12 +1016,14 @@ const StrayInput = Schema.Struct({
 });
 
 const strayCases = Arbitrary.schema(StrayInput).pipe(
-  Arbitrary.map(({ word, rootKind, before, stray, breaker, after, ending, tail, frames }) => {
+  Arbitrary.map(({ word, rootKind, prefix, before, stray, breaker, after, ending, tail, frames }) => {
     const folder = `${before}${stray}${breaker}${after}`;
+    const separator = prefix.endsWith("\\") ? "\\" : "/";
     const root = {
       posix: `/sink-${word}/${folder}/private`,
       url: `file:///sink-${word}/${folder}/private`,
       windows: `C:\\sink-${word}\\${folder}\\private`,
+      relative: `${prefix}sink-${word}${separator}${folder}${separator}private`,
     }[rootKind];
     const generated = frames.map(({ shape, name, line, column }) =>
       frameText({ shape, name, line, column, root, word }),
@@ -1120,14 +1124,22 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
             "    at fn (/root/a(b/c.ts:1:2)",
             "    at eval (eval at g (/root/a)b/c.ts:3:4), <anonymous>:1:1)",
             "    at /root/a(b/c.ts:5:6",
+            // A relative location: its start is a word and a separator, not a scheme or a "/".
+            "    at fn (src/a (b/c.ts:1:2)",
+            "    at fn (./a (b/c.ts:1:2)",
+            "    at fn (../a (b/c.ts:1:2)",
+            "    at fn (~/a (b/c.ts:1:2)",
+            "    at fn (.\\a (b\\c.ts:1:2)",
+            "    at eval (eval at g (src/a (b/c.ts:3:4), <anonymous>:1:1)",
           ].join("\n"),
         },
       ]);
       const lines = message.split("\n").map((line) => line.trim());
-      expect(lines.filter((line) => line === "at fn (c.ts:1:2)")).toHaveLength(2);
-      expect(lines).toContain("at eval (eval at g (c.ts:3:4), <anonymous>:1:1)");
+      expect(lines.filter((line) => line === "at fn (c.ts:1:2)")).toHaveLength(7);
+      expect(lines.filter((line) => line === "at eval (eval at g (c.ts:3:4), <anonymous>:1:1)")).toHaveLength(2);
       expect(lines).toContain("at c.ts:5:6");
       expect(message).not.toContain("/root");
+      expect(message).not.toMatch(/a \(/);
     }).pipe(Effect.scoped),
   );
 
