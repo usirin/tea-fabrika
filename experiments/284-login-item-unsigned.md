@@ -39,7 +39,9 @@ The script is `experiments/284-login-item-unsigned/` (`main.mjs` and its driver 
 branch `fabrikalfa/exp-login-item`, with the workflow `.github/workflows/exp-login-item.yaml` that
 runs only on that branch. The run:
 [actions/runs/43537112711](https://github.com/kamp-us/tea-fabrika/actions/runs/43537112711), all
-four steps green, about 10 s each.
+four steps green, about 10 s each. A second run on a fresh runner,
+[actions/runs/43537646396](https://github.com/kamp-us/tea-fabrika/actions/runs/43537646396), gave
+the same status at every step and the same records.
 
 Each shape got five app starts: a full cycle (on, then off), then on, a read from a fresh process,
 off, and a read again. `sudo -n sfltool dumpbtm` ran without a prompt and listed what macOS stored.
@@ -68,8 +70,8 @@ Every app start ended with exit code 0, and no status was ever `requires-approva
 ## What it means for the build
 
 1. **The setting can be built without a paid signature.** A packaged bundle with an ad-hoc
-   signature registers, and gets a record under its own bundle id. 90% sure for macOS 15; it is one
-   run on one macOS version.
+   signature registers, and gets a record under its own bundle id. 90% sure for macOS 15; it is two
+   runs on one macOS version.
 2. **The record's name comes from the signature, not from `Info.plist`.** The copied bundle had our
    bundle id in its `Info.plist`, and macOS still filed it as `2.Electron`, over the record the
    bare binary had just made. So any two apps that run on Electron's stock binary share one login
@@ -104,5 +106,5 @@ itself is the open part below.
 - **Why the bundle with no signature started at all.** An arm64 Mac is said to refuse unsigned
   code, and this one ran it with exit code 0. We did not look into it; no build we plan is unsigned
   in that way.
-- **How steady it is.** The numbers above are from one run, with each shape once. The same script
-  runs again on every push to the branch, on a fresh runner each time.
+- **How steady it is.** Two runs, each on a fresh runner, agreed on every status. Two is a small
+  number, and both were the same runner image on the same day.
