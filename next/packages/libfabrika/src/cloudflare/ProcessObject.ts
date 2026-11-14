@@ -5,18 +5,19 @@
  */
 import { DurableObjectState as ObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Context, Effect } from "effect";
+import { Effect } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import type { ProgramSource } from "./index.ts";
 import { Process, type ProcessShape } from "./objects.ts";
+import * as ObjectService from "./ObjectService.ts";
 import {
   configureProcess,
   type Env,
   processDescriptor,
-  processRuntime,
+  processLayer,
   ProcessService,
+  type ProjectOptions,
   savedAlarm,
-  settingsWire,
 } from "./runtime.ts";
 
 type Service = (typeof ProcessService)["Service"];
@@ -36,18 +37,23 @@ const called = <A, E>(call: Effect.Effect<A, E>): Effect.Effect<A, LedgerError> 
  *
  * **Details**
  *
- * `programs` are the built programs the object's runner loads. The service is built on the first
- * slot or call that needs it, kept once the build succeeds, and built again after a failed one.
- * The Layer starts no timer and no fiber, so an idle instance sleeps.
+ * `programs` are the built programs the object's runner loads, and `input` reads the instance's
+ * checked settings from the Worker's bindings. The service is built on the first slot or call that
+ * needs it, kept once the build succeeds, and built again after a failed one. The Layer starts no
+ * timer and no fiber, so an idle instance sleeps.
  *
  * The alarm slot has no failure type, so a failed alarm dies: the bridge rejects, and the platform
- * delivers the alarm again. A call fails with a `LedgerError` as itself, and any other failure of a
- * call dies too. `abort` resets the instance, as the platform's own abort does.
+ * delivers the alarm again. A call fails with a `LedgerError` as itself, a bad setting included,
+ * and any other failure of a call dies too. `abort` resets the instance, as the platform's own
+ * abort does.
  *
  * @stability unstable
  * @category layers
  */
-export const layer = (options: { readonly programs: Readonly<Record<string, ProgramSource>> }) =>
+export const layer = (options: {
+  readonly programs: Readonly<Record<string, ProgramSource>>;
+  readonly input: (env: Pick<Env, "INSTANCE">) => NonNullable<ProjectOptions["input"]>;
+}) =>
   Process.make(
     Effect.gen(function* () {
       const state = yield* ObjectState;
@@ -63,10 +69,12 @@ export const layer = (options: { readonly programs: Readonly<Record<string, Prog
       };
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: raw state until S5 and S6; not reported, 0042 amendment 2026-11-09
       const raw = state.raw as unknown as DurableObjectState;
-      // The runtime builds the service on first use and builds it again after a failure. It is
-      // the same one the plain class held, so it folds into S1's ObjectService helper later.
-      const runtime = settingsWire(processRuntime(raw, bindings, options.programs).contextEffect);
-      const service = runtime.contextEffect.pipe(Effect.map((context) => Context.get(context, ProcessService)));
+      const service = ObjectService.make(
+        ProcessService,
+        processLayer(raw, bindings, options.programs, options.input(bindings)),
+      );
+      // `configure` saves the descriptor first, then runs the service's first turn from a context.
+      const context = { contextEffect: service.pipe(Effect.map((process) => ProcessService.context(process))) };
       const use = <A, E>(call: (process: Service) => Effect.Effect<A, E>) => called(service.pipe(Effect.flatMap(call)));
 
       return Effect.succeed({
@@ -76,7 +84,7 @@ export const layer = (options: { readonly programs: Readonly<Record<string, Prog
             Effect.orDie,
           ),
         usage: (rows) => use((process) => process.usage(rows)),
-        configure: (descriptor, drain) => called(configureProcess(raw, descriptor, runtime, drain)),
+        configure: (descriptor, drain) => called(configureProcess(raw, descriptor, context, drain)),
         descriptor: () => called(processDescriptor(raw)),
         msg: (input) => use((process) => process.msg(input)),
         open: (client) => use((process) => process.open(client)),
