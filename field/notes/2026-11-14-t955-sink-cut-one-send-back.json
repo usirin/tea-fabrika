@@ -1,0 +1,16 @@
+{
+  "id": "2026-11-14-t955-sink-cut-one-send-back",
+  "date": "2026-11-14",
+  "lanes": [
+    "kamp-us/tea-fabrika#955"
+  ],
+  "stage": "review",
+  "kind": "friction",
+  "what": "next/ version. Ticket 955's lane ran plan, tests, build and one review, each by its own Opus subagent in a cloud session, then one fix round and a recheck by the same reviewer. The first review said merge-ready but found that a relative location (src/, ./, ../, ~/, .\\) with ' (' in a folder kept that folder, a case the cut at f83e0e9e8 covered; the lead sent that back as owed work, the lane's first send-back. The fix round widened the law's roots and the cut, and the recheck said done, with one finding row for the rest of that class (a first folder that holds a space or a parenthesis). The brief's claim that the cut at f83e0e9e8 handled a line that ends in a carriage return was wrong: the lead ran it, and its frame pattern matches no such line, so case 2 had no law and no fix before this lane.",
+  "cause": "The plan's generated roots were posix, url and windows only, so a relative root escaped the laws the plan named; and a claim about an older version was carried in a brief without a run behind it.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "Before a plan is written, run the older code on each case the brief says it covered, and give a frame law's generator every root kind a stack can hold.",
+  "test": "Property: S4 over StrayInput with rootKind relative, at next/packages/libfabrika/src/telemetry/Sink.test.ts.",
+  "links": []
+}
