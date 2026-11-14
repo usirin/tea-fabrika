@@ -19,7 +19,7 @@
 // The one place that needs the squashed value, an edge that names whatever failed, takes
 // `// oxlint-disable-next-line fabrika/no-cause-squash -- edge: <why>` on its line. `.oxlintrc.json`
 // leaves tests, shared suites and test support out: a test reads a failed `Exit` to assert on it.
-import type { CreateRule, ESTree, Scope, Variable } from "@oxlint/plugins";
+import type { CreateRule, Scope, Variable } from "@oxlint/plugins";
 import type { Node } from "./match.ts";
 
 const MESSAGE =
@@ -58,7 +58,7 @@ const written = (key: Node, computed: boolean): string | null => {
 
 export const noCauseSquash: CreateRule = {
   create(context) {
-    const resolve = (node: ESTree.IdentifierReference): Variable | undefined => {
+    const resolve = (node: Node & { readonly name: string }): Variable | undefined => {
       let scope: Scope | null = context.sourceCode.getScope(node);
 
       while (scope !== null) {
