@@ -169,6 +169,19 @@ export const home = homeWithCredential("p14-test");
 
 export type Home = Effect.Success<typeof home>;
 
+/** Sends dev.ts SIGTERM and waits for it to exit, or answers at once when it has. dev.ts exits only
+ *  once its scope has ended its detached child's process group (SIGTERM, then SIGKILL after 3 s), and
+ *  that child's own scope ends the runtime it started, so after this the instance's home stays still. */
+const stop = (c: NodeChildProcess) =>
+  Effect.callback<void>((resume) => {
+    if (c.exitCode !== null || c.signalCode !== null) {
+      return resume(Effect.void);
+    }
+
+    c.once("exit", () => resume(Effect.void));
+    c.kill("SIGTERM");
+  });
+
 /** The real `dev.ts` on a held port in `h`, ready when `/` answers. `env` adds to its environment. */
 export const devServer = (h: Home, env: Readonly<Record<string, string>> = {}) =>
   Effect.gen(function* () {
@@ -202,15 +215,7 @@ export const devServer = (h: Home, env: Readonly<Record<string, string>> = {}) =
         c.stderr?.on("data", (b: Buffer) => out.push(b.toString()));
         return c;
       }),
-      (c: NodeChildProcess) =>
-        Effect.callback<void>((resume) => {
-          if (c.exitCode !== null || c.signalCode !== null) {
-            return resume(Effect.void);
-          }
-
-          c.once("exit", () => resume(Effect.void));
-          c.kill("SIGTERM");
-        }),
+      stop,
       (c) => ({ pid: c.pid, port }),
     );
     // Ready when the real root answers; a child that exits first fails with what it said.
@@ -236,7 +241,8 @@ export const devServer = (h: Home, env: Readonly<Record<string, string>> = {}) =
         yield* Effect.sleep("250 millis");
       }
     }).pipe(Effect.timeout("180 seconds"));
-    return { url, port, output: () => out.join("") };
+    // A law that reads the whole home stops the instance first, within the 10 s its release gets.
+    return { url, port, output: () => out.join(""), stop: stop(child).pipe(Effect.timeout("10 seconds")) };
   });
 
 export type Dev = Effect.Success<ReturnType<typeof devServer>>;
