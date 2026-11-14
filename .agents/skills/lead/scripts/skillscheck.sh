@@ -12,6 +12,7 @@ sources = root / ".agents/skills"
 bad = []
 # Today's tooling, T321 slice 1a and T325 slice 1b: one clause table, one parser.
 # Each clause has one source and one section. An empty section means the whole skill.
+# A clause has one home (0130, experiment 283): another skill that needs it links the home.
 # No spelling aliases or legacy phrase list. Source: approved skills-friction plan, Amendment 1,
 # required clauses. K20's source is the dated addition to five-steps-for-every-check.md.
 leak = "leakgrep.sh checks added text; private words stay outside the repo."
@@ -34,11 +35,9 @@ clauses = [
     ("mutation", "Go easy on the machine", "K9", caps),
     ("tests", "Steps", "K20", effect),
     # Decision 0035. The fields and the closed rule list are field/README.md's; field-schema.ts
-    # checks a row's shape, so the skills keep only this clause and their own judgment.
-    *(
-        (skill, "Outside your task", "K21", outside)
-        for skill in ("plan", "tests", "build", "mutation", "lead")
-    ),
+    # checks a row's shape. The lead skill is this clause's one home: it writes the one line every
+    # brief carries. Each step skill links field/README.md and keeps only its own judgment.
+    ("lead", "Outside your task", "K21", outside),
 ]
 def normalized(text):
     return " ".join(text.replace("`", "").replace("**", "").split())
@@ -100,6 +99,9 @@ for source in sorted(sources.iterdir()) if sources.is_dir() else []:
 # that a future reviewer followed them.
 exam = (
     "Every new or changed law is a property, or an example labeled vector, format, pinned or scenario with its reason.",
+)
+# The lead's landing duty, in the lead skill's "Land it" step.
+landing = (
     # 0066: mutation left the pull request's steps, so loosening.sh alone is the zero-hit check.
     "Zero hits from loosening.sh mean no owner read is needed.",
     "The lead records its output in the PR. A hit goes to the lead's hand check, with the hit list in the PR. Only real loosening waits on the owner.",
@@ -128,20 +130,23 @@ cleanup = (
     "Print one line per retained item and continue.",
     "Saved plans, reports, logs and state/ remain.",
 )
+# One home a clause: the review skill holds what a review checks and answers, the tests skill
+# what a new or changed law must be, and the lead skill's landing step what a loosening.sh hit
+# means. The lead's brief names the review skill and repeats none of it; AGENTS.md links both.
 rules = {
     ".agents/skills/review/SKILL.md": {
         "step:Check": review, "step:Answer": answer,
     },
+    ".agents/skills/tests/SKILL.md": {"heading:New and changed laws": exam},
     ".agents/skills/lead/SKILL.md": {
         "heading:Review brief template": (
-            "Ticket:", "Version:", "Approved plan:", "Parent base:", "Reviewed head:",
-            "Decided notes:", "Last fixes:", *review, *answer,
+            "Use the review skill", "Ticket:", "Version:", "Approved plan:", "Parent base:",
+            "Reviewed head:", "Decided notes:", "Last fixes:",
         ),
-        "step:Land it": (*cleanup, *exam),
+        "step:Land it": (*cleanup, *landing),
         # Ticket 652: a lane agent's last act is land.ts ready; the lead session lands.
         "heading:Lane brief template": ("land.ts ready",),
     },
-    "AGENTS.md": {"bullet:Every pull request": exam},
 }
 
 def section(text, key):

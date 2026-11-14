@@ -10,7 +10,13 @@ import { Effect, Schema, SchemaGetter } from "effect";
 import { Digest } from "effect/crypto";
 import { ProgramName } from "../packs/ProgramName.ts";
 
-/** Why a build stopped: its `reason` names the phase (`table`, `read`, `compiler`, `bundle`, `publish`). */
+/**
+ * Why a build stopped: its `reason` names the phase (`table`, `read`, `compiler`, `bundle`,
+ * `publish`).
+ *
+ * @stability unstable
+ * @category errors
+ */
 export class BuildError extends Schema.TaggedError<BuildError>()("BuildError", {
   reason: Schema.String,
   message: Schema.optionalKey(Schema.String),
@@ -18,7 +24,12 @@ export class BuildError extends Schema.TaggedError<BuildError>()("BuildError", {
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
-/** The SHA-256 of a text's UTF-8 bytes, as lowercase hex. */
+/**
+ * Computes the SHA-256 of a text's UTF-8 bytes, as lowercase hex.
+ *
+ * @stability unstable
+ * @category combinators
+ */
 export const hash = Effect.fn("build.hash")((text: string) =>
   Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, new TextEncoder().encode(text))).pipe(
     Effect.provide(Digest.layerWebCrypto),
@@ -132,7 +143,13 @@ export const Built = Schema.Struct({
  */
 export type Built = typeof Built.Type;
 
-/** Built tables from outside (disk, a generated module): a bad value is BuildError `table`. */
+/**
+ * Decodes built tables from outside (disk, a generated module). A bad value fails with a
+ * `BuildError` whose reason is `table`.
+ *
+ * @stability unstable
+ * @category combinators
+ */
 export const decodeBuilt = Effect.fn("build.decode")(function* (raw: unknown) {
   return yield* Schema.decodeUnknownEffect(Built)(raw).pipe(
     Effect.mapError((cause) => new BuildError({ reason: "table", cause })),

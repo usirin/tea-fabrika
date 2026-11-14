@@ -55,7 +55,16 @@ import {
   type Tag,
 } from "./Trace.ts";
 
-export { SinkError } from "./Trace.ts";
+export {
+  /**
+   * Error for a sink, record or archive call that failed: the call never answered, a row or an
+   * answer did not decode, or storage threw.
+   *
+   * @stability unstable
+   * @category errors
+   */
+  SinkError,
+} from "./Trace.ts";
 
 const ERROR = "error.type";
 const DROPPED = "fab.sink.dropped";

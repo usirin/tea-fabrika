@@ -1,5 +1,6 @@
 /**
  * Replayable fault draws. Version 1 fixes the generator and case order.
+ *
  * @stability unstable
  */
 import * as Schema from "effect/Schema";
@@ -11,6 +12,7 @@ const Word = Schema.Int.check(Schema.isBetween({ minimum: -0x80000000, maximum: 
 
 /**
  * The four saved words of xoroshiro128plus, with its case-order version.
+ *
  * @stability unstable
  * @category schemas
  */
@@ -19,7 +21,8 @@ export const Schedule = Schema.Struct({ version: Schema.Literal(1), words: Schem
 const words = Schema.decodeUnknownSync(Schedule.fields.words);
 
 /**
- * Start a schedule without drawing or allocating faults.
+ * Starts a schedule without drawing or allocating faults.
+ *
  * @stability unstable
  * @category constructors
  */
@@ -56,7 +59,8 @@ const select = (choice: number, start: typeof Chaos.Start.Type): Chaos.Fault => 
 };
 
 /**
- * Draw exactly one fault and return the state for the following draw.
+ * Draws exactly one fault and returns the state for the following draw.
+ *
  * @stability unstable
  * @category scheduling
  */

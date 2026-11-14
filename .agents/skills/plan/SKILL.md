@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Write the plan for one tea-fabrika pull request, read-only, as the pipeline's plan step. Use when a brief says "use the plan skill for ticket N", or when you are the plan writer for a hand-run ticket.
+description: Write the plan for one pull request, read-only, as the pipeline's plan step. Use when a brief says "use the plan skill for ticket N", or when you are the plan writer for a hand-run ticket.
 ---
 
 # The plan step
@@ -51,6 +51,7 @@ no approval and how to write for a reader who saw none of the work.
   you expect: tests, build, review, plus one per likely send-back. `d` is their list-price dollars,
   priced from similar steps in `field/runs/`, and the older rows in `field/runs.jsonl`.
 - Say what fact is lost if it is not recorded now.
+- In `next/`, place each file by [`next/AGENTS.md`](../../../next/AGENTS.md)'s libfabrika test.
 - Split a big plan into pull requests that each land whole, ordered by what the owner sees first.
   Give the files table a "Product lines expected" column (a number, or a word such as `tests` or
   `docs`), and list the slices as numbered items under `## Size`, each saying "<n> lines".
@@ -66,10 +67,8 @@ without contradicting a decision already made? If not, it is not a question.
 
 ## Outside your task
 
-Something wrong that your task does not cover is one finding row with proof, then keep going:
-never a fix, a ticket or only a mention, and never a security hole.
-[A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
-counts as proof.
+Something wrong outside your task is one finding row, never a fix:
+[A finding](../../../field/README.md#a-finding) has the rule, the fields and what counts as proof.
 
 Outside means the ticket does not ask for it and the plan does not need it. What the plan needs
 goes in the plan.
@@ -87,32 +86,7 @@ Plain short sentences, American English.
 plancheck.sh checks the draft; only the lead session reads and approves the whole plan and amendments.
 leakgrep.sh checks added text; private words stay outside the repo.
 
-Draft and approved checks cover sections, questions, exam paths and the exact body bytes after
-line two. The draft prints the digest. `--approved` checks the approval line against it.
-The draft check checks the handoff format. It cannot prove session identity, because the step agents
-and the lead share shell access. Do not add a marker, key or readable file as proof.
-
-`scripts/plancheck.sh --draft <plan.md>` requires a blank first line, `Plancheck-Version: 3` on
-line two, no unfenced line beginning `Approved by the lead agent,`, and one Estimate line, the
-Size section's last. The lead session runs it before approval. It checks the format, not who wrote
-it. Plans approved at version 2 need no Estimate line.
-
-`scripts/plancheck.sh <plan.md>` keeps saved-plan behavior, including approved and legacy plans. It
-checks owners in every plan. Versions 2 and 3 also check each laws table's generator grammar and require
-generated inputs on `[secrets]` rows. An unmarked plan prints `legacy plan: generator checks
-skipped`; unknown, malformed or duplicate markers fail. Escaped pipes stay in their cells. Every
-exam path in a files table's file/path cell counts, whatever words or punctuation surround it,
-unless the cell names another package with a possessive (`Counter's package.json`); then only paths
-with a `/` count. A possessive of this repository (`the repo's package.json`) is not another
-package. Bare root paths in prose or other columns never decide the exit code. Apart from that
-check, the `exam path named` listing is a total scan that reads no Markdown: it splits the whole
-file, fences, link titles and comments included, into words and lists each one the exam list
-matches, wherever it stands. A false listing is harmless; the lead checks each listed path is owned
-by `tests`. The lead runs this before approving. Return the checked draft unsigned.
-
-## Where code goes in `next/`
-
-Anyone must be able to take `@kampus/libfabrika` alone and build a client that works exactly like
-fabrika; fabrika is one such client (owner, 2026-11-08). So for every file the plan puts in
-`next/apps/fabrika`, ask: would a from-scratch client have to write this again? If yes, it goes in
-libfabrika, and the app only picks Layers and hands them in.
+A draft has a blank first line, `Plancheck-Version: 3` on line two, no unfenced line beginning
+`Approved by the lead agent,`, and one Estimate line, the Size section's last. The check reads the
+format, not who wrote it: do not add a marker, key or readable file as proof.
+[`plancheck.sh`](scripts/plancheck.sh) holds what else each mode checks. The lead runs it.

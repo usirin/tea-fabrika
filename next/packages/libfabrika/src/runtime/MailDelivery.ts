@@ -27,7 +27,12 @@ export class MailDeliveryError extends Schema.TaggedError<MailDeliveryError>()("
   cause: Schema.optionalKey(Schema.Defect()),
 }) {}
 
-/** One saved Send: its command ID, the life that runs it, its operands and the writer's own facts. */
+/**
+ * One saved Send: its command ID, the life that runs it, its operands and the writer's own facts.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Mail = Delivery;
 
 /**
