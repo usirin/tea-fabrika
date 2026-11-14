@@ -11,7 +11,7 @@ import type { Update } from "./Entry.ts";
  * acknowledgement.
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export const Publication = Schema.TaggedUnion({ sent: {}, gone: {} });
 
@@ -45,8 +45,9 @@ export class WatcherManagerError extends Schema.TaggedError<WatcherManagerError>
 }) {}
 
 /**
- * Service that delivers a view update to one client. Only confirmed absence ends a watch: it fails
- * with `WatcherManagerError`, whose reason says which.
+ * Service that delivers a view update to one client. A failed delivery is a `WatcherManagerError`:
+ * its reason is `Gone` when the client is confirmed absent, which ends the watch, or `Unreachable`,
+ * which keeps it.
  *
  * @stability unstable
  * @category services

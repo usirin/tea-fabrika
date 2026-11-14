@@ -1,7 +1,7 @@
 /**
  * Audit selection and its errors. `select` reduces a program's message to the audit data the
- * program declares, and the errors and `Answer` carry a failure across the audit RPC without ever
- * holding a private cause.
+ * program declares. The errors keep their cause in memory, redacted, and `Answer` carries a failure
+ * across the audit RPC with no field for that cause.
  *
  * @stability unstable
  */
@@ -62,7 +62,7 @@ export class AuditError extends Schema.TaggedError<AuditError>()("AuditError", {
  * It deliberately has no field for a private cause.
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export const Answer = Schema.TaggedUnion({
   ok: { value: Schema.Json },
@@ -73,7 +73,7 @@ export const Answer = Schema.TaggedUnion({
  * Converts an audit failure to body-free RPC data.
  *
  * @stability unstable
- * @category combinators
+ * @category constructors
  */
 export const failure = (error: AuditError): typeof Answer.cases.AuditError.Type =>
   Answer.cases.AuditError.make({ reason: Answer.cases.AuditError.fields.reason.cases[error.reason._tag].make({}) });
@@ -84,7 +84,7 @@ const reasons = { Input, Selection, Output, Transport, Reply };
  * Restores a checked audit error without trusting a remote cause.
  *
  * @stability unstable
- * @category combinators
+ * @category constructors
  */
 export const restore = (answer: typeof Answer.cases.AuditError.Type): AuditError =>
   new AuditError({ reason: new reasons[answer.reason._tag]({}) });

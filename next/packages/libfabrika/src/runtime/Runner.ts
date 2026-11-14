@@ -90,9 +90,10 @@ import * as WatchersSql from "./WatchersSql.ts";
 
 export {
   /**
-   * The restart policy a process gets when its program declares none: 3 deliveries of one letter, a
-   * restart intensity of 5 over a 5000 ms period, and a backoff from 100 ms to 800 ms that resets
-   * after 5000 ms.
+   * The restart policy a new recovery journal gets when neither the program's declaration nor the
+   * runner's wiring gives one, and the delivery limit when the wiring's policy leaves it out: 3
+   * deliveries of one letter, a restart intensity of 5 over a 5000 ms period, and a backoff from 100
+   * ms to 800 ms that resets after 5000 ms.
    *
    * @stability unstable
    * @category models
@@ -103,7 +104,7 @@ export {
    * policy, build, recent restarts and the journal of the one unfinished recovery job.
    *
    * @stability unstable
-   * @category models
+   * @category schemas
    */
   Supervision,
 } from "./internal/supervisor.ts";
@@ -113,7 +114,7 @@ export {
  * taken (`refused`).
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export const Sent = Schema.TaggedUnion({
   accepted: { rev: Schema.Int, pos: Schema.Int },
@@ -123,7 +124,7 @@ export const Sent = Schema.TaggedUnion({
  * What `msg` answers, as `Sent` decodes it.
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export type Sent = typeof Sent.Type;
 

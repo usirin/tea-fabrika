@@ -45,7 +45,7 @@ const Schemas = Schema.declare(isDeclared, { expected: "a schema" });
  * Schema for a program's refusal: a `reason`, and the numbers that explain it.
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export const Refusal = Schema.Struct({
   reason: Schema.String,
@@ -56,7 +56,7 @@ export const Refusal = Schema.Struct({
  * A program's own no to a fresh Msg, as `Refusal` decodes it.
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export type Refusal = typeof Refusal.Type;
 
@@ -173,14 +173,14 @@ export const Input = Schema.make<InputConstructors>(InputSchema.ast, {
  * it. This is the trusted policy the door checks. Elm outputs never authorize a ledger write.
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export const EventPolicy = Schema.Struct({ schema: Schemas, personOnly: Schema.Boolean });
 /**
  * One row of a program's `writes`, as `EventPolicy` decodes it.
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export type EventPolicy = typeof EventPolicy.Type;
 
@@ -451,7 +451,7 @@ const Event = Schema.Record(Schema.String, Schema.Json);
  * own.
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export const Write = Schema.TaggedUnion({
   caused: { parent: ParentText, event: Event },
@@ -461,7 +461,7 @@ export const Write = Schema.TaggedUnion({
  * What a program asks the runner to write, as `Write` decodes it.
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export type Write = typeof Write.Type;
 
@@ -470,7 +470,7 @@ export type Write = typeof Write.Type;
  * wake time, or `refused`.
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export const Step = Schema.TaggedUnion({
   stepped: {
@@ -485,24 +485,24 @@ export const Step = Schema.TaggedUnion({
  * One pure step's answer, as `Step` decodes it.
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export type Step = typeof Step.Type;
 
 /**
  * Schema for the answer of a fresh check: `admitted`, `invalid` (the Msg does not check or names no
- * input), or `refused` with the program's refusal. A fresh check decides
- * admission without preparing a model or running update.
+ * input), or `refused` with the program's refusal. A fresh check decides admission without
+ * preparing a model or running update.
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export const Admission = Schema.TaggedUnion({ admitted: {}, invalid: {}, refused: Refusal.fields });
 /**
  * An admission answer, as `Admission` decodes it.
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export type Admission = typeof Admission.Type;
 

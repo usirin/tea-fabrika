@@ -23,7 +23,9 @@ export const StartChildInput = Schema.Struct({
 });
 
 /**
- * Schema for why a start is refused for good. Other clients decode these by name.
+ * Schema for the reasons a start's request is refused for good, as `start_child` declares them.
+ * Other clients decode these by name. A malformed start is answered `bad_cmd`, which is not one of
+ * these.
  *
  * @stability unstable
  * @category schemas

@@ -86,7 +86,7 @@ const programFailure = (failure: typeof ExecutionFailure.Type) => {
  * failure crosses RPC as data; a rejected call remains an RPC failure.
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export const Reply = Schema.TaggedUnion({
   ok: { value: Schema.Json },

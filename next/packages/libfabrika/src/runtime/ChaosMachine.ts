@@ -293,7 +293,8 @@ export const chaosMachine = Machine.make({
 });
 
 /**
- * The next saved deadline, or no alarm when work is stopped or awaiting a check.
+ * The next saved deadline: the active experiment's. It gives no alarm in any other phase (`idle`,
+ * `starting`, `checking`, `done`, `incomplete` and `stopped`).
  *
  * @stability unstable
  * @category scheduling
@@ -302,7 +303,8 @@ export const wake = (model: Model): number | null =>
   model.phase._tag === "active" ? model.phase.experiment.deadline : null;
 
 /**
- * Active experiments cannot be replaced by another start.
+ * Refuses a `start` with reason `active` while an experiment is starting, active or checking, or
+ * once the display number has reached its maximum.
  *
  * @stability unstable
  * @category validation

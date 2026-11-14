@@ -19,7 +19,7 @@ import { type Sql } from "../Sql.ts";
  * Cmds. The runner gives `turn` and `cmds` their shapes; the store keeps them as JSON.
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export const Checkpoint = Schema.Struct({
   saved: Schema.Struct({
@@ -35,7 +35,7 @@ export const Checkpoint = Schema.Struct({
  * What a process saves between turns, as `Checkpoint` decodes it.
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export type Checkpoint = typeof Checkpoint.Type;
 
@@ -43,14 +43,14 @@ export type Checkpoint = typeof Checkpoint.Type;
  * Schema for where an accepted letter sits in its inbox, kept so a resend finds its first placing.
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export const Placed = Schema.Struct({ id: Schema.String, rev: Rev, pos: Rev });
 /**
  * Where an accepted letter sits in its inbox, as `Placed` decodes it.
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export type Placed = typeof Placed.Type;
 

@@ -28,7 +28,7 @@ import { Sent } from "./Runner.ts";
  * process: its id, or the registered name the client resolves on each dial.
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export const Pending = Schema.TaggedUnion({
   dating: {
@@ -55,7 +55,7 @@ export type Pending = typeof Pending.Type;
  * Schema for a checked view as installed: the revision it was made at, and the value.
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export const Shown = Schema.Struct({ rev: Schema.Int, view: Schema.Json });
 export type Shown = typeof Shown.Type;
@@ -65,7 +65,7 @@ export type Shown = typeof Shown.Type;
  * what it shows (`views`, by process).
  *
  * @stability unstable
- * @category models
+ * @category schemas
  */
 export const Client = Schema.Struct({
   /** Presses made so far: the next slot's number. */
@@ -319,9 +319,9 @@ const decodeLife = Schema.decodeUnknownOption(
 
 /**
  * Returns the live process a registered name points at, from its `processes/<name>` entries as read:
- * the newest start or restart by the brain's own writer, unless a later exit ended it. `by` is the
- * brain's writer, the one the client trusts for process facts. It returns `null` when no such
- * process is live.
+ * the newest start or restart by the brain's own writer, unless a later exit ended it. `by` says
+ * whether a writer is the brain's own, the one the client trusts for process facts. It returns
+ * `null` when no such process is live.
  *
  * @stability unstable
  * @category getters

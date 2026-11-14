@@ -50,8 +50,8 @@ const load = (sql: Sql, name: string) => {
  *
  * `open` saves the client and then sends it the whole view; `publish` reads the saved clients and
  * sends the patch to each, one after another. A client the manager reports `Gone` has its watch
- * ended; one reported `Unreachable` keeps it. All membership transactions finish synchronously
- * before any delivery starts.
+ * ended; one reported `Unreachable` keeps it. Each membership transaction finishes synchronously
+ * before the next delivery starts, so no transaction stays open across a delivery.
  *
  * @stability unstable
  * @category layers
