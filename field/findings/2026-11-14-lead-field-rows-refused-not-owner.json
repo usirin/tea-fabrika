@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-lead-field-rows-refused-not-owner",
+  "date": "2026-11-14",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": ".agents/skills/step-commit/scripts/stepcommit.sh",
+    "line": 115
+  },
+  "says": "Today's lead tooling: stepcommit.sh refuses a lead commit of a lane's own field rows when the lane's approved plan has no files-table row for field/, though the lead skill says a lane's field rows are committed with stepcommit as lead (--commit-only included, which runs the same owner check), so the rows cannot land in the lane's pull request without a plan amendment and a new approval.",
+  "proof": "In the ticket 936 worktree, at 8f313331038b99761360df5e4d56d868bc28c551, `sh .agents/skills/step-commit/scripts/stepcommit.sh lead 936 \"T936 lead: field rows ...\" field/findings/2026-11-13-child-start-scans-the-child-inbox.json ...` printed `stepcommit: not_owner: field/findings/2026-11-13-child-start-scans-the-child-inbox.json`; `plancheck.sh --owners-json` on the approved plan lists only next/ and docs/plan/tier-1.md paths, and owner_of (stepcommit.sh:87) gives a field/ path no owner.",
+  "cost": "Every boxed lane whose plan omits field/ needs a lead plan amendment, or a rows-only pull request under a ticket of its own, before its run and finding rows can land, and a lead helper cannot finish the rows step at all.",
+  "head": "8f313331038b99761360df5e4d56d868bc28c551",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1203"
+}

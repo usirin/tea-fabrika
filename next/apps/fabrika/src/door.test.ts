@@ -16,8 +16,9 @@ import { Id, Sent } from "@kampus/libfabrika";
 import { Adds, Add, Grant, MemberEvent, Saw, Revoke } from "@kampus/libfabrika/access/Access";
 import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
 import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
-import { SignRequest } from "@kampus/libfabrika/access/SessionManager";
+import { SessionManagerError, SignRequest } from "@kampus/libfabrika/access/SessionManager";
 import { grantText, addText, enrollmentText, revokeText } from "@kampus/libfabrika/access/Text";
+import { GatewayError } from "@kampus/libfabrika/gateway/GatewayError";
 import * as RateLimiterSql from "@kampus/libfabrika/gateway/RateLimiterSql";
 import { Jobs } from "@kampus/libfabrika/jobs/Jobs";
 import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
@@ -1770,8 +1771,11 @@ describe("P10 review regressions", () => {
   });
 
   // crypto: for each of the five WebCrypto edges and any failure (a rejection or a throw, of any
-  // value), the call fails with LedgerError reason "crypto", never "storage", and delivers
-  // nothing. Plant: map a WebCrypto failure to storage (or NotGranted) at any edge.
+  // value), the call fails with that edge's crypto error, never storage, keeps the thrown value in
+  // its cause chain, and delivers nothing. The nonce edges fail with GatewayError reason Crypto;
+  // the fingerprint digest runs in the membership check, so it fails with SessionManagerError
+  // reason Membership around the gateway's LedgerError "crypto"; the input hash is still
+  // LedgerError "crypto". Plant: map a WebCrypto failure to storage (or NotGranted) at any edge.
   type Armed = <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
   // The spied WebCrypto call fails once, by a throw or a rejection, with the generated value.
   type Spy = {
@@ -1789,12 +1793,32 @@ describe("P10 review regressions", () => {
     readonly name: string;
     readonly spy: () => Spy;
     readonly fail: (w: World, armed: Armed) => Effect.Effect<unknown, unknown>;
+    readonly refused: (failure: unknown, thrown: unknown) => void;
+  };
+  const gatewayCrypto = (failure: unknown, thrown: unknown) => {
+    assert(failure instanceof GatewayError);
+    expect(failure).toMatchObject({ _tag: "GatewayError", reason: { _tag: "Crypto" } });
+    expect(failure.reason.cause).toBe(thrown);
+  };
+  const ledgerCrypto = (failure: unknown) => {
+    expect(failure).toBeInstanceOf(LedgerError);
+    expect(failure).toMatchObject({ _tag: "LedgerError", reason: "crypto" });
+  };
+  const membershipCrypto = (failure: unknown, thrown: unknown) => {
+    assert(failure instanceof SessionManagerError);
+    expect(failure).toMatchObject({
+      _tag: "SessionManagerError",
+      reason: { _tag: "Membership", cause: { _tag: "LedgerError", reason: "crypto" } },
+    });
+    assert(failure.reason.cause instanceof LedgerError);
+    expect(failure.reason.cause.cause).toBe(thrown);
   };
   const edges: ReadonlyArray<Edge> = [
     {
       name: "importKey",
       spy: () => vi.spyOn(crypto.subtle, "importKey"),
       fail: (w: World, armed: Armed) => armed(Gateway.pipe(w.provide)),
+      refused: gatewayCrypto,
     },
     {
       name: "nonce sign",
@@ -1805,6 +1829,7 @@ describe("P10 review regressions", () => {
           const client = yield* d.connect();
           return yield* armed(d.challenge(client));
         }).pipe(w.provide),
+      refused: gatewayCrypto,
     },
     {
       name: "nonce verify",
@@ -1815,6 +1840,7 @@ describe("P10 review regressions", () => {
           const { client, hello, trusted } = yield* signedHello(d, w.window, "crypto-failed");
           return yield* armed(d.initialize(client, hello, trusted));
         }).pipe(w.provide),
+      refused: gatewayCrypto,
     },
     {
       name: "fingerprint digest",
@@ -1827,6 +1853,7 @@ describe("P10 review regressions", () => {
           const parent = w.deliveries[0]!.envelope.id;
           return yield* armed(writeId("crypto-failed", d.signer(parent, PROCESS, "saved")));
         }).pipe(w.provide),
+      refused: membershipCrypto,
     },
     {
       // The first digest is the caller's fingerprint, which runs as it is; the second hashes
@@ -1842,6 +1869,7 @@ describe("P10 review regressions", () => {
           const { client } = yield* online(d, w);
           return yield* armed(d.route(client, "process.send", request("digest-failed")));
         }).pipe(w.provide),
+      refused: ledgerCrypto,
     },
   ];
 
@@ -1872,8 +1900,7 @@ describe("P10 review regressions", () => {
                 const failure = yield* Effect.flip(edge.fail(w, armed)).pipe(
                   Effect.ensuring(Effect.sync(() => restore())),
                 );
-                expect(failure).toBeInstanceOf(LedgerError);
-                expect(failure).toMatchObject({ _tag: "LedgerError", reason: "crypto" });
+                edge.refused(failure, thrown);
                 expect(w.deliveries).toHaveLength(before);
               }),
             ),
@@ -1911,7 +1938,8 @@ describe("P10 review regressions", () => {
               const result = yield* Effect.result(d.initialize(overflow.client, overflow.hello, overflow.trusted));
               expect.soft(result).toMatchObject({
                 _tag: "Failure",
-                failure: { _tag: "LedgerError", reason: "storage" },
+                // A full store is the gateway's own fault, with no lower one beneath it.
+                failure: { _tag: "GatewayError", reason: { _tag: "Storage", cause: undefined } },
               });
               expect.soft(w.sql.exec("SELECT total_changes() total")[0]?.total).toBe(before);
               expect.soft(receipts()).toEqual(full);
@@ -4930,7 +4958,7 @@ describe("P10 refusal records and checked writes", () => {
             (value) =>
               Effect.gen(function* () {
                 const w = yield* world();
-                let replace: Effect.Effect<void, LedgerError> | null = null;
+                let replace: Effect.Effect<void, GatewayError> | null = null;
                 const ledger = Layer.effect(
                   Ledger,
                   Effect.map(Ledger, (real) => ({
@@ -4945,7 +4973,11 @@ describe("P10 refusal records and checked writes", () => {
                           }
 
                           replace = null;
-                          return Stream.concat(Stream.fromEffect(before).pipe(Stream.drain), real.read(stream, after));
+                          // The interruption's gateway fault is no ledger fault: it fails the test as a defect.
+                          return Stream.concat(
+                            Stream.fromEffect(Effect.orDie(before)).pipe(Stream.drain),
+                            real.read(stream, after),
+                          );
                         }),
                       ),
                   })),

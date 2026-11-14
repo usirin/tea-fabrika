@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-reach-doc-names-one-client-and-the-wrong-failures",
+  "date": "2026-11-13",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": "next/packages/libfabrika/src/cloudflare/reach.ts",
+    "line": 4
+  },
+  "says": "reach's doc says it 'turns a failed Connection call into unreachable', but reach is generic over every object client and turns only an RpcCallError into the caller's own mapping; a typed failure passes through unchanged.",
+  "proof": "reach.ts:4 says 'Turns a failed Connection call into `unreachable`'; reach.ts:10-11 catches only Schema.instanceOf(RpcCallError) and maps it with the caller's `unreachable` argument; reach.laws.test.ts:10 and :36 use it with SinkError, not a Connection call, and assert the callee's typed failure passes through unchanged; the plan's S4 routes every sibling call through reach.",
+  "cost": "Readers of S2 to S4 are told reach is Connection-only and swallows every failure, so they may wrap a typed failure again or write a second helper.",
+  "head": "f83e0e9e89387190d505d676380743d1bb2ffdf2",
+  "ticket": "kamp-us/tea-fabrika#502",
+  "pr": "kamp-us/tea-fabrika#1188"
+}

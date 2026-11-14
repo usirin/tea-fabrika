@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-alchemy-fetch-patch-changes-to-http-client-transport-cause",
+  "date": "2026-11-14",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "patches/@alchemy.run__cloudflare@2.0.0-beta.85.patch",
+    "line": 1
+  },
+  "says": "The fetcher patch makes the server overload fail typed, so Alchemy's toHttpClient, which squashes that cause, now puts the HttpServerError wrapper in its TransportError's cause instead of the platform's rejection, a change beyond the proved gap (0054).",
+  "proof": "Patched src/Fetcher.ts: the server overload now maps a rejection to `new HttpServerError({ reason: new InternalError({ ..., cause: error.cause }) })`; toHttpClient (src/Fetcher.ts:211, its catchCause at :234-240) sets `cause: ... squashed` where `squashed = Cause.squash(cause)`, which was the raw rejection when it was a defect and is now the HttpServerError.",
+  "cost": "None in next/ today, since no file uses toHttpClient, the Worker loopback or the container fetcher. An upstream fix built from this patch, or a later user of toHttpClient here, gets a wrapped cause.",
+  "head": "44ef9ab81124879bb45bcba3d209d020b5a37b85",
+  "ticket": "kamp-us/tea-fabrika#502",
+  "pr": "kamp-us/tea-fabrika#1188"
+}

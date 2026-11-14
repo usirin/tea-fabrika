@@ -6,6 +6,7 @@ import { expect, it } from "@effect/vitest";
 import { build as buildOne, type Built } from "@kampus/libfabrika/build";
 import { bundle } from "@kampus/libfabrika/node/build";
 import { Arbitrary, Effect, FileSystem, Path, Schema } from "effect";
+import * as fc from "fast-check";
 import type { Plugin, RolldownPluginOption } from "rolldown";
 import { vi } from "vitest";
 import { build } from "../build.ts";
@@ -35,6 +36,28 @@ type Observed = {
 };
 
 const observations = vi.hoisted(() => ({ builds: [] as Observed[] }));
+
+const moduleReport = (modules: ReadonlyArray<string>): string =>
+  modules.map((id) => `P8 module: ${JSON.stringify(id)}\n`).join("");
+
+it("L7: module reports keep every id on its own line below 4096 characters", () => {
+  // fast-check stresses list size and control characters beyond Effect's default string generator.
+  fc.assert(
+    fc.property(fc.array(fc.string({ maxLength: 300 }), { maxLength: 2000 }), (modules) => {
+      const report = moduleReport(modules);
+      const lines = report === "" ? [] : report.trimEnd().split("\n");
+      expect(lines).toHaveLength(modules.length);
+      expect(lines.every((line) => line.length <= 4096)).toBe(true);
+      expect(lines.map((line) => JSON.parse(line.slice("P8 module: ".length)))).toEqual(modules);
+    }),
+    {
+      seed: 119120,
+      numRuns: 100,
+      // Pinned bug: the old P8 brain log exceeded gh's line reader with its whole module list.
+      examples: [[Array.from({ length: 2000 }, () => "m".repeat(300))]],
+    },
+  );
+});
 
 // This wrapper calls the actual Rolldown API. The only clean-build option change is the observer.
 vi.mock("rolldown", async (original) => {
@@ -229,8 +252,11 @@ it.effect(
       }
 
       const root = path.resolve(import.meta.dirname, "../../../../..");
+      process.stdout.write(`P8 brain: ${new TextEncoder().encode(bytes).byteLength} bytes\n`);
       process.stdout.write(
-        `P8 brain: ${new TextEncoder().encode(bytes).byteLength} bytes; modules=${JSON.stringify(observed.flatMap((g) => g.modules.map((m) => (path.isAbsolute(m.id) ? path.relative(root, m.id) : m.id))))}\n`,
+        moduleReport(
+          observed.flatMap((g) => g.modules.map((m) => (path.isAbsolute(m.id) ? path.relative(root, m.id) : m.id))),
+        ),
       );
       // Plant against the graph of this actual build, never against a substitute entry.
       const planted: Observed = {

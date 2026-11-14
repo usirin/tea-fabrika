@@ -1,0 +1,18 @@
+{
+  "id": "2026-11-13-limit-stop-left-a-step-half-done",
+  "date": "2026-11-13",
+  "lanes": [
+    "kamp-us/tea-fabrika#921"
+  ],
+  "stage": "driver",
+  "kind": "friction",
+  "what": "A coordinator and its tests agent both stopped on the model's usage limit. The tests agent had written most of slice 1's laws in the worktree and committed nothing, while the next coordinator's brief said the worktree held nothing. The next coordinator found the files by their times, read the stopped agent's transcript, and started a fresh tests agent that took over the uncommitted work instead of starting again.",
+  "cause": "A step agent run by hand keeps its work only in the tree until it commits, and nothing records that a step started and did not finish.",
+  "person": false,
+  "primitive": "remember",
+  "fix": "A step that starts writes its start into the lane's state file, so a stop leaves a line saying which step holds uncommitted work in which tree.",
+  "test": "Stop a step agent mid-run and check that the next coordinator's start reads the line and names the tree.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1189"
+  ]
+}

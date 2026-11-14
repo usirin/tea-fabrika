@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-dead-write-scans-the-dead-stream",
+  "date": "2026-11-13",
+  "by": "plan",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/processes/ProcessManager.ts",
+    "line": 445
+  },
+  "says": "In next/, ProcessManager.dead checks for an earlier dead entry by reading the whole <process>/dead stream and searching it for one key, where a lookup by id would read one row.",
+  "proof": "ProcessManager.ts:445 runs [...turn.read(stream, 0)].find((entry) => entry.id === key && entry.by === caller.by) on `${process}/dead`.",
+  "cost": "Each dead letter reads every earlier dead letter of that process, so a process that keeps dead-lettering pays n squared over 2 rows.",
+  "head": "59cb6a311",
+  "ticket": null,
+  "pr": null
+}
