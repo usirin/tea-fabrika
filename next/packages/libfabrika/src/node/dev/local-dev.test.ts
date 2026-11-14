@@ -2,8 +2,8 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { afterEach, describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, FileSystem, Layer, Path, Schema } from "effect";
+import { describe, expect, it } from "@effect/vitest";
+import { Cause, Effect, Exit, FileSystem, Layer, Path, Schema, type Scope } from "effect";
 import * as fc from "fast-check";
 import { processId } from "../../Id.test-support.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
@@ -11,8 +11,15 @@ import { brainOutbox, checkMemory } from "./local-dev.ts";
 
 const SEED = 119120;
 
-const runNode = <A, E>(work: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>) =>
-  Effect.runPromise(work.pipe(Effect.provide(NodeServices.layer)));
+// Each run has its own scope, so the folder a run opens goes away when the run ends (0061).
+const runNode = <A, E>(work: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path | Scope.Scope>) =>
+  Effect.runPromise(work.pipe(Effect.scoped, Effect.provide(NodeServices.layer)));
+
+const home = (prefix: string) =>
+  Effect.acquireRelease(
+    Effect.sync(() => mkdtempSync(join(tmpdir(), prefix))),
+    (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
+  );
 
 const firstStart: typeof BrainEvent.Type = {
   id: "brain-start-1",
@@ -56,17 +63,6 @@ const brainEvent: fc.Arbitrary<typeof BrainEvent.Type> = fc.oneof(
 );
 
 describe("P12 local brain life", () => {
-  const homes: Array<string> = [];
-  const home = () => {
-    const h = mkdtempSync(join(tmpdir(), "p12-l-"));
-    homes.push(h);
-    return h;
-  };
-  afterEach(() => {
-    for (const h of homes.splice(0)) {
-      rmSync(h, { recursive: true, force: true });
-    }
-  });
   it("p81 plant: sample workerd RSS, replace at 500000000, never measure the Node parent", async () => {
     const child = fc.integer({ min: 1 }).filter((pid) => pid !== process.pid);
     const belowCap: [number, number] = [499_999_999, 417];
@@ -104,7 +100,7 @@ describe("P12 local brain life", () => {
       fc.asyncProperty(brainEvent, (event) =>
         runNode(
           Effect.gen(function* () {
-            const folder = home();
+            const folder = yield* home("p12-l-");
             let outbox = yield* brainOutbox(folder);
             yield* outbox.add(event);
             yield* Effect.exit(outbox.flush(() => Effect.fail(new Error("private control failure"))));
@@ -136,18 +132,6 @@ describe("P12 local brain life", () => {
 });
 
 describe("P12 durable brain outbox", () => {
-  const homes: Array<string> = [];
-  const home = () => {
-    const folder = mkdtempSync(join(tmpdir(), "p12-m-"));
-    homes.push(folder);
-    return folder;
-  };
-  afterEach(() => {
-    for (const folder of homes.splice(0)) {
-      rmSync(folder, { recursive: true, force: true });
-    }
-  });
-
   for (const reader of ["pending", "last"] as const) {
     it(`malformed saved ${reader} returns BrainError without a defect`, async () => {
       const schema = reader === "pending" ? BrainEvent : Schema.NonEmptyString;
@@ -155,13 +139,13 @@ describe("P12 durable brain outbox", () => {
         fc.asyncProperty(
           fc.jsonValue().filter((raw) => !Schema.is(schema)(raw)),
           async (raw) => {
-            const folder = home();
-            writeFileSync(
-              join(folder, reader === "pending" ? "brain.pending.jsonl" : "brain.last.json"),
-              JSON.stringify(raw),
-            );
             const exit = await runNode(
               Effect.gen(function* () {
+                const folder = yield* home("p12-m-");
+                writeFileSync(
+                  join(folder, reader === "pending" ? "brain.pending.jsonl" : "brain.last.json"),
+                  JSON.stringify(raw),
+                );
                 const outbox = yield* brainOutbox(folder);
                 return yield* outbox[reader];
               }).pipe(Effect.exit),
@@ -183,75 +167,74 @@ describe("P12 durable brain outbox", () => {
 
   it("FileSystem writes each pending and last file in durable order, including acknowledgement", async () => {
     await fc.assert(
-      fc.asyncProperty(
-        fc.uniqueArray(brainEvent, { minLength: 1, maxLength: 4, selector: (row) => row.id }),
-        async (rows) => {
-          const folder = home();
-          const files = new Map<string, string>();
-          const calls: Array<unknown> = [];
-          const joins: Array<ReadonlyArray<string>> = [];
-          const note = (call: unknown) =>
-            Effect.sync(() => {
-              calls.push(call);
-            });
-          const fs = FileSystem.layerNoop({
-            exists: (path) => Effect.sync(() => files.has(path)),
-            readFileString: (path) => Effect.sync(() => files.get(path) ?? ""),
-            makeDirectory: () => Effect.void,
-            open: (path) =>
-              Effect.acquireRelease(
-                Effect.sync((): FileSystem.File => {
-                  calls.push(["open", path]);
-                  return {
-                    [FileSystem.FileTypeId]: FileSystem.FileTypeId,
-                    stat: Effect.die("unused stat"),
-                    seek: () => Effect.die("unused seek"),
-                    read: () => Effect.die("unused read"),
-                    readAlloc: () => Effect.die("unused readAlloc"),
-                    truncate: () => Effect.die("unused truncate"),
-                    write: () => Effect.die("use writeAll"),
-                    sync: note(["sync", path]),
-                    writeAll: (data) =>
-                      Effect.sync(() => {
-                        const text = new TextDecoder().decode(data);
-                        calls.push(["write", path, text]);
-                        files.set(path, text);
-                      }),
-                  };
-                }),
-                () => note(["close", path]),
-              ),
-            rename: (from, to) =>
+      fc.asyncProperty(fc.uniqueArray(brainEvent, { minLength: 1, maxLength: 4, selector: (row) => row.id }), (rows) =>
+        runNode(
+          Effect.gen(function* () {
+            const folder = yield* home("p12-m-");
+            const files = new Map<string, string>();
+            const calls: Array<unknown> = [];
+            const joins: Array<ReadonlyArray<string>> = [];
+            const note = (call: unknown) =>
               Effect.sync(() => {
-                calls.push(["rename", from, to]);
-                files.set(to, files.get(from)!);
-                files.delete(from);
-              }),
-          });
-          const path = Effect.runSync(Path.Path.pipe(Effect.provide(Path.layer)));
-          const paths = Layer.succeed(Path.Path, {
-            ...path,
-            join: (...parts) => {
-              joins.push(parts);
-              return path.join(...parts);
-            },
-          });
-          const file = join(folder, "brain.pending.jsonl"),
-            last = join(folder, "brain.last.json");
-          const durable = (target: string, text: string) => [
-            ["open", `${target}.tmp`],
-            ["write", `${target}.tmp`, text],
-            ["sync", `${target}.tmp`],
-            ["close", `${target}.tmp`],
-            ["rename", `${target}.tmp`, target],
-            ["open", folder],
-            ["sync", folder],
-            ["close", folder],
-          ];
-          const encoded = (rows: ReadonlyArray<typeof BrainEvent.Type>) =>
-            rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : "");
-          await Effect.runPromise(
-            Effect.scoped(
+                calls.push(call);
+              });
+            const fs = FileSystem.layerNoop({
+              exists: (path) => Effect.sync(() => files.has(path)),
+              readFileString: (path) => Effect.sync(() => files.get(path) ?? ""),
+              makeDirectory: () => Effect.void,
+              open: (path) =>
+                Effect.acquireRelease(
+                  Effect.sync((): FileSystem.File => {
+                    calls.push(["open", path]);
+                    return {
+                      [FileSystem.FileTypeId]: FileSystem.FileTypeId,
+                      stat: Effect.die("unused stat"),
+                      seek: () => Effect.die("unused seek"),
+                      read: () => Effect.die("unused read"),
+                      readAlloc: () => Effect.die("unused readAlloc"),
+                      truncate: () => Effect.die("unused truncate"),
+                      write: () => Effect.die("use writeAll"),
+                      sync: note(["sync", path]),
+                      writeAll: (data) =>
+                        Effect.sync(() => {
+                          const text = new TextDecoder().decode(data);
+                          calls.push(["write", path, text]);
+                          files.set(path, text);
+                        }),
+                    };
+                  }),
+                  () => note(["close", path]),
+                ),
+              rename: (from, to) =>
+                Effect.sync(() => {
+                  calls.push(["rename", from, to]);
+                  files.set(to, files.get(from)!);
+                  files.delete(from);
+                }),
+            });
+            const path = Effect.runSync(Path.Path.pipe(Effect.provide(Path.layer)));
+            const paths = Layer.succeed(Path.Path, {
+              ...path,
+              join: (...parts) => {
+                joins.push(parts);
+                return path.join(...parts);
+              },
+            });
+            const file = join(folder, "brain.pending.jsonl"),
+              last = join(folder, "brain.last.json");
+            const durable = (target: string, text: string) => [
+              ["open", `${target}.tmp`],
+              ["write", `${target}.tmp`, text],
+              ["sync", `${target}.tmp`],
+              ["close", `${target}.tmp`],
+              ["rename", `${target}.tmp`, target],
+              ["open", folder],
+              ["sync", folder],
+              ["close", folder],
+            ];
+            const encoded = (rows: ReadonlyArray<typeof BrainEvent.Type>) =>
+              rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : "");
+            yield* Effect.scoped(
               Effect.gen(function* () {
                 const outbox = yield* brainOutbox(folder);
                 const expected: Array<unknown> = [];
@@ -290,9 +273,9 @@ describe("P12 durable brain outbox", () => {
                 expect(joins).toContainEqual([folder, "brain.pending.jsonl"]);
                 expect(joins).toContainEqual([folder, "brain.last.json"]);
               }),
-            ).pipe(Effect.provide(fs), Effect.provide(paths)),
-          );
-        },
+            ).pipe(Effect.provide(fs), Effect.provide(paths));
+          }),
+        ),
       ),
       {
         seed: SEED,
@@ -310,7 +293,7 @@ describe("P12 durable brain outbox", () => {
       fc.asyncProperty(brainEvent, fc.string({ minLength: 1 }), (event, extra) =>
         runNode(
           Effect.gen(function* () {
-            const folder = home();
+            const folder = yield* home("p12-m-");
             const outbox = yield* brainOutbox(folder);
             const excess = { ...event, [`x-${extra}`]: extra };
             expect(yield* Effect.flip(outbox.add(excess))).toMatchObject({
@@ -334,7 +317,7 @@ describe("P12 durable brain outbox", () => {
       fc.asyncProperty(brainEvent, (event) =>
         runNode(
           Effect.gen(function* () {
-            const folder = home();
+            const folder = yield* home("p12-m-");
             const outbox = yield* brainOutbox(folder);
             yield* outbox.add(event);
             yield* outbox.add(event);
@@ -365,7 +348,7 @@ describe("P12 durable brain outbox", () => {
       fc.asyncProperty(brainEvent, (event) =>
         runNode(
           Effect.gen(function* () {
-            const outbox = yield* brainOutbox(home());
+            const outbox = yield* brainOutbox(yield* home("p12-m-"));
             const before = readdirSync("/dev/fd").sort();
             yield* outbox.add(event);
             expect(readdirSync("/dev/fd").sort()).toEqual(before);

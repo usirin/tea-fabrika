@@ -12,6 +12,25 @@ tsh> trace --ticket 117               another tile: open a step, see its spans
 tsh> ticket --ticket 117              the questions, answered here
 ```
 
+## The rules for a live run
+
+A live run changes a real repository. Each rule was learned from a run.
+
+- The target repository's own merge rules apply. Never merge by hand, never arm auto-merge, never
+  push to its main branch. A change lands only through the ship stage
+  ([0224](../../.decisions/0224-real-repos-keep-their-merge-rules.md)).
+- A pull request that went by hand is not a live run, and neither is what is left once a lane is
+  finished and stuck. Each lands by [the plan's rule](../plan/README.md#how-a-change-lands).
+- No agent approves a pull request or answers a question the lane put to a person: that rule is in
+  [the map](../../AGENTS.md#how-a-change-lands).
+- A dry run is read-only. It starts no agent that could claim or change a real ticket.
+- Leave nothing behind: no claim, no working copy, no half-open pull request. If something is left,
+  say exactly what.
+- In every report and write-up, say which parts were this repo's machine and which were today's
+  fabrika (its agents and its ledger behind the wrapper).
+- Log the run in [`field/`](../../field/README.md) the same day, with dollars and both token
+  measures.
+
 ## The ticket
 
 Ticket 117 is on the app's own tracker, in the owner's app. It is not a GitHub issue.

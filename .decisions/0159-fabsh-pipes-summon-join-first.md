@@ -1,7 +1,7 @@
 ---
 id: 0159
 title: The next thing built in next/ is the four primitives, fabsh, pipes, summon and join, working for real with whatever they need, so fabrika is built inside fabrika, never thin slices of them behind the rest of Tier 1
-status: accepted
+status: amended-in-part by [0181](0181-the-alchemy-port-keeps-a-slot.md)
 date: 2026-11-13
 tags: [plan, tiers, tier-1, fabsh, pipes, summon, join, rooms, order, next]
 ---

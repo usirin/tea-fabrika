@@ -1,6 +1,6 @@
 // P11 adds history without changing P9 Letter. One reader must keep entry timing and build.
 import { DatabaseSync } from "node:sqlite";
-import { afterAll, describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Schema, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
@@ -10,13 +10,11 @@ import { lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Mailbox, type From } from "./Mailbox.ts";
 
-const opened: DatabaseSync[] = [];
-
-afterAll(() => {
-  for (const db of opened) {
-    db.close();
-  }
-});
+// Each world's own scope closes its database (0061).
+const memory = Effect.acquireRelease(
+  Effect.sync(() => new DatabaseSync(":memory:")),
+  (db) => Effect.sync(() => db.close()),
+);
 
 const from: From = {
   by: "SHA256:sender",
@@ -28,17 +26,20 @@ const from: From = {
   build: "build-original",
 };
 
-const world = () => {
-  const db = new DatabaseSync(":memory:");
-  opened.push(db);
-  return Mailbox.layer.pipe(
-    Layer.provideMerge(
-      LedgerSql.layer(nodeSql(db), { reader: "p11-history" }).pipe(
-        Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
+const world = () =>
+  Layer.unwrap(
+    memory.pipe(
+      Effect.map((db) =>
+        Mailbox.layer.pipe(
+          Layer.provideMerge(
+            LedgerSql.layer(nodeSql(db), { reader: "p11-history" }).pipe(
+              Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
+            ),
+          ),
+        ),
       ),
     ),
   );
-};
 
 const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: A[], law: (a: A) => Effect.Effect<void, E, R>) =>
   Effect.gen(function* () {

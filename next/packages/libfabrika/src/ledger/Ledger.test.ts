@@ -18,8 +18,8 @@ import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterAll, describe, expect, it } from "@effect/vitest";
-import { Duration, Effect, Layer, ManagedRuntime, References, Schema, Stream, Tracer } from "effect";
+import { describe, expect, it } from "@effect/vitest";
+import { Duration, Effect, Layer, ManagedRuntime, References, Schema, type Scope, Stream, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
@@ -36,29 +36,27 @@ const PARENT = `in-${Effect.runSync(processId)}-41`;
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const OTHER_TRACE = "5bf92f3577b34da6a3ce929d0e0e4737";
 
-// Every ledger is a fresh node:sqlite file in one temp folder, removed after.
-const folder = mkdtempSync(join(tmpdir(), "p6-ledger-"));
-const opened: Array<DatabaseSync> = [];
-let files = 0;
-const freshPath = (): string => join(folder, `ledger-${++files}.db`);
+// Every ledger is a fresh node:sqlite file in its own temp folder. The scope it is opened in closes
+// the connection, then removes the folder (0061).
+const folder = Effect.acquireRelease(
+  Effect.sync(() => mkdtempSync(join(tmpdir(), "p6-ledger-"))),
+  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+);
 
-const openDb = (path: string): DatabaseSync => {
-  const db = new DatabaseSync(path);
-  opened.push(db);
-  return db;
-};
+const freshPath = folder.pipe(Effect.map((path) => join(path, "ledger.db")));
 
-const fresh = (): Sql => nodeSql(openDb(freshPath()));
+const openDb = (path: string) =>
+  Effect.acquireRelease(
+    Effect.sync(() => new DatabaseSync(path)),
+    (db) =>
+      Effect.sync(() => {
+        if (db.isOpen) {
+          db.close();
+        }
+      }),
+  );
 
-afterAll(() => {
-  for (const db of opened.splice(0)) {
-    if (db.isOpen) {
-      db.close();
-    }
-  }
-
-  rmSync(folder, { recursive: true, force: true });
-});
+const fresh = () => freshPath.pipe(Effect.flatMap(openDb), Effect.map(nodeSql));
 
 type Rung = { readonly to: string; readonly stream: string; readonly rev: number };
 
@@ -75,8 +73,11 @@ const bell = () => {
 
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
-const onSql = (sql: Sql, doorbell: Layer.Layer<Doorbell> = quiet) =>
-  LedgerSql.layer(sql, { reader: READER }).pipe(Layer.provide(doorbell));
+// Takes the store as a scoped Effect, so the layer's own scope holds the open file.
+type Store = Effect.Effect<Sql, never, Scope.Scope>;
+
+const onSql = (sql: Store, doorbell: Layer.Layer<Doorbell> = quiet) =>
+  Layer.unwrap(sql.pipe(Effect.map((sql) => LedgerSql.layer(sql, { reader: READER }).pipe(Layer.provide(doorbell)))));
 
 const line = (over: Partial<Line> = {}): Line => ({
   by: "SHA256:writer-a",
@@ -333,8 +334,8 @@ describe("p18, the ledger suite on Ledger.sql", () => {
     "the file closed and opened again holds every placed entry once, with no gap, and a parked wait still rings",
     () =>
       Effect.gen(function* () {
-        const path = freshPath();
-        const first = openDb(path);
+        const path = yield* freshPath;
+        const first = yield* openDb(path);
         yield* Effect.gen(function* () {
           const ledger = yield* Ledger;
 
@@ -343,7 +344,7 @@ describe("p18, the ledger suite on Ledger.sql", () => {
           }
 
           expect(yield* ledger.wait("b", 5)).toEqual({ _tag: "parked" });
-        }).pipe(Effect.provide(onSql(nodeSql(first))));
+        }).pipe(Effect.provide(onSql(Effect.succeed(nodeSql(first)))));
         first.close();
         const { rang, layer } = bell();
         yield* Effect.gen(function* () {
@@ -359,7 +360,7 @@ describe("p18, the ledger suite on Ledger.sql", () => {
           expect(yield* ledger.append("a", "w-5", line())).toEqual(placed(5, 5));
           expect(yield* ledger.append("b", "w-1", line())).toEqual(placed(6, 1));
           expect(rang).toEqual([{ to: READER, stream: "b", rev: 6 }]);
-        }).pipe(Effect.provide(onSql(nodeSql(openDb(path)), layer)));
+        }).pipe(Effect.provide(onSql(openDb(path).pipe(Effect.map(nodeSql)), layer)));
       }),
   );
 
@@ -446,27 +447,29 @@ describe("p93, seen is bounded by the log's head", () => {
 });
 
 describe("p19, read is a lazy Stream, and arrivedAt is the referee's Clock", () => {
-  it.effect("making the read Stream reads nothing, and take(1) asks for one page only", () => {
-    const { sql, calls } = counting(fresh());
-    const { tracer, ended } = capture();
-    return Effect.gen(function* () {
-      const ledger = yield* Ledger;
+  it.effect("making the read Stream reads nothing, and take(1) asks for one page only", () =>
+    Effect.gen(function* () {
+      const { sql, calls } = counting(yield* fresh());
+      const { tracer, ended } = capture();
+      yield* Effect.gen(function* () {
+        const ledger = yield* Ledger;
 
-      for (let n = 1; n <= 300; n++) {
-        yield* ledger.append("a", `w-${n}`, line());
-      }
+        for (let n = 1; n <= 300; n++) {
+          yield* ledger.append("a", `w-${n}`, line());
+        }
 
-      const before = calls();
-      const stream = ledger.read("a", 0);
-      expect(calls()).toBe(before);
-      expect(ended("ledger.read")).toHaveLength(0);
-      const one = yield* Stream.runCollect(Stream.take(stream, 1));
-      expect(one.map((e) => e.rev)).toEqual([1]);
-      expect(ended("ledger.read")).toHaveLength(1);
-      const all = yield* Stream.runCollect(stream);
-      expect(all.map((e) => e.rev)).toEqual(Array.from({ length: 300 }, (_, i) => i + 1));
-    }).pipe(Effect.provide(onSql(sql)), Effect.withTracer(tracer));
-  });
+        const before = calls();
+        const stream = ledger.read("a", 0);
+        expect(calls()).toBe(before);
+        expect(ended("ledger.read")).toHaveLength(0);
+        const one = yield* Stream.runCollect(Stream.take(stream, 1));
+        expect(one.map((e) => e.rev)).toEqual([1]);
+        expect(ended("ledger.read")).toHaveLength(1);
+        const all = yield* Stream.runCollect(stream);
+        expect(all.map((e) => e.rev)).toEqual(Array.from({ length: 300 }, (_, i) => i + 1));
+      }).pipe(Effect.provide(onSql(Effect.succeed(sql))), Effect.withTracer(tracer));
+    }),
+  );
 
   it.effect("arrivedAt is the Clock's time, and never goes back when the clock does", () =>
     Effect.gen(function* () {
@@ -605,25 +608,26 @@ describe("p20, failures are typed, and pass", () => {
       Effect.forEach(
         ["a", generated],
         (value) =>
-          Effect.promise(async () => {
-            const { sql, arm } = throwingOnce(fresh());
-            const runtime = ManagedRuntime.make(onSql(sql));
-            const append = (id: string) => Ledger.use((ledger) => ledger.append(value, id, line()));
-            expect(await runtime.runPromise(append("w-1"))).toEqual(placed(1, 1));
-            arm();
-            const failed = await runtime.runPromise(Effect.flip(append("w-2")));
-            expect(failed).toBeInstanceOf(LedgerError);
-            expect(failed.reason).toBe("storage");
-            expect(await runtime.runPromise(append("w-3"))).toEqual(placed(2, 2));
-            arm();
-            const read = await runtime.runPromise(Effect.flip(readAll(value)));
-            expect(read.reason).toBe("storage");
-            arm();
-            const waited = await runtime.runPromise(Effect.flip(Ledger.use((ledger) => ledger.wait(value, 9))));
-            expect(waited.reason).toBe("storage");
-            expect((await runtime.runPromise(readAll(value))).map((e) => e.id)).toEqual(["w-1", "w-3"]);
-            await runtime.dispose();
-          }),
+          Effect.flatMap(Effect.map(fresh(), throwingOnce), ({ sql, arm }) =>
+            Effect.promise(async () => {
+              const runtime = ManagedRuntime.make(onSql(Effect.succeed(sql)));
+              const append = (id: string) => Ledger.use((ledger) => ledger.append(value, id, line()));
+              expect(await runtime.runPromise(append("w-1"))).toEqual(placed(1, 1));
+              arm();
+              const failed = await runtime.runPromise(Effect.flip(append("w-2")));
+              expect(failed).toBeInstanceOf(LedgerError);
+              expect(failed.reason).toBe("storage");
+              expect(await runtime.runPromise(append("w-3"))).toEqual(placed(2, 2));
+              arm();
+              const read = await runtime.runPromise(Effect.flip(readAll(value)));
+              expect(read.reason).toBe("storage");
+              arm();
+              const waited = await runtime.runPromise(Effect.flip(Ledger.use((ledger) => ledger.wait(value, 9))));
+              expect(waited.reason).toBe("storage");
+              expect((await runtime.runPromise(readAll(value))).map((e) => e.id)).toEqual(["w-1", "w-3"]);
+              await runtime.dispose();
+            }),
+          ),
         { concurrency: 1, discard: true },
       ),
     { arbitrary: { seed: 119120, runs: 12 } },
@@ -658,13 +662,15 @@ describe("p20, failures are typed, and pass", () => {
               expect(errors.map((error) => error.reason)).toEqual(["storage", "storage", "storage"]);
             }).pipe(
               Effect.provide(
-                onSql({
-                  exec: () => {
-                    throw thrown;
-                  },
-                  transaction: (step) => step(),
-                  size: () => 0,
-                }),
+                onSql(
+                  Effect.succeed<Sql>({
+                    exec: () => {
+                      throw thrown;
+                    },
+                    transaction: (step) => step(),
+                    size: () => 0,
+                  }),
+                ),
               ),
             ),
           { concurrency: 1, discard: true },
@@ -690,39 +696,39 @@ describe("p20, failures are typed, and pass", () => {
     ({ generated }) =>
       Effect.forEach(
         ["{not json", generated],
-        (value) => {
-          const db = openDb(freshPath());
-          // Rows the referee never wrote, planted past it straight in SQLite: one whose body is not
-          // JSON, one whose `_tag` is empty. Every other column holds what an entry may hold.
-          const plant = (rev: number, stream: string, id: string, kind: string, body: string) =>
-            db
-              .prepare(
-                `INSERT INTO entries (rev, stream, pos, id, "arrivedAt", "by", "for", "sentAt", seen,
+        (value) =>
+          Effect.flatMap(Effect.flatMap(freshPath, openDb), (db) => {
+            // Rows the referee never wrote, planted past it straight in SQLite: one whose body is not
+            // JSON, one whose `_tag` is empty. Every other column holds what an entry may hold.
+            const plant = (rev: number, stream: string, id: string, kind: string, body: string) =>
+              db
+                .prepare(
+                  `INSERT INTO entries (rev, stream, pos, id, "arrivedAt", "by", "for", "sentAt", seen,
 							parent, "traceId", build, "_tag", body) VALUES (?, ?, 1, ?, 0, 'SHA256:writer-a', 'owner', 'x', 0,
 							NULL, ?, 'b-7c1d073', ?, ?)`,
-              )
-              .run(rev, stream, id, TRACE, kind, body);
-          return Effect.gen(function* () {
-            const ledger = yield* Ledger;
-            expect(yield* ledger.append("ok", "w-1", line())).toEqual(placed(1, 1));
-            plant(2, "a", "w-2", "saved", value);
-            plant(3, "b", "w-3", "", JSON.stringify({ note: "n-7f3a" }));
-            const errors = [
-              yield* Effect.flip(readAll("a")),
-              yield* Effect.flip(readAll("b")),
-              yield* Effect.flip(ledger.append("a", "w-2", line())),
-              yield* Effect.flip(ledger.append("b", "w-3", line())),
-            ];
+                )
+                .run(rev, stream, id, TRACE, kind, body);
+            return Effect.gen(function* () {
+              const ledger = yield* Ledger;
+              expect(yield* ledger.append("ok", "w-1", line())).toEqual(placed(1, 1));
+              plant(2, "a", "w-2", "saved", value);
+              plant(3, "b", "w-3", "", JSON.stringify({ note: "n-7f3a" }));
+              const errors = [
+                yield* Effect.flip(readAll("a")),
+                yield* Effect.flip(readAll("b")),
+                yield* Effect.flip(ledger.append("a", "w-2", line())),
+                yield* Effect.flip(ledger.append("b", "w-3", line())),
+              ];
 
-            for (const error of errors) {
-              expect(error).toBeInstanceOf(LedgerError);
-            }
+              for (const error of errors) {
+                expect(error).toBeInstanceOf(LedgerError);
+              }
 
-            expect(errors.map((error) => error.reason)).toEqual(["bad_row", "bad_row", "bad_row", "bad_row"]);
-            // The rows that do decode still read.
-            expect((yield* readAll("ok")).map((e) => e.id)).toEqual(["w-1"]);
-          }).pipe(Effect.provide(onSql(nodeSql(db))));
-        },
+              expect(errors.map((error) => error.reason)).toEqual(["bad_row", "bad_row", "bad_row", "bad_row"]);
+              // The rows that do decode still read.
+              expect((yield* readAll("ok")).map((e) => e.id)).toEqual(["w-1"]);
+            }).pipe(Effect.provide(onSql(Effect.succeed(nodeSql(db)))));
+          }),
         { concurrency: 1, discard: true },
       ),
     { arbitrary: { seed: 119120, runs: 12 } },
@@ -737,24 +743,26 @@ describe("p20, failures are typed, and pass", () => {
 // The plan's "what this piece records": P6 gives `Sql.size()` and its Node half, page_count times
 // page_size, for P37's hourly size row (how close the one object is to 10 GB; experiment 224).
 describe("Sql.size on node:sqlite, the object's bytes for P37's size row", () => {
-  it.effect("answers the file's bytes, positive once the ledger is used, and grows with writes", () => {
-    const path = freshPath();
-    const sql = nodeSql(openDb(path));
-    return Effect.gen(function* () {
-      const ledger = yield* Ledger;
-      yield* ledger.append("a", "w-0", line());
-      const first = sql.size();
-      expect(first).toBeGreaterThan(0);
-      // With SQLite's default rollback journal, the file holds exactly page_count pages.
-      expect(first).toBe(statSync(path).size);
+  it.effect("answers the file's bytes, positive once the ledger is used, and grows with writes", () =>
+    Effect.gen(function* () {
+      const path = yield* freshPath;
+      const sql = nodeSql(yield* openDb(path));
+      yield* Effect.gen(function* () {
+        const ledger = yield* Ledger;
+        yield* ledger.append("a", "w-0", line());
+        const first = sql.size();
+        expect(first).toBeGreaterThan(0);
+        // With SQLite's default rollback journal, the file holds exactly page_count pages.
+        expect(first).toBe(statSync(path).size);
 
-      for (let n = 1; n <= 50; n++) {
-        yield* ledger.append("a", `w-${n}`, line({ body: { note: "x".repeat(4_000) } }));
-      }
+        for (let n = 1; n <= 50; n++) {
+          yield* ledger.append("a", `w-${n}`, line({ body: { note: "x".repeat(4_000) } }));
+        }
 
-      const after = sql.size();
-      expect(after).toBeGreaterThan(first + 50 * 4_000);
-      expect(after).toBe(statSync(path).size);
-    }).pipe(Effect.provide(onSql(sql)));
-  });
+        const after = sql.size();
+        expect(after).toBeGreaterThan(first + 50 * 4_000);
+        expect(after).toBe(statSync(path).size);
+      }).pipe(Effect.provide(onSql(Effect.succeed(sql))));
+    }),
+  );
 });

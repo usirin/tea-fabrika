@@ -1,7 +1,7 @@
 ---
 id: 0129
 title: AGENTS.md becomes a short map, each rule leaving it by one of three moves, after the decided rules have moved and one test of long against short has run
-status: accepted
+status: amended-in-part by [0180](0180-instruction-files-take-quick-edits.md)
 date: 2026-11-11
 tags: [agents-md, agents, docs, rules, lint, decisions, discovery, map]
 ---
@@ -54,7 +54,8 @@ decision file, which empties much of `AGENTS.md` by itself.
 - What stays: what the repo is, the table of where to read and where to write, decision discovery,
   the three checks and the narrowest-check table, the public repo rules, and the laptop caps.
 
-**The order**
+**The order** (withdrawn by [0180](0180-instruction-files-take-quick-edits.md): the cut lands with
+no test first; the rest of this file still holds)
 
 1. 0115's move of decided rules lands first.
 2. One test runs: the same step, on the same tickets, with the long file and with a short one, and

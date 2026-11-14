@@ -24,6 +24,14 @@ Use the build skill for ticket 277, door fixes, next/. Plan at ../door-PLAN.md.
 Laws d1 to d3 are red. This round: make them green in door.ts, answer.ts and hello.ts.
 ```
 
+A brief does not repeat what every agent reads in
+[`AGENTS.md`, "Finish your task"](../../../AGENTS.md#finish-your-task): finish the whole task, the routine steps
+that need no approval, and a report a reader with no context can follow.
+
+When you answer an agent's ask, resume an agent or send work back, say exactly what to do: the file, the
+fault, the input that shows it and what done looks like, as [the recheck message](#when-a-review-sends-back)
+does. A bare "continue" or "go" makes the agent guess what you meant, and a wrong guess costs a round.
+
 A brief never prints npm, pnpm or environment settings (owner, 2026-11-08), not even to show a
 step where they come from. A run once printed a token to a local log that way. Name the setting
 and say where it is set; never echo its value. `pnpm config list` and `env` stay out of briefs.
@@ -51,7 +59,8 @@ Do not add a marker, key or readable file as proof of session identity.
 
 ## Review brief template
 
-Use this for the whole diff, including a re-review after fixes:
+Use this for the whole diff, including a re-review by a fresh reviewer. A recheck after a fix round
+uses [the recheck message](#when-a-review-sends-back) instead:
 
 ```text
 Use the review skill for the ticket below.
@@ -88,6 +97,82 @@ End with exactly one answer: line, as the last line.
 Keep the four reason labels in the review skill. A missed case in a named class checks the law;
 it does not reopen every test's merits.
 
+## When a review sends back
+
+A fix round is one agent and a recheck, and a lane stops at its second sent-back review
+([0177](../../../.decisions/0177-fix-round-is-one-agent.md),
+[0176](../../../.decisions/0176-second-send-back-stops-lane.md)).
+
+```mermaid
+flowchart TD
+  review["a review answers send build or send tests"] --> count{"the lane's second sent-back review?"}
+  count -- "no" --> fix["start one fix agent"]
+  fix --> recheck["resume the same reviewer"]
+  recheck --> review
+  count -- "yes" --> stop["stop the lane"]
+  stop --> left{"does what is left break the slice's main job?"}
+  left -- "no" --> cut["land what works, file the rest as a ticket"]
+  left -- "yes" --> owner["take it to the owner"]
+```
+
+1. **Count the lane's sent-back reviews.** The lane's state file has each step's outcome. `chain.ts`
+   does not count them yet, so you do.
+2. **On the first,** start one fix agent with the brief below. It writes the law and the fix
+   together: no tests step and no build step. Then resume the same reviewer, with what it already
+   read, and send it the recheck message below. Never start a fresh reviewer for a recheck.
+3. **On the second,** stop the lane. Land what works, file the rest as a tracker ticket
+   (`tracker_file`), and write the lane's field note in `field/notes/`. Take it to the owner only
+   if what is left breaks the slice's main job.
+
+A review that answers `send plan` is not a fix round: it goes back to the plan step, as today.
+The first pass is unchanged: plan, tests, build and one review, each by its own fresh agent.
+
+The fix agent's brief:
+
+```text
+Fix round for ticket <id>, <title>, <today's tooling or next/>.
+You do the tests step and the build step together, for the faults below only. Use the tests skill
+for how a law is written and the build skill for how product code is written.
+Branch: fabrikalfa/<name>, in the worktree <path>. Approved plan: <path>. Reviewed head: <full SHA>.
+
+Faults the review named:
+1. <path:line>: <what is wrong>. Input that shows it: <the call, the Msgs or the value>.
+2. <path:line>: <what is wrong>. Input that shows it: <the call, the Msgs or the value>.
+
+Write the law and the fix together, as small as the fault. For each fault, write its law, or
+extend the law that covers its class. See it fail on the reviewed head for that fault. Then fix
+the product code until it passes. Change nothing these faults do not need.
+Commit the law as the tests step and the fix as the build step, with the step-commit skill.
+
+Laptop caps: tests on a narrow path only, as `nice -n 19 pnpm exec vitest run --maxWorkers=1 <path>`,
+never the full suite. `pnpm lint` once. At most one `pnpm typecheck`, at the very end. One Electron
+app at a time. Every wait or poll loop runs in the background.
+
+Finish the whole round. An error, a timeout or a failing tool is an ordinary obstacle: work through
+it yourself. Stop only for a real blocker, such as a fault that needs a new design call, and say
+exactly what it is. End with each fault, its law at file:line, how you saw the law fail and then
+pass, and the new head's full SHA. Do not end with a list of what is left or an offer to continue.
+```
+
+The recheck message, sent to the resumed reviewer:
+
+```text
+Recheck for ticket <id>. A fix round answered your review.
+New head: <branch and full SHA>. The fix is <reviewed SHA>..<new SHA>.
+
+Faults you named:
+1. <path:line>: <the fault, in your words>
+2. <path:line>: <the fault, in your words>
+
+Check the fix for these faults and the new law's reach: read each line the fix changed and what
+calls it, and plant a break, by reading or in a scratch copy, to see that the new law reaches the
+fix. If you now think one of your findings was wrong, say so.
+A new fault you notice outside the fix is a finding row or ticket text for the lead. It sends the
+lane back only if it breaks the slice's main job.
+End with exactly one answer: line, as the last line: `answer: done <why>`, or
+`answer: send build <why>` (or `send tests`, `send plan`).
+```
+
 ## Lane brief template
 
 Use this when a lane agent runs a lane's steps for you. Its last act is `land.ts ready`; the lead
@@ -100,7 +185,7 @@ Approved plan: <path, including amendments>. Lane brief: <path>.
 Run each step through drive.ts or chain.ts, read its answer, and send fixes to the step that owns the file.
 Commit a lead file (field rows, a plan row, a lockfile) unsigned, with
 `stepcommit.sh --commit-only lead <ticket> <subject> <files>`, and keep its sha.
-When the review says merge-ready: write the PR body file (its first line the title, and a
+When the review says merge-ready: write the PR body file with the pr skill (its first line the title, and a
 `fabrika close ticket <id>` line when the PR finishes the ticket), save loosening.sh's output as a
 file, and end with
 `node .agents/skills/lead/scripts/land.ts ready <lane> --tree <path> --body <file> --loosening <file> --plan <path> [--lead <sha>]...`.
@@ -130,11 +215,13 @@ Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-cod
   the branch, the signed heads, what ran and what is next. Nothing is carried in an agent's
   memory. A PR still merges only after every step ran, each by its own agent (plan, tests, build,
   one review saying merge-ready), with CI green and the leak grep clean. No step is ever
-  skipped. Only a new design call or an exam read that does not meet the bar (step 9) comes back to
+  skipped. A fix round after a sent-back review is the one exception: one agent does the tests and
+  build work, and the same reviewer is resumed ([above](#when-a-review-sends-back)). Only a new design call or an exam read that does not meet the bar (step 9) comes back to
   the lead. `chain.ts` (tracker ticket 341) chains the mechanical steps in code and starts an
   agent only where judgment is needed ([below](#run-a-whole-lane-with-chaints)). *It said (owner, 2026-11-08): one driver per ticket, start
   to finish. One driver ran for 11 hours, which was wasteful.*
-- **A step agent never writes another step's code or tests** (owner, 2026-11-08). The agent
+- **A step agent never writes another step's code or tests** (owner, 2026-11-08), except the fix
+  agent of a fix round (0177). The agent
   that hands work along fetches, reads the report, and runs what a Codex box cannot: e2e runs and
   screenshots.
 - Plan every row as soon as its tier opens, and start each test writer when its plan is approved.
@@ -194,7 +281,7 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   skill named in its prompt. Its `stream-json` goes to the events file, and `clauderow.ts` writes
   the field row with tokens and list-price dollars.
 - Claude runs under `sandbox-exec`: it cannot read `~/.fabrika/step-keys`, the leak words or
-  `~/.codex`, and it writes only its box and caches. It commits with plain git. drive then signs its
+  `~/.codex`, and it writes only its box and caches. It commits nothing: drive commits and signs its
   work as one commit through `stepcommit.sh`, with main's own signer, never the box's code.
 - A mutation step's Stryker run happens first, in a container (`mutbox.ts`, 0045): drive runs it on
   the step's start head with the tests the brief names on one line, `RELATED=<paths>`, and with
@@ -331,7 +418,8 @@ scripts, stop the lane and start it again with `--start <step>`; it prints the c
   `## tests`, `## build` and `## review`, written as a step brief is written today
   (the review one keeps the template above, minus the two head lines), and `## pr`: the pull
   request's description, its first line the title, with the `fabrika close ticket <N>` line when
-  the PR finishes the ticket. Every section is required. A lane has no `## mutation` section
+  the PR finishes the ticket, written as
+  [the pr skill](../pr/SKILL.md#a-lanes-description-is-written-twice) says. Every section is required. A lane has no `## mutation` section
   (0066); an older brief that has one is accepted and that section is not run, except by
   `--start mutation`, which needs it. Each step's brief is the shared head, its
   section, and the lane's facts the chain fills in: the round, where the step starts, each step's
@@ -369,6 +457,9 @@ scripts, stop the lane and start it again with `--start <step>`; it prints the c
   scope or drop. Tool stucks never count. Put `Estimate: <n> steps, $<d>` in the plan or the lane
   brief: twice it is the backstop and replaces `MaxSteps`. With none, the chain prints that it
   skipped the backstop. Never put these numbers in a step's brief.
+  Since [0176](../../../.decisions/0176-second-send-back-stops-lane.md) a lane stops at its second
+  sent-back review, whatever this window says. The chain does not count that yet, so
+  [the lead does](#when-a-review-sends-back). The backstop stands.
 - **Judgment** (an `ask:lead:question`, or a `stuck`): the chain runs one turn in the main
   checkout on the agents package's read-only Codex row, which cannot change the checkout, with the
   lane's state file and the step's report in its prompt. It answers one JSON object: `send` with a step and a note runs that step again
@@ -476,12 +567,17 @@ visible, and never weaken the rules to hide this message.
 5. **Run the steps in order,** in the background: tests, build, review (no mutation step, 0066). Each runs
    through `drive.ts`, except a step with Electron or socket work, which a Claude agent runs
    (above). No builder starts before tests that exist. Each brief names its skill.
+   Never start a review while a host-only law the plan names has not passed on a real machine
+   ([0178](../../../.decisions/0178-host-only-laws-run-first.md)). The build runs it, or you run it right after
+   the build (step 7). On the owner's Mac it runs only after you have read every line it can reach
+   that signals a process or calls launchd, and the owner has said yes (0178).
    box.sh run --step checks order and slots, and saves the run row.
 6. **After each step:** read drive's last line, the report and the diff, and log the run the same day:
    one row file in `field/runs/` (`fieldrow.py` for Codex, `clauderow.ts` for a Claude agent, a
    driver included, once it has finished, or drive's `BOXES/<lane>-rows.jsonl`, each saved with
    `fieldfile.ts runs`), and one note file in `field/notes/` for anything that
-   broke, cost too much, needed a person or worked well. Send a fix to the step that owns the file.
+   broke, cost too much, needed a person or worked well. Send a fix to the step that owns the file;
+   when a review sent the lane back, follow [When a review sends back](#when-a-review-sends-back).
    A test that breaks on one machine or in a box leans on that machine: send it to tests to remove
    the dependency, never to catch the error ([0052](../../../.decisions/0052-tests-never-depend-on-the-machine.md)).
    Step-commit checks file owners.
@@ -489,11 +585,19 @@ visible, and never weaken the rules to hide this message.
    that would have caught it. Running the steps by hand is how `next/`'s pipeline learns.
 7. **Run what the box cannot,** yourself: Electron e2e and screenshots. One Electron app at a time,
    each run with its own short `FABRIKA_HOME`, never `FABRIKA_FOREGROUND=1`. Look at every shot.
+   A host-only law runs here before the first review, never at the end of the lane (0178). Before
+   it runs on the owner's Mac, read every line it can reach that signals a process or calls
+   launchd, and work out the worst target each could get: a pid or group of 0, 1 or -1 reaches
+   every process the owner has, and so does `launchctl bootout` of a whole domain. Then ask the
+   owner, and run it only on a yes. On the
+   real machine a test touches only its own label, files and processes: its own temp home and its
+   own test label under launchd, no focus taken, and nothing left behind.
 8. **Ready to land.** A lane agent never signs as lead, pushes, opens the pull request or adds
    it to the merge queue: the permission check refuses a subagent the lead key, and the lane stops
    ([0056](../../../.decisions/0056-lead-runs-a-refused-step-itself.md), ticket 652). Its last act
    is `land.ts ready` ([the template](#lane-brief-template)). The PR body file says which parts were
-   this repo's steps, what ran each one, and the dollars.
+   this repo's steps, what ran each one, and the dollars, in the order
+   [the pr skill](../pr/SKILL.md) gives.
 9. **Land it** by [the plan's rule](../../../docs/plan/README.md#how-a-change-lands): the review says
    `merge-ready`, CI is green (e2e included), and you read the diff and run the leak grep.
    Every new or changed law is a property, or an example labeled vector, format, pinned or
@@ -666,7 +770,9 @@ commit does not clear it.
 ## Never
 
 - Write a step's work, run git inside a box, or reset a branch to take a step's work over.
-- Rebase, force-push or `gh pr update-branch`, except a stacked child moved with `gh stack` (0004).
+- Rebase, force-push or `gh pr update-branch`, except a stacked child moved with `gh stack` (0004): a
+  rewrite breaks every signed link and can drop a push another session made. Bring a branch up to date
+  with a merge of main.
 - Read, print or copy a key. Leave a box, a claim or a half-open pull request behind without saying so.
 
 ## When a run teaches something
