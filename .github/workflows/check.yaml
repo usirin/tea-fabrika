@@ -46,6 +46,8 @@ jobs:
   # comments; else all of next/. The parser's pass (`same`) proves the second case. It runs only when
   # every changed line looks like a comment (`probe`), and its install and run may fail without
   # failing changes: then the first pass's `next` and `filter` stand, which run all of next/.
+  # `readers` is those reader paths whatever changed, changes.mjs's own list, for the next job's
+  # readers step.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -59,6 +61,7 @@ jobs:
       field: ${{ steps.diff.outputs.field }}
       build: ${{ steps.diff.outputs.build }}
       today: ${{ steps.diff.outputs.today }}
+      readers: ${{ steps.diff.outputs.readers }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -473,6 +476,16 @@ jobs:
           SHARD: ${{ matrix.shard }}/5
           FILTER: ${{ needs.changes.outputs.filter || 'next/' }}
           CHANGED: ${{ github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}
+      # When CHANGED narrows the step above, the reader tests run whole on leg 1. They read files as
+      # text, so `--changed`, which follows imports, drops them, and a change only they catch would
+      # first fail in the merge queue. READERS is changes' `readers`, changes.mjs's own list. An empty
+      # list, when changes failed, would run every test, so the step skips then. The merge queue and
+      # main run the whole suite, readers included, so it never runs there.
+      - name: readers
+        if: ${{ !cancelled() && matrix.shard == '1' && github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/' && needs.changes.outputs.readers != '' }}
+        env:
+          READERS: ${{ needs.changes.outputs.readers }}
+        run: pnpm exec vitest run $READERS --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/readers.json"
       # `--with-deps` runs apt itself, with no limit. apt.sh refreshes the lists first, on a mirror
       # that answers, the same way as the test job's apt step.
       - name: chromium
@@ -487,10 +500,12 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}/2
           CHANGED: ${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}
-      # After both test steps, so a vitest leg and an e2e leg each feed it their own next.json.
+      # After every test step, so a vitest leg and an e2e leg each feed it their own next.json, and
+      # leg 1 its readers.json when the readers step ran. A report a leg did not write gets one
+      # "report unavailable" line and no advice.
       - name: shard times
         if: ${{ !cancelled() }}
-        run: node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"
+        run: node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json" "$RUNNER_TEMP/readers.json"
       # Tier 1, P35: each edge comment this pull request adds, one line with its reason, for the owner
       # (docs/direction/no-promises.md). In the step summary and as a note on that line of the diff.
       # It never blocks on an edge: it exits 0, or 2 only when it could not read a file.

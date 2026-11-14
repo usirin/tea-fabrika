@@ -209,7 +209,8 @@ export const lintWorkflow = (text: string): string[] => {
     outputs = map(changes["outputs"]);
   require(!("if" in changes) && !("needs" in changes), "changes starts on every event");
 
-  for (const name of ["check", "typecheck", "test", "e2e", "field", "build", "today"]) {
+  // `readers` is the first pass's alone: the reader list, whatever changed.
+  for (const name of ["check", "typecheck", "test", "e2e", "field", "build", "today", "readers"]) {
     require(compact(outputs[name]) === `steps.diff.outputs.${name}`, `changes exposes ${name}`);
   }
 
@@ -422,14 +423,22 @@ export const lintWorkflow = (text: string): string[] => {
   // pull request's change reaches, and every one in the queue and on main.
   const e2eCommand = `node next/apps/fabrika/e2e.ts $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
   const changedOnPullRequests = `\${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
-  // The vitest step's own: empty when the filter names the reader tests too. They read files as
-  // text, so `--changed`, which follows imports, would drop them; there the filter alone decides.
-  const changedUnlessReaders = `\${{ github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
-  const adviceCommand = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"';
+  // When the vitest step narrows: a pull request whose filter is all of next/. The vitest step's
+  // CHANGED is empty when the filter names the reader tests too. They read files as text, so
+  // `--changed`, which follows imports, would drop them; there the filter alone decides.
+  const narrows = "github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'";
+  const changedUnlessReaders = `\${{ ${narrows} && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
+  // Under that same narrowing the reader tests run whole, once, on leg 1, from changes' `readers`.
+  // An empty list would run every test, so the step needs one.
+  const readersCommand =
+    'pnpm exec vitest run $READERS --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/readers.json"';
+  const readersCondition = `!cancelled() && matrix.shard == '1' && ${narrows} && needs.changes.outputs.readers != ''`;
+  const adviceCommand = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json" "$RUNNER_TEMP/readers.json"';
   // Only these whole scripts are allowed; shell aliases and alternate paths cannot add work.
   const allowed = [
     "pnpm install --frozen-lockfile",
     nextCommand,
+    readersCommand,
     adviceCommand,
     chromium,
     e2eCommand,
@@ -439,7 +448,7 @@ export const lintWorkflow = (text: string): string[] => {
   require(nextRuns.length === allowed.length &&
     allowed.every(
       (command) => nextRuns.filter((run) => run === command).length === 1,
-    ), "next runs exactly its install and five approved commands once each");
+    ), "next runs exactly its install and six approved commands once each");
   const testStep = nextSteps.find((s) => s["run"] === nextCommand);
   require(testStep !== undefined, "next runs all its own tests with --shard and no exclusions");
   const shard = map(testStep?.["env"])["SHARD"];
@@ -472,18 +481,29 @@ export const lintWorkflow = (text: string): string[] => {
       expected, `next's ${name} step narrows with --changed on pull requests only`);
   }
 
-  // E3. Both kinds of leg write next.json, so the advice comes after both test steps.
+  // The readers step takes the list changes printed, never a copy of it.
+  const readersStep = nextSteps.find((s) => s["run"] === readersCommand);
+  require(Object.keys(map(readersStep?.["env"])).length === 1 &&
+    compact(map(readersStep?.["env"])["READERS"]) ===
+      "needs.changes.outputs.readers", "next's readers step takes its paths from changes' readers alone");
+
+  // E3. Both kinds of leg write next.json and leg 1 readers.json, so the advice comes after every
+  // test step.
   const advice = nextSteps.find((s) => s["run"] === adviceCommand);
   require(testStep !== undefined &&
     e2eStep !== undefined &&
+    readersStep !== undefined &&
     advice !== undefined &&
     nextSteps.indexOf(testStep) < nextSteps.indexOf(advice) &&
     nextSteps.indexOf(e2eStep) < nextSteps.indexOf(advice) &&
+    nextSteps.indexOf(readersStep) < nextSteps.indexOf(advice) &&
     compact(advice["if"]) ===
-      "!cancelled()", "next timing advice follows both test steps even after failure, unless cancelled");
+      "!cancelled()", "next timing advice follows every test step even after failure, unless cancelled");
 
-  // E2 and E3. Chromium and the end-to-end runner only on the e2e legs, edges only on leg 1.
+  // E2 and E3. Chromium and the end-to-end runner only on the e2e legs, edges only on leg 1, and
+  // the readers only on leg 1 when the vitest step narrows.
   for (const [command, leg, condition] of [
+    [readersCommand, "leg 1 when CHANGED narrows", readersCondition],
     [chromium, "the e2e legs", `${ON_E2E} && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''`],
     [e2eCommand, "the e2e legs", ON_E2E],
     [
