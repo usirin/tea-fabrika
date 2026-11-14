@@ -219,8 +219,16 @@ export const MetricPoint = Schema.TaggedStruct("metric", {
  */
 export type MetricPoint = typeof MetricPoint.Type;
 
-/** A refusal counted instead of keeping the span or its measurement. */
-export { REFUSED } from "../SpanTag.ts";
+export {
+  /**
+   * Tag name for a refusal counted instead of keeping the span or its measurement. Its value is
+   * one of `Refused`; the sink counts any other value as `other`.
+   *
+   * @stability unstable
+   * @category constants
+   */
+  REFUSED,
+} from "../SpanTag.ts";
 
 /**
  * Schema for the closed value a counted refusal is split by. The sink counts any other value of
