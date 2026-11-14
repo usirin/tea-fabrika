@@ -56,7 +56,8 @@ has no hits, and the docs rule turns on the same way.
   nobody has to follow makes the code built on it a foundation that lies.
 - [0168](0168-old-lint-breaks-are-fixed.md) decided the same day that no list file takes new
   entries, and that a new rule turns on folder by folder as each folder reaches zero. This
-  decision follows it: the old hits are fixed, never listed.
+  decision builds it for these rules: the old hits are fixed, never listed, and 0168 stands
+  unchanged.
 - The comment fills of 2026-11-13 brought ten `libfabrika` folders to zero for the docs rule,
   `fabrika/jsdocs`, which was on for only a few folders.
 
