@@ -2,10 +2,10 @@
 // usage: node experiments/289-desk-move-first/desk-latency.mjs <package folder whose node_modules has miniflare> [rtt ms] [seconds]
 // e.g. packages/fabrika 20 60. Loopback only, no key. Prints JSON with the numbers.
 import { createRequire } from "node:module";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 
-const req = createRequire(join(process.argv[2], "package.json"));
+const req = createRequire(join(resolve(process.argv[2]), "package.json"));
 const RTT = Number(process.argv[3] ?? 0); // simulated network round trip, ms, half each way
 const SECONDS = Number(process.argv[4] ?? 60);
 const later = (f) => (RTT > 0 ? setTimeout(f, RTT / 2) : f());
