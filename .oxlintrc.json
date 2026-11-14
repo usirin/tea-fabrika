@@ -2022,11 +2022,29 @@
     },
     {
       // E6 (0023, 0120): every public export of a next/ library has an Effect-shaped doc block, and
-      // its file a module block (`oxlint-plugins/jsdocs.ts`). On for the folders at zero; each fill
-      // adds its folder here when it lands, and the list ends as `next/packages/*/src/**` (Plan B,
-      // B2). `since` stays `absent` until libfabrika's first release (0118).
-      "files": ["next/packages/libfabrika/src/ci/**", "next/packages/libfabrika/src/codehost/**"],
+      // its file a module block (`oxlint-plugins/jsdocs.ts`). It blocks in every folder at zero, so a
+      // new folder blocks from its first file (0523, ticket 948). `since` stays `absent` until
+      // libfabrika's first release (0118).
+      "files": ["next/packages/*/src/**"],
       "rules": { "fabrika/jsdocs": ["error", { "since": "absent" }] }
+    },
+    {
+      // Still advising here until a fill brings the folder to zero (0523, 0168). Delete a line when
+      // its folder reaches zero: a whole `pnpm lint` fails until you do. It sits after the block
+      // above and before the "off" block below, so a warn line never turns the rule on for a file
+      // that is not public.
+      "files": [
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/cloudflare/**",
+        "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/node/**",
+        "next/packages/libfabrika/src/telemetry/**",
+        "next/packages/libfabrika/src/transport/**",
+        "next/packages/tuval/src/*",
+        "next/packages/tuval/src/browser/**",
+        "next/packages/tuval/src/window/**"
+      ],
+      "rules": { "fabrika/jsdocs": ["warn", { "since": "absent" }] }
     },
     {
       // Not public, so no doc block is asked: `internal/` (the modules rule asks `@internal` there),

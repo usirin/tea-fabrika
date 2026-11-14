@@ -389,8 +389,8 @@ describe("each rule refuses what it is there to refuse", () => {
       "no-node-imports",
       // libfabrika's modules are planted at their real paths in modules.test.ts.
       "modules",
-      // E6's docs rule is on for listed libfabrika folders only: jsdocs.test.ts generates its files
-      // and plants one per left-out kind at real paths with the real lint config.
+      // E6's docs rule is on for every next/packages folder: jsdocs.test.ts generates its files and
+      // plants one per left-out kind at real paths with the real lint config.
       "jsdocs",
       // A service's written type and its static members are planted at next/ paths with the real
       // lint config in written-service-type.test.ts and no-static-layer.test.ts.

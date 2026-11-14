@@ -1,5 +1,6 @@
 // Ticket 930 (0523): the five old advice rules block wherever their folder is at zero, and advise
-// only where a warn override at the end of the config names their folder. These laws read
+// only where a warn override at the end of the config names their folder. Ticket 948 adds the docs
+// rule, `fabrika/jsdocs`, the same way: six in all. These laws read
 // `advice.ts` in process, and run the real `lint.ts` and oxlint in a small temp repo of their own.
 import { spawnSync } from "node:child_process";
 import {
@@ -32,6 +33,9 @@ const FIVE = [
   "fabrika(prefer-schema-arbitrary)",
 ] as const;
 
+/** The six: the five and the docs rule (ticket 948). */
+const SIX = [...FIVE, "fabrika(jsdocs)"] as const;
+
 const OTHERS = [
   "fabrika(service-id)",
   "eslint(no-debugger)",
@@ -39,21 +43,21 @@ const OTHERS = [
   "eslint(no-restricted-imports)",
 ];
 
-describe("T930 L1 a fire advises only when it is one of the five and graded a warning", () => {
-  it("is true exactly for the five at severity warning, and false for an error or any other rule", () => {
+describe("T930 L1 a fire advises only when it is one of the six and graded a warning", () => {
+  it("is true exactly for the six at severity warning, and false for an error or any other rule", () => {
     fc.assert(
       fc.property(
         fc.record(
           {
             // A missing key is drawn through `requiredKeys: []`: oxlint's JSON never holds an explicit undefined.
-            code: fc.constantFrom<string>(...FIVE, ...OTHERS),
+            code: fc.constantFrom<string>(...SIX, ...OTHERS),
             severity: fc.constantFrom("warning", "error"),
           },
           { requiredKeys: [] },
         ),
         (fire) => {
-          const five = FIVE.some((code) => code === fire.code);
-          expect(advises(fire)).toBe(five && fire.severity === "warning");
+          const six = SIX.some((code) => code === fire.code);
+          expect(advises(fire)).toBe(six && fire.severity === "warning");
         },
       ),
       runs,
@@ -78,7 +82,7 @@ describe("T930 L3 a warn line is stale when no advice fire of its rule is in its
                 fc.record({
                   folder: fc.constant(folder),
                   kind: fc.constantFrom<Kind>("tree", "files", "file"),
-                  rule: fc.constantFrom(...FIVE),
+                  rule: fc.constantFrom(...SIX),
                 }),
               ),
             ),
@@ -87,7 +91,7 @@ describe("T930 L3 a warn line is stale when no advice fire of its rule is in its
                 folder: fc.constantFrom(...names),
                 // `sibling` is a folder whose name starts with this one's: a glob is not a prefix.
                 place: fc.constantFrom("direct", "deep", "sibling"),
-                rule: fc.constantFrom(...FIVE),
+                rule: fc.constantFrom(...SIX),
               }),
               { maxLength: 8 },
             ),
@@ -315,13 +319,46 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
       done();
     }
   }, 120_000);
+
+  // scenario (ticket 948): the docs rule under the repo's own config. `jobs/` is at zero, so a missing
+  // doc block there blocks; `cloudflare/` still has fires, so its warn line makes the same export
+  // advice; and the warn line never turns the rule on for a test file, since the off override is last.
+  it("scenario: under the real config a missing doc block blocks in a clean folder, advises in a warn folder, and is off for a test file there", () => {
+    const SRC = "next/packages/libfabrika/src";
+    // No block at all: the rule fires twice, once for the export and once for the module block.
+    const text = "export const planted = 1;\n";
+    const config = readFileSync(join(ROOT, ".oxlintrc.json"), "utf8");
+    const { lint, done } = repo(config, {
+      [`${SRC}/jobs/Planted.ts`]: text,
+      [`${SRC}/cloudflare/Planted.ts`]: text,
+      [`${SRC}/cloudflare/Planted.test.ts`]: text,
+    });
+
+    try {
+      const clean = lint(`${SRC}/jobs/Planted.ts`);
+      expect(clean.out).toContain(`${SRC}/jobs/Planted.ts:1:1 fabrika(jsdocs) `);
+      expect(clean.out).toContain("oxlint: 2 blocking, 0 advice");
+      expect(clean.status, clean.out).toBe(1);
+
+      const warn = lint(`${SRC}/cloudflare/Planted.ts`);
+      expect(warn.out).toContain("fabrika(jsdocs) advice, this folder is not at zero yet:");
+      expect(warn.out).toContain("oxlint: 0 blocking, 2 advice");
+      expect(warn.status, warn.out).toBe(0);
+
+      const test = lint(`${SRC}/cloudflare/Planted.test.ts`);
+      expect(test.out).not.toContain("fabrika(jsdocs)");
+      expect(test.status, test.out).toBe(0);
+    } finally {
+      done();
+    }
+  }, 120_000);
 });
 
 describe("T930 L4 the warn lines are read from oxlint's own --print-config", () => {
   // pinned: oxlint 1.90.0's --print-config shape (pnpm-lock.yaml): a builtin's key loses its plugin,
   // a level prints as "deny" or "warn", and an override keeps its `files` list. The config holds the
   // frozen version's warn override too (FROZEN above): it is not a dirty-folder line, so it is not read.
-  it("pinned: reads a law-shape warn override and a no-restricted-properties one with options, and no error or frozen line", () => {
+  it("pinned: reads a law-shape warn override, a no-restricted-properties one and a jsdocs one with options, and no error or frozen line", () => {
     const config = {
       ...small([]),
       overrides: [
@@ -331,6 +368,8 @@ describe("T930 L4 the warn lines are read from oxlint's own --print-config", () 
           rules: { "fabrika/law-shape": "warn" },
         },
         { files: ["next/dirty/**"], rules: { "eslint/no-restricted-properties": parse("warn") } },
+        // Ticket 948: the docs rule's warn line, with its option, as the real config writes it.
+        { files: ["next/docs/src/*"], rules: { "fabrika/jsdocs": ["warn", { since: "absent" }] } },
       ],
     };
     const { at, done } = repo(config, {});
@@ -346,6 +385,7 @@ describe("T930 L4 the warn lines are read from oxlint's own --print-config", () 
         { rule: "fabrika(law-shape)", glob: "next/dirty/**/*{.test.ts,Test.ts}" },
         { rule: "fabrika(law-shape)", glob: "next/other/*{.test.ts,Test.ts}" },
         { rule: "eslint(no-restricted-properties)", glob: "next/dirty/**" },
+        { rule: "fabrika(jsdocs)", glob: "next/docs/src/*" },
       ]);
     } finally {
       done();
