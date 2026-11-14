@@ -259,6 +259,9 @@ class Client {
   // Node's WebSocket fires `error` on a failed upgrade (the proxy's 502 while workerd
   // restarts) but can stay CONNECTING with no `close`, so `error` counts as closed.
   private closed = false;
+  // A caller waits on the socket's own events, never on a timer: a reply read on a 20 ms poll cost each
+  // of p11's 259 sends up to one poll, and more on a busy machine, where a late timer adds to it.
+  private readonly waiting: Array<() => void> = [];
   private readonly ws: WebSocket;
   private readonly base: string;
   private readonly key: ReturnType<typeof identity>;
@@ -270,15 +273,30 @@ class Client {
     this.tab = tab;
     this.ws = new WebSocket(`${base.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
     sockets.push(this.ws);
+    this.ws.addEventListener("open", () => this.wake());
     this.ws.addEventListener("error", () => {
       this.closed = true;
+      this.wake();
     });
     this.ws.addEventListener("close", () => {
       this.closed = true;
+      this.wake();
     });
     this.ws.addEventListener("message", ({ data }) => {
       this.frames.push(data === "pong" ? "pong" : JSON.parse(String(data)));
+      this.wake();
     });
+  }
+
+  private wake() {
+    for (const done of this.waiting.splice(0)) {
+      done();
+    }
+  }
+
+  /** The socket's next event: it opened, a frame arrived, or it closed. */
+  private changed() {
+    return new Promise<void>((done) => this.waiting.push(done));
   }
 
   async next(test: (f: Frame | string) => boolean): Promise<any> {
@@ -293,7 +311,7 @@ class Client {
         throw new Error("wire closed before answer");
       }
 
-      await pause();
+      await this.changed();
     }
   }
 
@@ -332,7 +350,7 @@ class Client {
         throw new Error("wire closed before open");
       }
 
-      await pause();
+      await this.changed();
     }
 
     this.ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
