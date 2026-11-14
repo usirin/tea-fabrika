@@ -8,5 +8,7 @@
     // The package commands use plain Node, which strips types without transforming them.
     "erasableSyntaxOnly": true
   },
-  "include": ["**/*.ts", "**/*.tsx"]
+  // The P19 host check bundles this fixture as the small brain that exits normally, so it is checked
+  // here with the code that runs it. The root tsconfig is for editors only and no typecheck reads it.
+  "include": ["**/*.ts", "**/*.tsx", "../../../fixtures/next/p19-launchd/brain.ts"]
 }
