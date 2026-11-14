@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-clauderow-refuses-a-limit-stopped-run",
+  "date": "2026-11-13",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": ".agents/skills/lead/scripts/clauderow.ts",
+    "line": 188
+  },
+  "says": "clauderow.ts refuses the transcript of a subagent that stopped on a usage limit, so that run gets no field row unless its last line is cut out by hand.",
+  "proof": "A subagent stopped by the usage limit ends with an assistant message whose model is '<synthetic>' and whose usage is all zero; clauderow.ts on that transcript printed 'clauderow: no list price for <synthetic>' and wrote no row. With that one line dropped it wrote the row.",
+  "cost": "Each run stopped by a limit is lost from field/runs or needs a hand edit of its transcript, so cost and stop counts undercount exactly the runs that failed.",
+  "head": "b825a190a4bdf507c10403f9eb301a26689003f4",
+  "ticket": null,
+  "pr": null
+}

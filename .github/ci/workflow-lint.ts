@@ -67,6 +67,7 @@ const TOOLING = "!cancelled()&&needs.changes.outputs.today=='false'";
 // The commit a run's change starts from, for vitest's `--changed`: a pull request's base, a merge
 // queue group's base, or what main held before a push. All zeros (a first push) is no base.
 const TEST_BASE = `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`;
+const RATCHET = 'node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"';
 const TOOLING_EXCLUDES = ["next/**", "apps/**", "packages/**", "programs/**"];
 
 // Chromium's OS packages come from apt, so the step first finds a mirror that answers (apt.sh).
@@ -127,6 +128,18 @@ export const lintWorkflow = (text: string): string[] => {
     const slow = step["name"] === "promises" || step["run"] === "pnpm build";
     require(slow ? compact(step["if"]) === BUILD : !("if" in step), "only promises and build skip, on the build flag");
   }
+
+  // 0524: a list file only shrinks. Without its one step a pull request could drop the ratchet and
+  // pass with a grown list; a first push's zeros map to no base, as for the test steps.
+  const ratchets = checkSteps.filter(
+    (step) => typeof step["run"] === "string" && step["run"].includes("next/apps/fabrika/src/exam/ratchet"),
+  );
+  require(ratchets.length === 1 &&
+    ratchets[0]?.["run"] === RATCHET &&
+    compact(map(ratchets[0]?.["env"])["BASE"]) === compact(TEST_BASE) &&
+    !("if" in (ratchets[0] ?? {})) &&
+    ratchets[0]?.["continue-on-error"] ===
+      undefined, `check runs ${RATCHET} once, on the test base, and its failure blocks`);
 
   for (const name of gated) {
     const job = map(jobs[name]);

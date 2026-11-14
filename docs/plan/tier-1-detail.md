@@ -1751,7 +1751,7 @@ export class ProgramRunner extends Context.Service<ProgramRunner, {
 	readonly open: (client: string) => Effect.Effect<Opened, RunnerFailure>;  // Opened = {rev, view}
 	readonly msg: (input: unknown) => Effect.Effect<Sent, RunnerFailure>;
 	readonly due: (at: number) => Effect.Effect<void, RunnerFailure>;
-}>()("@kampus/libfabrika/ProgramRunner") {
+}>()("@kampus/libfabrika/runtime/Runner.ProgramRunner") {
 	static layer: (process: Descriptor) => Layer<ProgramRunner, never,
 		ProgramLoader | ProcessStore | Mailbox | CheckedWriter | WatcherManager | Alarm | Recording>; // SessionManager optional
 }

@@ -1,9 +1,9 @@
-import { Cause, Clock, Context, Effect, Layer, Result, Schema } from "effect";
+import { Cause, Clock, Context, Effect, Layer, Option, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 import { RecordedStart } from "../settings/RecordedStart.ts";
-import { errorClass, REFUSED, SinkError } from "../telemetry/Trace.ts";
+import { causeClass, REFUSED, SinkError } from "../telemetry/Trace.ts";
 import { connection } from "../transport/Connection.ts";
 import { Answer, Attached, Hello, RateCountFailure } from "../transport/Wire.ts";
 import type { ConnectionId } from "./bindings.ts";
@@ -166,15 +166,15 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
         // the span fails with the typed error, so stored content keeps its tag and reason, never the
         // thrown text, which may hold a bearer or a raw frame.
         Effect.catchCause((cause) => {
-          const failure = Cause.squash(cause);
-
-          if (Schema.is(RateCountFailure)(failure)) {
+          if (Option.exists(Cause.findErrorOption(cause), Schema.is(RateCountFailure))) {
             return Effect.failCause(cause);
           }
 
           return Effect.exit(
-            Effect.fail(failure).pipe(
-              Effect.withSpan("gateway.refused", { attributes: { "error.type": errorClass(rejected(failure)) } }),
+            Effect.failCause(cause).pipe(
+              Effect.withSpan("gateway.refused", {
+                attributes: { "error.type": causeClass(Cause.map(cause, rejected)) },
+              }),
             ),
           ).pipe(Effect.as(Answer.cases.refused.make({ reason: "unreachable" })));
         }),
@@ -309,7 +309,16 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 
 export class ConnectionService extends Context.Service<
   ConnectionService,
-  Effect.Success<ReturnType<typeof gatewayLogic>>
+  {
+    readonly fetch: (request: Request) => Effect.Effect<Response, LedgerError>;
+    // A frame, a ring and a probe go through the socket's connection, whose calls are door calls. A door
+    // fails with `unknown`, which takes in every other failure.
+    readonly message: (ws: WebSocket, text: string | ArrayBuffer) => Effect.Effect<void, unknown>;
+    readonly close: (ws: WebSocket, code?: number) => Effect.Effect<void, LedgerError | SinkError>;
+    readonly ring: (stream: string, rev: number) => Effect.Effect<void, unknown>;
+    readonly probe: (session: string) => Effect.Effect<number | null, unknown>;
+    readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError | SinkError>;
+  }
 >()("@kampus/libfabrika/cloudflare/connection.ConnectionService") {}
 
 export const connectionLayer = (

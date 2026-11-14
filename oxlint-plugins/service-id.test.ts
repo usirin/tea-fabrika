@@ -132,7 +132,7 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
   });
 
   // The plan's mapping, old to new, kept here because diagnostics can hold either spelling.
-  // `ProgramRunner` is the next slice's and has no row.
+  // `ProgramRunner` was renamed after it, by ticket 909, and has no row.
   const mapping = [
     ["Id.ts", "Generator", "Id.Generator", "Id.Generator"],
     ["access/ClientManager.ts", "ClientManager", "ClientManager", "access/ClientManager"],
@@ -207,7 +207,9 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
     }
   });
 
-  it("scenario: replayed over libfabrika's own source, the rule finds only the next slice's ProgramRunner ID", () => {
+  // Law 9 of docs/plan/effect-rules-small.md. The rule blocks since ticket 909, so it starts at zero
+  // (decision 0168). The real tree is the input: no generator can stand in for the IDs that are there.
+  it("scenario: replayed over libfabrika's own source, the rule finds nothing", () => {
     const ran = spawnSync(
       join(root, "node_modules/.bin/oxlint"),
       [`--config=${join(root, ".oxlintrc.json")}`, "--disable-nested-config", "--no-ignore", "--format=json", SRC],
@@ -216,7 +218,6 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
     const report: { readonly diagnostics: ReadonlyArray<{ readonly code?: string; readonly filename: string }> } =
       JSON.parse(ran.stdout);
     const hits = report.diagnostics.filter((d) => d.code === CODE).map((d) => d.filename);
-    // The decision 0023 sweep leaves only Runner's ID, which the next slice renames with its other sites.
-    expect(hits).toEqual([`${SRC}/runtime/Runner.ts`]);
+    expect(hits).toEqual([]);
   });
 });

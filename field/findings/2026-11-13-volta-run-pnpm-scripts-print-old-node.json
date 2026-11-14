@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-volta-run-pnpm-scripts-print-old-node",
+  "date": "2026-11-13",
+  "by": "build",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "package.json",
+    "line": 1
+  },
+  "says": "Run as volta run --node 26.13.0 pnpm lint, each pnpm sub-script prints that the project requires Node.js 26.13.0 and the current Node.js is v22.22.3, so the lint checks may run on a Node the project says it does not support.",
+  "proof": "In the ticket 933 build round, pnpm lint printed '[WARN] This project requires Node.js 26.13.0. Your current Node.js is v22.22.3' before code-graph --boundaries, packages/fabrika/browser-check.ts, code-graph --unreachable, compiler.ts, twin.ts and promise-types.ts; the step-commit script's sign call printed the same line.",
+  "cost": "A check that leans on Node 26 behavior could pass or fail differently here than in CI, which pins 26.13.0.",
+  "head": "d0321b7466894a0b2978d6b513d042a7d1a68c24",
+  "ticket": "933",
+  "pr": "1201"
+}

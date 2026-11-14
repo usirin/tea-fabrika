@@ -1,3 +1,95 @@
+diff --git a/lib/Fetcher.js b/lib/Fetcher.js
+index 33b7dbb6bfb623da207215b88d4fdb6bea6d3dff..382834205f6734ff4f95c34231b4dbdbb841f603 100644
+--- a/lib/Fetcher.js
++++ b/lib/Fetcher.js
+@@ -6,6 +6,7 @@ import * as HttpClient from "effect/http/HttpClient";
+ import { HttpClientError, TransportError } from "effect/http/HttpClientError";
+ import * as HttpClientRequest from "effect/http/HttpClientRequest";
+ import * as HttpClientResponse from "effect/http/HttpClientResponse";
++import { HttpServerError, InternalError } from "effect/http/HttpServerError";
+ import * as HttpServerRequest from "effect/http/HttpServerRequest";
+ import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ import * as Schedule from "effect/Schedule";
+@@ -53,36 +54,29 @@ export const fromCloudflareFetcher = (fetcher) => {
+         // the failed attempt already consumed makes workerd reject with
+         // "TypeError: Cannot reconstruct a Request with a used body".
+         const attempt = request.clone();
+-        return Effect.promise((signal) => fetcher.fetch(attempt, { signal: signal }));
++        // fabrika patch: a rejected platform fetch fails typed, with what the platform threw as its
++        // cause, so the server overload fails with its declared HttpServerError, not a defect.
++        return Effect.tryPromise({
++            try: (signal) => fetcher.fetch(attempt, { signal: signal }),
++            catch: (cause) => (isHandlerNotReady(cause) ? new HandlerNotReady(cause) : new FetchRejected(cause)),
++        });
+     }).pipe(
+     // The "Handler does not export a fetch()" window is a property of
+     // invoking a freshly-deployed Cloudflare binding, so it is ridden out
+-    // HERE — the one adapter every binding flows through — rather than in any
+-    // single higher-level wrapper (`toHttpClient`, the client/server
+-    // overloads, the RPC DO transport all go through this). `Effect.promise`
+-    // surfaces the rejection as a defect; lift it to a typed retryable error
+-    // and back off until the new version propagates. The request never
+-    // reached a handler, so nothing committed — safe to retry. This wraps
+-    // only the promise, leaving the response (and its streaming body)
+-    // untouched, so RPC/stream decoding is unaffected. After the budget is
+-    // exhausted, re-raise the original defect unchanged.
+-    Effect.catchCause((cause) => {
+-        const squashed = Cause.squash(cause);
+-        return isHandlerNotReady(squashed)
+-            ? Effect.fail(new HandlerNotReady(squashed))
+-            : Effect.failCause(cause);
+-    }), Effect.retry({
++    // HERE, in the one adapter every binding flows through. The request never
++    // reached a handler, so nothing committed, and a retry is safe.
++    Effect.retry({
+         while: (error) => error instanceof HandlerNotReady,
+         schedule: Schedule.exponential("100 millis"),
+         times: 8,
+-    }), Effect.catch((error) => error instanceof HandlerNotReady
+-        ? Effect.die(error.cause)
+-        : Effect.failCause(Cause.fail(error))));
++    }));
+     return {
+         raw: fetcher,
+         connect: (address, options) => fromCloudflareSocket(fetcher.connect(address, options)),
+         fetch: (request) => HttpClientRequest.isHttpClientRequest(request)
+-            ? request.pipe(HttpServerRequest.fromClientRequest, HttpServerRequest.toWeb, Effect.flatMap(fetch), Effect.map((response) => HttpClientResponse.fromWeb(request, response)), Effect.catch((error) => Effect.succeed(HttpClientResponse.fromWeb(request, new Response(error.message, {
++            ? request.pipe(HttpServerRequest.fromClientRequest, HttpServerRequest.toWeb, 
++            // fabrika patch: the client overload keeps a rejection as the defect it was.
++            Effect.flatMap((web) => Effect.catch(fetch(web), (error) => Effect.die(error.cause))), Effect.map((response) => HttpClientResponse.fromWeb(request, response)), Effect.catch((error) => Effect.succeed(HttpClientResponse.fromWeb(request, new Response(error.message, {
+                 status: error._tag === "InternalError"
+                     ? 500
+                     : error._tag === "RequestParseError"
+@@ -104,7 +98,13 @@ export const fromCloudflareFetcher = (fetcher) => {
+             // preserves the method and un-consumed streaming body.
+             Effect.map((webRequest) => sameHeaders(webRequest.headers, request.headers)
+                 ? webRequest
+-                : new Request(webRequest, { headers: request.headers })), Effect.flatMap(fetch), Effect.map((response) => {
++                : new Request(webRequest, { headers: request.headers })), Effect.flatMap((web) => Effect.mapError(fetch(web), (error) => new HttpServerError({
++                reason: new InternalError({
++                    request,
++                    description: "the platform fetch rejected",
++                    cause: error.cause,
++                }),
++            }))), Effect.map((response) => {
+                 if (response.status === 101) {
+                     return HttpServerResponse.setBody(HttpServerResponse.empty({ status: 101 }), HttpBody.raw(response));
+                 }
+@@ -141,6 +141,14 @@ class HandlerNotReady {
+         this.cause = cause;
+     }
+ }
++// fabrika patch: a platform fetch that rejected for any other reason; `cause` is what it threw.
++class FetchRejected {
++    cause;
++    _tag = "FetchRejected";
++    constructor(cause) {
++        this.cause = cause;
++    }
++}
+ export const toHttpClient = (fetcher) => HttpClient.make((request) => Effect.suspend(() => 
+ // Rebuild the server request on every attempt so a retry re-serializes
+ // the body instead of replaying a consumed one.
 diff --git a/lib/Workers/Sources/shared.js b/lib/Workers/Sources/shared.js
 index fe5b925cdc0b3ee2efd7302d4ac5fca2c6c8f65b..006f3d5ea5b7f1d0e8854a57e99b4ebbebfb0399 100644
 --- a/lib/Workers/Sources/shared.js
@@ -48,6 +140,109 @@ index a1dd2ed19b2ea24fa676fc2777a55bf27a8e7300..c8d7eaf79eee3da776c1dff5f62d32b4
      createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
      // Normalize `main` relative to the cwd, then let `domain.dns` naming a
      // non-Cloudflare DNS host compose Cloudflare for SaaS custom hostnames +
+diff --git a/src/Fetcher.ts b/src/Fetcher.ts
+index 964773941241199261127477c69d4e6c45912a1a..0871e1dee2e5f2e7ade4dffa6536bafe6d82d2ec 100644
+--- a/src/Fetcher.ts
++++ b/src/Fetcher.ts
+@@ -7,7 +7,7 @@ import * as HttpClient from "effect/http/HttpClient";
+ import { HttpClientError, TransportError } from "effect/http/HttpClientError";
+ import * as HttpClientRequest from "effect/http/HttpClientRequest";
+ import * as HttpClientResponse from "effect/http/HttpClientResponse";
+-import type { HttpServerError } from "effect/http/HttpServerError";
++import { HttpServerError, InternalError } from "effect/http/HttpServerError";
+ import * as HttpServerRequest from "effect/http/HttpServerRequest";
+ import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ import * as Schedule from "effect/Schedule";
+@@ -79,37 +79,22 @@ export const fromCloudflareFetcher = (fetcher: cf.Fetcher | globalThis.Fetcher):
+       // the failed attempt already consumed makes workerd reject with
+       // "TypeError: Cannot reconstruct a Request with a used body".
+       const attempt = request.clone() as Request;
+-      return Effect.promise((signal) =>
+-        (fetcher as globalThis.Fetcher).fetch(attempt, { signal: signal }),
+-      );
++      // fabrika patch: a rejected platform fetch fails typed, with what the platform threw as its
++      // cause, so the server overload fails with its declared HttpServerError, not a defect.
++      return Effect.tryPromise({
++        try: (signal) => (fetcher as globalThis.Fetcher).fetch(attempt, { signal: signal }),
++        catch: (cause) => (isHandlerNotReady(cause) ? new HandlerNotReady(cause) : new FetchRejected(cause)),
++      });
+     }).pipe(
+       // The "Handler does not export a fetch()" window is a property of
+       // invoking a freshly-deployed Cloudflare binding, so it is ridden out
+-      // HERE — the one adapter every binding flows through — rather than in any
+-      // single higher-level wrapper (`toHttpClient`, the client/server
+-      // overloads, the RPC DO transport all go through this). `Effect.promise`
+-      // surfaces the rejection as a defect; lift it to a typed retryable error
+-      // and back off until the new version propagates. The request never
+-      // reached a handler, so nothing committed — safe to retry. This wraps
+-      // only the promise, leaving the response (and its streaming body)
+-      // untouched, so RPC/stream decoding is unaffected. After the budget is
+-      // exhausted, re-raise the original defect unchanged.
+-      Effect.catchCause((cause) => {
+-        const squashed = Cause.squash(cause);
+-        return isHandlerNotReady(squashed)
+-          ? Effect.fail(new HandlerNotReady(squashed))
+-          : Effect.failCause(cause);
+-      }),
++      // HERE, in the one adapter every binding flows through. The request never
++      // reached a handler, so nothing committed, and a retry is safe.
+       Effect.retry({
+         while: (error) => error instanceof HandlerNotReady,
+         schedule: Schedule.exponential("100 millis"),
+         times: 8,
+       }),
+-      Effect.catch((error) =>
+-        error instanceof HandlerNotReady
+-          ? Effect.die(error.cause)
+-          : Effect.failCause(Cause.fail(error)),
+-      ),
+     );
+ 
+   return {
+@@ -122,7 +107,8 @@ export const fromCloudflareFetcher = (fetcher: cf.Fetcher | globalThis.Fetcher):
+         ? request.pipe(
+             HttpServerRequest.fromClientRequest,
+             HttpServerRequest.toWeb,
+-            Effect.flatMap(fetch),
++            // fabrika patch: the client overload keeps a rejection as the defect it was.
++            Effect.flatMap((web) => Effect.catch(fetch(web), (error) => Effect.die(error.cause))),
+             Effect.map((response) =>
+               HttpClientResponse.fromWeb(request, response as any as Response),
+             ),
+@@ -161,7 +147,19 @@ export const fromCloudflareFetcher = (fetcher: cf.Fetcher | globalThis.Fetcher):
+                 ? webRequest
+                 : new Request(webRequest, { headers: request.headers as Record<string, string> }),
+             ),
+-            Effect.flatMap(fetch),
++            Effect.flatMap((web) =>
++              Effect.mapError(
++                fetch(web),
++                (error) =>
++                  new HttpServerError({
++                    reason: new InternalError({
++                      request,
++                      description: "the platform fetch rejected",
++                      cause: error.cause,
++                    }),
++                  }),
++              ),
++            ),
+             Effect.map((response) => {
+               if ((response as any).status === 101) {
+                 return HttpServerResponse.setBody(
+@@ -204,6 +202,12 @@ class HandlerNotReady {
+   constructor(readonly cause: unknown) {}
+ }
+ 
++// fabrika patch: a platform fetch that rejected for any other reason; `cause` is what it threw.
++class FetchRejected {
++  readonly _tag = "FetchRejected";
++  constructor(readonly cause: unknown) {}
++}
++
+ export const toHttpClient = (fetcher: {
+   fetch: (
+     request: HttpServerRequest.HttpServerRequest,
 diff --git a/src/Workers/Sources/shared.ts b/src/Workers/Sources/shared.ts
 index e2bcbf92d457e941be805aa1c09ded1a3f6a1bfd..b0bd6d23c61f9a3731529b829a3d8753eb8b9f45 100644
 --- a/src/Workers/Sources/shared.ts

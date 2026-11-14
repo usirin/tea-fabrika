@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-recovery-save-checks-every-receipt-in-memory",
+  "date": "2026-11-13",
+  "by": "plan",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/RecoveryStore.ts",
+    "line": 142
+  },
+  "says": "In next/, every RecoveryStore save decodes the whole journal, every receipt included, and encodes every receipt again, so its CPU grows with the receipts a name has ever kept even once the save reads no receipt rows.",
+  "proof": "RecoveryStore.ts:142 runs check(value), Schema.decodeUnknownSync over the whole Supervision with its receipts array, and the loop at :160 runs encodeReceipt(receipt) for every receipt kept, on every save the runner makes (runtime/Runner.ts:460).",
+  "cost": "A chatty process's step still slows linearly with age in CPU, which a Durable Object bills per request; experiment 258 measured rows, not this.",
+  "head": "59cb6a311",
+  "ticket": null,
+  "pr": null
+}

@@ -16,7 +16,8 @@ import { checklist } from "@kampus/checklist";
 import { revokeText } from "@kampus/libfabrika/access/Text";
 import { Entry, PAGE } from "@kampus/libfabrika/ledger/Log";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
-import { Effect, FileSystem, Schema, Stream } from "effect";
+import { Clock, DateTime, Effect, FileSystem, Schema, Stream } from "effect";
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { type Browser, type BrowserContext, chromium, type Page, type WebSocket as PageSocket } from "playwright";
 import type { TestContext } from "vitest";
@@ -169,6 +170,19 @@ export const home = homeWithCredential("p14-test");
 
 export type Home = Effect.Success<typeof home>;
 
+/** Sends dev.ts SIGTERM and waits for it to exit, or answers at once when it has. dev.ts exits only
+ *  once its scope has ended its detached child's process group (SIGTERM, then SIGKILL after 3 s), and
+ *  that child's own scope ends the runtime it started, so after this the instance's home stays still. */
+const stop = (c: NodeChildProcess) =>
+  Effect.callback<void>((resume) => {
+    if (c.exitCode !== null || c.signalCode !== null) {
+      return resume(Effect.void);
+    }
+
+    c.once("exit", () => resume(Effect.void));
+    c.kill("SIGTERM");
+  });
+
 /** The real `dev.ts` on a held port in `h`, ready when `/` answers. `env` adds to its environment. */
 export const devServer = (h: Home, env: Readonly<Record<string, string>> = {}) =>
   Effect.gen(function* () {
@@ -202,15 +216,7 @@ export const devServer = (h: Home, env: Readonly<Record<string, string>> = {}) =
         c.stderr?.on("data", (b: Buffer) => out.push(b.toString()));
         return c;
       }),
-      (c: NodeChildProcess) =>
-        Effect.callback<void>((resume) => {
-          if (c.exitCode !== null || c.signalCode !== null) {
-            return resume(Effect.void);
-          }
-
-          c.once("exit", () => resume(Effect.void));
-          c.kill("SIGTERM");
-        }),
+      stop,
       (c) => ({ pid: c.pid, port }),
     );
     // Ready when the real root answers; a child that exits first fails with what it said.
@@ -220,13 +226,11 @@ export const devServer = (h: Home, env: Readonly<Record<string, string>> = {}) =
           return yield* new DevFailed({ output: out.join("") });
         }
 
-        // oxlint-disable-next-line fabrika/no-promises -- edge: the readiness probe is one HTTP fetch
-        const ok = yield* Effect.tryPromise({
-          try: () => fetch(url),
-          catch: (cause) => new DevFailed({ output: String(cause) }),
-        }).pipe(
-          Effect.map((r) => r.ok),
+        // The readiness probe is one HTTP request. A refused connection is "not yet", never a failure.
+        const ok = yield* HttpClient.get(url).pipe(
+          Effect.map((r) => r.status >= 200 && r.status <= 299),
           Effect.orElseSucceed(() => false),
+          Effect.provide(FetchHttpClient.layer),
         );
 
         if (ok) {
@@ -236,7 +240,8 @@ export const devServer = (h: Home, env: Readonly<Record<string, string>> = {}) =
         yield* Effect.sleep("250 millis");
       }
     }).pipe(Effect.timeout("180 seconds"));
-    return { url, port, output: () => out.join("") };
+    // A law that reads the whole home stops the instance first, within the 10 s its release gets.
+    return { url, port, output: () => out.join(""), stop: stop(child).pipe(Effect.timeout("10 seconds")) };
   });
 
 export type Dev = Effect.Success<ReturnType<typeof devServer>>;
@@ -408,12 +413,11 @@ const Target = Schema.Struct({ key: Schema.String, for: Schema.String, to: Schem
 /** Reads the grant target while the tab waits, so the key can be removed later. */
 export const target = (w: Waiting) => {
   const url = `${new URL(w.url).origin}/grant/client/${encodeURIComponent(w.fingerprint)}?code=${encodeURIComponent(w.code)}`;
-  // oxlint-disable-next-line fabrika/no-promises -- edge: the door's target is one HTTP fetch
-  return Effect.promise(() => fetch(url)).pipe(
-    // oxlint-disable-next-line fabrika/no-promises -- edge: an HTTP body is a Promise
-    Effect.flatMap((r) => Effect.promise(() => r.json())),
+  return HttpClient.get(url).pipe(
+    Effect.flatMap((r) => r.json),
     Effect.flatMap(Schema.decodeUnknownEffect(Target)),
     Effect.orDie,
+    Effect.provide(FetchHttpClient.layer),
   );
 };
 
@@ -422,22 +426,24 @@ export const target = (w: Waiting) => {
 export const remove = (h: Home, dev: Dev, t: typeof Target.Type) =>
   Effect.gen(function* () {
     const text = revokeText({
-      id: `revoke_${Date.now()}`,
+      id: `revoke_${yield* Clock.currentTimeMillis}`,
       key: t.key,
       for: t.for,
       to: t.to,
       saw: { label: "first-window", location: "local", method: "command", check: "none" },
-      sentAt: new Date().toISOString(),
+      sentAt: DateTime.formatIso(yield* DateTime.now),
     });
     const armored = execFileSync("ssh-keygen", ["-Y", "sign", "-n", "fabrika-client", "-f", h.key], {
       input: text,
     }).toString();
     const body = JSON.stringify({ text, armored });
-    // oxlint-disable-next-line fabrika/no-promises -- edge: the signed revocation is posted over HTTP
-    const r = yield* Effect.promise(() =>
-      fetch(`${dev.url}/grant`, { method: "POST", headers: { "content-type": "application/json" }, body }),
+    const r = yield* HttpClientRequest.post(`${dev.url}/grant`).pipe(
+      HttpClientRequest.bodyText(body, "application/json"),
+      HttpClient.execute,
+      Effect.orDie,
+      Effect.provide(FetchHttpClient.layer),
     );
-    return { ok: r.ok, text, armored };
+    return { ok: r.status >= 200 && r.status <= 299, text, armored };
   });
 
 /** What the tab keeps in IndexedDB, read in the page: every value but its keys, as source text so the

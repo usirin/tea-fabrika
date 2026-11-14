@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-commits-header-says-ci-decides",
+  "date": "2026-11-13",
+  "by": "plan",
+  "model": null,
+  "rule": "doc_drift",
+  "location": {
+    "path": "next/apps/fabrika/src/exam/commits.ts",
+    "line": 3
+  },
+  "says": "The header of commits.ts says CI decides from each step's signature, but decision 0161 made commits plain and turned CI's commits gate off, and no workflow on main runs the script.",
+  "proof": "commits.ts lines 3-4 read 'CI decides from the signature, never from the author, the message or a trailer'; .decisions/0161-no-step-signing-by-hand.md says 'CI's commits job stops gating a merge'; nice -n 19 rg -n 'commits' .github/workflows/ on 59cb6a311 finds no step that runs commits.ts. Run on the last 40 merged pull requests, the script answers stuck unsigned_commit on 17 of 17 in-scope pull requests (338 answers) and build_touched_exam on none.",
+  "cost": "A reader trusts that CI holds the exam rule for build commits, as the whole no-waiver plan's first draft did, and plans around a guard that is off.",
+  "head": "59cb6a311b62cc6af2adc02d38aa26d41a84f120",
+  "ticket": "933",
+  "pr": "1201"
+}

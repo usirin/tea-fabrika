@@ -98,8 +98,22 @@
             "options": {
               "diagnosticSeverity": {
                 "globalErrorInEffectCatch": "error",
-                "globalErrorInEffectFailure": "error"
+                "globalErrorInEffectFailure": "error",
+                // A global `fetch` or `Date` inside Effect code cannot be swapped in a test:
+                // `HttpClient`, `DateTime` and `Clock` can (ticket 910, decision 0168).
+                "globalFetchInEffect": "error",
+                "globalDateInEffect": "error"
               }
+            }
+          },
+          // A library imports each Effect module by its path (E7, 0023). On for the folders
+          // at zero, their tests too. Each import slice adds its folder, and the last makes it
+          // all of `next/packages`. `oxlint-plugins/namespace-imports.test.ts` keeps the list.
+          {
+            "include": ["next/packages/libfabrika/src/ci/**/*.ts", "next/packages/libfabrika/src/codehost/**/*.ts"],
+            "options": {
+              "namespaceImportPackages": ["effect"],
+              "diagnosticSeverity": { "preferNamespaceImport": "error" }
             }
           }
         ]

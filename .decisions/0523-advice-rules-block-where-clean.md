@@ -106,3 +106,12 @@ a reason (owner, 2026-11-13).**
 - Not decided here:
   - `fabrika/service-id`, the sixth advice rule, which its own pull request makes block.
   - Whether `AGENTS.md`'s false-alarm rule changes for other new rules.
+
+## Amendments
+
+- 2026-11-13: the lead's reading, signed in the slice 2 plan. `fabrika/jsdocs` is `"error"` for
+  `next/packages/*/src/**`, so a new folder blocks from its first file. A dirty folder advises
+  through one warn line until its fill deletes it, in place of staying off. The set of folders
+  that pass with a missing doc block does not grow, so 0524's rule that no list grows holds. The
+  owner did not rule on this detail. Tracker ticket 948 built it in
+  https://github.com/kamp-us/tea-fabrika/pull/1209.
