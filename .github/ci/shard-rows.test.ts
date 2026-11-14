@@ -41,15 +41,18 @@ it("L2: stale rows are exactly next/ rows whose file Vitest does not select, sor
       expect(stale(table, files)).toEqual(expected);
       expect(stale(table, files.toReversed())).toEqual(expected);
     }),
-    options,
+    {
+      ...options,
+      examples: [
+        // A selected next/ file with no row is not stale: assign places it by its fallback.
+        [{ table: { "next/a.test.ts": 1 }, files: ["next/a.test.ts", "next/new.test.ts"] }],
+        // A row for a file gone from the selection is stale; a row outside next/ is not this check's.
+        [{ table: { "next/gone.test.ts": 4, "next/a.test.ts": 0.0, "apps/x.test.ts": 2 }, files: ["next/a.test.ts"] }],
+        // An own key that is also an Object prototype name is still a row.
+        [{ table: { "next/constructor": 0, constructor: 0 }, files: [] }],
+      ],
+    },
   );
-  // A selected next/ file with no row is not stale: assign places it by its fallback.
-  expect(stale({ "next/a.test.ts": 1 }, ["next/a.test.ts", "next/new.test.ts"])).toEqual([]);
-  // A row for a file gone from the selection is stale; a row outside next/ is not this check's.
-  expect(stale({ "next/gone.test.ts": 4, "next/a.test.ts": 0.0, "apps/x.test.ts": 2 }, ["next/a.test.ts"])).toEqual([
-    "next/gone.test.ts",
-  ]);
-  expect(stale({ "next/constructor": 0 }, [])).toEqual(["next/constructor"]);
 });
 
 // L3. Plants, each run once on shard-rows.ts and restored: narrow the next/ globs to `*.test.ts`,

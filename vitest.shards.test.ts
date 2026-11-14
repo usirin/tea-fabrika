@@ -759,74 +759,85 @@ describe("assign", () => {
 // path order, on the machine with the least seconds so far (ties: the first), counting the median
 // row, so several new files spread over the machines.
 // Plants, each run once on vitest.shards.ts and restored: a file with no row adds 0 s (red: the new
-// files pile onto one machine); place files with no row first (red in the vectors and L14); give
-// Shards `measured[path] ?? 0` (red in the Shards scenario).
+// files pile onto one machine); place files with no row first (red in L14); give Shards
+// `measured[path] ?? 0` (red in the Shards scenario); take the upper middle, or 0 s of nothing
+// (red in L16); count the table's median in place of `unmeasured` (red in L14).
+
+// Files with and without a row. fast-check supplies them; no domain schema describes test paths.
+const rowFiles = fc.uniqueArray(
+  fc.record({
+    path: fc.string({ minLength: 1 }),
+    seconds: fc.option(fc.integer({ min: 0, max: 500 }), { nil: undefined }),
+  }),
+  { selector: (f) => f.path, minLength: 1, maxLength: 40 },
+);
+
+/** Two tied measured files, a 0 s row and two files with no row. Made up. */
+const tied = [
+  { path: "new2.test.ts", seconds: undefined },
+  { path: "new.test.ts", seconds: undefined },
+  { path: "zero.test.ts", seconds: 0 },
+  { path: "b.test.ts", seconds: 5 },
+  { path: "a.test.ts", seconds: 5 },
+];
+
 describe("median", () => {
-  it("vector: takes the middle, the lower middle of an even count, and 1 s of nothing", () => {
-    expect(median([3, 1, 2])).toBe(2);
-    expect(median([4, 1, 3, 2])).toBe(2);
-    expect(median([0.3])).toBe(0.3);
-    expect(median([])).toBe(1);
+  it("L16: the median is an input of middle rank, the lower middle of an even count, 1 s of nothing, in any order", () => {
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.integer({ min: 0, max: 6000 }).map((tenths) => tenths / 10),
+          { maxLength: 50 },
+        ),
+        fc.array(fc.nat(), { maxLength: 50 }),
+        (seconds, order) => {
+          const middle = median(seconds);
+
+          if (seconds.length === 0) {
+            expect(middle).toBe(1);
+            return;
+          }
+
+          const rank = Math.floor((seconds.length - 1) / 2);
+          expect(seconds).toContain(middle);
+          expect(seconds.filter((value) => value < middle).length).toBeLessThanOrEqual(rank);
+          expect(seconds.filter((value) => value <= middle).length).toBeGreaterThanOrEqual(rank + 1);
+          const shuffled = seconds
+            .map((value, i) => ({ value, key: order[i] ?? 0 }))
+            .toSorted((x, y) => x.key - y.key)
+            .map(({ value }) => value);
+          expect(median(shuffled)).toBe(middle);
+        },
+      ),
+      {
+        seed: 119120,
+        numRuns: 100,
+        examples: [
+          [[], []],
+          [
+            [4, 1, 3, 2],
+            [3, 0, 2, 1],
+          ],
+        ],
+      },
+    );
   });
 
-  it("vector: a file with no row counts the median of every row by default", () => {
-    const files = [{ path: "a.test.ts", seconds: 9 }, { path: "x.new.test.ts" }, { path: "y.new.test.ts" }];
-    expect(assign(files, 3)).toEqual(assign(files, 3, [], median(Object.values(measured))));
+  it("L17: a file with no row counts the median of every row by default", () => {
+    fc.assert(
+      fc.property(rowFiles, fc.integer({ min: 1, max: 12 }), (files, count) => {
+        expect(assign(files, count)).toEqual(assign(files, count, [], median(Object.values(measured))));
+      }),
+      { seed: 119120, numRuns: 100 },
+    );
   });
 });
 
 describe("assign, for a file with no row", () => {
-  it("vector: places files with no row after the measured ones, each counting the median", () => {
-    // Made up, median 2. a 10 -> 0, b 6 -> 1, c 5 -> 2 (10, 6, 5); m.new -> 2 (7); z.new -> 1 (8).
-    const files = [
-      { path: "z.new.test.ts", seconds: undefined },
-      { path: "a.test.ts", seconds: 10 },
-      { path: "m.new.test.ts" },
-      { path: "c.test.ts", seconds: 5 },
-      { path: "b.test.ts", seconds: 6 },
-    ];
-    const want = { "a.test.ts": 0, "b.test.ts": 1, "c.test.ts": 2, "m.new.test.ts": 2, "z.new.test.ts": 1 };
-    expect(byPath(files, assign(files, 3, [], 2))).toEqual(want);
-    expect(byPath(files.toReversed(), assign(files.toReversed(), 3, [], 2))).toEqual(want);
-  });
-
-  it("vector: breaks a tie by the first machine, keeps a 0 s row measured, and spreads new files", () => {
-    // Made up, median 3. a 5 -> 0, b 5 -> 1, zero 0 -> 0 (5, 5); new -> 0 (8); new2 -> 1 (8).
-    const files = [
-      { path: "new2.test.ts" },
-      { path: "new.test.ts" },
-      { path: "zero.test.ts", seconds: 0 },
-      { path: "b.test.ts", seconds: 5 },
-      { path: "a.test.ts", seconds: 5 },
-    ];
-    expect(byPath(files, assign(files, 2, [], 3))).toEqual({
-      "a.test.ts": 0,
-      "b.test.ts": 1,
-      "zero.test.ts": 0,
-      "new.test.ts": 0,
-      "new2.test.ts": 1,
-    });
-    // Starting loads count too: machine 0 starts at 8. a and b take machine 1 to 10, zero goes to
-    // 0 (8), new to 0 (11), new2 to 1 (13).
-    expect(byPath(files, assign(files, 2, [8], 3))).toEqual({
-      "a.test.ts": 1,
-      "b.test.ts": 1,
-      "zero.test.ts": 0,
-      "new.test.ts": 0,
-      "new2.test.ts": 1,
-    });
-  });
-
   it("L14: files with no row move no measured file, and each goes to the least load counting the median", () => {
     fc.assert(
       fc.property(
-        fc.uniqueArray(
-          fc.record({
-            path: fc.string({ minLength: 1 }),
-            seconds: fc.option(fc.integer({ min: 0, max: 500 }), { nil: undefined }),
-          }),
-          { selector: (f) => f.path, minLength: 1, maxLength: 40 },
-        ),
+        rowFiles,
         fc.integer({ min: 1, max: 12 }),
         fc.array(fc.integer({ min: 0, max: 2000 }), { maxLength: 12 }),
         fc.integer({ min: 0, max: 50 }),
@@ -848,7 +859,30 @@ describe("assign, for a file with no row", () => {
           }
         },
       ),
-      { seed: 119120, numRuns: 100 },
+      {
+        seed: 119120,
+        numRuns: 100,
+        examples: [
+          // Made up, median 2. a 10 -> 0, b 6 -> 1, c 5 -> 2 (10, 6, 5); m.new -> 2 (7); z.new -> 1.
+          [
+            [
+              { path: "z.new.test.ts", seconds: undefined },
+              { path: "a.test.ts", seconds: 10 },
+              { path: "m.new.test.ts", seconds: undefined },
+              { path: "c.test.ts", seconds: 5 },
+              { path: "b.test.ts", seconds: 6 },
+            ],
+            3,
+            [],
+            2,
+          ],
+          // Made up, median 3: a tie goes to the first machine, a 0 s row is measured, new files
+          // spread. a 5 -> 0, b 5 -> 1, zero -> 0; new -> 0 (8); new2 -> 1 (8).
+          [tied, 2, [], 3],
+          // The same with machine 0 starting at 8: a and b -> 1, zero -> 0, new -> 0, new2 -> 1.
+          [tied, 2, [8], 3],
+        ],
+      },
     );
   });
 
