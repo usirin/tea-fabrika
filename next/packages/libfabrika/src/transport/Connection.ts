@@ -1,3 +1,9 @@
+/**
+ * The per-connection driver for one gateway socket: it reads and saves the connection's attached
+ * state around each JSON-RPC frame, tracks parked waits and answers them when a stream advances.
+ *
+ * @stability unstable
+ */
 import { applyCell } from "@demlik/tea";
 import { Effect, Exit, Option, Predicate, Result, Schema, Semaphore } from "effect";
 import { REFUSED } from "../SpanTag.ts";
@@ -32,6 +38,44 @@ type Options<E, ReadError> = {
   readonly call: (method: string, params: unknown) => Effect.Effect<typeof Answer.Type, E>;
 };
 
+/**
+ * Creates the handlers for one connection. The caller supplies the I/O in `options` and gets back
+ * four effects: `frame`, `ring`, `wake` and `probe`.
+ *
+ * **Details**
+ *
+ * The saved attachment is the only state. Every handler starts from `options.read()`, which may
+ * return the value or an effect that does, and writes changes back with `options.save`. Nothing is
+ * cached between calls. `options.call` answers an ordinary request, `options.wait` registers a
+ * wait on a stream, `options.send` writes a text frame, `options.close` closes the socket, and
+ * `options.ping` gives the ping interval, or `null`.
+ *
+ * - `frame(text)` takes one text frame. Text that is not a JSON-RPC 2.0 request is dropped without
+ *   a reply. A `ledger.wait` request is saved as a wait and registered, and stays parked unless
+ *   `options.wait` answers it at once. It needs an online connection and `stream` and
+ *   `after` params, and it is refused with `no_hello`, `bad_input` or `too_many_waits` when it
+ *   does not fit. Waits are limited by a repeated id, by 64 waits and by 16,384 bytes of saved
+ *   attachment. Every other request runs one at a time, marks the connection busy while
+ *   `options.call` runs, sends the answer, and marks it idle again even if the call failed. A
+ *   connection that is not online may only call `initialize` or `gateway.knock`; the rest get
+ *   `no_hello`.
+ * - `ring(stream, rev, onRefused)` answers every wait on `stream` whose position is below `rev`
+ *   with the new `rev`. It then registers the earliest remaining wait on that stream again, and
+ *   repeats until one stays parked. `onRefused` hears a `reserved` or `rate_limited` reason.
+ * - `wake()` closes the socket with code 1012 when the connection is busy, and does nothing
+ *   otherwise.
+ * - `probe(session)` returns the ping interval when `session` is this connection's session and the
+ *   connection is online, and `null` otherwise.
+ *
+ * **Gotchas**
+ *
+ * A failed `options.call` is sent no reply and its failure is returned to the caller of `frame`
+ * after the busy marker is cleared. A failed wait registration whose error is a `RateCountFailure`
+ * drops the wait and also fails the caller.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const connection = <E, ReadError = never>(options: Options<E, ReadError>) => {
   const turn = Semaphore.makeUnsafe(1);
   const [unloaded] = State.connection.init(null, {});

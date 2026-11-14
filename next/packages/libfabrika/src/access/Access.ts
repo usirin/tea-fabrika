@@ -1,15 +1,35 @@
-// Who belongs: signed events in, a grant tree out (p28), as one tea machine, `access` (0037, 0046).
-// Pure, so the door's rule and the view are one update and never drift. Tier 1, P9, building
-// account recovery's calls 6 to 9 and a key per client. Every device the person owns is a master:
-// devices are equal roots, and client keys hang under the device that let them in. The
-// sheet belongs to the person and works once.
-//
-// It never checks a signature: the door does, then hands the event here. The Model is never
-// stored and `Access` is a projection of it, so a later rule re-judges old events.
+/**
+ * Who belongs: signed membership events in, a tree of keys out, as one tea machine named `access`
+ * (0037, 0046).
+ *
+ * **Details**
+ *
+ * The machine is pure, so the door's rule and the view are one update and never drift. It carries
+ * account recovery's calls 6 to 9 and a key per client. Every device the person owns is a master:
+ * devices are equal roots, and client keys hang under the device that let them in. A recovery
+ * sheet belongs to the person and works once.
+ *
+ * It never checks a signature: the door does, then hands the event here. The Model is never
+ * stored and `Access` is a projection of it, so a later rule re-judges old events.
+ *
+ * @stability unstable
+ */
 import { Machine } from "@demlik/tea/effect";
 import { Result, Schema } from "effect";
 
-/** What the person saw when they let a client in. Recorded, never trusted. */
+/**
+ * Schema for what the person saw when they let a client in.
+ *
+ * **Details**
+ *
+ * It holds the code shown, the device's label and location, how the person compared (`compare`,
+ * `link` or `command`), what kind of check they made (`touch`, `click` or `none`), and a list of
+ * strings in `has`. It is recorded in a grant's signed text and in a denial, and nothing decides
+ * on it.
+ *
+ * @stability unstable
+ * @category models
+ */
 export const Saw = Schema.Struct({
   code: Schema.String,
   label: Schema.String,
@@ -19,7 +39,19 @@ export const Saw = Schema.Struct({
   has: Schema.Array(Schema.String),
 });
 
-/** A client's key, let in by a person key. In the signed text whole. */
+/**
+ * Schema for a grant: a client's key, let in by a person key.
+ *
+ * **Details**
+ *
+ * `for` is the person and the signer must be one of their keys. `to` names this ledger, so a grant
+ * cannot be replayed on another. `as` says whether the key is a `window`, an `agent` or `hands`.
+ * The whole struct is part of the signed text, and `sentAt` is the signer's own clock, never
+ * trusted.
+ *
+ * @stability unstable
+ * @category models
+ */
 export const Grant = Schema.Struct({
   id: Schema.String,
   key: Schema.String,
@@ -33,7 +65,16 @@ export const Grant = Schema.Struct({
   sentAt: Schema.String,
 });
 
-/** What the person saw when they removed a key. In the signed text, as a grant's `saw` is. */
+/**
+ * Schema for what the person saw when they removed a key.
+ *
+ * **Details**
+ *
+ * Like a grant's `saw`, it sits inside the signed text. Its `method` is `panel` or `command`.
+ *
+ * @stability unstable
+ * @category models
+ */
 export const Took = Schema.Struct({
   label: Schema.String,
   location: Schema.String,
@@ -41,7 +82,18 @@ export const Took = Schema.Struct({
   check: Schema.Literals(["touch", "click", "none"]),
 });
 
-/** The signed text, the signature, and the key that signed. The door checked it before. */
+/**
+ * Schema for a signed event's proof: the signed text, its armored signature, and the signing key.
+ *
+ * **Details**
+ *
+ * The door checks the signature before the event reaches the machine, so nothing here verifies it.
+ * `passkey` is present when the signature came from a passkey, and holds its origin, relying
+ * party, flags and counter.
+ *
+ * @stability unstable
+ * @category models
+ */
 export const Signed = Schema.Struct({
   text: Schema.String,
   armored: Schema.String,
@@ -57,7 +109,17 @@ export const Signed = Schema.Struct({
   ),
 });
 
-/** A removal, the grant's twin: its own id, and the ledger it was meant for (flag 5). */
+/**
+ * Schema for a removal, the grant's twin: its own id, and the ledger it was meant for.
+ *
+ * **Details**
+ *
+ * `key` is the key to stop, `for` the person, and `to` the ledger, so a removal cannot be replayed
+ * on another. `saw` records what the person saw, and `sentAt` is the signer's own clock.
+ *
+ * @stability unstable
+ * @category models
+ */
 export const Revoke = Schema.Struct({
   id: Schema.String,
   key: Schema.String,
@@ -67,7 +129,20 @@ export const Revoke = Schema.Struct({
   sentAt: Schema.String,
 });
 
-/** What the person saw when a key was added. In the signed text. */
+/**
+ * Schema for what the person saw when a key was added.
+ *
+ * **Details**
+ *
+ * `method` says how it came in: `sheet`, `recovery`, `device`, `email` or `command`. `typed` and
+ * `kept` apply on a sheet (two words typed back, and the button used), and `old` applies on a
+ * recovery (the person's answer about the old device). A writer sends `false` or `null` for the
+ * fields that do not apply; nothing checks that they match `method`. It sits inside the signed
+ * text.
+ *
+ * @stability unstable
+ * @category models
+ */
 export const AddSaw = Schema.Struct({
   method: Schema.Literals(["sheet", "recovery", "device", "email", "command"]),
   check: Schema.Literals(["touch", "click", "none"]),
@@ -81,7 +156,18 @@ export const AddSaw = Schema.Struct({
   old: Schema.NullOr(Schema.Literals(["lost", "kept"])),
 });
 
-/** What joins: a new device (its person key and window key) or a new sheet. */
+/**
+ * Schema for what an addition brings in: a new device or a new recovery sheet.
+ *
+ * **Details**
+ *
+ * A `person` case carries the device's person key and its window key, and may carry passkey
+ * enrollment proof. A `recovery` case carries the sheet's key. The case tag is the rank the key
+ * joins with.
+ *
+ * @stability unstable
+ * @category models
+ */
 export const Adds = Schema.TaggedUnion({
   person: {
     key: Schema.String,
@@ -101,6 +187,19 @@ export const Adds = Schema.TaggedUnion({
   recovery: { key: Schema.String, v: Schema.Literal(1) },
 });
 
+/**
+ * Schema for an addition: a new device or sheet joins, and some of the person's keys stop at the
+ * same moment.
+ *
+ * **Details**
+ *
+ * `drops` lists keys that stop now, forever, with all they let in. The signing key is never
+ * dropped by its own addition. A new sheet also ends every other live sheet, whatever `drops`
+ * says. The struct is part of the signed text.
+ *
+ * @stability unstable
+ * @category models
+ */
 export const Add = Schema.Struct({
   id: Schema.String,
   for: Schema.String,
@@ -112,6 +211,18 @@ export const Add = Schema.Struct({
   sentAt: Schema.String,
 });
 
+/**
+ * Schema for one membership event: the founding, a grant, a denial, a removal or an addition.
+ *
+ * **Details**
+ *
+ * Only `founded` and `denied` carry no signature: `denied` records a refused attempt, with the
+ * key that wrote it in `by`. A `founded` event is kept under the fixed id `founded`, so a second
+ * founding changes nothing.
+ *
+ * @stability unstable
+ * @category models
+ */
 export const MemberEvent = Schema.TaggedUnion({
   founded: {
     id: Schema.String,
@@ -124,6 +235,12 @@ export const MemberEvent = Schema.TaggedUnion({
   revoked: { revoke: Revoke, signed: Signed },
   added: { add: Add, signed: Signed },
 });
+/**
+ * The decoded type of `MemberEvent`.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type MemberEvent = typeof MemberEvent.Type;
 
 /** Rank `email`, the brain's own key, waits for P36. */
@@ -146,6 +263,19 @@ type Keys = ReadonlyMap<string, Key>;
 /** A key as the view shows it. */
 type Member = { readonly rank: Rank; readonly live: boolean; readonly under: string | null };
 
+/**
+ * The public view of who belongs: the person, the name, every key with its rank and place, and the
+ * recovery keys that are spent.
+ *
+ * **Details**
+ *
+ * It is derived from the machine's Model by `members`, never stored and never machine input.
+ * `under` is the key that let a key in, or null for a root. A key that stopped stays in the map
+ * with `live` false.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Access = {
   /** From `founded`, never changed. Empty before the founding. */
   readonly person: string;
@@ -155,8 +285,27 @@ export type Access = {
   readonly spent: ReadonlySet<string>;
 };
 
-/** Why an event changes nothing. */
+/**
+ * Schema for why an event changes nothing.
+ *
+ * **Details**
+ *
+ * `not_member` is an unknown signer or person, a removal of a key that was never let in, or an
+ * event before the founding. `not_allowed` is a signer of the wrong rank, a key removing itself, or
+ * a key that would join with a rank it does not hold. `used` is a recovery sheet that already let a
+ * device in. `replaced` is a sheet a newer one ended. `revoked`
+ * is a stopped key, as signer or as the key an event is about.
+ *
+ * @stability unstable
+ * @category models
+ */
 export const Reason = Schema.Literals(["not_member", "not_allowed", "used", "replaced", "revoked"]);
+/**
+ * The decoded type of `Reason`.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Reason = typeof Reason.Type;
 
 /** How the last event went. It never decides what is legal next. */
@@ -182,12 +331,33 @@ const Model = Schema.TaggedUnion({
   },
 });
 
+/**
+ * The machine's Model: `unfounded` before the founding, then `founded` with the person, the name,
+ * every key, the ids of the events taken, and the reply to the last event.
+ *
+ * **Gotchas**
+ *
+ * The reply says how the last event went and never decides what is legal next. Read who belongs
+ * through `members`, not through this type.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Folded = typeof Model.Type;
 type Founded = typeof Model.cases.founded.Type;
 
 const Msg = Schema.Struct({ type: Schema.Literal("fold"), event: MemberEvent });
 
-/** The id an event is kept under: its own, and the fixed `founded` for the founding. */
+/**
+ * Returns the id an event is kept under: its own, and the fixed `founded` for the founding.
+ *
+ * **Details**
+ *
+ * The machine remembers every id it took, so the same event twice changes nothing.
+ *
+ * @stability unstable
+ * @category getters
+ */
 export const eventId = (event: MemberEvent): string =>
   MemberEvent.match(event, {
     founded: () => "founded",
@@ -197,7 +367,13 @@ export const eventId = (event: MemberEvent): string =>
     added: ({ add }) => add.id,
   });
 
-/** The key that signed an event, if it is signed. */
+/**
+ * Returns the key that signed an event, or null for `founded` and `denied`, which carry no
+ * signature.
+ *
+ * @stability unstable
+ * @category getters
+ */
 export const signedBy = (event: MemberEvent): string | null =>
   MemberEvent.match(event, {
     founded: () => null,
@@ -207,7 +383,17 @@ export const signedBy = (event: MemberEvent): string | null =>
     added: ({ signed }) => signed.signer,
   });
 
-/** The key an event is about. */
+/**
+ * Returns the key an event is about, or null for `founded`.
+ *
+ * **Details**
+ *
+ * For a grant, a removal and a denial it is the key named in the event. For an addition it is the
+ * new key of `adds`, not its window.
+ *
+ * @stability unstable
+ * @category getters
+ */
 export const subject = (event: MemberEvent): string | null =>
   MemberEvent.match(event, {
     founded: () => null,
@@ -438,8 +624,21 @@ const fold = (model: Folded, event: MemberEvent): Folded => {
 };
 
 /**
- * Who belongs, one signed event at a time. No Cmds: `AccessFold.ts` steps it with `applyCell`, and
- * `ClientManager.write` answers with its reply, so the door and the view never drift.
+ * Machine that decides who belongs, one signed event at a time.
+ *
+ * **Details**
+ *
+ * It takes one `fold` message with an event, and has no Cmds. `AccessFold.ts` steps it with
+ * `applyCell`, and `ClientManager.write` answers with its reply, so the door and the view never
+ * drift. It starts from a loaded Model when one is given, else `unfounded`, which refuses every
+ * event except `founded`.
+ *
+ * **Gotchas**
+ *
+ * It never checks a signature, and a refused event leaves the keys as they were.
+ *
+ * @stability unstable
+ * @category machines
  */
 export const access = Machine.make({
   model: Model,
@@ -451,7 +650,16 @@ export const access = Machine.make({
   },
 });
 
-/** The public view of a Model: derived, never machine input. Empty strings before the founding. */
+/**
+ * Returns the public view of a Model: derived, never machine input.
+ *
+ * **Details**
+ *
+ * Before the founding the person and the name are empty strings and there are no keys.
+ *
+ * @stability unstable
+ * @category combinators
+ */
 export const members = (model: Folded): Access => {
   if (model._tag === "unfounded") {
     return { person: "", name: "", keys: new Map(), spent: new Set() };
@@ -489,8 +697,22 @@ const chainLive = (members: Access, key: string): boolean => {
   return true;
 };
 
-/** Who a dialing key is: a live client key with every key above it live. Person and recovery
- *  keys never dial. The same shape as transport's `Who`; wiring joins them. */
+/**
+ * Returns who a dialing key is, or `{ reason: "not_granted" }` when it may not dial.
+ *
+ * **Details**
+ *
+ * A key is admitted when it is a live client key (a window, an agent or hands) and every key above
+ * it, up to a root, is live. Person and recovery keys never dial. The answer has the same shape as
+ * transport's `Who`; wiring joins them.
+ *
+ * **Gotchas**
+ *
+ * A loop in the `under` chain counts as not live.
+ *
+ * @stability unstable
+ * @category combinators
+ */
 export const admitted = (
   members: Access,
   key: string,

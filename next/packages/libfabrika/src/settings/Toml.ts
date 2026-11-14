@@ -1,8 +1,17 @@
-// The settings module's TOML service. It owns key positions; a Layer such as TomlParser.layer owns
-// the grammar.
+/**
+ * The settings module's TOML service. It owns key positions; a Layer such as `TomlParser.layer` owns the grammar.
+ *
+ * @stability unstable
+ */
 import type { Effect } from "effect";
 import { Context, Schema } from "effect";
 
+/**
+ * A parsed TOML document: its values, and where each key and table header starts.
+ *
+ * @stability unstable
+ * @category models
+ */
 export interface TomlDocument {
   /** The document's values, as plain tables. */
   readonly value: Readonly<Record<string, unknown>>;
@@ -13,19 +22,47 @@ export interface TomlDocument {
   readonly spans: ReadonlyArray<{ readonly path: ReadonlyArray<string>; readonly line: number }>;
 }
 
+/**
+ * The text is not valid TOML.
+ *
+ * @stability unstable
+ * @category errors
+ */
 export class Syntax extends Schema.TaggedError<Syntax>()("Syntax", {
   cause: Schema.Defect(),
 }) {}
 
+/**
+ * A value cannot be written as TOML.
+ *
+ * @stability unstable
+ * @category errors
+ */
 export class Value extends Schema.TaggedError<Value>()("Value", {
   cause: Schema.Defect(),
 }) {}
 
+/**
+ * The path of a `set` or `remove` does not name an editable setting, such as a path through a value that is not a table.
+ *
+ * @stability unstable
+ * @category errors
+ */
 export class Conflict extends Schema.TaggedError<Conflict>()("Conflict", {
   path: Schema.Array(Schema.String),
   cause: Schema.Defect(),
 }) {}
 
+/**
+ * Error for a failed TOML operation, with the line it concerns.
+ *
+ * **Details**
+ *
+ * `reason` is `Syntax` when the text does not parse, `Value` when a value to write is not TOML, and `Conflict` when the path does not name an editable setting. A syntax error carries the parser's line, and a value error always says line 1.
+ *
+ * @stability unstable
+ * @category errors
+ */
 export class TomlError extends Schema.TaggedError<TomlError>()("TomlError", {
   reason: Schema.Union([Syntax, Value, Conflict]),
   message: Schema.String,
@@ -33,6 +70,16 @@ export class TomlError extends Schema.TaggedError<TomlError>()("TomlError", {
   cause: Schema.Defect(),
 }) {}
 
+/**
+ * Service for reading and editing TOML text.
+ *
+ * **Details**
+ *
+ * `parse` returns the document. `set` and `remove` return the edited text, and the result is parsed again before it is returned.
+ *
+ * @stability unstable
+ * @category services
+ */
 export class Toml extends Context.Service<
   Toml,
   {
