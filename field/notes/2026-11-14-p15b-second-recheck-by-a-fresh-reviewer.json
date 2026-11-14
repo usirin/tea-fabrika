@@ -14,6 +14,6 @@
   "test": "Replay: start a recheck from another session using only the lane's state file, and check the brief it builds carries the first review's findings and its not-run list.",
   "links": [
     "https://github.com/kamp-us/tea-fabrika/pull/1012",
-    "field/notes/2026-11-13-p15b-recheck-by-a-different-reviewer.json"
+    "https://github.com/kamp-us/tea-fabrika/blob/main/field/notes/2026-11-13-p15b-recheck-by-a-different-reviewer.json"
   ]
 }
