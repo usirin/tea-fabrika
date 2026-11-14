@@ -54,11 +54,6 @@ const unreachable = (cause: unknown) => new LedgerError({ reason: "unreachable",
  *  the platform threw inside it, in the form `unreachable` writes. */
 const lost = (cause: RpcCallError) => new LedgerError({ reason: "unreachable", message: thrown(cause.cause), cause });
 
-/** A call through a typed stub, inside `reach`, with no span of its own. `reach` opens one, and a
- *  lost call's message holds what the platform threw, which can be a letter's text: the caller's
- *  span decides what of it is kept, as for every client here (the mail law T1b). */
-const reached = <A>(call: Effect.Effect<A, LedgerError>) => reach(call, lost).pipe(Effect.withTracerEnabled(false));
-
 /** An object's contract as its callers see it: each call needs nothing, and fails with `LedgerError`. */
 type Calls<S> = {
   readonly [K in keyof S]: S[K] extends (...args: infer A) => Effect.Effect<infer B, infer _E, infer _R>
@@ -211,18 +206,18 @@ export class ProcessClient extends Context.Service<ProcessClient, Calls<Omit<Pro
     // The object's own LedgerError crosses as itself; a call that got no answer is `unreachable`.
     const process = makeRpcStub<ProcessClient["Service"]>(stub, { errors: [LedgerError] });
     return {
-      usage: (...args) => reached(process.usage(...args)),
-      mailed: (...args) => reached(process.mailed(...args)),
-      configure: (...args) => reached(process.configure(...args)),
-      descriptor: () => reached(process.descriptor()),
-      msg: (...args) => reached(process.msg(...args)),
-      open: (...args) => reached(process.open(...args)),
-      due: (...args) => reached(process.due(...args)),
-      restart: (...args) => reached(process.restart(...args)),
-      activity: (...args) => reached(process.activity(...args)),
-      recover: () => reached(process.recover()),
-      savedAlarm: () => reached(process.savedAlarm()),
-      abort: () => reached(process.abort()),
+      usage: (...args) => reach(process.usage(...args), lost),
+      mailed: (...args) => reach(process.mailed(...args), lost),
+      configure: (...args) => reach(process.configure(...args), lost),
+      descriptor: () => reach(process.descriptor(), lost),
+      msg: (...args) => reach(process.msg(...args), lost),
+      open: (...args) => reach(process.open(...args), lost),
+      due: (...args) => reach(process.due(...args), lost),
+      restart: (...args) => reach(process.restart(...args), lost),
+      activity: (...args) => reach(process.activity(...args), lost),
+      recover: () => reach(process.recover(), lost),
+      savedAlarm: () => reach(process.savedAlarm(), lost),
+      abort: () => reach(process.abort(), lost),
     };
   }
 }
