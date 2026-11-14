@@ -148,8 +148,8 @@ repo is public". The ones a description breaks most:
 - A pull request or an issue is a full URL. A decision or a note is a full URL too: a relative link
   does not resolve in a description.
 - No personal names, no account names, no machine paths, and nothing a person typed in a chat.
-- No credit line, no "generated with" footer and no session link. The agent never names itself
-  ([0401](../../../.decisions/0401-agents-commit-as-the-fabrikalfa-bot.md)).
+- No session link. A credit line for the agent is fine
+  ([0187](../../../.decisions/0187-a-commit-may-credit-its-agent.md)).
 
 ## Send it
 
@@ -188,7 +188,7 @@ Each of these is a rule code could hold. It stays here until its check lands
 - `## What this does` is there, with 3 to 6 bullets, before a lane's pull request is marked ready or
   `land.ts ready` takes a body file.
 - No heading has nothing under it, and the headings keep this order.
-- No relative link, no bare `#<n>`, no credit footer and no session link.
+- No relative link, no bare `#<n>` and no session link.
 - `leakgrep.sh --text` on the title and the description wherever a tool sends them. `land.ts run`
   does it today.
 - Every file path named in the description is in the diff, and every law title is in one of its

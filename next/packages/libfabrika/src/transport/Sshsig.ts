@@ -1,12 +1,21 @@
-// SSHSIG written and checked, Ed25519 only: the bytes OpenSSH's PROTOCOL.sshsig gives, the same
-// file `ssh-keygen -Y sign` writes and `-Y verify` reads. Tier 1, P7 (laws p27 and p44).
-//
-//   blob   = "SSHSIG" u32(1) string(key) string(space) string(reserved) string(hash) string(signature)
-//   signed = "SSHSIG" string(space) string(reserved) string(hash) string(H(text))
-//   string = a u32 length, then the bytes (RFC 4251)
-//
-// Pure but for WebCrypto, so a browser tab runs it as Node does. Base64 goes through Effect's
-// encoding, never Node's `Buffer`.
+/**
+ * SSHSIG written and checked: the bytes OpenSSH's PROTOCOL.sshsig gives, the same file
+ * `ssh-keygen -Y sign` writes and `-Y verify` reads. Ed25519 keys are written and checked; a
+ * passkey signature is also checked, when the caller gives a policy.
+ *
+ * **Details**
+ *
+ * ```text
+ * blob   = "SSHSIG" u32(1) string(key) string(space) string(reserved) string(hash) string(signature)
+ * signed = "SSHSIG" string(space) string(reserved) string(hash) string(H(text))
+ * string = a u32 length, then the bytes (RFC 4251)
+ * ```
+ *
+ * The code is pure but for WebCrypto, so a browser tab runs it as Node does. Base64 goes through
+ * Effect's encoding, never Node's `Buffer`.
+ *
+ * @stability unstable
+ */
 import { Effect, Option, Schema } from "effect";
 import { Base64 } from "effect/encoding";
 import { armor, type Bytes, field, holds, join, reader, same, subtle, u32, utf8 } from "./internal/binary.ts";
@@ -38,8 +47,15 @@ const keyBlob = (line: string): Option.Option<Uint8Array> => {
 };
 
 /**
- * One key line, `ssh-ed25519 <base64 of the 51-byte key blob> [comment]`, kept as given. Decode it
- * once, where a line comes in, and `writeSshsig` never meets a line it cannot sign for.
+ * Schema for one key line, `ssh-ed25519 <base64 of the 51-byte key blob> [comment]`, kept as given.
+ *
+ * **When to use**
+ *
+ * Use to decode a line once, where it comes in, so `writeSshsig` never meets a line it cannot sign
+ * for. A line that is not an Ed25519 key line fails with "an ssh-ed25519 key line".
+ *
+ * @stability unstable
+ * @category models
  */
 export const KeyLine = Schema.String.pipe(
   Schema.check(
@@ -47,6 +63,12 @@ export const KeyLine = Schema.String.pipe(
   ),
   Schema.brand("KeyLine"),
 );
+/**
+ * The type of a decoded `KeyLine`: a string branded as an Ed25519 key line.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type KeyLine = typeof KeyLine.Type;
 
 /** A hash a signature may name, the spec's two, with WebCrypto's name for it. */
@@ -103,10 +125,18 @@ type Answer = { readonly signer: string } | { readonly reason: "bad_signature" }
 const refused: Answer = { reason: "bad_signature" };
 
 /**
- * Which of `signers` signed `text` under `space`: that entry, as given. Any refusal, of any cause,
- * is the one answer `{reason: "bad_signature"}` (p27). It never fails and never dies. The key inside
- * the signature is matched to a signer first, as Go's sshsig `Verify` does; a signer line that is
- * not Ed25519 never matches.
+ * Schema for the answer of `verifySshsig`: `key` for an Ed25519 signer, `passkey` for a passkey
+ * signer, or `refused`.
+ *
+ * **Details**
+ *
+ * Both signer cases carry the matching line from `signers`, as given. `passkey` also carries the
+ * `origin` and `rp` the signature was made for, the `be` and `bs` flags (backup eligible and
+ * backup state) and the signature `counter`. `refused` always has the reason `bad_signature`,
+ * whatever the cause.
+ *
+ * @stability unstable
+ * @category models
  */
 export const Checked = Schema.TaggedUnion({
   key: { signer: Schema.String },
@@ -123,6 +153,25 @@ export const Checked = Schema.TaggedUnion({
 
 const bad = Checked.cases.refused.make({ reason: "bad_signature" });
 
+/**
+ * Checks an armored SSHSIG over `text` and says which of `signers` signed it.
+ *
+ * **Details**
+ *
+ * The key inside the signature is matched to a signer line first, as Go's sshsig `Verify` does.
+ * A signer line can be an Ed25519 key line or a passkey line; any other line never matches. The
+ * signature's namespace must equal `space`, and its hash is sha512 or sha256.
+ *
+ * - An Ed25519 signer gives `key` when the 64-byte signature verifies.
+ * - A passkey signer gives `passkey` only when `policy` is given and `checkPasskey` accepts it
+ *   under that policy. Without `policy` it is refused.
+ *
+ * Any refusal, of any cause, is the one answer `{ _tag: "refused", reason: "bad_signature" }`. It
+ * never fails and never dies: a WebCrypto error also becomes that answer.
+ *
+ * @stability unstable
+ * @category combinators
+ */
 export const verifySshsig = Effect.fn("transport.verifySshsig")(function* (a: {
   readonly text: string;
   readonly armored: string;
@@ -174,6 +223,18 @@ export const verifySshsig = Effect.fn("transport.verifySshsig")(function* (a: {
   );
 });
 
+/**
+ * Checks an armored SSHSIG against Ed25519 signer lines only, and answers with a plain object.
+ *
+ * **Details**
+ *
+ * Passkey lines in `signers` are dropped before the check and no policy is passed, so only an
+ * Ed25519 signature can pass. The answer is `{ signer }` with the matching line, or
+ * `{ reason: "bad_signature" }`. It never fails and never dies. Use `verifySshsig` to accept passkeys.
+ *
+ * @stability unstable
+ * @category combinators
+ */
 export const checkSshsig = Effect.fn("transport.checkSshsig")(function* (a: {
   readonly text: string;
   readonly armored: string;
@@ -188,9 +249,17 @@ export const checkSshsig = Effect.fn("transport.checkSshsig")(function* (a: {
 });
 
 /**
- * The same bytes `ssh-keygen -Y sign -n <space>` writes: sha512, base64 wrapped at 70. `sign` is
- * the raw Ed25519 signature from any key holder (WebCrypto in a tab, the person key in the app).
- * It fails only with `sign`'s error: hashing bytes cannot fail, so a rejection there is a defect.
+ * Writes an armored SSHSIG over `text`: the same bytes `ssh-keygen -Y sign -n <space>` writes,
+ * with sha512 and base64 wrapped at 70.
+ *
+ * **Details**
+ *
+ * `sign` is given the bytes to sign and returns the raw Ed25519 signature. It can be any key
+ * holder: WebCrypto in a tab, or the person key in the app. This function fails only with
+ * `sign`'s error. Hashing bytes cannot fail, so a rejection there is a defect.
+ *
+ * @stability unstable
+ * @category constructors
  */
 export const writeSshsig = Effect.fn("transport.writeSshsig")(function* <E>(a: {
   readonly text: string;

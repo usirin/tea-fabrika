@@ -1,3 +1,15 @@
+/**
+ * Passkey (WebAuthn) keys in OpenSSH form: reading a passkey key line, checking a passkey
+ * signature, and turning a browser's WebAuthn assertion into an SSHSIG.
+ *
+ * **Details**
+ *
+ * The key type is `sk-ecdsa-sha2-nistp256@openssh.com`, a P-256 key tied to a relying party (rp).
+ * The signature type is `webauthn-sk-ecdsa-sha2-nistp256@openssh.com`. Only WebCrypto is used, so
+ * a browser tab runs it as Node does.
+ *
+ * @stability unstable
+ */
 import { Effect, Option, Schema } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { armor, type Bytes, field, holds, join, reader, same, subtle, u32, utf8 } from "./internal/binary.ts";
@@ -17,6 +29,18 @@ const keyParts = (blob: Uint8Array) =>
     return { point, rp };
   });
 
+/**
+ * Reads the key blob out of a passkey key line, or gives `none`.
+ *
+ * **Details**
+ *
+ * The line is `sk-ecdsa-sha2-nistp256@openssh.com <base64> [comment]`. The blob must name the curve
+ * `nistp256`, hold a 65-byte uncompressed point, a non-empty rp and nothing after. Any other line
+ * gives `none`.
+ *
+ * @stability unstable
+ * @category getters
+ */
 export const passkeyBlob = (line: string): Option.Option<Bytes> => {
   const [kind, base64] = line.split(/\s+/);
 
@@ -30,12 +54,33 @@ export const passkeyBlob = (line: string): Option.Option<Bytes> => {
   );
 };
 
+/**
+ * Reads the relying party (rp) from a passkey key line, or gives `none`.
+ *
+ * **Details**
+ *
+ * Gives `none` when the line is not a well-formed passkey line, or when its rp is not valid UTF-8.
+ *
+ * @stability unstable
+ * @category getters
+ */
 export const passkeyRp = (line: string): Option.Option<string> =>
   passkeyBlob(line).pipe(
     Option.flatMap(keyParts),
     Option.flatMap(({ rp }) => Option.liftThrowable(() => text(rp))()),
   );
 
+/**
+ * Schema for one OpenSSH P-256 passkey key line, kept as given and branded `PasskeyLine`.
+ *
+ * **When to use**
+ *
+ * Use to check a line once, where it comes in. A line that `passkeyBlob` cannot read fails with
+ * "an OpenSSH P-256 passkey line".
+ *
+ * @stability unstable
+ * @category models
+ */
 export const PasskeyLine = Schema.String.check(
   Schema.makeFilter((line: string) => (Option.isSome(passkeyBlob(line)) ? undefined : "an OpenSSH P-256 passkey line")),
 ).pipe(Schema.brand("PasskeyLine"));
@@ -75,6 +120,29 @@ const Client = Schema.fromJsonString(
   }),
 );
 
+/**
+ * Checks a passkey signature over `challenge` against a passkey key blob and a policy.
+ *
+ * **Details**
+ *
+ * Gives `{ origin, rp, be, bs, counter }` when the signature holds, and `null` otherwise. `be` and
+ * `bs` are the backup eligible and backup state flags. It does not fail: a WebCrypto error also
+ * gives `null`. All of these must hold:
+ *
+ * - The blob and the signature parse, with no byte left over. The signature is a
+ *   `webauthn-sk-ecdsa-sha2-nistp256@openssh.com` signature.
+ * - The flags show user presence and user verification, set neither reserved bit nor the attested
+ *   credential data bit, and do not set backup state without backup eligible. The extension data
+ *   flag is set exactly when extension data is present.
+ * - The key's rp equals `policy.rp`. The signature's origin equals the client data's origin and is
+ *   in `policy.origins`. The client data is not cross-origin.
+ * - The client data type is `webauthn.get`, and its challenge is the base64url of `challenge`.
+ * - The ECDSA P-256 signature verifies over the authenticator data and the SHA-256 of the client
+ *   data.
+ *
+ * @stability unstable
+ * @category combinators
+ */
 export const checkPasskey = Effect.fn("transport.checkPasskey")(function* (
   blob: Bytes,
   signature: Bytes,
@@ -138,6 +206,25 @@ class BadAssertion extends Schema.TaggedError<BadAssertion>()("BadAssertion", {
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
+/**
+ * Turns a browser's WebAuthn assertion into an armored SSHSIG over `text`.
+ *
+ * **Details**
+ *
+ * The passkey must have been asked to sign the SSHSIG signed bytes for `text` as its challenge
+ * (namespace `fabrika-client`, sha512). `assertion` holds the authenticator data, the client data
+ * JSON and the DER signature the browser gave back. The result is checked with `checkPasskey`
+ * before it is returned, using the key's rp and the origin named in the client data as the only
+ * allowed origin.
+ *
+ * It fails with `BadAssertion` when the DER signature is malformed, the authenticator data is
+ * shorter than 37 bytes, the client data is not valid, the authenticator data's rp hash does not
+ * match the key's rp, or the built signature does not pass `checkPasskey`. A WebCrypto error also
+ * fails the effect.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(function* (a: {
   readonly text: string;
   readonly line: typeof PasskeyLine.Type;
