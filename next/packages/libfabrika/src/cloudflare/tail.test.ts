@@ -3,13 +3,15 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Layer, Schema, Tracer } from "effect";
 import * as fc from "fast-check";
+import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { workerLoader } from "./index.ts";
 import type { Env } from "./runtime.ts";
 
 type BoundTail = NonNullable<Parameters<ReturnType<typeof workerLoader>["load"]>[2]>;
 
 const PROCESS = "process_0000000000e008000000000001";
-const methods = ["describe", "init", "step", "fold", "upgrade", "reply", "admit", "check", "other"] as const;
+// The product's own closed list, which the U10 format law pins word by word in IsolateUsage.test.ts.
+const methods = IsolateUsage.Method.literals;
 const outcomes = ["ok", "exception", "exceededCpu", "exceededMemory", "canceled", "other"] as const;
 const word = fc.string();
 

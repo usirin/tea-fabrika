@@ -23,12 +23,14 @@ import {
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Path, Tracer } from "effect";
+import { Effect, FileSystem, Path, Schema, Tracer } from "effect";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import { parseSync } from "oxc-parser";
 import { rolldown, type RolldownOptions, type OutputOptions, type RolldownOutput } from "rolldown";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import * as StartsTest from "../../settings/StartsTest.ts";
 
 const ROOT = resolve(import.meta.dirname, "../../../../../..");
 const homes: string[] = [];
@@ -45,6 +47,82 @@ const text = fc
 
 const graph = fc.record({ text, chaos: fc.boolean(), count: fc.integer({ min: 1, max: 3 }) });
 const runs = { seed: 119120, numRuns: 3 };
+
+it("A13: an actual built box exposes separate fresh, update and body-free audit calls", async () => {
+  await fc.assert(
+    fc.asyncProperty(fc.array(fc.noBias(fc.nat()), { minLength: 6, maxLength: 16 }), (tape) =>
+      Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const home = yield* p40Home();
+            yield* p40Module(home, "counter", "split-box");
+            const fs = yield* FileSystem.FileSystem;
+            const path = yield* Path.Path;
+            const builder = yield* Effect.promise(api);
+            const built = yield* builder.build({
+              out: path.join(home, "dist"),
+              root: home,
+              entry: path.join(home, "src/brain.ts"),
+              files: [],
+              ledger: [],
+              chaos: false,
+              programs: [{ name: "p13/counter", package: "@p40/counter", export: "program" }],
+            });
+            const file = path.join(home, "checked-box.mjs");
+            yield* fs.writeFileString(file, built.programs["p13/counter"]!.source);
+            const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+            const output = yield* spawner.string(
+              ChildProcess.make(
+                process.execPath,
+                [
+                  "--experimental-vm-modules",
+                  "--input-type=module",
+                  "-e",
+                  `
+import {readFileSync} from "node:fs";
+import {createContext,SourceTextModule,SyntheticModule} from "node:vm";
+const context=createContext({console,TextEncoder,TextDecoder,URL,crypto,fetch,Request,Response,Headers,AbortController,AbortSignal,setTimeout,clearTimeout,queueMicrotask,performance,Buffer,process:{env:{NODE_ENV:"test"}}});
+const module=new SourceTextModule(readFileSync(process.argv[1],"utf8"),{context});
+await module.link(name=>{if(name!=="cloudflare:workers")throw Error("unexpected module");return new SyntheticModule(["WorkerEntrypoint"],function(){this.setExport("WorkerEntrypoint",class{});},{context});});
+await module.evaluate();const Box=module.namespace.default;const box=new Box();
+let model=(await box.init(null)).model;const records=[];let updates=0;
+for(const n of JSON.parse(process.argv[2])){const type=model.count===0?"inc":n%2===0?"inc":"dec";const msg={type,body:"private \\"/雪"};const checked=await box.fresh(model,msg);if(checked._tag!=="admitted")throw Error("fresh did not admit");const selected=await box.audit(msg);records.push(selected);const prepared=await box.update(model,msg);if(prepared._tag!=="stepped")throw Error("update did not prepare");model=prepared.model;updates++;}
+process.stdout.write(JSON.stringify({model,records,updates}));
+`,
+                  file,
+                  JSON.stringify(tape),
+                ],
+                { env: { TYPESAFE_API_KEY: undefined }, extendEnv: true },
+              ),
+            );
+            const actual = Schema.decodeUnknownSync(
+              Schema.fromJsonString(
+                Schema.Struct({
+                  model: Schema.Struct({ count: Schema.Int }),
+                  records: Schema.Array(
+                    Schema.Struct({ _tag: Schema.Literal("ok"), value: Schema.Struct({ type: Schema.String }) }),
+                  ),
+                  updates: Schema.Int,
+                }),
+              ),
+            )(output);
+            let count = 0;
+            const types = tape.map((n) => {
+              const type = count === 0 || n % 2 === 0 ? "inc" : "dec";
+              count += type === "inc" ? 1 : -1;
+              return type;
+            });
+            expect(actual.model).toEqual({ count });
+            expect(actual.updates).toBe(tape.length);
+            expect(actual.records.map((r) => r.value)).toEqual(types.map((type) => ({ type })));
+          }),
+        ).pipe(Effect.provide(NodeServices.layer)),
+      ),
+    ),
+    { seed: 119120, numRuns: 6 },
+  );
+}, 120_000);
+
 // A clean build measured 0.12 to 0.3 s on a laptop; 10 s per generated sample is the budget.
 const buildTimeout = (samples = runs.numRuns) => samples * 10_000;
 type Selection = { readonly name: string; readonly package: string; readonly export: string };
@@ -1058,23 +1136,19 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
             // Every carried route as the brain answers it, by its plain and its encoded URL.
             const port = 8787;
             // A file route reaches no object: each binding answers nothing but the name lookup.
-            const binding = { getByName: () => ({}) };
+            const config = StartsTest.fixture(
+              { name: "p14", port, person: "p", founder: "f", window: null, build: built.build },
+              (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+            );
+            const binding = { getByName: () => ({ settingsStart: async () => StartsTest.reply(config) }) };
             // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only what file routes touch
             const env = {
+              INSTANCE: JSON.stringify(config),
               PROJECT: binding,
               CONNECTION: binding,
               PROCESS: binding,
               RECORD: binding,
             } as unknown as Parameters<typeof fetch>[1];
-            const config = {
-              name: "p14",
-              port,
-              person: "p",
-              founder: "f",
-              window: null,
-              build: built.build,
-              rateLimit: { limit: 100_000, window: 60_000 },
-            };
 
             for (const route of ["/", ...Object.keys(built.assets)]) {
               for (const url of [route, route.split("/").map(encodeURIComponent).join("/")]) {

@@ -6,8 +6,8 @@
  *
  * The machine is pure, so the door's rule and the view are one update and never drift. It carries
  * account recovery's calls 6 to 9 and a key per client. Every device the person owns is a master:
- * devices are equal roots, and only tabs and agents hang under the device that let them in. A
- * recovery sheet belongs to the person and works once.
+ * devices are equal roots, and client keys hang under the device that let them in. A recovery
+ * sheet belongs to the person and works once.
  *
  * It never checks a signature: the door does, then hands the event here. The Model is never
  * stored and `Access` is a projection of it, so a later rule re-judges old events.
@@ -18,7 +18,7 @@ import { Machine } from "@demlik/tea/effect";
 import { Result, Schema } from "effect";
 
 /**
- * Schema for what the person saw when they let a tab or an agent in.
+ * Schema for what the person saw when they let a client in.
  *
  * **Details**
  *
@@ -40,13 +40,14 @@ export const Saw = Schema.Struct({
 });
 
 /**
- * Schema for a grant: a tab's or an agent's key, let in by a person key.
+ * Schema for a grant: a client's key, let in by a person key.
  *
  * **Details**
  *
  * `for` is the person and the signer must be one of their keys. `to` names this ledger, so a grant
- * cannot be replayed on another. `as` says whether the key is a `window` or an `agent`. The whole
- * struct is part of the signed text, and `sentAt` is the signer's own clock, never trusted.
+ * cannot be replayed on another. `as` says whether the key is a `window`, an `agent` or `hands`.
+ * The whole struct is part of the signed text, and `sentAt` is the signer's own clock, never
+ * trusted.
  *
  * @stability unstable
  * @category models
@@ -58,7 +59,7 @@ export const Grant = Schema.Struct({
   for: Schema.String,
   /** This ledger's name, so a grant cannot be replayed on another. */
   to: Schema.String,
-  as: Schema.Literals(["window", "agent"]),
+  as: Schema.Literals(["window", "agent", "hands"]),
   saw: Saw,
   /** The signer's own clock, never trusted. */
   sentAt: Schema.String,
@@ -243,7 +244,7 @@ export const MemberEvent = Schema.TaggedUnion({
 export type MemberEvent = typeof MemberEvent.Type;
 
 /** Rank `email`, the brain's own key, waits for P36. */
-const Rank = Schema.Literals(["person", "window", "agent", "recovery"]);
+const Rank = Schema.Literals(["person", "window", "agent", "hands", "recovery"]);
 type Rank = typeof Rank.Type;
 
 /** A key's one standing, with the rank and place it joined with. Only a sheet is spent or
@@ -499,7 +500,7 @@ const found = ({ id, name, keys, window }: Event<"founded">): Folded => {
   return Model.cases.founded.make({ person: id, name, keys: change.keys, ids, reply: ACCEPTED });
 };
 
-/** A window or an agent let in by a live person key. */
+/** A client let in by a live person key. */
 const grant = (model: Founded, { grant, signed }: Event<"granted">) =>
   Result.flatMap(standing(model, signed.signer, grant.for), (rank) => {
     if (rank !== "person") {
@@ -701,9 +702,9 @@ const chainLive = (members: Access, key: string): boolean => {
  *
  * **Details**
  *
- * A key is admitted when it is a live window or agent and every key above it, up to a root, is
- * live. Person and recovery keys never dial. The answer has the same shape as transport's `Who`;
- * wiring joins them.
+ * A key is admitted when it is a live client key (a window, an agent or hands) and every key above
+ * it, up to a root, is live. Person and recovery keys never dial. The answer has the same shape as
+ * transport's `Who`; wiring joins them.
  *
  * **Gotchas**
  *
@@ -716,7 +717,7 @@ export const admitted = (
   members: Access,
   key: string,
 ):
-  | { readonly key: string; readonly person: string; readonly as: "window" | "agent" }
+  | { readonly key: string; readonly person: string; readonly as: "window" | "agent" | "hands" }
   | { readonly reason: "not_granted" } => {
   const known = members.keys.get(key);
 
@@ -724,7 +725,7 @@ export const admitted = (
     return { reason: "not_granted" };
   }
 
-  if (known.rank !== "window" && known.rank !== "agent") {
+  if (known.rank !== "window" && known.rank !== "agent" && known.rank !== "hands") {
     return { reason: "not_granted" };
   }
 

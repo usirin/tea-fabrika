@@ -12,7 +12,12 @@ export type Remote = {
 
 export const remote = (): Remote => ({ branches: new Map(), calls: [] });
 
-export type Failing = { readonly leak?: string; readonly push?: string };
+export type Failing = {
+  readonly leak?: string;
+  readonly leakChange?: string;
+  readonly leakText?: string;
+  readonly push?: string;
+};
 
 export const layer = (r: Remote, failing: Failing = {}): Layer.Layer<Pushes> =>
   Layer.succeed(
@@ -22,6 +27,20 @@ export const layer = (r: Remote, failing: Failing = {}): Layer.Layer<Pushes> =>
         Effect.suspend(() => {
           r.calls.push(`leakgrep ${head}`);
           return failing.leak === undefined ? Effect.void : Effect.fail(new LeakGrepRefused({ reason: failing.leak }));
+        }),
+      leakChange: (_dir, head) =>
+        Effect.suspend(() => {
+          r.calls.push(`leakchange ${head}`);
+          return failing.leakChange === undefined
+            ? Effect.void
+            : Effect.fail(new LeakGrepRefused({ reason: failing.leakChange }));
+        }),
+      leakText: (_dir, text) =>
+        Effect.suspend(() => {
+          r.calls.push(`leaktext ${text}`);
+          return failing.leakText === undefined
+            ? Effect.void
+            : Effect.fail(new LeakGrepRefused({ reason: failing.leakText }));
         }),
       push: (_dir, branch, head) =>
         Effect.suspend(() => {

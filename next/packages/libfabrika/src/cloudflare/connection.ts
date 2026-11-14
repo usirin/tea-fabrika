@@ -1,16 +1,30 @@
-import { Cause, Clock, Context, Effect, Layer, ManagedRuntime, Result, Schema } from "effect";
+import { Cause, Clock, Context, Effect, Layer, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
+import { RecordedStart } from "../settings/RecordedStart.ts";
 import { errorClass, REFUSED, SinkError } from "../telemetry/Trace.ts";
 import { connection } from "../transport/Connection.ts";
 import { Answer, Attached, Hello, RateCountFailure } from "../transport/Wire.ts";
 import type { ConnectionId } from "./bindings.ts";
 import { cloudflareSql } from "./CloudflareSql.ts";
 import { ProjectClient, rejected } from "./platform.ts";
-import { complete, projectStub, recordingLayer, rpc, type BrainOptions, type Env } from "./runtime.ts";
+import {
+  complete,
+  projectStub,
+  recordedLayer,
+  recordingLayer,
+  rpc,
+  SettingsRuntime,
+  type BrainOptions,
+  type Env,
+  type ProjectOptions,
+} from "./runtime.ts";
 
-const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: Env, config: BrainOptions) {
+const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: Env) {
+  const checked = yield* RecordedStart;
+  const port = checked.values.port;
+  const config = checked.input;
   const p = ProjectClient.make(projectStub(env, config.name)),
     ids = yield* ProcessIdGenerator;
   const gateway = yield* Schema.decodeUnknownEffect(Schema.String)(ctx.id.name).pipe(
@@ -18,7 +32,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
   );
   const recording = yield* Layer.build(
     recordingLayer(cloudflareSql(ctx.storage), env, config.name, `connection:${gateway}`),
-  );
+  ).pipe(Effect.provideService(RecordedStart, checked));
   const recorded = <A, E>(work: Effect.Effect<A, E>, counted?: (value: A) => boolean) =>
     complete(work, counted).pipe(Effect.provideContext(recording));
   const routed = Effect.fnUntraced(function* (work: Effect.Effect<typeof Answer.Type, LedgerError>) {
@@ -85,7 +99,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
             const hello = Schema.decodeUnknownResult(Hello)(params);
             const result = yield* rpc(
               p.initialize(client, params, {
-                url: `http://127.0.0.1:${config.port}`,
+                url: `http://127.0.0.1:${port}`,
                 tab,
                 name: key,
               }),
@@ -114,6 +128,8 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
                 waits: [],
                 watching: false,
                 busy: false,
+                has: result.hello.has,
+                ...(result.hello.build === undefined ? {} : { build: result.hello.build }),
               }),
             );
             const at = yield* Clock.currentTimeMillis;
@@ -124,9 +140,12 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
           }
 
           if (method === "gateway.knock") {
-            const input = yield* Schema.decodeUnknownEffect(Schema.Struct({ label: Schema.String }))(params).pipe(
-              Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-            );
+            const input = yield* Schema.decodeUnknownEffect(
+              Schema.Struct({
+                label: Schema.String,
+                as: Schema.optionalKey(Schema.Literals(["window", "agent", "hands"])),
+              }),
+            )(params).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
             const result = yield* rpc(p.knock(client, input));
 
             if (result._tag === "ok") {
@@ -176,6 +195,15 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
     yield* rpc(p.disconnect(state.client as ConnectionId));
     connections.delete(ws);
   });
+  // The runtime leaves a peer's close frame unanswered, and a browser then keeps its socket closing
+  // for 10 s before it reports the close. One close frame back ends it at once (RFC 6455, 5.5.1). It
+  // carries the peer's code, or 1000 for a code no frame may carry (1005, 1006). A socket that is
+  // already gone refuses the frame, and nothing is left to answer.
+  const answerClose = (ws: WebSocket, code: number) =>
+    Effect.try({
+      try: () => ws.close(code === 1000 || (code >= 3000 && code <= 4999) ? code : 1000, "closed"),
+      catch: (cause) => new LedgerError({ reason: "unreachable", cause }),
+    }).pipe(Effect.ignore);
   const ring = Effect.fn("connection.ring")(function* (stream: string, rev: number) {
     const span = yield* Effect.currentSpan;
     const onRefused = (reason: string) => Effect.sync(() => span.attribute(REFUSED, reason));
@@ -262,7 +290,11 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
       const work = (yield* connected(ws)).frame(text);
       yield* state._tag === "online" ? recorded(work) : work;
     }),
-    close: Effect.fnUntraced(function* (ws: WebSocket) {
+    close: Effect.fnUntraced(function* (ws: WebSocket, code?: number) {
+      if (code !== undefined) {
+        yield* answerClose(ws, code);
+      }
+
       return yield* (yield* attached(ws))._tag === "online" ? recorded(close(ws)) : close(ws);
     }),
     ring: (stream: string, rev: number) => recorded(ring(stream, rev), (counted) => counted).pipe(Effect.asVoid),
@@ -280,8 +312,20 @@ export class ConnectionService extends Context.Service<
   Effect.Success<ReturnType<typeof gatewayLogic>>
 >()("@kampus/libfabrika/cloudflare/connection.ConnectionService") {}
 
-export const connectionLayer = (ctx: DurableObjectState, env: Env, config: BrainOptions) =>
-  Layer.effect(ConnectionService, gatewayLogic(ctx, env, config)).pipe(Layer.provide(ProcessIdGenerator.layer));
+export const connectionLayer = (
+  ctx: DurableObjectState,
+  env: Env,
+  _config?: BrainOptions,
+  input?: ProjectOptions["input"],
+) =>
+  Layer.effect(ConnectionService, gatewayLogic(ctx, env)).pipe(
+    Layer.provide(ProcessIdGenerator.layer),
+    Layer.provide(input === undefined ? recordedLayer(env) : recordedLayer(env, input)),
+  );
 
-export const connectionRuntime = (ctx: DurableObjectState, env: Env, config: BrainOptions) =>
-  ManagedRuntime.make(connectionLayer(ctx, env, config));
+export const connectionRuntime = (
+  ctx: DurableObjectState,
+  env: Env,
+  config?: BrainOptions,
+  input?: ProjectOptions["input"],
+) => SettingsRuntime.runtime(connectionLayer(ctx, env, config, input));

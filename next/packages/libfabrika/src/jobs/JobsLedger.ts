@@ -3,11 +3,13 @@
 // when the machine accepts it. A repeat answers the first event's receipt; a refusal writes nothing.
 // Tier 1, P39 slice 1.
 import { applyCell } from "@demlik/tea";
-import { Effect, Layer, Result as R, Schema } from "effect";
+import { Effect, Layer, Result as R, Schema, Stream } from "effect";
 import * as Id from "../Id.ts";
 import type { LedgerError } from "../ledger/Ledger.ts";
+import { LedgerStreams } from "../ledger/LedgerStreams.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
-import { type Entry, lineFor, valueFor } from "../ledger/Log.ts";
+import { lineFor, valueFor } from "../ledger/Log.ts";
+import type { ProcessId } from "../ProcessId.ts";
 import { job, Msg } from "./internal/job.ts";
 import { Event, Executor, type Job, Recorded, Request, Result } from "./Job.ts";
 import { Jobs, JobsError } from "./Jobs.ts";
@@ -17,10 +19,10 @@ const Execution = Id.make("execution");
 
 /** An accepted call as its entry keeps it: the event's case, and the facts it brought. */
 const Stored = Schema.TaggedUnion({
-  requested: { request: Request },
-  taken: { executor: Executor, execution: Schema.NonEmptyString },
-  started: { execution: Schema.NonEmptyString },
-  finished: { execution: Schema.NonEmptyString, result: Result },
+  requested: { request: Request, recorded: Schema.optionalKey(Recorded) },
+  taken: { executor: Executor, execution: Schema.NonEmptyString, recorded: Schema.optionalKey(Recorded) },
+  started: { execution: Schema.NonEmptyString, recorded: Schema.optionalKey(Recorded) },
+  finished: { execution: Schema.NonEmptyString, result: Result, recorded: Schema.optionalKey(Recorded) },
 });
 type Stored = typeof Stored.Type;
 
@@ -63,8 +65,8 @@ type Model = (typeof job)["model"]["Type"];
 
 const step = (model: Model, msg: Msg): Model => applyCell(job, model, msg)[0];
 
-const fold = (entries: ReadonlyArray<Entry>): Model =>
-  entries.reduce((model, entry) => step(model, toMsg(decodeStored(valueFor(entry)))), job.init(null, undefined)[0]);
+const fold = (events: ReadonlyArray<Stored>): Model =>
+  events.reduce((model, event) => step(model, toMsg(event)), job.init(null, undefined)[0]);
 
 /** A ledger failure as the jobs module's: a line the referee refused is the caller's input. */
 const translated = (cause: LedgerError) =>
@@ -75,6 +77,28 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const ledger = yield* LedgerTransaction;
     const ids = yield* Id.Generator;
+    const streams = yield* LedgerStreams;
+
+    const read = Effect.fn("jobs.read")(function* (id: string) {
+      const found = yield* ledger
+        .transact((turn) => {
+          const saved = [...turn.read(stream(id), 0)].map((entry) => ({
+            entry,
+            stored: decodeStored(valueFor(entry)),
+          }));
+          const events = saved.map(({ entry, stored }) =>
+            decodeEvent({ ...entry, ...stored.recorded, event: entry._tag }),
+          );
+          return { state: fold(saved.map(({ stored }) => stored)).state, events };
+        })
+        .pipe(Effect.mapError(translated));
+
+      if (found.state._tag === "absent") {
+        return yield* new JobsError({ reason: "not_found" });
+      }
+
+      return found satisfies Job;
+    });
 
     /** One call in one transaction. It answers the receipt of the call's event and the job after it. */
     const call = Effect.fnUntraced(function* (id: string, input: Msg, said: Recorded) {
@@ -88,14 +112,17 @@ export const layer = Layer.effect(
       const stored = toStored(msg);
       const answer = yield* ledger
         .transact((turn) => {
-          const model = step(fold([...turn.read(stream(id), 0)]), msg);
+          const model = step(fold([...turn.read(stream(id), 0)].map((entry) => decodeStored(valueFor(entry)))), msg);
 
           if (model.answer._tag === "refused") {
             return R.fail(model.answer.reason);
           }
 
           if (model.answer._tag === "accepted") {
-            turn.append(stream(id), `${id}/${stored._tag}`, lineFor(recorded, encodeStored(stored)));
+            // JSON preserves the writer's UTF-16 strings, including lone surrogates that SQL text replaces.
+            // Older events have no saved record and keep reading their ledger metadata.
+            const { connection: _connection, has: _has, ...writer } = recorded;
+            turn.append(stream(id), `${id}/${stored._tag}`, lineFor(writer, encodeStored({ ...stored, recorded })));
           }
 
           const entry = [...turn.read(stream(id), 0)].find((e) => e._tag === stored._tag);
@@ -133,21 +160,13 @@ export const layer = Layer.effect(
       finish: Effect.fn("jobs.finish")(function* (id: string, execution: string, result: Result, recorded: Recorded) {
         return (yield* call(id, { type: "finish", execution, result }, recorded)).receipt;
       }),
-      read: Effect.fn("jobs.read")(function* (id: string) {
-        const found = yield* ledger
-          .transact((turn) => {
-            const entries = [...turn.read(stream(id), 0)];
-            const events = entries.map((entry) => decodeEvent({ ...entry, event: entry._tag }));
-            return { state: fold(entries).state, events };
-          })
-          .pipe(Effect.mapError(translated));
-
-        if (found.state._tag === "absent") {
-          return yield* new JobsError({ reason: "not_found" });
-        }
-
-        return found satisfies Job;
-      }),
+      read,
+      forProcess: (process: typeof ProcessId.Type) =>
+        streams.list("job:").pipe(
+          Stream.mapError((cause) => new JobsError({ reason: "storage", cause })),
+          Stream.mapEffect((name) => read(name.slice("job:".length))),
+          Stream.filter((job) => job.state._tag !== "absent" && job.state.request.process === process),
+        ),
     };
   }),
 );

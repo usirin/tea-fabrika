@@ -7,6 +7,8 @@ import { programs as selected } from "./table.ts";
 
 export type { Built } from "@kampus/libfabrika/build";
 
+const STYLES = ["@manti-ui/styles/index.css", "@kampus/fabrika-design/tokens.css", "@kampus/tuval/style.css"];
+
 type Options = {
   readonly out: string;
   /** `.tsx` files the Compiler checks. Every `.tsx` file under `next/` by default. */
@@ -33,6 +35,9 @@ export const build = Effect.fn("build.app")(function* (options: Options) {
       Effect.map((found) => found.filter((p) => !p.includes("node_modules") && !p.includes(".test."))),
       Effect.mapError((cause) => new BuildError({ reason: "read", cause })),
     ));
+  const styles = yield* Effect.forEach(STYLES, (module) => path.fromFileUrl(new URL(import.meta.resolve(module))), {
+    concurrency: 1,
+  }).pipe(Effect.mapError((cause) => new BuildError({ reason: "read", cause })));
   return yield* buildOne({
     out: options.out,
     root: ROOT,
@@ -41,5 +46,6 @@ export const build = Effect.fn("build.app")(function* (options: Options) {
     files,
     ...(options.ledger === undefined ? {} : { ledger: options.ledger }),
     chaos: options.chaos ?? false,
+    tab: { entry: path.join(APP, "src/entry/browser.tsx"), styles },
   });
 });

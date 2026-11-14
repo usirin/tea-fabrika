@@ -5,4 +5,5 @@ import type { Selection } from "@kampus/libfabrika/build";
 // name is `pack/program` (0083), and the shipped programs are the core pack, `fabrika`.
 export const programs: ReadonlyArray<Selection> = [
   { name: "fabrika/counter", package: "@kampus/counter", export: "counter" },
+  { name: "fabrika/checklist", package: "@kampus/checklist", export: "checklist" },
 ];
