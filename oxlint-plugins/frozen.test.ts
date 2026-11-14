@@ -1,13 +1,14 @@
 // Today's version's frozen paths, named once in frozen.mjs (decision 0525), and the checks that
 // leave them out. The answers are written apart from frozen.mjs.
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import * as fc from "fast-check";
 import { afterAll, expect, it } from "vitest";
+import { parse } from "yaml";
 import { oxfmtArgs } from "./format.ts";
-import { frozen, isFrozen, livePackages, liveRoots, shared } from "./frozen.mjs";
+import { frozen, isFrozen, livePackages, liveRoots, packageDirs, shared } from "./frozen.mjs";
 import { oxlintArgs } from "./lint.ts";
 
 const options = { seed: 119120, numRuns: 200 };
@@ -155,9 +156,7 @@ const LIVE = [
 ];
 
 it("S8: vector: livePackages keeps the live workspace packages and drops today's frozen ones", () => {
-  const root = join(tmpdir(), "repo");
-  const listed = WORKSPACE.map((p) => ({ ...p, path: join(root, p.path) }));
-  expect(livePackages(listed, root)).toEqual(LIVE);
+  expect(livePackages(WORKSPACE.map((p) => p.path))).toEqual(LIVE);
   const dropped = WORKSPACE.map((p) => p.path).filter((p) => p !== "." && !LIVE.includes(p));
   expect(dropped.sort()).toEqual(
     [
@@ -182,50 +181,105 @@ it("S8: vector: livePackages keeps the live workspace packages and drops today's
   );
 });
 
-it("S8: scenario: pnpm typecheck runs each live package's typecheck and no frozen one's", () => {
-  // scenario: scripts/typecheck.sh with a stand-in pnpm first on PATH. It answers `pnpm ls` with
-  // the vector above, laid at this checkout, and records every other call. Nothing is type-checked.
-  const bin = mkdtempSync(join(tmpdir(), "typecheck-pnpm-"));
-  temps.push(bin);
-  const log = join(bin, "calls.jsonl");
-  const listed = JSON.stringify(WORKSPACE.map((p) => ({ ...p, path: join(ROOT, p.path) })));
-  writeFileSync(
-    join(bin, "pnpm"),
-    [
-      `#!${process.execPath}`,
-      'const { appendFileSync } = require("node:fs");',
-      "const args = process.argv.slice(2);",
-      `if (args[0] === "ls") { process.stdout.write(${JSON.stringify(listed)}); process.exit(0); }`,
-      `appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + "\\n");`,
-      "",
-    ].join("\n"),
+it("S8b: vector: the real pnpm-workspace.yaml, read by packageDirs, gives the live packages pnpm itself listed", () => {
+  // vector: the same saved `pnpm ls` output as S8, against the real workspace file and tree.
+  const { packages } = parse(readFileSync(join(ROOT, "pnpm-workspace.yaml"), "utf8")) as { packages: string[] };
+  expect(livePackages(packageDirs(ROOT, packages))).toEqual(LIVE);
+  expect(packageDirs(ROOT, packages)).toEqual(
+    WORKSPACE.map((p) => p.path)
+      .filter((p) => p !== ".")
+      .sort(),
   );
-  chmodSync(join(bin, "pnpm"), 0o755);
-  const ran = spawnSync("sh", ["scripts/typecheck.sh"], {
-    cwd: ROOT,
-    encoding: "utf8",
-    env: { ...process.env, PATH: [bin, process.env["PATH"]].join(delimiter) },
-  });
-  expect(ran.status, `${ran.stdout}${ran.stderr}`).toBe(0);
-  const calls = readFileSync(log, "utf8")
-    .trim()
-    .split("\n")
-    .map((line) => JSON.parse(line) as readonly string[]);
-  const filters = (args: readonly string[]) =>
-    args.flatMap((arg, i) =>
-      arg.startsWith("--filter=") ? [arg.slice(9)] : arg === "--filter" ? [args[i + 1] ?? ""] : [],
-    );
-  const recursive = calls.filter((args) => args.includes("-r") || args.includes("--recursive"));
-  expect(recursive.length).toBeGreaterThan(0);
+});
 
-  for (const args of recursive) {
-    expect(args).toContain("typecheck");
-    expect(
-      filters(args)
-        .map((f) => f.replace(/^\.\//, ""))
-        .sort(),
-    ).toEqual([...LIVE].sort());
+it("S8c: packageDirs finds exactly the folders under each glob that hold a package.json, one level for *, and refuses a ! glob", () => {
+  const folder = fc.stringMatching(/^[a-z][a-z0-9-]{0,8}$/);
+  const entry = fc.record({ name: folder, manifest: fc.boolean(), deeper: fc.boolean() });
+  const globs = ["next/apps/*", "packages/*", "programs/*", "tools/one"];
+  fc.assert(
+    fc.property(
+      fc.uniqueArray(entry, { selector: (e) => e.name, maxLength: 6 }),
+      fc.uniqueArray(entry, { selector: (e) => e.name, maxLength: 6 }),
+      fc.boolean(),
+      (apps, programs, literal) => {
+        const at = mkdtempSync(join(tmpdir(), "frozen-workspace-"));
+        temps.push(at);
+        const want: string[] = [];
+        const lay = (dir: string, e: { name: string; manifest: boolean; deeper: boolean }) => {
+          mkdirSync(join(at, dir, e.name, "inner"), { recursive: true });
+
+          if (e.manifest) {
+            writeFileSync(join(at, dir, e.name, "package.json"), "{}\n");
+            want.push(`${dir}/${e.name}`);
+          }
+
+          // A package one level deeper is no match for `*`.
+          if (e.deeper) {
+            writeFileSync(join(at, dir, e.name, "inner", "package.json"), "{}\n");
+          }
+        };
+
+        for (const e of apps) {
+          lay("next/apps", e);
+        }
+
+        for (const e of programs) {
+          lay("programs", e);
+        }
+
+        if (literal) {
+          mkdirSync(join(at, "tools", "one"), { recursive: true });
+          writeFileSync(join(at, "tools", "one", "package.json"), "{}\n");
+          want.push("tools/one");
+        }
+
+        expect(packageDirs(at, globs)).toEqual(want.sort());
+        expect(() => packageDirs(at, [...globs, "!programs/x"])).toThrow();
+      },
+    ),
+    { seed: 119120, numRuns: 50 },
+  );
+});
+
+it("S8d: scenario: frozen.mjs packages prints a temp workspace's live packages from any folder, and exits 2 on a bad workspace file", () => {
+  // scenario: a temp checkout with a copy of frozen.mjs, its oxlint-plugins/node_modules a link to
+  // the real one (read, never written), as stylelint.test.ts's runnerRepo does. No pnpm runs.
+  const at = mkdtempSync(join(tmpdir(), "frozen-checkout-"));
+  temps.push(at);
+  mkdirSync(join(at, "oxlint-plugins"));
+  writeFileSync(join(at, "oxlint-plugins", "frozen.mjs"), readFileSync(join(import.meta.dirname, "frozen.mjs")));
+  symlinkSync(join(import.meta.dirname, "node_modules"), join(at, "oxlint-plugins", "node_modules"), "dir");
+
+  for (const dir of ["next/apps/fabrika", "packages/pipeline", "packages/fabrika-design", "apps/fabrika", "tools/x"]) {
+    mkdirSync(join(at, dir), { recursive: true });
+    writeFileSync(join(at, dir, "package.json"), "{}\n");
   }
+
+  const elsewhere = mkdtempSync(join(tmpdir(), "frozen-elsewhere-"));
+  temps.push(elsewhere);
+  const run = () =>
+    spawnSync(process.execPath, [join(at, "oxlint-plugins", "frozen.mjs"), "packages"], {
+      cwd: elsewhere,
+      encoding: "utf8",
+    });
+  const write = (text: string) => writeFileSync(join(at, "pnpm-workspace.yaml"), text);
+
+  write("packages:\n  - apps/*\n  - packages/*\n  - next/apps/*\n  - tools/x\n");
+  const good = run();
+  expect(good.status, good.stderr).toBe(0);
+  expect(good.stdout.trim().split("\n")).toEqual(["next/apps/fabrika", "packages/fabrika-design", "tools/x"]);
+
+  for (const bad of ["packages: [\n", "catalog:\n  a: 1\n", "packages:\n  - apps/*\n"]) {
+    write(bad);
+    const out = run();
+    expect(out.status, bad).toBe(2);
+    expect(out.stdout, bad).toBe("");
+  }
+
+  rmSync(join(at, "pnpm-workspace.yaml"));
+  const missing = run();
+  expect(missing.status).toBe(2);
+  expect(missing.stdout).toBe("");
 });
 
 it("D1: scenario: no tracked test file sits under a frozen path (0525)", () => {
@@ -235,4 +289,31 @@ it("D1: scenario: no tracked test file sits under a frozen path (0525)", () => {
   const files = listed.stdout.split("\0").filter(Boolean);
   expect(files.length).toBeGreaterThan(0);
   expect(files.filter((file) => isFrozen(file) && /\.test[.-]/.test(file))).toEqual([]);
+});
+
+it("D8: scenario: every named entry of a frozen package.json is a tracked file or build output under dist/", () => {
+  // scenario: the real index and each frozen package's manifest. A named export is a package's
+  // public surface, so a deleted target is frozen product code deleted. A `*` target names nothing.
+  const listed = spawnSync("git", ["ls-files", "-z"], { cwd: ROOT, encoding: "utf8", maxBuffer: 2 ** 28 });
+  expect(listed.status).toBe(0);
+  const tracked = new Set(listed.stdout.split("\0").filter(Boolean));
+  const manifests = [...tracked].filter((file) => isFrozen(file) && file.endsWith("/package.json"));
+  expect(manifests.length).toBeGreaterThan(0);
+  /** Every string target below a manifest value, conditions and subpaths included. */
+  const targets = (value: unknown): string[] =>
+    typeof value === "string"
+      ? [value]
+      : typeof value === "object" && value !== null
+        ? Object.values(value).flatMap(targets)
+        : [];
+  const missing = manifests.flatMap((file) => {
+    const manifest = JSON.parse(readFileSync(join(ROOT, file), "utf8")) as Record<string, unknown>;
+    const dir = dirname(file);
+    return ["exports", "main", "module", "types", "bin"]
+      .flatMap((key) => targets(manifest[key]))
+      .filter((target) => !target.includes("*"))
+      .map((target) => join(dir, target))
+      .filter((path) => !tracked.has(path) && !path.split("/").includes("dist"));
+  });
+  expect(missing).toEqual([]);
 });
