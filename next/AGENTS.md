@@ -14,12 +14,14 @@ libfabrika
 
 ## Rethink, do not port
 
-- Follow the decisions and `docs/direction`, not today's code. Read today's code and its tests to
-  learn which jobs exist and what was learned, then rethink. Never import it and never copy it
-  across ([0217](../.decisions/0217-next-grows-beside-today.md),
-  [rethink, do not port](../docs/direction/rethink-do-not-port.md)).
+- Follow the decisions and `docs/direction`, not today's code. Read today's code, and its tests in
+  git history before 0525's deletion (the deletion pull request names the last commit that held
+  them), to learn which jobs exist and what was learned, then rethink. Never import it and never
+  copy it across ([0217](../.decisions/0217-next-grows-beside-today.md),
+  [rethink, do not port](../docs/direction/rethink-do-not-port.md),
+  [0525](../.decisions/0525-todays-version-is-frozen.md)).
 - When `next/` takes a job over, the pull request that switches to it deletes the old part. Its
-  tests or laws are ported first (0217).
+  tests or laws, read from git history before 0525's deletion, are ported first (0217).
 - The shell is `fabsh`. `tsh` stays in today's version
   ([0432](../.decisions/0432-next-has-fabsh-rethought-from-tsh.md)).
 - Hands, a window and an agent dial the brain, and `client` means any of them at the door

@@ -1,11 +1,10 @@
-import { readFileSync, globSync } from "node:fs";
-import { matchesGlob } from "node:path";
+import { readFileSync } from "node:fs";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
-import { lintWorkflow as lint, LANE_FILTER, LANE_GLOB, inLaneStep } from "./workflow-lint.ts";
+import { lintWorkflow as lint, lintManifest } from "./workflow-lint.ts";
 
-// Today's CI for both versions. Covers workflow-lint.ts. Each generated valid workflow
+// The CI workflow's shape. Covers workflow-lint.ts. Each generated valid workflow
 // also receives every listed plant, one at a time, so an unrelated error cannot mask it.
 // T342: all 24 input plants were rejected in each of 100 generated workflows.
 // A source plant ignoring next's required job condition failed this property too.
@@ -26,13 +25,10 @@ const diff = {
   run: "node .github/ci/changes.mjs",
 };
 
-const build = `\${{ needs.changes.outputs.build != 'false' }}`;
-
 const testEnv = {
   BASE: `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`,
 };
 
-const toolingExcludes = "--exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**'";
 const fieldIf = "steps.diff.outputs.field == 'true'";
 const name = fc.string({ maxLength: 20 });
 
@@ -52,18 +48,16 @@ const valid = (label: string, extra: string) => ({
       "runs-on": "ubuntu-latest",
       "timeout-minutes": 5,
       outputs: Object.fromEntries(
-        ["check", "typecheck", "test", "next", "e2e", "field", "build", "today"].map((key) => [
-          key,
-          `\${{ steps.diff.outputs.${key} }}`,
-        ]),
+        ["check", "typecheck", "test", "next", "e2e", "field"].map((key) => [key, `\${{ steps.diff.outputs.${key} }}`]),
       ),
       steps: [
         { uses: "actions/checkout@v7", with: { "fetch-depth": 0 } },
         diff,
         { run: "sh .agents/skills/lead/scripts/skillscheck.sh", if: "!cancelled()" },
         { run: "node oxlint-plugins/gitignore.mjs", if: "!cancelled()" },
+        { run: "node .github/ci/freeze.mjs", if: `\${{ !cancelled() }}`, env },
         { name: extra, run: "echo checked" },
-      ],
+      ] as Record<string, unknown>[],
     },
     check: {
       name: `\${{ github.event.pull_request.draft && 'lint' || 'check' }}`,
@@ -72,8 +66,7 @@ const valid = (label: string, extra: string) => ({
       "timeout-minutes": 10,
       steps: [
         { run: "pnpm lint" },
-        { name: "promises", if: build, run: "pnpm promises gate" },
-        { run: "pnpm build", if: build },
+        { name: "next ledger committed", run: "git diff --exit-code -- next-ledger.json" },
       ] as Record<string, unknown>[],
     },
     typecheck: {
@@ -88,36 +81,20 @@ const valid = (label: string, extra: string) => ({
       "timeout-minutes": 30,
       strategy: { matrix: { shard: [1, 2, 3, 4, 5, 6] } },
       steps: [
+        { run: "pnpm install --frozen-lockfile" },
         {
           name: "test",
-          if: `\${{ !cancelled() && needs.changes.outputs.today != 'false' }}`,
           env: testEnv,
           run: [
             'if [ -n "$BASE" ]; then',
-            'pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests --exclude \'next/**\' --exclude apps/fabrika/src/bundles.test.ts --exclude packages/pipeline/src/laws/standard.test.ts',
-            `if [ "\${{ matrix.shard }}" = 1 ]; then`,
-            "pnpm exec vitest run apps/fabrika/src/bundles.test.ts packages/pipeline/src/laws/standard.test.ts --exclude 'next/**'",
-            "fi",
+            'pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests --exclude \'next/**\'',
             "else",
-            "pnpm exec vitest run --shard \"$SHARD\" --exclude 'next/**'",
-            "fi",
-          ]
-            .map((line) => (line.startsWith("pnpm exec vitest run") ? `${line} --exclude '${LANE_GLOB}'` : line))
-            .join("\n"),
-        },
-        {
-          name: "tooling tests",
-          if: `\${{ !cancelled() && needs.changes.outputs.today == 'false' }}`,
-          env: testEnv,
-          run: [
-            'if [ -n "$BASE" ]; then',
-            `pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests ${toolingExcludes}`,
-            "else",
-            `pnpm exec vitest run --shard "$SHARD" --passWithNoTests ${toolingExcludes}`,
+            "pnpm exec vitest run --shard \"$SHARD\" --passWithNoTests --exclude 'next/**'",
             "fi",
           ].join("\n"),
         },
-      ],
+        { name: "shard times", if: "!cancelled()", run: 'node .github/ci/shard-times.ts "$RUNNER_TEMP/test.json"' },
+      ] as Record<string, unknown>[],
     },
     next: {
       needs: "changes",
@@ -150,8 +127,11 @@ const valid = (label: string, extra: string) => ({
     e2e: {
       needs: "changes",
       if: guard("e2e"),
-      "timeout-minutes": 25,
-      steps: [{ run: "pnpm --filter @kampus/fabrika-app-old e2e" }],
+      "timeout-minutes": 5,
+      steps: [{ name: "e2e", run: 'echo "today\'s end-to-end tests are removed (0525)"\nexit 1\n' }] as Record<
+        string,
+        unknown
+      >[],
     },
     field: {
       "timeout-minutes": 5,
@@ -186,24 +166,6 @@ const wiring = fc
   .tuple(name, name, fc.boolean(), fc.constantFrom("", " ", "  ", "\t", "\n"))
   .map(([label, extra, whitespace, gap]) => {
     const clean = valid(label, extra);
-    clean.jobs.test.steps.unshift({
-      name: "lane tests, one file at a time",
-      if: `\${{ needs.changes.outputs.today != 'false' }}`,
-      env: testEnv,
-      run: [
-        'if [ -n "$BASE" ]; then',
-        `pnpm exec vitest run ${LANE_FILTER} --changed "$BASE" --shard "$SHARD" --maxWorkers=1 --passWithNoTests --exclude 'next/**'`,
-        "else",
-        `pnpm exec vitest run ${LANE_FILTER} --shard "$SHARD" --maxWorkers=1 --passWithNoTests --exclude 'next/**'`,
-        "fi",
-      ].join("\n"),
-    });
-    clean.jobs.test.steps.push({
-      name: "shard times",
-      if: "!cancelled()",
-      env: testEnv,
-      run: "node .github/ci/shard-times.ts",
-    });
 
     if (whitespace) {
       clean.jobs.next.steps[0]!.env!.SHARD = `\${{${gap}matrix.shard${gap}}}/6`;
@@ -271,30 +233,40 @@ const plants: [string, (workflow: Workflow) => void][] = [
       w.jobs["ci-required"].name = "ci-required";
     },
   ],
+  // D6: check runs nothing of today's version, and none of its steps skips on a draft.
   [
-    "the build runs on a draft",
+    "D6: the promises gate comes back",
     (w) => {
-      delete w.jobs.check.steps[2]!["if"];
+      w.jobs.check.steps.push({ name: "promises", run: "pnpm promises gate" });
     },
   ],
   [
-    "the promises gate skips on the check flag",
+    "D6: the build of today's packages comes back",
     (w) => {
-      w.jobs.check.steps[1]!["if"] = `\${{ needs.changes.outputs.check != 'false' }}`;
+      w.jobs.check.steps.push({ run: "pnpm build" });
+    },
+  ],
+  [
+    "D6: the dead exports ledger step comes back",
+    (w) => {
+      w.jobs.check.steps.push({
+        name: "dead exports ledger committed",
+        run: "git diff --exit-code -- unreachable-ledger.json",
+      });
     },
   ],
   [
     "lint skips on a draft",
     (w) => {
-      w.jobs.check.steps[0]!["if"] = build;
+      w.jobs.check.steps[0]!["if"] = `\${{ needs.changes.outputs.check != 'false' }}`;
     },
   ],
-  [
-    "changes hides the build flag",
+  ...(["build", "today"] as const).map((flag): [string, (w: Workflow) => void] => [
+    `D3: changes exposes today's ${flag} flag again`,
     (w) => {
-      delete (w.jobs.changes.outputs as Record<string, string>)["build"];
+      (w.jobs.changes.outputs as Record<string, string>)[flag] = `\${{ steps.diff.outputs.${flag} }}`;
     },
-  ],
+  ]),
   [
     "the classifier is not told the draft",
     (w) => {
@@ -303,88 +275,122 @@ const plants: [string, (workflow: Workflow) => void][] = [
       }
     },
   ],
+  // D5: one test step over everything but next/, and its shard times.
   [
-    "L1: main loses lane exclude",
+    "D5: the lane step comes back",
     (w) => {
-      const step = w.jobs.test.steps[1]!;
-      const lines = step.run.split("\n");
-      lines[6] = lines[6]!.replace(` --exclude '${LANE_GLOB}'`, "");
-      step.run = lines.join("\n");
+      w.jobs.test.steps.splice(1, 0, {
+        name: "lane tests, one file at a time",
+        env: testEnv,
+        run: "pnpm exec vitest run packages/pipeline/src/stages/pipeline/lane. --shard \"$SHARD\" --maxWorkers=1 --passWithNoTests --exclude 'next/**'",
+      });
     },
   ],
   [
-    "L2: two lane workers",
+    "D5: the apt step comes back",
     (w) => {
-      w.jobs.test.steps[0]!.run = w.jobs.test.steps[0]!.run.replace("--maxWorkers=1", "--maxWorkers=2");
+      w.jobs.test.steps.splice(0, 0, {
+        name: "apt packages",
+        run: "sudo sh .github/ci/apt.sh install expect zsh bubblewrap socat ripgrep",
+      });
     },
   ],
   [
-    "L3: failure skips rest",
+    "D5: the test step runs on today's flag",
     (w) => {
-      w.jobs.test.steps[1]!.if = "";
+      w.jobs.test.steps[1]!["if"] = `\${{ !cancelled() && needs.changes.outputs.today != 'false' }}`;
     },
   ],
   [
-    "L3: rest before lanes",
+    "D5: a second vitest step",
     (w) => {
-      w.jobs.test.steps.reverse();
+      w.jobs.test.steps.splice(2, 0, { ...w.jobs.test.steps[1]!, name: "tooling tests" });
     },
   ],
   [
-    "L3: failure skips advice",
-    (w) => {
-      w.jobs.test.steps[3]!.if = "";
-    },
-  ],
-  // 0175: today's tests start only on the today flag, and the tooling tests run when they do not.
-  [
-    "T1: the lane tests run with no file of today's version changed",
-    (w) => {
-      w.jobs.test.steps[0]!.if = "";
-    },
-  ],
-  [
-    "T1: today's tests run with no file of today's version changed",
-    (w) => {
-      w.jobs.test.steps[1]!.if = "!cancelled()";
-    },
-  ],
-  [
-    "T2: the tooling tests are gone",
+    "D5: the shard times are gone",
     (w) => {
       w.jobs.test.steps.splice(2, 1);
     },
   ],
   [
-    "T2: the tooling tests run beside today's",
+    "D5: a failure skips the shard times",
     (w) => {
-      w.jobs.test.steps[2]!.if = "!cancelled()";
+      w.jobs.test.steps[2]!["if"] = "";
     },
   ],
   [
-    "T3: the tooling tests run today's packages' tests",
+    "D5: the shard times come before the tests",
     (w) => {
-      w.jobs.test.steps[2]!.run = w.jobs.test.steps[2]!.run.replace(" --exclude 'packages/**'", "");
+      w.jobs.test.steps.reverse();
     },
   ],
-  ...[0, 1, 2].map((index): [string, (w: Workflow) => void] => [
-    `T4: test step ${index} reads its base from a pull request alone`,
+  [
+    "T4: the test step reads its base from a pull request alone",
     (w) => {
-      w.jobs.test.steps[index]!.env = { BASE: `\${{ github.event.pull_request.base.sha }}` };
+      w.jobs.test.steps[1]!["env"] = { BASE: `\${{ github.event.pull_request.base.sha }}` };
+    },
+  ],
+  ...[1, 3].map((line): [string, (w: Workflow) => void] => [
+    `D5: test command ${line} runs next/'s tests`,
+    (w) => {
+      const step = w.jobs.test.steps[1]!;
+      const lines = String(step["run"]).split("\n");
+      lines[line] = lines[line]!.replace(" --exclude 'next/**'", "");
+      step["run"] = lines.join("\n");
     },
   ]),
   [
-    "changes hides the today flag",
+    "D5: main loses its full shard command",
     (w) => {
-      delete (w.jobs.changes.outputs as Record<string, string>)["today"];
+      const step = w.jobs.test.steps[1]!;
+      step["run"] = String(step["run"]).replace(
+        "pnpm exec vitest run --shard",
+        'pnpm exec vitest run --changed "$BASE" --shard',
+      );
+    },
+  ],
+  // D7: e2e's one step fails with its reason and starts nothing of today's app.
+  [
+    "D7: e2e runs today's app's end-to-end tests again",
+    (w) => {
+      w.jobs.e2e.steps.push({ run: "pnpm --filter @kampus/fabrika-app-old e2e" });
     },
   ],
   [
-    "L4: nonexistent lane filter",
+    "D7: e2e's one step runs today's app",
     (w) => {
-      w.jobs.test.steps[0]!.run = w.jobs.test.steps[0]!.run.replaceAll(LANE_FILTER, "missing/lane.");
+      w.jobs.e2e.steps[0]!["run"] = "pnpm --filter @kampus/fabrika-app-old e2e";
     },
   ],
+  [
+    "D7: e2e's step passes",
+    (w) => {
+      w.jobs.e2e.steps[0]!["run"] = 'echo "removed"\nexit 0\n';
+    },
+  ],
+  [
+    "D7: e2e's failure is ignored",
+    (w) => {
+      w.jobs.e2e.steps[0]!["continue-on-error"] = true;
+    },
+  ],
+  [
+    "D7: e2e fetches Playwright",
+    (w) => {
+      w.jobs.e2e.steps[0]!["run"] = 'pnpm exec playwright install chromium\necho "removed"\nexit 1\n';
+    },
+  ],
+  // D4: the jobs keep the names ci-required and the branch ruleset read.
+  ...(["e2e", "test", "check"] as const).map((job): [string, (w: Workflow) => void] => [
+    `D4: ${job} is renamed`,
+    (w) => {
+      const jobs = w.jobs as Record<string, unknown>;
+      jobs[`${job}-old`] = jobs[job];
+      delete jobs[job];
+      w.jobs["ci-required"].needs = w.jobs["ci-required"].needs.map((name) => (name === job ? `${job}-old` : name));
+    },
+  ]),
   ...extraCommands.map((step): [string, (w: Workflow) => void] => [
     `review2 extra command: ${step.run}`,
     (w) => {
@@ -609,6 +615,43 @@ const plants: [string, (workflow: Workflow) => void][] = [
       w.jobs.next.steps[3]!.if = "matrix.shard == 1";
     },
   ],
+  // F8: the freeze guard (0525) runs on every event and reads the classifier's own diff.
+  [
+    "F8: the changes job loses the freeze guard",
+    (w) => {
+      w.jobs.changes.steps.splice(4, 1);
+    },
+  ],
+  [
+    "F8: the freeze guard runs only when the classifier succeeded",
+    (w) => {
+      w.jobs.changes.steps[4]!["if"] = `\${{ steps.diff.outcome == 'success' }}`;
+    },
+  ],
+  [
+    "F8: the freeze guard skips a failure before it",
+    (w) => {
+      w.jobs.changes.steps[4]!["if"] = "success()";
+    },
+  ],
+  [
+    "F8: the freeze guard's failure is ignored",
+    (w) => {
+      w.jobs.changes.steps[4]!["continue-on-error"] = true;
+    },
+  ],
+  ...(["BASE", "HEAD", "EVENT"] as const).map((key): [string, (w: Workflow) => void] => [
+    `F8: the freeze guard reads another ${key} than the classifier`,
+    (w) => {
+      w.jobs.changes.steps[4]!["env"] = { ...env, [key]: `\${{ github.sha }}` };
+    },
+  ]),
+  [
+    "F8: the freeze guard runs twice",
+    (w) => {
+      w.jobs.changes.steps.push({ ...w.jobs.changes.steps[4]! });
+    },
+  ],
   [
     "scan skips after failure",
     (w) => {
@@ -723,15 +766,6 @@ const plants: [string, (workflow: Workflow) => void][] = [
       w.jobs.next.steps[0]!.run += " --exclude 'next/**'";
     },
   ],
-  ...[0, 1, 2].map((branch): [string, (w: Workflow) => void] => [
-    `exclusion branch ${branch}`,
-    (w) => {
-      const lines = w.jobs.test.steps[1]!.run.split("\n");
-      const line = [1, 3, 6][branch]!;
-      lines[line] = lines[line]!.replace(" --exclude 'next/**'", "");
-      w.jobs.test.steps[1]!.run = lines.join("\n");
-    },
-  ]),
   // The ci-required job: it waits on every job, never skips, and its judge cannot be bypassed.
   ...(["changes", "field", "check", "typecheck", "test", "next", "e2e"] as const).map(
     (job): [string, (w: Workflow) => void] => [
@@ -811,21 +845,6 @@ const plants: [string, (workflow: Workflow) => void][] = [
       w.jobs.test["timeout-minutes"] = 360;
     },
   ],
-  [
-    "duplicate forced tests",
-    (w) => {
-      w.jobs.test.steps[1]!.run = w.jobs.test.steps[1]!.run.replace(" --exclude apps/fabrika/src/bundles.test.ts", "");
-    },
-  ],
-  [
-    "forced tests on all shards",
-    (w) => {
-      w.jobs.test.steps[1]!.run = w.jobs.test.steps[1]!.run.replace(
-        `if [ "\${{ matrix.shard }}" = 1 ]; then`,
-        "if true; then",
-      );
-    },
-  ],
 ];
 
 it("accepts generated valid wiring", () => {
@@ -867,31 +886,18 @@ it("format: the checked-in workflow passes the same wiring lint", () => {
   expect(lint(readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8"))).toEqual([]);
 });
 
-it("L5: lane selection and rest exclusion agree on today's test paths", () => {
-  // Vitest includes .test.ts only; next/ is excluded by both commands.
-  // Plant: lane*.test.ts also excludes lane-fixture.test.ts.
-  const real = globSync(["packages/**/*.test.ts", "apps/**/*.test.ts", ".github/**/*.test.ts"]);
-  const made = fc
-    .stringMatching(/^[a-z][a-z.-]{0,30}$/)
-    .chain((name) =>
-      fc.constantFrom(
-        `${LANE_FILTER}${name}.test.ts`,
-        `packages/pipeline/src/stages/pipeline/lane-${name}.test.ts`,
-        `stages/lane/${name}.test.ts`,
-        `packages/pipeline/src/stages/pipeline/${name}.test.ts`,
-      ),
-    );
-  fc.assert(
-    fc.property(fc.oneof(fc.constantFrom(...real), made), (path) => {
-      expect(inLaneStep(path), path).toBe(matchesGlob(path, LANE_GLOB));
-    }),
-    {
-      ...options,
-      examples: [
-        ["packages/pipeline/src/stages/pipeline/lane-fixture.test.ts"],
-        [`${LANE_FILTER}x.y.test.ts`],
-        ["stages/lane/lane.test.ts"],
-      ],
-    },
-  );
+it("D6: format: the root package.json's lint runs workflow-lint.ts and nothing of today's version", () => {
+  // format: the real manifest, read as `pnpm lint` reads it, and one plant per script that left.
+  const text = readFileSync(new URL("../../package.json", import.meta.url), "utf8");
+  expect(lintManifest(text)).toEqual([]);
+  const manifest = JSON.parse(text) as { scripts: Record<string, string> };
+
+  for (const plant of [
+    { lint: `${manifest.scripts["lint"]} && pnpm -s lint:browser` },
+    { "lint:browser": "node packages/fabrika/browser-check.ts" },
+    { promises: "node packages/promises/src/main.ts" },
+    { lint: "node oxlint-plugins/lint.ts" },
+  ]) {
+    expect(lintManifest(JSON.stringify({ ...manifest, scripts: { ...manifest.scripts, ...plant } }))).not.toEqual([]);
+  }
 });

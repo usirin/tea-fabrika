@@ -17,31 +17,33 @@ real tickets, and what was decided are all kept here on purpose, so they can be 
 
 ```text
 next/              what we are building, on the decisions; its rules are in next/AGENTS.md
-everything else    what we use today (packages/, programs/, apps/), and a map of which jobs exist
+everything else    today's version (packages/, programs/, apps/), frozen; a map of which jobs exist
 ```
 
 `next/` grows beside today's version, which keeps running for daily use until the new one takes
 each job over ([0217](./.decisions/0217-next-grows-beside-today.md),
-[clean slate](./docs/direction/clean-slate.md)). How far it is:
-[where we are](./docs/plan/README.md#where-we-are-now).
+[clean slate](./docs/direction/clean-slate.md)). Today's version is frozen: it takes no edit, and
+all new work goes into `next/` ([0525](./.decisions/0525-todays-version-is-frozen.md)). How far
+`next/` is: [where we are](./docs/plan/README.md#where-we-are-now).
 
 - **Know which version your work is in** before you read or change code. Your brief or ticket says
-  so. If it does not, a fix to something in use is today's version, new design work is `next/`, and
-  if you still cannot tell, ask.
+  so. If it does not, it is `next/`: today's version takes no work (0525). If you still cannot
+  tell, ask.
 - **A search finds both.** Check the path of every file you read before you trust it. A name that
   exists in both can mean different things: a `rev` or a `host` in today's code is not the same as
   in the decisions.
 - **Say which version a claim is about,** in every write-up, note and report. "The host keeps X" is
   true of one version.
 - **In `next/`:** read [`next/AGENTS.md`](./next/AGENTS.md) before you touch a file there.
-- **In today's version:** fixes that daily use or CI needs, the UX work the owner picks, and ideas
-  the owner wants to try out there first. What a tryout teaches goes into `next/` as a lesson,
-  rethought and not copied. Nothing else is added (0217). Today's library is `@kampus/fabrika-old`
-  and today's app is `@kampus/fabrika-app-old`; both are deleted when `next/` takes over.
-- **A product foundation decided in a walk starts on today's app at once,** no exception: tokens,
+- **Today's version is frozen** (0525). It takes no fix, no UX work and no tryout. A pull request
+  that adds or changes a file under `apps/`, `programs/`, `packages/` (except
+  `packages/fabrika-design/`) or `bin/` fails CI; deleting a file there is allowed. Its tests are
+  removed, and no lint, typecheck or CI job runs on it. It still runs for daily use. Today's library
+  is `@kampus/fabrika-old` and today's app is `@kampus/fabrika-app-old`; both are deleted when
+  `next/` takes over.
+- **A product foundation decided in a walk starts in `next/` at once,** no exception: tokens,
   focus, lint rules for the design, accessibility checks. Its build plan is written the same day
-  and comes to the owner as one yes, so the decision is pressed in the real app while `next/` is
-  built.
+  and comes to the owner as one yes.
 - **The design package is shared by both versions,** the one exception to sharing no code
   ([0456](./.decisions/0456-one-design-package-both-versions.md)).
 
@@ -62,7 +64,7 @@ each job over ([0217](./.decisions/0217-next-grows-beside-today.md),
 | Report something wrong that your task does not cover | [`field/README.md`](./field/README.md#a-finding) | One row file in `field/findings/`, with proof, then keep going: never a fix, a ticket or only a mention, and never a security hole ([0035](./.decisions/0035-outside-work-becomes-finding-rows.md)) |
 | Understand a design that is still a draft | `docs/` (for example [`docs/review-machine.md`](./docs/review-machine.md)) | A draft there. When a draft settles a direction, add the note under `docs/direction/` too |
 | Build the new version | [`next/AGENTS.md`](./next/AGENTS.md), then `docs/direction/` | Code in `next/`, with its test beside it as `name.test.ts` |
-| Change the machines (today's version) | `packages/fabrika`, `packages/pipeline`, `programs/*`, with the top-level [`README.md`](./README.md#what-is-in-this-repository) as the map and each part's own README | Code in the part's folder, with its test beside it as `name.test.ts`. New pipeline work goes in `packages/pipeline/src/`; a tool any factory could use goes in `packages/fabrika`. Outside a package, import it by its name, never by a path; inside one, by relative path. Toy projects used by tests live in `fixtures/` |
+| Learn which jobs today's version does | `packages/fabrika`, `packages/pipeline`, `programs/*`, with the top-level [`README.md`](./README.md#what-is-in-this-repository) as the map and each part's own README; its tests are in git history before 0525's deletion | Nothing: it is frozen ([0525](./.decisions/0525-todays-version-is-frozen.md)). The work goes into `next/` |
 | Learn a package by doing it | [`docs/tutorials/`](./docs/tutorials/), one folder per tutorial | A folder there with a `package.json` whose `typecheck` covers the files. Run every step on a fresh clone before it lands |
 | Run a real ticket through the pipeline | [the how-to](./docs/how-to/run-a-pipeline-ticket.md) and [its rules](./docs/how-to/run-a-pipeline-ticket.md#the-rules-for-a-live-run) | The run's rows in `field/`, the same day |
 | Look at a live run's state and logs | `runs/` on your own machine | Nothing by hand. `runs/` is ignored by git and is never committed |
@@ -126,10 +128,10 @@ For every agent, whatever its step. A step's skill adds its own rules and its ow
 
 ## How a change lands
 
-- **Every pull request, `next/` or today's, goes through the pipeline's steps:** plan, test writer,
-  build, one review, each by its own agent, with laws. No builder starts before an approved plan and
-  tests that exist ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)), and `next/` does
-  not wait on the pipeline. Today's pipeline programs are paused, so the lead session's agents run
+- **Every pull request goes through the pipeline's steps:** plan, test writer, build, one review,
+  each by its own agent, with laws. No builder starts before an approved plan and tests that exist
+  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)), and `next/` does not wait on the
+  pipeline. Today's pipeline programs are paused, so the lead session's agents run
   the steps by hand, each logged in `field/`, and the lead reads every diff, CI and the leak grep
   before a merge. [The lead skill](./.agents/skills/lead/SKILL.md) says how, and
   [the plan](./docs/plan/README.md#how-a-change-lands) says how a change lands.
@@ -283,7 +285,7 @@ agents. This table adds no rule, and `pnpm format` comes first in every row.
 | Only Markdown that no program or skill reads, or field rows | `pnpm lint`. CI skips the heavy jobs, and its `field` job checks the added rows |
 | Skill prose | `pnpm lint`, which runs `skillscheck.sh`, its one reader |
 | A skill script, or Markdown that a program or skill reads | as code, below |
-| Code, in `next/` or today's version | `pnpm lint`, a narrow vitest path while you work, `--changed origin/main` once at the end, then one `pnpm typecheck`. Never the full suite locally |
+| Code, in `next/` or the repo's tooling | `pnpm lint`, a narrow vitest path while you work, `--changed origin/main` once at the end, then one `pnpm typecheck`. Never the full suite locally |
 | A dependency's version | as code, but narrow paths in place of `--changed`, which a lockfile change makes the full suite |
 | A script under `experiments/` | `pnpm lint`, and run the changed script once yourself: it is outside the typecheck |
 | A tutorial's files | `pnpm typecheck`, and every step on a fresh clone |
@@ -296,9 +298,9 @@ agents. This table adds no rule, and `pnpm format` comes first in every row.
 - **An unused export fails lint** (`pnpm lint:dead` runs that part alone,
   [0006](./.decisions/0006-no-unused-exports.md)). Check each finding
   by hand. If it is right, delete the code or drop its `export`. If it is wrong, stop and tell the
-  owner: that is a code-graph bug to file. `unreachable-ledger.json` only shrinks, the run prunes
-  it, and CI fails until that is committed. No entry is added: its last ones are fixed, then the
-  file is deleted ([0524](./.decisions/0524-no-list-lets-broken-code-pass.md)).
+  owner: that is a code-graph bug to file. `pnpm lint:dead` reads code-graph's findings and drops
+  those in frozen files (0525); no ledger lets a finding pass
+  ([0524](./.decisions/0524-no-list-lets-broken-code-pass.md)).
 - **A check on the shape of code is a lint rule, never a test:** oxlint's own rule where one exists
   (`no-restricted-imports`), else ours in `oxlint-plugins/`. A plan asks "lint, type or test?" of
   every law.
@@ -313,8 +315,7 @@ agents. This table adds no rule, and `pnpm format` comes first in every row.
   in, so send the least text that answers the question. Record what it cost in the write-up. Every
   model run gets dollars at the provider's list price, with the source and date, even when it ran
   on a subscription: a plan hides the number the comparison needs.
-- `pnpm build` writes `@kampus/fabrika-old`'s `dist/`, what a pack holds. No check needs it; CI
-  runs it too.
+- `pnpm build` writes `@kampus/fabrika-old`'s `dist/`, what a pack holds. No check needs it.
 
 ### Go easy on the machine
 
@@ -396,8 +397,8 @@ Write-ups are read by busy people, some of them not native English speakers.
 
 ## Changing the product
 
-For a change to what a person sees or uses, in either version. These have no folder of their own:
-a window lives in `apps/`, `programs/` and `next/` alike.
+For a change to what a person sees or uses. Since today's version is frozen (0525), that change is
+in `next/`; a window lives in `next/apps/` and `next/programs/`.
 
 - **The daily moment comes first.** Cut scope by deferring, never by making the daily flow clunky.
   An outside tool that "works fine" is no reason to skip an in-app feature, and a design that needs
@@ -424,10 +425,10 @@ a window lives in `apps/`, `programs/` and `next/` alike.
   evidence, not a target.
 - **Mockups use the real thing:** real tickets, steps, programs and fact names, with a "made up"
   list for anything that isn't.
-- **No rough first versions.** A change to the product (`apps`, `programs`, `packages`) lands
-  finished and thought through: all it shows works, with no stub, dead button or "(not yet)". A
-  piece that waits on other work stays out of the window until it is real. `experiments/` is the lab
-  and may be rough.
+- **No rough first versions.** A change to the product (`next/apps`, `next/programs`,
+  `next/packages`) lands finished and thought through: all it shows works, with no stub, dead button
+  or "(not yet)". A piece that waits on other work stays out of the window until it is real.
+  `experiments/` is the lab and may be rough.
 - **Ask how Linear would do it.** Before building any screen (a program's window, the app's frame, a
   mockup), ask how Linear would build it as their new product. The PR says, per screen, what Linear
   would do, and where we differ and why. Tuval and tmux stay the defaults for tiling; where they
@@ -437,18 +438,17 @@ a window lives in `apps/`, `programs/` and `next/` alike.
     desk, the top bar, pipes between programs. Their taste and quality bar, on our primitive. Never
     copy a Linear screen. Ask which program owns the job, what composes beside what, and what
     becomes a piece every program gets for free.
-- **Pick the look before the PR.** A screen being built in today's app runs the look step
+- **Pick the look before the PR.** A screen being built in `next/` runs the look step
   ([step 5 of the guidelines skill](./.claude/skills/guidelines/SKILL.md#5-build-3-or-4-designs-and-look-at-them-next-to-linear))
   before its pull request opens: 3 or 4 real designs, shots at the five layouts beside Linear, and
-  the owner picks one. That covers all work in flight: the ask desk, the inbox, the project window
-  and typography. The keys editor already does it.
+  the owner picks one.
 - **Show it running.** A PR that adds or changes a program's window carries screenshots from the
   real built app, attached and never committed
   ([0160](./.decisions/0160-pr-shots-are-never-committed.md)). The step that shoots writes them
   under `runs/`, and the lead attaches them, each with alt text. Take them the way
-  `apps/fabrika/e2e.ts` drives the app: Playwright on Electron, with `FABRIKA_HOME` set to a test
-  home of its own in a temp folder, never your real one. Look at each shot, and say in the PR what
-  looks broken, empty or wrong.
+  the tests in `next/apps/fabrika/e2e/` drive the app: Playwright, with `FABRIKA_HOME` set to a
+  test home of its own in a temp folder, never your real one. Look at each shot, and say in the PR
+  what looks broken, empty or wrong.
 - **Shoot more than one layout.** A window that looks right in one wide tile can break at half or a
   quarter. Mockups and PR shots show each key state in at least: one tile filling the window, two
   tiles side by side, two stacked, a 2x2 grid, and a small app window (about 1024x700). Name each

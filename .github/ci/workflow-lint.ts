@@ -1,16 +1,9 @@
-// Today's CI, serving both versions. Static workflow shape belongs in lint.
-import { existsSync, readFileSync, globSync } from "node:fs";
+// The CI workflow's shape. Static workflow shape belongs in lint. Today's version is frozen
+// (0525), so no job, step or shard runs only for it.
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 import { gated } from "./required.mjs";
-
-export const LANE_FILTER = "packages/pipeline/src/stages/pipeline/lane.";
-export const LANE_GLOB = "packages/pipeline/src/stages/pipeline/lane.*.test.ts";
-export const inLaneStep = (path: string) => path.includes(LANE_FILTER);
-
-const testFiles = globSync("packages/pipeline/**/*.test.ts", {
-  cwd: fileURLToPath(new URL("../../", import.meta.url)),
-});
 
 const isMap = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -59,21 +52,15 @@ const DRAFT_NAMES = {
 // Marking a draft ready starts the full run; only a new head cancels the run before it.
 const TYPES = ["opened", "synchronize", "reopened", "ready_for_review"];
 const CANCEL = "github.event_name=='pull_request'&&github.event.action=='synchronize'";
-const BUILD = "needs.changes.outputs.build!='false'";
-// Today's tests run only when a file of today's version changed; else the tooling tests run alone
-// (0175). An unreadable flag is not 'false', so it runs today's tests.
-const TODAY = "needs.changes.outputs.today!='false'";
-const TOOLING = "!cancelled()&&needs.changes.outputs.today=='false'";
 // The commit a run's change starts from, for vitest's `--changed`: a pull request's base, a merge
 // queue group's base, or what main held before a push. All zeros (a first push) is no base.
 const TEST_BASE = `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`;
-const TOOLING_EXCLUDES = ["next/**", "apps/**", "packages/**", "programs/**"];
+// The jobs ci-required judges, by the names it and the branch ruleset know (0525 keeps them).
+const JOBS = ["changes", "field", "check", "typecheck", "e2e", "test", "next", "ci-required"];
 
 // Chromium's OS packages come from apt, so the step first finds a mirror that answers (apt.sh).
 const chromium =
   "sudo sh .github/ci/apt.sh update\n" + "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium\n";
-
-const forced = ["apps/fabrika/src/bundles.test.ts", "packages/pipeline/src/laws/standard.test.ts"];
 
 export const lintWorkflow = (text: string): string[] => {
   let source: unknown;
@@ -120,13 +107,35 @@ export const lintWorkflow = (text: string): string[] => {
     require(compact(map(jobs[job])["name"]) === expected, `${job} has its own name on a draft`);
   }
 
-  // A draft's check is lint alone: the promises gate and the build skip on changes' build flag.
-  const checkSteps = steps(map(jobs["check"]));
+  // D4: the jobs keep their names, which ci-required and the branch ruleset read.
+  require(JOBS.every((name) => isMap(jobs[name])), "the jobs keep their names");
 
-  for (const step of checkSteps) {
-    const slow = step["name"] === "promises" || step["run"] === "pnpm build";
-    require(slow ? compact(step["if"]) === BUILD : !("if" in step), "only promises and build skip, on the build flag");
-  }
+  // D6: check is lint and its ledger steps, with nothing of today's version: no promises gate, no
+  // build of today's packages and no dead-export ledger. None of its steps skips.
+  const checkSteps = steps(map(jobs["check"]));
+  require(checkSteps.every((step) => !("if" in step)), "every check step runs, a draft's lint too");
+  require(!checkSteps.some(
+    (step) =>
+      step["name"] === "promises" ||
+      step["name"] === "dead exports ledger committed" ||
+      (typeof step["run"] === "string" &&
+        /\bpnpm (?:-s )?(?:promises|build)\b|unreachable-ledger\.json/.test(step["run"])),
+  ), "D6: check runs no promises gate, no build and no dead-export ledger step");
+
+  // D7: today's end-to-end tests are gone (0525). e2e runs only when changes failed, and then its
+  // one step fails with its reason; it starts no app, no browser and no script of today's app.
+  const e2eSteps = steps(map(jobs["e2e"]));
+  const e2eRun = e2eSteps[0]?.["run"];
+  require(e2eSteps.length === 1 &&
+    typeof e2eRun === "string" &&
+    !("uses" in (e2eSteps[0] ?? {})) &&
+    !("if" in (e2eSteps[0] ?? {})) &&
+    e2eSteps[0]?.["continue-on-error"] === undefined &&
+    /\becho\b/.test(e2eRun) &&
+    e2eRun.trim().split("\n").at(-1)?.trim() === "exit 1" &&
+    !/playwright|electron|fabrika-app-old|pnpm|node /i.test(
+      e2eRun,
+    ), "D7: e2e's one step fails with its reason and starts nothing");
 
   for (const name of gated) {
     const job = map(jobs[name]);
@@ -164,9 +173,11 @@ export const lintWorkflow = (text: string): string[] => {
     outputs = map(changes["outputs"]);
   require(!("if" in changes) && !("needs" in changes), "changes starts on every event");
 
-  for (const name of ["check", "typecheck", "test", "next", "e2e", "field", "build", "today"]) {
+  for (const name of ["check", "typecheck", "test", "next", "e2e", "field"]) {
     require(compact(outputs[name]) === `steps.diff.outputs.${name}`, `changes exposes ${name}`);
   }
+
+  require(Object.keys(outputs).length === 6, "changes exposes no flag of today's version");
 
   // The typecheck is its own job, so its answer comes as soon as it ends and a lane can read it
   // alone (0133). check runs no second one.
@@ -183,6 +194,17 @@ export const lintWorkflow = (text: string): string[] => {
       (s) => s["run"] === command && compact(s["if"]) === "!cancelled()",
     ), "small scans still run after classifier failure");
   }
+
+  // F8: the freeze guard (0525) runs on every event, after a classifier failure too, and reads the
+  // same diff: the same BASE, HEAD and EVENT as the classifier's own step.
+  const guards = steps(changes).filter((s) => s["run"] === "node .github/ci/freeze.mjs");
+  const diffEnv = map(steps(changes).find((s) => s["id"] === "diff")?.["env"]);
+  require(guards.length === 1 &&
+    compact(guards[0]?.["if"]) === "!cancelled()" &&
+    guards[0]?.["continue-on-error"] === undefined &&
+    Object.entries(env).every(
+      ([key, expected]) => map(guards[0]?.["env"])[key] === expected && diffEnv[key] === expected,
+    ), "changes runs the freeze guard on the classifier's diff");
 
   const field = map(jobs["field"]);
   require(!("needs" in field) && !("if" in field), "field starts independently on every event");
@@ -238,79 +260,38 @@ export const lintWorkflow = (text: string): string[] => {
     require(compact(step["if"]) === flag, "field setup, install and validation skip without changed JSONL");
   }
 
+  // D5: one test step and its shard times, over every test but next/'s, which has its own job.
+  // No apt step, since only today's tests needed its packages, and no step on today's flag.
   const test = map(jobs["test"]),
     scripts = commands(test);
   require(JSON.stringify(map(map(test["strategy"])["matrix"])["shard"]) === "[1,2,3,4,5,6]", "keep six shards");
   const testSteps = steps(test);
-  const lane = testSteps.find((s) => s["name"] === "lane tests, one file at a time");
-  const rest = testSteps.find((s) => s["name"] === "test");
-  const tooling = testSteps.find((s) => s["name"] === "tooling tests");
-  const toolingRuns = commands({ steps: [tooling] }).filter((line) => line.startsWith("pnpm exec vitest run"));
-  const runs = scripts.filter((line) => line.startsWith("pnpm exec vitest run") && !toolingRuns.includes(line));
-  require(runs.length === 5, "today has five test commands, including two lane commands");
-  require(compact(lane?.["if"]) === TODAY &&
-    compact(rest?.["if"]) === `!cancelled()&&${TODAY}`, "T1: today's tests run only on the today flag");
-  require(tooling !== undefined &&
-    compact(tooling["if"]) === TOOLING &&
-    rest !== undefined &&
-    testSteps.indexOf(rest) < testSteps.indexOf(tooling), "T2: the tooling tests run when today's do not");
-  require([lane, rest, tooling].every(
-    (step) => compact(map(step?.["env"])["BASE"]) === compact(TEST_BASE),
-  ), "T4: each test step takes its base from the pull request, the merge queue's group or the push");
-  require(toolingRuns.length === 2 &&
-    toolingRuns.every(
-      (line) =>
-        line.includes('--shard "$SHARD"') &&
-        line.includes("--passWithNoTests") &&
-        TOOLING_EXCLUDES.every((glob) => line.includes(`--exclude '${glob}'`)),
-    ) &&
-    toolingRuns.filter((line) => line.includes('--changed "$BASE"')).length ===
-      1, "T3: the tooling commands leave out today's trees and next/, on a pull request and on main");
+  const rest = testSteps.filter((s) => commands({ steps: [s] }).some((line) => /\bvitest\b/.test(line)));
   const times = testSteps.find((s) => s["name"] === "shard times");
-  const laneRuns = commands({ steps: [lane] }).filter((line) => line.startsWith("pnpm exec vitest run"));
-  const restRuns = commands({ steps: [rest] }).filter((line) => line.startsWith("pnpm exec vitest run"));
-  require(restRuns.length === 3 &&
-    restRuns.every((line) => line.includes(`--exclude '${LANE_GLOB}'`)), "L1: every rest command excludes lane files");
-  require(laneRuns.length === 2 &&
-    laneRuns.every(
+  const runs = scripts.filter((line) => /\bvitest\b/.test(line));
+  require(rest.length === 1 && rest[0]?.["name"] === "test", "D5: the test job has one vitest step");
+  require(times !== undefined &&
+    rest[0] !== undefined &&
+    testSteps.indexOf(rest[0]) < testSteps.indexOf(times) &&
+    compact(times["if"]) === "!cancelled()", "D5: shard times follow the tests, after a failure too");
+  require(!testSteps.some(
+    (s) =>
+      /apt/.test(String(s["name"] ?? "")) ||
+      /\bapt(?:-get)?\b|apt\.sh/.test(String(s["run"] ?? "")) ||
+      /outputs\.today/.test(compact(s["if"])),
+  ), "D5: the test job has no apt step and no step on today's flag");
+  require(compact(map(rest[0]?.["env"])["BASE"]) ===
+    compact(TEST_BASE), "T4: the test step takes its base from the pull request, the merge queue's group or the push");
+  require(runs.length === 2 &&
+    runs.every(
       (line) =>
-        line.startsWith(`pnpm exec vitest run ${LANE_FILTER} `) &&
+        line.startsWith("pnpm exec vitest run ") &&
         line.includes('--shard "$SHARD"') &&
-        /--maxWorkers=1(?:\s|$)/.test(line) &&
         line.includes("--passWithNoTests") &&
-        line.includes("--exclude 'next/**'"),
+        /--exclude\s+['"]next\/\*\*['"](?:\s|$)/.test(line),
     ) &&
-    laneRuns.filter((line) => line.includes('--changed "$BASE"')).length ===
-      1, "L2: lane commands run one file at a time on PR and main");
-  require(lane !== undefined &&
-    rest !== undefined &&
-    times !== undefined &&
-    testSteps.indexOf(lane) < testSteps.indexOf(rest) &&
-    testSteps.indexOf(rest) < testSteps.indexOf(times) &&
-    compact(rest["if"]).startsWith("!cancelled()") &&
-    compact(times["if"]) === "!cancelled()", "L3: lanes first; rest and shard times survive failure");
-  require(testFiles.some(inLaneStep), "L4: lane filter matches a real test file");
-
-  for (const line of runs) {
-    require(/--exclude\s+['"]next\/\*\*['"](?:\s|$)/.test(line), "every today command excludes next/**");
-  }
-
-  const changed = restRuns.find((line) => line.includes("--changed"));
-  require(changed !== undefined &&
-    changed.includes('--changed "$BASE"') &&
-    changed.includes('--shard "$SHARD"') &&
-    forced.every((path) => changed.includes(`--exclude ${path}`)), "changed shards exclude the two forced files");
-  require(runs.some(
-    (line) => !line.includes("--changed") && line.includes('--shard "$SHARD"'),
-  ), "main keeps its full shard command");
-  const forcedLine = scripts.findIndex(
-    (line) =>
-      line.startsWith("pnpm exec vitest run") &&
-      forced.every((path) => line.includes(path)) &&
-      !line.includes("--changed"),
-  );
-  require(forcedLine > 0 &&
-    scripts[forcedLine - 1] === `if [ "\${{ matrix.shard }}" = 1 ]; then`, "forced tests run once on shard 1");
+    runs.filter((line) => line.includes('--changed "$BASE"')).length ===
+      1, "D5: every test command shards and excludes next/**, on a pull request and on main");
   require(scripts.includes('if [ -n "$BASE" ]; then') &&
     scripts.includes("else"), "PR and main branches remain separate");
   const nextJob = map(jobs["next"]),
@@ -370,16 +351,37 @@ export const lintWorkflow = (text: string): string[] => {
   return errors;
 };
 
+/** The root `package.json`'s lint script: it runs this check, and nothing of today's version (D6). */
+export const lintManifest = (text: string): string[] => {
+  let manifest: unknown;
+
+  try {
+    manifest = JSON.parse(text);
+  } catch {
+    return ["package.json: invalid JSON"];
+  }
+
+  const scripts = map(map(manifest)["scripts"]);
+  const lint = String(scripts["lint"]);
+  const errors: string[] = [];
+
+  if (!lint.includes("node .github/ci/workflow-lint.ts")) {
+    errors.push("pnpm lint must run workflow-lint.ts");
+  }
+
+  if (/lint:browser|browser-check|promises/.test(lint) || "lint:browser" in scripts || "promises" in scripts) {
+    errors.push("D6: pnpm lint runs nothing of today's version: no lint:browser and no promises gate");
+  }
+
+  return errors;
+};
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
     const errors = lintWorkflow(read(".github/workflows/check.yaml"));
 
-    const manifest: unknown = JSON.parse(read("package.json"));
-
-    if (!String(map(map(manifest)["scripts"])["lint"]).includes("node .github/ci/workflow-lint.ts")) {
-      errors.push("pnpm lint must run workflow-lint.ts");
-    }
+    errors.push(...lintManifest(read("package.json")));
 
     if (!read("oxlint-plugins/lint.ts").includes('import { checkTracked } from "./gitignore.mjs"')) {
       errors.push("full lint must use the shared tracked-file check");

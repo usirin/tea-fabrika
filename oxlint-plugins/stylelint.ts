@@ -1,15 +1,18 @@
-// Today's CSS check always uses the root config and tracked files, ignoring nested settings.
+// The CSS check always uses the root config and tracked files, ignoring nested settings. It reads
+// next/ and the design package, never today's frozen version (0525).
 import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { devNull } from "node:os";
 import { join, relative } from "node:path";
 import stylelint from "stylelint";
 import type { CssResult } from "./css-support.ts";
+import { isFrozen, liveRoots } from "./frozen.mjs";
 
 const ROOT = process.cwd();
 const configFile = join(ROOT, "stylelint.config.ts");
 
-const tracked = spawnSync("git", ["ls-files", "-z", "--", "apps", "packages", "programs", "next"], {
+// The folders that hold windows, less today's frozen version (0525): next/ and the design package.
+const tracked = spawnSync("git", ["ls-files", "-z", "--", ...liveRoots(["apps", "packages", "programs", "next"])], {
   cwd: ROOT,
   encoding: "utf8",
   maxBuffer: 2 ** 30,
@@ -20,7 +23,7 @@ if (tracked.status !== 0) {
   process.exit(2);
 }
 
-const files = tracked.stdout.split("\0").filter((path) => path.endsWith(".css"));
+const files = tracked.stdout.split("\0").filter((path) => path.endsWith(".css") && !isFrozen(path));
 
 if (files.length === 0) {
   console.error("stylelint: no tracked CSS files");

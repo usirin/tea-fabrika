@@ -23,6 +23,20 @@ const root = resolve(import.meta.dirname, "..");
 const options = { seed: 325, numRuns: 4 };
 const configUrl = pathToFileURL(join(root, "vitest.config.ts")).href;
 
+// The live typecheck line (0525), from the one list: frozen.mjs on this checkout's own
+// pnpm-workspace.yaml, read with the `yaml` that frozen.mjs itself imports.
+const frozen = await import(pathToFileURL(join(root, "oxlint-plugins/frozen.mjs")).href);
+
+const { parse } = await import(
+  pathToFileURL(createRequire(join(root, "oxlint-plugins/package.json")).resolve("yaml")).href
+);
+
+const live: string[] = frozen.livePackages(
+  frozen.packageDirs(root, parse(readFileSync(join(root, "pnpm-workspace.yaml"), "utf8")).packages),
+);
+
+const typecheck = `pnpm -r ${live.map((dir) => `--filter=./${dir}`).join(" ")} typecheck\n`;
+
 const load = `
 if (process.env.TEST_NODE_VERSION) {
   Object.defineProperty(process, 'version', {value: 'v' + process.env.TEST_NODE_VERSION});
@@ -794,6 +808,10 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
     ["missing", "ran"],
   ] as const) {
     it(`scenario: a ${shape} node_modules ends as ${outcome}`, () => {
+      // The expected line cannot drift to frozen packages: it holds the design package and no
+      // path frozen.mjs freezes.
+      expect(live).toContain("packages/fabrika-design");
+      expect(live.filter((dir) => frozen.isFrozen(`${dir}/`))).toEqual([]);
       const dir = mkdtempSync(join(tmpdir(), "tc-nm-"));
 
       try {
@@ -850,7 +868,7 @@ exit 0
           },
         });
         const install = "pnpm install --offline --frozen-lockfile\n";
-        const run = "pnpm exec effect-tsgo patch --typescript\npnpm -r typecheck\n";
+        const run = `pnpm exec effect-tsgo patch --typescript\n${typecheck}`;
         const shapeNow = !existsSync(modules) ? "missing" : lstatSync(modules).isDirectory() ? "folder" : "other";
 
         expect({

@@ -205,8 +205,8 @@ These still run, but they are not the way forward:
 |---|---|
 | Know what is next, and who has the move | [`docs/plan/`](./docs/plan/README.md) |
 | Run a ticket through the pipeline | [`docs/how-to/run-a-pipeline-ticket.md`](./docs/how-to/run-a-pipeline-ticket.md) |
-| Write code with `@kampus/fabrika-old` | [`packages/fabrika/README.md`](./packages/fabrika/README.md) |
-| Change the work pipeline | [`packages/pipeline/README.md`](./packages/pipeline/README.md) |
+| Learn what `@kampus/fabrika-old` does (frozen, read only) | [`packages/fabrika/README.md`](./packages/fabrika/README.md) |
+| Learn what today's work pipeline does (frozen, read only) | [`packages/pipeline/README.md`](./packages/pipeline/README.md) |
 | Write a program for `next/` | [`docs/how-to/write-a-next-program.md`](./docs/how-to/write-a-next-program.md) |
 | Learn today's host by doing it | Tutorial: [Two hosts, one ledger](./docs/tutorials/two-hosts/README.md), then [Agents on two hosts](./docs/tutorials/agents/README.md) |
 | Know why a choice was made | [`docs/direction/`](./docs/direction/README.md) |
@@ -216,7 +216,12 @@ These still run, but they are not the way forward:
 ## What is in this repository
 
 A pnpm workspace. A package may import the ones listed before it, never the ones after.
-`layer-rules.json` holds the order, and `pnpm lint` checks it.
+
+Today's version, everything under `apps/`, `programs/`, `packages/` and `bin/` except
+`packages/fabrika-design/`, is frozen
+([0525](./.decisions/0525-todays-version-is-frozen.md)). It still runs for daily use, but it takes
+no edit: a pull request that adds or changes a file there fails CI, and deleting one is allowed.
+Its tests are removed, and lint, typecheck and CI leave it out. New work goes into `next/`.
 
 - [`packages/fabrika`](./packages/fabrika/README.md), `@kampus/fabrika-old`: the tools, in one
   package. It names no pipeline. Its parts, bottom first:
@@ -229,8 +234,8 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
   the work pipeline, an app on fabrika's public names. The stages, the services they use, the
   programs it lists in tsh, and the `tsh` that lists them.
 - [`packages/promises`](./packages/promises/README.md), `@kampus/promises`: each formal check
-  as a record in `promises/`, tied to the code it covers, and the CI gate that fails when that
-  code changes and the record does not (experiment 117).
+  as a record, tied to the code it covers (experiment 117). Its records and its CI gate were
+  removed with today's tests (0525).
 - [`packages/ledger-server`](./packages/ledger-server/README.md), `@kampus/ledger-server`: one
   shared ledger on Cloudflare for a team, declared with Alchemy, and its twin on the laptop from
   the same Worker.
@@ -278,5 +283,3 @@ Other commands:
 | tsh with only its small programs (fabrika installs no command) | `packages/fabrika/bin/tsh-small` |
 | Open the fabrika app: tsh in a window, with the small programs, `counter` and `tracker` | `pnpm fabrika` |
 | Start or stop a local Jaeger, to see tsh's traces (`TSH_TRACE=1`) | `pnpm trace:up`, `pnpm trace:down` |
-| List the promises the formal checks keep, each run with its planted break | `pnpm promises` |
-| Confirm one promise again after the code it covers changed | `pnpm promises confirm <id>` |

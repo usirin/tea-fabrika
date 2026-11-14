@@ -34,9 +34,12 @@ from 2026-11-01: finish the pipeline, watch it build a real ticket, then switch 
    [PR 223](https://github.com/usirin/tea-fabrika/pull/223) is read, and each layer lands
    already fixed.
 
-On today's version, beside Tier 1: `runs` is gone and `trace` is the ticket's view (ticket 141,
+Today's version is frozen (2026-11-14,
+[0525](../../.decisions/0525-todays-version-is-frozen.md)): it takes no edit, its tests are
+removed, and all new work goes into `next/`. *It said: on today's version, beside Tier 1, `runs`
+is gone and `trace` is the ticket's view (ticket 141,
 [PR 338](https://github.com/usirin/tea-fabrika/pull/338), 2026-11-03); then the performance
-program (ticket 114). They and Tier 1 do not wait for each other. Past Tier 1,
+program (ticket 114).* Past Tier 1,
 [seven tiers](./tiers.md) in all, the rest proposed.
 
 Ticket numbers are this project's own tracker, not GitHub issues.
@@ -54,6 +57,13 @@ request goes by hand, by its own agent, and is logged.
 `AGENTS.md`.
 
 ## Where we are now
+
+*2026-11-14:* today's version is frozen
+([0525](../../.decisions/0525-todays-version-is-frozen.md)). A pull request that adds or changes a
+file under `apps/`, `programs/`, `packages/` (except `packages/fabrika-design/`) or `bin/` fails
+CI's freeze guard; deleting one is allowed. Its tests, their fixtures and the promise records are
+removed, and lint, typecheck and CI leave it out. It still runs for daily use. Every lane below
+that names today's app or today's version takes no new work there; its work goes into `next/`.
 
 *2026-11-13:* the order of work changed ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)). The next thing built in `next/` is `fabsh`,
 pipes, `summon` and `join`, working for real, with whatever they need (the window, a second tile and its
@@ -84,19 +94,19 @@ on the laptop, which the owner accepts. The merge line is decided
 [0162](../../.decisions/0162-no-friction-before-a-merge.md),
 [0164](../../.decisions/0164-the-bot-stays-without-signing.md)): what is left is the queue's
 trigger in CI ([PR 1120](https://github.com/kamp-us/tea-fabrika/pull/1120)), the queue turned on,
-and the bot's plain tooling. Nothing in `next/` names `fabsh`, `summon` or a room yet. Open pull
-requests on Tier 1 rows: [1028](https://github.com/usirin/tea-fabrika/pull/1028)
-(P14), [1044](https://github.com/usirin/tea-fabrika/pull/1044) (P13),
-[1054](https://github.com/usirin/tea-fabrika/pull/1054) (P38),
-[1074](https://github.com/usirin/tea-fabrika/pull/1074) (P39),
+and the bot's plain tooling. Nothing in `next/` names `fabsh`, `summon` or a room yet. Merged
+since 2026-11-13: [1079](https://github.com/kamp-us/tea-fabrika/pull/1079) (P19 slice 1, as
+`5051875`), and [1028](https://github.com/kamp-us/tea-fabrika/pull/1028) (P14),
+[1044](https://github.com/kamp-us/tea-fabrika/pull/1044) (P13),
+[1097](https://github.com/kamp-us/tea-fabrika/pull/1097) (P21),
+[1074](https://github.com/kamp-us/tea-fabrika/pull/1074) (P39) and
+[1054](https://github.com/kamp-us/tea-fabrika/pull/1054) (P38) inside the batch `48460bd`
+([PR 1146](https://github.com/kamp-us/tea-fabrika/pull/1146)). Open pull requests on Tier 1 rows:
 [1012](https://github.com/usirin/tea-fabrika/pull/1012) (P15),
-[1097](https://github.com/usirin/tea-fabrika/pull/1097) (P21),
 [1032](https://github.com/usirin/tea-fabrika/pull/1032) (P36), and drafts
-[1079](https://github.com/usirin/tea-fabrika/pull/1079) (P19),
 [1092](https://github.com/usirin/tea-fabrika/pull/1092) (P34c) and
-[1099](https://github.com/usirin/tea-fabrika/pull/1099) (P25). → the lead: pick and restart PR 1028
-and PR 1044, past their budget stop with red laws (0162;
-[0076](../../.decisions/0076-a-lane-stops-at-its-budget.md)). → the owner: walk the focus clash
+[1099](https://github.com/usirin/tea-fabrika/pull/1099) (P25), which was reverted out of that
+batch. → the owner: walk the focus clash
 between 0279 and 0274 before the desk is built, then S1 of the
 [summon guidelines](../direction/summon-guidelines.md#s1-one-grammar-typed-tokens-every-view-reads-it)
 before `fabsh` is built, and S2 to S7 before `summon`; say yes after reading `alchemy plan` before
@@ -351,11 +361,13 @@ work, so what is wrong shows early. Every "after ticket 117" below that holds on
 longer holds. A plan that only builds a decided note is approved by the lead agent; one that
 raises a new design call goes to the owner. When the lead fills agent slots, these lanes count as
 much as `next/` work and run beside Tier 1, never held back for it (owner, 2026-11-10,
-[0063](../../.decisions/0063-todays-app-lanes-share-the-slots.md)).
+[0063](../../.decisions/0063-todays-app-lanes-share-the-slots.md)). *Changed 2026-11-14
+([0525](../../.decisions/0525-todays-version-is-frozen.md)): product foundations are built in
+`next/`, and no lane runs on today's app.*
 
-- **The four primitives first, in `next/` ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)).** The changed Tier 1 was approved by the owner on 2026-11-13, in [the four primitives first](./tier-1.md#the-four-primitives-first): what done means in the Electron app and a browser tab, what is built, what is missing piece by piece, the build order with the thin menu bar and the cloud instance beside it, and the 12 rows that wait. → the lead picks on PR 1028 and PR 1044 and finishes the merge line; the owner walks the focus clash (0279 against 0274) before the desk is built, then S1 before `fabsh`
+- **The four primitives first, in `next/` ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)).** The changed Tier 1 was approved by the owner on 2026-11-13, in [the four primitives first](./tier-1.md#the-four-primitives-first): what done means in the Electron app and a browser tab, what is built, what is missing piece by piece, the build order with the thin menu bar and the cloud instance beside it, and the 12 rows that wait. → the lead finishes the merge line; the owner walks the focus clash (0279 against 0274) before the desk is built, then S1 before `fabsh`
 
-- **Configurable keys on today's app, ticket 174.** Two pull requests. Keys PR 1, change your keys without leaving the app, merged 2026-11-08 ([PR 505](https://github.com/usirin/tea-fabrika/pull/505)). Keys PR 2 brings program and mode keys into the same table. → the lead agent plans PR 2
+- **Configurable keys on today's app, ticket 174.** Two pull requests. Keys PR 1, change your keys without leaving the app, merged 2026-11-08 ([PR 505](https://github.com/usirin/tea-fabrika/pull/505)). Keys PR 2 brings program and mode keys into the same table. → nothing: today's app is frozen (0525), so PR 2's keys are built in `next/`
 - **Design foundations on today's app, approved by the owner 2026-11-07.** [The build plan](./design-foundations.md): ticket 245, three pull requests, all merged 2026-11-08 ([499](https://github.com/usirin/tea-fabrika/pull/499), [506](https://github.com/usirin/tea-fabrika/pull/506), [519](https://github.com/usirin/tea-fabrika/pull/519)). → nothing
 
 - **Pipeline v0.** Built and merged ([259](https://github.com/usirin/tea-fabrika/pull/259), [260](https://github.com/usirin/tea-fabrika/pull/260), [264](https://github.com/usirin/tea-fabrika/pull/264)). Two rehearsals on a throwaway repo, then ticket 117 (below). → the self-fix plan
@@ -388,7 +400,7 @@ much as `next/` work and run beside Tier 1, never held back for it (owner, 2026-
 
 | Your job | Read |
 |---|---|
-| Fix today's version | [AGENTS.md](../../AGENTS.md), the [package list](../../README.md#what-is-in-this-repository), then that part's own README |
+| Learn what today's version does (frozen, 0525: read only) | [AGENTS.md](../../AGENTS.md), the [package list](../../README.md#what-is-in-this-repository), then that part's own README |
 | Build in `next/` | [Tier 1](./tier-1.md), [its pull requests and waves](./tier-1.md#the-pull-requests-one-at-a-time) and [ticket 115's plan](./ticket-115.md), [the steps](../direction/next-is-a-pipeline-pre-run.md), the [Start here list](../direction/README.md#start-here). No builder starts before an approved plan and tests that exist |
 | Run a real ticket | [Run a ticket through the pipeline](../how-to/run-a-pipeline-ticket.md), [its rules](../how-to/run-a-pipeline-ticket.md#the-rules-for-a-live-run), then [field/](../../field/README.md) for what past runs hit |
 | Write down a decision | A note in [docs/direction](../direction/README.md), the same day, plus its row. Mark it **proposed** until it is settled |
@@ -398,12 +410,12 @@ much as `next/` work and run beside Tier 1, never held back for it (owner, 2026-
 
 **Only the owner:**
 
-- Approves a plan that raises a new design call, in `next/` or today's, before any builder starts. A plan that only builds a decided note is approved by the lead agent (owner, 2026-11-03; [AGENTS.md](../../AGENTS.md#how-a-change-lands)).
+- Approves a plan that raises a new design call before any builder starts. A plan that only builds a decided note is approved by the lead agent (owner, 2026-11-03; [AGENTS.md](../../AGENTS.md#how-a-change-lands)).
 - Approves a pull request on GitHub, and answers a question the machine put to a person. No agent does either. A merge does not wait on that yes: see [how a change lands](#how-a-change-lands).
 - *Changed 2026-11-05:* how `next/` reaches the lane no longer needs an answer before Tier 1 starts ([why](./tier-1.md#still-open-how-next-reaches-the-lane)). *It said: answers it before PR A's plan step (lean 65%).*
 - Settles a **proposed** note.
 - Reads each exam pull request. On today's lane, since [the self-fix plan](./pipeline-self-fix.md)'s PR 5 landed, a builder's diff to the exam files asks the owner, with two picks: the builder was wrong (the touched files go back, and build runs again on the builder's head) or the test is wrong (the test writer redoes those files with the owner's note). Either way every finished step is kept.
-- Adds an entry to `unreachable-ledger.json`, in a change of its own.
+- *Changed 2026-11-14:* nobody adds a waiver for a dead export: `unreachable-ledger.json` is deleted ([0524](../../.decisions/0524-no-list-lets-broken-code-pass.md), [0525](../../.decisions/0525-todays-version-is-frozen.md)). *It said: adds an entry to `unreachable-ledger.json`, in a change of its own.*
 - Says yes after reading `alchemy plan`, before a deploy to the cloud.
 - Names each exception to "never copy across".
 - Picks a side where Tuval or tmux clash with how Linear would build a screen.

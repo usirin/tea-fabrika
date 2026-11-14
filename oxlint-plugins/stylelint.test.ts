@@ -351,9 +351,20 @@ describe("T245 PR 3, law 29: known only shrinks", () => {
     expect(result.status, result.output).toBe(0);
   });
 
+  it("S13: law 29 on the real tree: no known list holds an entry, since the check reads no frozen file (0525)", async () => {
+    // scenario: the real root config and the real tracked CSS, as law 29 reads them.
+    const base = await rootConfig();
+    const lists = Object.entries(base.rules ?? {})
+      .filter(([rule]) => rule.startsWith("fabrika/"))
+      .map(([rule, setting]) => [rule, Array.isArray(setting) ? setting[1]?.known : undefined]);
+    expect(lists).toEqual(RULES.map(({ name }) => [`fabrika/${name}`, []]));
+    const result = run(ROOT);
+    expect(result.status, result.output).toBe(0);
+  });
+
   it("law 29 refuses a known value that is not a list", () => {
     const repo = runnerRepo("fabrika/no-raw-color", "");
-    track(repo, { "apps/plant/window.css": ".a { color: var(--focus); }\n" });
+    track(repo, { "next/programs/plant/window.css": ".a { color: var(--focus); }\n" });
     const result = run(repo);
     expect(result.status, result.output).toBe(2);
     expect(result.output).toContain("fabrika/no-raw-color");
@@ -378,7 +389,7 @@ describe("T245 PR 3, law 29: known only shrinks", () => {
   it.each([
     {
       rule: "no-raw-color",
-      entry: "programs/plant/window.css .known { color }",
+      entry: "next/programs/plant/window.css .known { color }",
       bad: ".known { color: #fff; }",
       good: ".known { color: var(--text-primary); }",
     },
@@ -390,26 +401,26 @@ describe("T245 PR 3, law 29: known only shrinks", () => {
     },
     {
       rule: "font-size-from-scale",
-      entry: "programs/plant/window.css .known { font-size }",
+      entry: "next/programs/plant/window.css .known { font-size }",
       bad: ".known { font-size: 10px; }",
       good: ".known { font-size: var(--fs-small); }",
     },
   ])("law 29 refuses a stale $rule entry after the CSS is fixed", ({ rule, entry, bad, good }) => {
     const repo = runnerRepo(`fabrika/${rule}`, [entry]);
-    track(repo, { "programs/plant/window.css": `${bad}\n` });
+    track(repo, { "next/programs/plant/window.css": `${bad}\n` });
     expect(run(repo).status).toBe(0);
-    write(repo, "programs/plant/window.css", `${good}\n`);
+    write(repo, "next/programs/plant/window.css", `${good}\n`);
     const stale = run(repo);
     expect(stale.status).not.toBe(0);
     expect(stale.output).toContain(entry);
   });
 
   it.each([
-    { path: "programs/other/window.css", css: ".known { color: #fff; }" },
-    { path: "programs/plant/window.css", css: ".other { color: #fff; }" },
-    { path: "programs/plant/window.css", css: ".known { background: #fff; }" },
+    { path: "next/programs/other/window.css", css: ".known { color: #fff; }" },
+    { path: "next/programs/plant/window.css", css: ".other { color: #fff; }" },
+    { path: "next/programs/plant/window.css", css: ".known { background: #fff; }" },
   ])("law 29 cannot let known debt hide a new fire at $path: $css", ({ path, css }) => {
-    const repo = runnerRepo("fabrika/no-raw-color", ["programs/plant/window.css .known { color }"]);
+    const repo = runnerRepo("fabrika/no-raw-color", ["next/programs/plant/window.css .known { color }"]);
     track(repo, { [path]: `${css}\n` });
     const result = run(repo);
     expect(result.status).not.toBe(0);
@@ -422,10 +433,10 @@ describe("T245 PR 3, law 30: the runner and disable comments cannot hide CSS", (
   it("law 30 accepts tracked clean CSS and prints all six counts", () => {
     const manifest: { scripts: { lint: string } } = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
     expect(manifest.scripts.lint).toContain("node oxlint-plugins/stylelint.ts");
-    const repo = runnerRepo("fabrika/no-raw-color", ["programs/plant/window.css .known { color }"]);
+    const repo = runnerRepo("fabrika/no-raw-color", ["next/programs/plant/window.css .known { color }"]);
     track(repo, {
-      "apps/plant/window.css": ".a { color: var(--text-primary); }\n",
-      "programs/plant/window.css": ".known { color: #fff; color: #fff; }\n",
+      "next/programs/other/window.css": ".a { color: var(--text-primary); }\n",
+      "next/programs/plant/window.css": ".known { color: #fff; color: #fff; }\n",
     });
     const result = run(repo);
     expect(result.status, result.output).toBe(0);
@@ -440,7 +451,7 @@ describe("T245 PR 3, law 30: the runner and disable comments cannot hide CSS", (
 
   it.each(RULES)("law 30 fails and prints the path, line and $name fire", ({ name }) => {
     const repo = runnerRepo();
-    const path = "programs/plant/window.css";
+    const path = "next/programs/plant/window.css";
     track(repo, { [path]: `\n\n${readFileSync(fixture("bad", name), "utf8")}` });
     const result = run(repo);
     expect(result.status).not.toBe(0);
@@ -451,7 +462,7 @@ describe("T245 PR 3, law 30: the runner and disable comments cannot hide CSS", (
 
   it("law 30 gives invalid options a path, fallback location and stylelint label", () => {
     const repo = runnerRepo("fabrika/no-raw-color", [42]);
-    const path = "apps/plant/window.css";
+    const path = "next/programs/plant/window.css";
     track(repo, { [path]: ".a { color: var(--focus); }\n" });
     const result = run(repo);
     expect(result.status).toBe(1);
@@ -462,15 +473,15 @@ describe("T245 PR 3, law 30: the runner and disable comments cannot hide CSS", (
 
   it("law 30 reads every tracked scope despite nested configs and ignore files", () => {
     const repo = runnerRepo();
-    const paths = ["apps", "packages", "programs", "next"].map((scope) => `${scope}/plant/window.css`);
+    const paths = ["next", "packages/fabrika-design"].map((scope) => `${scope}/plant/window.css`);
     track(repo, Object.fromEntries(paths.map((path) => [path, ".a { color: #fff; }\n"])));
     write(repo, ".stylelintignore", "**/*.css\n");
     write(
       repo,
-      "apps/.stylelintrc.json",
+      "next/.stylelintrc.json",
       JSON.stringify({ rules: Object.fromEntries(RULES.map(({ name }) => [`fabrika/${name}`, null])) }),
     );
-    write(repo, "apps/untracked.css", ".broken {\n");
+    write(repo, "next/untracked.css", ".broken {\n");
     track(repo, { "experiments/plant/ignored.css": ".broken {\n" });
     const result = run(repo);
     expect(result.status).not.toBe(0);
@@ -483,9 +494,32 @@ describe("T245 PR 3, law 30: the runner and disable comments cannot hide CSS", (
     expect(result.output).not.toContain("experiments/plant/ignored.css");
   });
 
+  it("S4: scenario: the runner leaves today's frozen CSS out, and reads next/ and the design package", () => {
+    // scenario: a raw color tracked at each kind of path, in the runner's own temp repo.
+    const repo = runnerRepo();
+    track(repo, {
+      "next/programs/plant/clean.css": ".a { color: var(--text-primary); }\n",
+      "apps/plant/window.css": ".a { color: #fff; }\n",
+      "programs/plant/window.css": ".a { color: #fff; }\n",
+      "packages/pipeline/plant.css": ".a { color: #fff; }\n",
+    });
+    const frozen = run(repo);
+    expect(frozen.status, frozen.output).toBe(0);
+    expect(frozen.output).toContain("stylelint: 1 files, 0 blocking");
+
+    for (const path of ["next/programs/plant/window.css", "packages/fabrika-design/src/plant.css"]) {
+      const live = runnerRepo();
+      track(live, { [path]: ".a { color: #fff; }\n", "apps/plant/window.css": ".a { color: #fff; }\n" });
+      const result = run(live);
+      expect(result.status, path).toBe(1);
+      expect(result.output).toContain(`${path}:1:`);
+      expect(result.output).not.toContain("apps/plant/window.css");
+    }
+  });
+
   it("law 30 fails when the git index contains no CSS", () => {
     const repo = runnerRepo();
-    track(repo, { "apps/plant/readme.txt": "no stylesheet\n" });
+    track(repo, { "next/programs/plant/readme.txt": "no stylesheet\n" });
     const result = run(repo);
     expect(result.status).not.toBe(0);
     expect(result.output).toMatch(/no.*(?:css|files)|(?:0|zero).*files/i);
@@ -493,7 +527,7 @@ describe("T245 PR 3, law 30: the runner and disable comments cannot hide CSS", (
 
   it("law 30 fails on a CSS parse error rather than reporting a clean run", () => {
     const repo = runnerRepo();
-    track(repo, { "apps/plant/broken.css": ".broken { color:\n" });
+    track(repo, { "next/programs/plant/broken.css": ".broken { color:\n" });
     const result = run(repo);
     expect(result.status).toBe(1);
     expect(result.output).toContain("broken.css");
@@ -506,7 +540,7 @@ describe("T245 PR 3, law 30: the runner and disable comments cannot hide CSS", (
 
   it("law 30 fails if stylelint crashes before it can report", () => {
     const repo = runnerRepo();
-    track(repo, { "apps/plant/window.css": ".a { color: var(--focus); }\n" });
+    track(repo, { "next/programs/plant/window.css": ".a { color: var(--focus); }\n" });
     write(repo, "stylelint.config.ts", 'throw new Error("planted stylelint crash");\n');
     const result = run(repo);
     expect(result.status).not.toBe(0);

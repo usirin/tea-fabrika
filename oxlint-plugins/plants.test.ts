@@ -1,8 +1,7 @@
 // The lint rules are the exam, so each one is seen to fail. Each planted line says whether its rule
 // must refuse it. The planted files sit beside this one, so the repository's own .oxlintrc.json is
-// what runs. `no-secret-env` and `no-redacted-value` are planted in
-// packages/fabrika/src/redacted-lint.test.ts, `no-project-settings` in
-// packages/fabrika/src/agents/claude/rules.test.ts.
+// what runs. `no-secret-env`, `no-redacted-value` and `no-project-settings` are planted here too:
+// their lines came over verbatim from today's tests, which left with today's version (0525).
 // `no-node-filesystem` and `no-node-imports` plant next/ paths in their own test files.
 // `program-package-layout` reads a program's package.json, so it plants generated program
 // packages under next/programs/ in program-package-layout.test.ts.
@@ -15,6 +14,7 @@ import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
 import { BUILTIN_PLANTS, type Plant } from "./builtin-plants.ts";
+import { isFrozen } from "./frozen.mjs";
 import fabrika from "./index.ts";
 
 const ROOT = join(import.meta.dirname, "..");
@@ -68,6 +68,7 @@ const linesOf = (fires: readonly Fire[], code: string): readonly number[] =>
 const fires = (path: string, code: string): readonly number[] => linesOf(firesIn([path]).get(path)!, code);
 
 const EFFECT = 'import {Context, Data, Duration, Effect, Schedule} from "effect";';
+const REDACTED = ['import {Redacted} from "effect";', "declare const token: Redacted.Redacted<string>;"];
 
 const PLANTS: readonly Plant[] = [
   {
@@ -193,6 +194,75 @@ const PLANTS: readonly Plant[] = [
       ["export const a = <Redacted.value />;", true],
       ["export const b = <Redacted.value></Redacted.value>;", true],
       ["export const c = <Other.value />;", false],
+    ],
+  },
+  // T937 S10: moved verbatim from packages/fabrika/src/redacted-lint.test.ts and
+  // packages/fabrika/src/agents/claude/rules.test.ts, each line's refuse-or-pass unchanged, since
+  // these rules still run on live code and today's tests left (0525).
+  {
+    code: "fabrika(no-secret-env)",
+    prelude: REDACTED,
+    lines: [
+      ["export const a = process.env.GITHUB_TOKEN;", true],
+      ['export const b = process.env["TYPESAFE_API_KEY"];', true],
+      ['export const c = process.env.DOOR_SECRET ?? "";', true],
+      ["export const {ANTHROPIC_API_KEY} = process.env;", true],
+      ['export const d = (process.env.CLAUDE_CODE_OAUTH_TOKEN ?? "") !== "";', true],
+      ["export const e = process.env.CLOUDFLARE_API_TOKEN;", true],
+      ['export const f = process.env["DB_PASSWORD"];', true],
+      ["export const g = process.env.GH_AUTH;", true],
+      ["export const h = process.env.SERVICE_CREDENTIALS;", true],
+      ["export const i = process.env.KEYS_CACHE_MS;", false],
+      ["export const j = process.env.GIT_AUTHOR_NAME;", false],
+      ["export const k = process.env.LOCAL_SECRET_HASH;", false],
+      ["export const l = process.env.SSH_AUTH_SOCK;", false],
+      ["export const m = process.env.KEY;", false],
+      ["export const n = process.env.REAL_KEY;", false],
+      ["export const o = !process.env.OPENAI_API_KEY;", false],
+      ["export const p = process.env.CODEX_API_KEY === undefined;", false],
+      ["export const q = process.env.CODEX_API_KEY !== undefined;", false],
+      ["delete process.env.CLOUDFLARE_API_TOKEN;", false],
+      ["export const {TYPESAFE_API_KEY: _gone, ...rest} = process.env;", false],
+      ["export const r = process.env.PATH;", false],
+    ],
+  },
+  {
+    code: "fabrika(no-redacted-value)",
+    prelude: REDACTED,
+    lines: [
+      ["export const s = Redacted.value(token);", true],
+      ["export const t = [token].map(Redacted.value);", true],
+      ['export const u = "Bearer " + Redacted.value(token);', true],
+      ["export const v = Redacted.make(String(Math.random()));", false],
+      ["export const w = String(token);", false],
+      ["export const x = Redacted.isRedacted(token);", false],
+    ],
+  },
+  {
+    code: "fabrika(no-project-settings)",
+    prelude: [
+      'import {ownRules} from "@kampus/fabrika-old/agents/sandbox";',
+      "declare const options: {settingSources?: string[]; projectConfigRoot?: string};",
+      "declare const sources: string[];",
+      "declare const settingSources: string[];",
+    ],
+    lines: [
+      ['export const a = {settingSources: ["project"]};', true],
+      ['export const b = {"settingSources": ["user"]};', true],
+      ["export const c = {settingSources: sources};", true],
+      ["export const d = {settingSources};", true],
+      ['export const e = {...ownRules({}), projectConfigRoot: "/srv/repo"};', true],
+      ['options.settingSources = ["project"];', true],
+      ['options.projectConfigRoot = "/srv/repo";', true],
+      ['export const f = ["-p", "--setting-sources", "project"];', true],
+      ['export const g = ["--setting-sources=project"];', true],
+      ['export const h = ["--project-config-root", "/srv/repo"];', true],
+      ['export const i = {extraArgs: {"setting-sources": "project"}};', true],
+      ["export const j = {settingSources: []};", false],
+      ["export const k = {...ownRules({disableClaudeAiConnectors: true})};", false],
+      ['export const l = ["-p", "--setting-sources", ""];', false],
+      ["export const {projectConfigRoot: _gone, ...m} = ownRules({});", false],
+      ["options.settingSources = [];", false],
     ],
   },
   // Biome's built-in rules that must not be lost in the move.
@@ -360,9 +430,6 @@ describe("each rule refuses what it is there to refuse", () => {
     const elsewhere = [
       "prefer-schema-arbitrary", // generated syntax laws in prefer-schema-arbitrary.test.ts
       "law-shape", // one generated line per edge case, at next/ test paths, in law-shape.test.ts
-      "no-secret-env",
-      "no-redacted-value",
-      "no-project-settings",
       "no-bare-disable",
       // P17a's path-scoped rules have plants in their own oxlint-plugins/*.test.ts files.
       "door-is-library",
@@ -453,6 +520,23 @@ it("scenario: the isolate-boundary rule refuses a platform type outside cloudfla
   const file = "next/packages/libfabrika/src/runtime/usage.ts";
   const result = await lintCopies({ [file]: "export type Usage = TraceItem;\n" });
   expect(result("fabrika(isolate-boundary)", file)).toEqual([1]);
+});
+
+it("S11: scenario: no override that turns a rule off or down to a warning names a frozen path (0525)", () => {
+  // scenario: the config as oxlint itself resolves it (`--print-config` prints off as "allow").
+  const out = spawnSync(OXLINT, [`--config=${join(ROOT, ".oxlintrc.json")}`, "--print-config"], {
+    cwd: ROOT,
+    encoding: "utf8",
+  });
+  const config = JSON.parse(out.stdout) as {
+    readonly overrides: readonly { readonly files: readonly string[]; readonly rules?: Record<string, unknown> }[];
+  };
+  const level = (setting: unknown) => String(Array.isArray(setting) ? setting[0] : setting);
+  const loosening = config.overrides.filter((o) =>
+    Object.values(o.rules ?? {}).some((setting) => ["allow", "off", "warn", "0", "1"].includes(level(setting))),
+  );
+  expect(loosening.length).toBeGreaterThan(0);
+  expect(loosening.flatMap((o) => o.files.filter((glob) => isFrozen(glob)))).toEqual([]);
 });
 
 describe("lint.ts, the first step of pnpm lint", () => {
