@@ -230,7 +230,7 @@ describe("L22: words to a start", () => {
   it("L22: a bare word is the one program whose last part matches, pack/program always resolves, two matches start nothing, no as names <program>:1, and as needs a ProcessName", () => {
     const seen = { bare: 0, whole: 0, named: 0, ambiguous: 0, bad: 0 };
     fc.assert(
-      fc.property(Table, fc.array(ProgramLine, { minLength: 1, maxLength: 8 }), (table, lines) => {
+      fc.property(Table, fc.array(ProgramLine, { minLength: 1, maxLength: 8 }), (table: ReadonlyArray<string>, lines) => {
         let model = told(table);
 
         for (const line of lines) {

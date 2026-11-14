@@ -57,7 +57,7 @@ const machine = Machine.make({
   update: {
     ask: (s) => [s, [programs({})]],
     programs_ok: (s, m) => [{ told: [...s.told, Schema.decodeUnknownSync(Schema.Json)(m.value)] }, []],
-    programs_err: (s, m) => [{ told: [...s.told, m.reason] }, []],
+    programs_err: (s, m) => [{ told: [...s.told, m.error._tag] }, []],
   },
 });
 
