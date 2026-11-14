@@ -1,7 +1,7 @@
 ---
 id: 0280
 title: In next/, a person only opens the app, which starts the brain as a plain launchd service with its plist in the app's home, the menu bar is part of the Electron app from the first slice, and Approve and Remove ask for a finger
-status: accepted
+status: amended-in-part by [0182](0182-the-app-file-and-start-at-login-are-in-p19.md)
 date: 2026-11-01
 tags: [app, electron, menu-bar, brain, launchd, touch-id, instance, next]
 ---
@@ -40,7 +40,10 @@ is not needed. The note's `cloud` stage is the cloud instance
 - A person only opens the app, and the app starts the brain.
 - The menu bar is part of the Electron app from the first slice.
 - The brain is a plain launchd service, with its plist in the app's home, so nothing starts at
-  login. It sits behind one brain service, with a launchd layer and a test layer.
+  login. It sits behind one brain service, with a launchd layer and a test layer. From 2026-11-13
+  the app itself may open at login, behind one setting that is off by default
+  ([0182](0182-the-app-file-and-start-at-login-are-in-p19.md)); the brain is still started by the
+  app.
 - Approve and Remove ask for a finger. Deny never does: saying no should be easy.
 - On the cloud instance the app starts no brain and keeps only its link.
 

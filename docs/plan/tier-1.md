@@ -165,7 +165,9 @@ In build order. "Decide first" lists only what no decision answers yet.
   a typed line is saved before `update` runs; P18's client cores, where a tile follows its `keep`;
   P19, the Electron app, beside the browser page from this piece on: the founding screen, the
   sealed keys and the brain as a launchd service (slice 1 is draft
-  [PR 1079](https://github.com/kamp-us/tea-fabrika/pull/1079)); right behind it, P21's thin
+  [PR 1079](https://github.com/kamp-us/tea-fabrika/pull/1079)), and, from 2026-11-13, the app file
+  and start at login
+  ([0182](../../.decisions/0182-the-app-file-and-start-at-login-are-in-p19.md)); right behind it, P21's thin
   version, approve and deny from the menu bar (slice 1 is
   [PR 1097](https://github.com/kamp-us/tea-fabrika/pull/1097)). Remove and the rest of P21 wait.
 - From this piece on, every piece that draws (2, 3, 7's inbox and 8's room) is shown working in
