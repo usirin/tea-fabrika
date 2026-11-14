@@ -3,6 +3,7 @@ import { grantText } from "@kampus/libfabrika/access/Text";
 import { Console, DateTime, Effect, Schema, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { SecureRandom } from "effect/crypto";
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess } from "effect/process";
 
 class GrantError extends Schema.TaggedError<GrantError>()("GrantError", { reason: Schema.String }) {}
@@ -52,12 +53,11 @@ const grant = Command.make(
       try: () => `${origin}/grant/client/${encodeURIComponent(fingerprint)}?code=${encodeURIComponent(code)}`,
       catch: unreachable,
     });
-    // oxlint-disable-next-line fabrika/no-promises -- edge: the grant command reads a public target over HTTP
-    const response = yield* Effect.tryPromise({ try: () => fetch(targetUrl), catch: unreachable });
-    const badTarget = () => new GrantError({ reason: "bad_target" });
-    // oxlint-disable-next-line fabrika/no-promises -- edge: HTTP response bodies return a Promise
-    const raw = yield* Effect.tryPromise({ try: () => response.json(), catch: badTarget });
-    const target = yield* Schema.decodeUnknownEffect(Target)(raw).pipe(
+    const client = yield* HttpClient.HttpClient;
+    const response = yield* client.get(targetUrl).pipe(Effect.mapError(unreachable));
+    // The body is read as text: the client's own JSON reader takes an empty body for `null`.
+    const target = yield* response.text.pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Target))),
       Effect.mapError(() => new GrantError({ reason: "bad_target" })),
     );
 
@@ -97,24 +97,18 @@ const grant = Command.make(
         return out;
       }),
     );
-    const grantUrl = `${origin}/grant`;
-    const request = {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text, armored }),
-    };
-    // oxlint-disable-next-line fabrika/no-promises -- edge: the signed grant is posted over HTTP
-    const post = Effect.tryPromise({ try: () => fetch(grantUrl, request), catch: unreachable });
-    const result = yield* post;
+    const result = yield* HttpClientRequest.post(`${origin}/grant`).pipe(
+      HttpClientRequest.bodyText(JSON.stringify({ text, armored }), "application/json"),
+      client.execute,
+      Effect.mapError(unreachable),
+    );
 
-    if (!result.ok) {
+    if (result.status < 200 || result.status > 299) {
       return yield* new GrantError({ reason: "refused" });
     }
 
-    const badReply = () => new GrantError({ reason: "bad_reply" });
-    // oxlint-disable-next-line fabrika/no-promises -- edge: HTTP response bodies return a Promise
-    const applied = yield* Effect.tryPromise({ try: () => result.json(), catch: badReply });
-    const reply = yield* Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.Json))(applied).pipe(
+    const reply = yield* result.text.pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)))),
       Effect.mapError(() => new GrantError({ reason: "bad_reply" })),
     );
 
@@ -129,6 +123,8 @@ const grant = Command.make(
 NodeRuntime.runMain(
   Command.runWith(grant, { version: "0.0.0", renderErrors: false })(process.argv.slice(2)).pipe(
     Effect.catchTag("ShowHelp", () => Effect.fail(new GrantError({ reason: "bad_args" }))),
-    Effect.provide([NodeServices.layer, SecureRandom.layerWebCrypto]),
+    Effect.provide([NodeServices.layer, SecureRandom.layerWebCrypto, FetchHttpClient.layer]),
+    // The request keeps the headers it had: no trace headers ride along to an outside address.
+    Effect.provideService(HttpClient.TracerPropagationEnabled, false),
   ),
 );

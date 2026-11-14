@@ -10,6 +10,7 @@ import { TestClock } from "effect/testing";
 import { vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import type { BrainEvent } from "../../runtime/BrainEvent.ts";
+import { bodyText, fetchClient } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
 import { brainOutbox } from "./local-dev.ts";
@@ -235,8 +236,9 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
   yield* Effect.acquireRelease(
     Effect.sync(() =>
       vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
-        const body = JSON.parse(String(options?.body)) as Call["body"];
-        sent.push({ url: String(url), body });
+        const body = JSON.parse(bodyText(options)) as Call["body"];
+        // The address as `fetch` parses it, given as a string or as the client's URL object.
+        sent.push({ url: new URL(String(url)).href, body });
 
         if (mode === "startup") {
           return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
@@ -468,6 +470,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
 // Each run gets its own clock, file system, process ids and secrets.
 const walked = (walk: Walk) =>
   run(walk).pipe(
+    Effect.provide(fetchClient),
     Effect.provide(ProcessIdGenerator.layer),
     Effect.provide(SecureRandom.layerWebCrypto),
     Effect.provide(NodeServices.layer),
@@ -492,7 +495,7 @@ describe("T708 dev control laws", () => {
 
           // A known port is attempted even after its process exited or braked.
           expect(call.sent).toHaveLength(1);
-          expect(call.sent[0]!.url).toBe(`http://127.0.0.1:${call.port}`);
+          expect(call.sent[0]!.url).toBe(`http://127.0.0.1:${call.port}/`);
           expect(call.sent[0]!.body).toEqual({
             target: "process",
             project: NAME,
