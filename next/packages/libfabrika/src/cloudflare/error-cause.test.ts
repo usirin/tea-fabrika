@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { RpcCallError } from "alchemy/Rpc";
 import { Effect, Layer, Schema } from "effect";
 import * as fc from "fast-check";
 // T695, next/. The Cloudflare adapters keep the failure they translate (decision 0043 rule 12).
@@ -67,6 +68,20 @@ const calls = Object.entries(clients(null)).flatMap(([client, made]) =>
   Object.keys(made).map((method) => ({ client, method })),
 );
 
+// Ticket 502 slice S2: a ProcessClient call goes through Alchemy's typed stub inside `reach`, so its
+// cause is the RpcCallError, and that error holds the rejection. Plant: `unreachable(error.cause)`.
+const throughStub = new Set(["process"]);
+
+/** The rejection a client's `unreachable` kept: its cause, or what the stub's RpcCallError holds. */
+const kept = (client: string, cause: unknown) => {
+  if (!throughStub.has(client)) {
+    return cause;
+  }
+
+  expect(cause, `${client} keeps Alchemy's RpcCallError`).toBeInstanceOf(RpcCallError);
+  return cause instanceof RpcCallError ? cause.cause : undefined;
+};
+
 describe("T695, the platform clients keep what the platform rejected with", () => {
   // C5, platform.ts:12, every `catch: unreachable` in that file. Plant: the zero-argument callback.
   it("vector: the shared callback serves at least every client method the adapters call", () => {
@@ -90,7 +105,7 @@ describe("T695, the platform clients keep what the platform rejected with", () =
           const error = yield* Effect.flip((method as () => Effect.Effect<unknown, LedgerError>)());
           expect(error).toBeInstanceOf(LedgerError);
           expect(error.reason).toBe("unreachable");
-          expect(error.cause, `${call.client}.${call.method} keeps the rejection`).toBe(failure);
+          expect(kept(call.client, error.cause), `${call.client}.${call.method} keeps the rejection`).toBe(failure);
         }
       }),
   );

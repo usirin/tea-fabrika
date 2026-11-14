@@ -170,10 +170,28 @@ const world = async (
         'export const program = {name:"p12/sealed-fixture",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{},outputs:{},writes:{},wake:()=>null};',
       ].join("\n"),
     );
+    // Ticket 502 slice S2: one wake, asked for by `schedule`, dropped by `cancel`, and never asked
+    // for again by `timer`. So each alarm the platform delivers is one the test asked for.
+    const alarm = join(home, "alarm.ts");
+    writeFileSync(
+      alarm,
+      [
+        'import {Machine} from "@demlik/tea/effect"; import {Schema} from "effect";',
+        "const Model = Schema.Struct({fired: Schema.Int, wake: Schema.NullOr(Schema.Number)});",
+        'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("schedule"), at: Schema.Number}), Schema.Struct({type: Schema.Literal("cancel")}), Schema.Struct({type: Schema.Literal("timer"), at: Schema.Number})]);',
+        "const machine = Machine.make({model:Model,msg:Msg,cmds:[],init:loaded=>[loaded??{fired:0,wake:null},[]],update:{schedule:(s,m)=>[{...s,wake:m.at},[]],cancel:s=>[{...s,wake:null},[]],timer:s=>[{fired:s.fired+1,wake:null},[]]}});",
+        'export const program = {name:"p12/alarm-fixture",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{schedule:{_tag:"write",schema:Msg,description:"Schedule",personOnly:false},cancel:{_tag:"write",schema:Msg,description:"Cancel",personOnly:false}},outputs:{},writes:{},wake:s=>s.wake};',
+      ].join("\n"),
+    );
     const built = await Effect.runPromise(
       build({
         out: join(home, "dist"),
-        programs: { "p12/writer-fixture": writer, "p12/timer-fixture": timer, "p12/sealed-fixture": sealed },
+        programs: {
+          "p12/writer-fixture": writer,
+          "p12/timer-fixture": timer,
+          "p12/sealed-fixture": sealed,
+          "p12/alarm-fixture": alarm,
+        },
       }).pipe(Effect.provide(NodeServices.layer)),
     );
 
@@ -246,6 +264,60 @@ const world = async (
   }
 };
 
+// Ticket 502 slice S2: the exam's Process holds for a plain class and for Alchemy's bridge class
+// alike. A bridge class has no `msg` or any other RPC method on its prototype: its constructor
+// returns a Proxy that answers each name the class lacks from the object's Layer
+// (`Workers/DurableObjectBridge.ts`, the `get` trap). So an override that calls `super.msg` finds
+// nothing there, and an override of any name hides the Layer's method. This class overrides
+// nothing. Its constructor returns one more Proxy around what the base made, and that Proxy stands
+// in front of two names only:
+// - `msg`: holds the call before the base sees it, while `exam.hold` is saved.
+// - `alarm`: counts each delivery of the platform alarm, and each one the base failed.
+// Every other name is the base's own. The `test*` methods read and write this object's storage.
+const examProcess = `
+export class Process extends Brain.Process {
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.incarnation = crypto.randomUUID();
+    const alarms = async (step) => {
+      const seen = (await ctx.storage.get("exam.alarms")) ?? {delivered:0, failed:0};
+      await ctx.storage.put("exam.alarms", step(seen));
+    };
+    return new Proxy(this, {
+      get: (base, name) => {
+        const member = Reflect.get(base, name);
+        if (typeof member !== "function" || name === "constructor") return member;
+        if (name === "msg") return async (...args) => {
+          if (await ctx.storage.get("exam.hold")) { await ctx.storage.put("exam.entered",true); await new Promise(()=>{}); }
+          return member.apply(base, args);
+        };
+        if (name === "alarm") return async (...args) => {
+          await alarms((seen) => ({...seen, delivered: seen.delivered + 1}));
+          try { return await member.apply(base, args); }
+          catch (error) { await alarms((seen) => ({...seen, failed: seen.failed + 1})); throw error; }
+        };
+        return member.bind(base);
+      },
+    });
+  }
+  testState() { return {incarnation: this.incarnation}; }
+  async testHold() { await this.ctx.storage.put("exam.hold",true); await this.ctx.storage.put("exam.entered",false); }
+  testEntered() { return this.ctx.storage.get("exam.entered"); }
+  testRelease() { return this.ctx.storage.put("exam.hold",false); }
+  async testAlarms() { return (await this.ctx.storage.get("exam.alarms")) ?? {delivered:0, failed:0}; }
+  async testBreak() {
+    await this.ctx.storage.put("exam.descriptor", await this.ctx.storage.get("descriptor"));
+    await this.ctx.storage.delete("descriptor");
+    await this.ctx.storage.sync();
+    this.ctx.abort("exam break");
+  }
+  async testRepair() {
+    await this.ctx.storage.put("descriptor", await this.ctx.storage.get("exam.descriptor"));
+    await this.ctx.storage.sync();
+    this.ctx.abort("exam repair");
+  }
+}`;
+
 // Test-only subclasses expose storage inspection and platform abort on the private control
 // socket. The production Connection, runner, Project and transport behavior stays in the base.
 // No HTTP route or extra target is installed in a product build.
@@ -263,12 +335,7 @@ export class Connection extends Brain.Connection {
   testState() { return {incarnation:this.incarnation, sockets:this.ctx.getWebSockets().map(ws=>({attachment:ws.deserializeAttachment(),tags:this.ctx.getTags(ws)}))}; }
   testAbort() { this.ctx.abort("exam abort"); }
 }
-export class Process extends Brain.Process {
-  async testHold() { await this.ctx.storage.put("exam.hold",true); await this.ctx.storage.put("exam.entered",false); }
-  testEntered() { return this.ctx.storage.get("exam.entered"); }
-  testRelease() { return this.ctx.storage.put("exam.hold",false); }
-  async msg(input) { if (await this.ctx.storage.get("exam.hold")) {await this.ctx.storage.put("exam.entered",true); await new Promise(()=>{});} return super.msg(input); }
-}
+${examProcess}
 export class Project extends Brain.Project {
   testGateway(name,method,args) { return this.env.CONNECTION.getByName(name)[method](...args); }
   testWaits(reader,stream) { return Array.from(this.ctx.storage.sql.exec('SELECT "to",stream,after FROM rings WHERE "to"=? AND stream=?',reader,stream)); }
@@ -304,6 +371,24 @@ export class Control extends Brain.Control {
 };
 
 const pause = (ms = 20) => new Promise<void>((done) => setTimeout(done, ms));
+
+/** Looks until `done` says yes, for at most `wait` ms. The platform's alarm retry sets the bound. */
+const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) => boolean, wait = 25_000) => {
+  const end = Date.now() + wait;
+  let last: A | undefined;
+
+  while (Date.now() < end) {
+    last = await look();
+
+    if (done(last)) {
+      return last;
+    }
+
+    await pause(50);
+  }
+
+  throw new Error(`${label}: timed out; last observed ${JSON.stringify(last)}`);
+};
 
 const wire = async (instance: any, key: ReturnType<typeof identity>, tab: string) => {
   const name = `/client/${encodeURIComponent(key.fingerprint)}/${tab}`;
@@ -871,6 +956,122 @@ describe("P12 real object adapters", () => {
       expect(await process.recover()).toMatchObject({ _tag: "interrupted", letter: "interrupted" });
     });
   });
+  // Outside only. Ticket 502 slice S2, law 4: only the platform evicts an idle object, so this waits
+  // past workerd's idle time on the real clock and must see a new instance, not a slow answer.
+  // Plant: fork a fiber that sleeps in the Process object's Layer, which keeps the object awake.
+  it("scenario: T502 law 4: an idle Process object sleeps, and wakes as a new instance with its saved wake and view", async () => {
+    await world(async (instance, key, fixture) => {
+      const { p, client } = await admitted(instance, key);
+      const started = await fixture.start("sleeper:1", "p12/alarm-fixture");
+      const object = instance.process(started.process);
+      // An hour away: the wake is saved, and no alarm arrives to keep the object awake.
+      const far = Date.now() + 3_600_000;
+      const send = (letter: string, m: unknown) =>
+        routed(p, client, "process.send", { pid: started.process, letter, m, sentAt: SENT, seen: 0 });
+      expect(await send("arm", { type: "schedule", at: far })).toMatchObject({
+        _tag: "ok",
+        result: { _tag: "accepted" },
+      });
+      const view = await object.open("audit");
+      expect(view).toMatchObject({ view: { fired: 0, wake: far } });
+      expect(await object.alarm()).toBe(far);
+      const before = await object.testState();
+      // workerd's idle eviction is about ten seconds, as in the Connection scenario above.
+      await pause(12_000);
+      const awake = await object.testState();
+      expect(awake.incarnation, "the object must have slept").not.toBe(before.incarnation);
+      expect(await object.alarm()).toBe(far);
+      expect(await object.open("audit")).toEqual(view);
+      expect((await p.info()).find((row: any) => row.name === "sleeper:1").process).toBe(started.process);
+      expect(await object.testAlarms()).toEqual({ delivered: 0, failed: 0 });
+      // The woken instance still takes a letter, and drops the wake it kept.
+      expect(await send("drop", { type: "cancel" })).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+      expect(await object.alarm()).toBeNull();
+    }, true);
+  }, 120_000);
+  // Outside only. Ticket 502 slice S2, law 10 on the real Process object: only the platform fires,
+  // deletes and retries an alarm. The exam's Process counts each delivery, and each one the object
+  // failed. A failure is made by taking the saved descriptor away, so the object's own service
+  // cannot be built when the alarm arrives; putting it back lets the platform's next try through.
+  // Plants: drop the `alarm` slot from the Layer (nothing fires); catch the alarm's failure in the
+  // Layer and answer done (the platform never tries again, so the wake is lost).
+  it("scenario: T502 law 10: a saved alarm fires once, a deleted one never fires, and a failed one is retried", async () => {
+    await world(async (instance, key, fixture) => {
+      const { p, client } = await admitted(instance, key);
+      const accepted = { _tag: "ok", result: { _tag: "accepted" } };
+      const send = (pid: string, letter: string, m: unknown) =>
+        routed(p, client, "process.send", { pid, letter, m, sentAt: SENT, seen: 0 });
+      const timers = async (name: string) =>
+        (await p.read(`${name}/inbox`, 0, "audit")).filter((row: any) => row.body.m?.type === "timer");
+
+      // 1. A saved alarm fires once: one timer letter for the wake, and the wake is spent.
+      const once = await fixture.start("once:1", "p12/alarm-fixture");
+      const first = Date.now() + 1_000;
+      expect(await send(once.process, "arm", { type: "schedule", at: first })).toMatchObject(accepted);
+      expect(await instance.process(once.process).alarm()).toBe(first);
+      await until(
+        "the saved alarm's timer letter",
+        () => timers("once:1"),
+        (rows) => rows.length >= 1,
+      );
+      // Long enough for a second delivery of the same wake to show.
+      await pause(1_500);
+      const fired = await timers("once:1");
+      expect(fired).toHaveLength(1);
+      expect(fired[0].body.m).toMatchObject({ type: "timer", at: first });
+      expect(await instance.process(once.process).open("audit")).toMatchObject({ view: { fired: 1, wake: null } });
+      expect(await instance.process(once.process).alarm()).toBeNull();
+      const counted = await instance.process(once.process).testAlarms();
+      expect(counted.delivered).toBeGreaterThanOrEqual(1);
+      expect(counted.failed).toBe(0);
+
+      // 2. A deleted alarm never fires: the platform delivers nothing after the wake is dropped.
+      const never = await fixture.start("never:1", "p12/alarm-fixture");
+      const second = Date.now() + 2_000;
+      expect(await send(never.process, "arm", { type: "schedule", at: second })).toMatchObject(accepted);
+      expect(await instance.process(never.process).alarm()).toBe(second);
+      expect(await send(never.process, "drop", { type: "cancel" })).toMatchObject(accepted);
+      expect(await instance.process(never.process).alarm()).toBeNull();
+      await pause(Math.max(0, second - Date.now()) + 1_500);
+      expect(await timers("never:1")).toEqual([]);
+      expect(await instance.process(never.process).testAlarms()).toEqual({ delivered: 0, failed: 0 });
+      expect(await instance.process(never.process).open("audit")).toMatchObject({ view: { fired: 0, wake: null } });
+
+      // 3. A failed alarm is retried: it fails while the descriptor is gone, and its wake is
+      // delivered, once, by a later try after the descriptor is back.
+      const retried = await fixture.start("retry:1", "p12/alarm-fixture");
+      const third = Date.now() + 2_000;
+      expect(await send(retried.process, "arm", { type: "schedule", at: third })).toMatchObject(accepted);
+      // Both exam calls end in a platform abort, which rejects the call that asked for it.
+      await instance
+        .process(retried.process)
+        .testBreak()
+        .catch(() => undefined);
+      await until(
+        "one failed delivery of the alarm",
+        () => instance.process(retried.process).testAlarms(),
+        (seen: any) => seen.failed >= 1,
+      );
+      expect(await timers("retry:1")).toEqual([]);
+      await instance
+        .process(retried.process)
+        .testRepair()
+        .catch(() => undefined);
+      await until(
+        "the retried alarm's timer letter",
+        () => timers("retry:1"),
+        (rows) => rows.length >= 1,
+      );
+      await pause(1_500);
+      const late = await timers("retry:1");
+      expect(late).toHaveLength(1);
+      expect(late[0].body.m).toMatchObject({ type: "timer", at: third });
+      const seen = await instance.process(retried.process).testAlarms();
+      expect(seen.failed).toBeGreaterThanOrEqual(1);
+      expect(seen.delivered).toBeGreaterThan(seen.failed);
+      expect(await instance.process(retried.process).open("audit")).toMatchObject({ view: { fired: 1, wake: null } });
+    }, true);
+  }, 180_000);
   it("scenario: sealed program plant: external fetch and Project/R2 bindings stay unavailable; unknown program fails", async () => {
     await world(async (instance, _key, probe) => {
       const loader = instance.loader;

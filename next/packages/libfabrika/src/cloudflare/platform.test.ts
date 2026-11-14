@@ -3,6 +3,7 @@
 // failure text out of tags). The methods come from each client's own keys, so a new method joins the
 // law without an edit here. Plant: `catch: unreachable` that ignores its argument, as before this ticket.
 import { it } from "@effect/vitest";
+import { encodeRpcError, ErrorTag, RpcCallError } from "alchemy/Rpc";
 import { Effect, Schema } from "effect";
 import { expect } from "vitest";
 import { LedgerError } from "../ledger/Ledger.ts";
@@ -60,6 +61,57 @@ it.effect.prop(
       expect(error).toMatchObject({ _tag: "LedgerError", reason: "unreachable" });
       expect(Reflect.get(Object(error), "message")).toContain(kind.name);
       expect(Reflect.get(Object(error), "message")).toContain(text);
+    }),
+  { arbitrary: { runs: 200, seed: 119120 } },
+);
+
+// Ticket 502 slice S2, next/. ProcessClient calls the object through Alchemy's typed stub inside
+// `reach`: the object's own typed failure crosses as itself, and only a call that never got an
+// answer is `unreachable`, with Alchemy's RpcCallError kept as its cause. The methods come from the
+// client's own keys. Plants: map every failure to `unreachable`; build `unreachable` from the
+// thrown value alone, so the RpcCallError is dropped.
+const processMethods = Object.keys(ProcessClient.make(rejecting(new Error("probe"))));
+
+/** A Process stub whose every method resolves with `answer`, as the object's bridge does. */
+const answering = <A>(answer: unknown) => new Proxy({}, { get: () => async () => answer }) as A;
+
+it.effect.prop(
+  "a LedgerError the Process object fails with crosses ProcessClient as itself, never as unreachable by translation",
+  {
+    method: Schema.Literals(processMethods),
+    reason: LedgerError.fields.reason,
+    text: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(64)),
+  },
+  ({ method, reason, text }) =>
+    Effect.gen(function* () {
+      // The bridge answers a typed failure as data: Alchemy's error envelope around the encoded error.
+      const envelope = { _tag: ErrorTag, error: encodeRpcError(new LedgerError({ reason, message: text })) };
+      const call: () => Effect.Effect<unknown, unknown> = Reflect.get(ProcessClient.make(answering(envelope)), method);
+      const error = yield* Effect.flip(call());
+      expect(error).toBeInstanceOf(LedgerError);
+      expect(error).toMatchObject({ reason, message: text });
+      expect(Reflect.get(Object(error), "cause")).toBeUndefined();
+    }),
+  { arbitrary: { runs: 200, seed: 119120 } },
+);
+
+it.effect.prop(
+  "a Process call that never got an answer is unreachable, and its cause is the RpcCallError that holds the thrown error",
+  {
+    method: Schema.Literals(processMethods),
+    name: Schema.Literals(faults.map((fault) => fault.name)),
+    text: Schema.String.check(Schema.isMinLength(8), Schema.isMaxLength(64)),
+  },
+  ({ method, name, text }) =>
+    Effect.gen(function* () {
+      const fault = faults.find((kind) => kind.name === name)!.make(text);
+      const call: () => Effect.Effect<unknown, unknown> = Reflect.get(ProcessClient.make(rejecting(fault)), method);
+      const error = yield* Effect.flip(call());
+      expect(error).toMatchObject({ _tag: "LedgerError", reason: "unreachable" });
+      const cause = Reflect.get(Object(error), "cause");
+      expect(cause).toBeInstanceOf(RpcCallError);
+      expect(cause).toMatchObject({ method });
+      expect(Reflect.get(Object(cause), "cause")).toBe(fault);
     }),
   { arbitrary: { runs: 200, seed: 119120 } },
 );
