@@ -12,10 +12,24 @@
 //     `Children.start` with the Cmd's id and the running life as requester. `exit` writes `exited
 //     {reason: normal}` for this life after the Cmds listed before it; none after it runs.
 // The oracle is the walk's own model and the store's raw rows read with SQL, never the product's fold.
+//
+// Desk S1, next/: L1 to L3 on the same real runners. The contract they pin, from the approved
+// desk plan's shape:
+//   0170: a start caused by a letter is checked against that letter's sender, read through
+//     `SessionManager.signer` (or the CheckedWriter's `sign`, which the real door backs with it),
+//     with `mayStart(member, program)`, which is always true. The program that asked holds no
+//     grant for it. A start with no letter behind it keeps the `starts` pair list.
+//   StartChild.ts: `stopChild`, `Cmd.make("stop_child", { input: {name}, ok: null, err:
+//     ["not_child", "noproc"] })`, OTP's terminate_child: it ends the requester's own child with
+//     `shutdown`, and its watchers get one DOWN.
+// Every letter a runner here takes is recorded and delivered in a real SessionManager first, as the
+// door does, so the sender of a start's parent is on record where the real door keeps it.
 import type { Tagged } from "@demlik/tea";
+import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import type { Tracer } from "effect";
 import {
+  Arbitrary,
   Clock,
   Context,
   Deferred,
@@ -31,8 +45,10 @@ import {
   Scope,
 } from "effect";
 import * as fc from "fast-check";
-import { InputId, Writer } from "../coordination/index.ts";
+import { InputId, NotGranted, SessionManager, SignRequest, Writer } from "../coordination/index.ts";
+import * as Id from "../Id.ts";
 import { Children, Started } from "../processes/Children.ts";
+import { ExitReason } from "../processes/ExitReason.ts";
 import { type From, Mailbox } from "../processes/Mailbox.ts";
 import { Owner, Recipient, Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
@@ -41,7 +57,9 @@ import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { childStarter, Model } from "./internal/childStarter.test-support.ts";
 import { ProcessStore } from "./ProcessStore.ts";
+import { Program } from "./Program.ts";
 import { ProgramRunner } from "./Runner.ts";
+import * as StartChild from "./StartChild.ts";
 
 /** Real stores. `sql(part)` is one database per part; `probe.open` counts the handles still open. */
 export type Store = {
@@ -86,6 +104,8 @@ const ids = (...values: ReadonlyArray<string>) => {
 
 const Reasons = Schema.TaggedUnion({ normal: {} });
 const NORMAL = Reasons.cases.normal.make({});
+/** Desk S1, L3: OTP's shutdown, the one reason a stopped child ends with. */
+const SHUTDOWN = ExitReason.cases.shutdown.make({});
 
 type Entry = Tagged & {
   readonly id: string;
@@ -119,7 +139,89 @@ export const STARTS = [
   { source: "plain", to: "merger" },
   { source: "starter", to: BOUNDARY_PROGRAM },
   { source: "merger", to: BOUNDARY_PROGRAM },
+  // Desk S1, L3: the three stoppers may start mergers on their own grant, so L3 holds apart from L1.
+  { source: "stopa", to: "merger" },
+  { source: "stopb", to: "merger" },
+  { source: "stopc", to: "merger" },
 ];
+
+/** Desk S1, L3: three programs that start and stop children. Booted only by a walk that stops. */
+const STOPPERS: ReadonlyArray<readonly [string, string]> = [
+  ["stopa:1", "stopa"],
+  ["stopb:1", "stopb"],
+  ["stopc:1", "stopc"],
+];
+
+const STOPPER_PROGRAMS = new Set(STOPPERS.map(([, program]) => program));
+
+/** Desk S1, L2: a sender whose key the membership no longer admits, though its letter was delivered. */
+const OUTSIDER_KEY = "SHA256:outsider";
+const OUTSIDER_PERSON = "person_01m6v5270hf3c8x2q7w9z4k5zz";
+const outsider = Writer.cases.person.make({ key: OUTSIDER_KEY, for: OUTSIDER_PERSON });
+
+/** Desk S1, L1: a member's own writer, keyed by the person. */
+const memberWriter = (member: string) => Writer.cases.person.make({ key: `SHA256:${member}`, for: member });
+
+/** Programs a member's letter may start; no grant names `starter` or `plain` as a start's target. */
+const ANY_PROGRAM = ["starter", "plain", "merger"] as const;
+/** Programs no start grant names as a target, so only a member's check can let a start of one through. */
+const UNGRANTED = ["starter", "plain"] as const;
+
+/** Desk S1, L3: one stopper program. It asks for starts and stops, and keeps every answer, in order,
+ *  as `childStarter` does. Built on first use: `stopChild` is the build's. */
+const stopper = (name: string) => {
+  const Ask = Schema.Struct({ program: Schema.String, name: Schema.String });
+  const Msg = Schema.Union([
+    Schema.Struct({ type: Schema.Literal("start"), ask: Ask }),
+    Schema.Struct({ type: Schema.Literal("stop"), name: Schema.String }),
+  ]);
+  const answer = (type: string, outcome: unknown) =>
+    Schema.decodeUnknownSync(Schema.Json)({ type, outcome: outcome ?? null });
+  const keep = (type: string) => (s: Model, m: { value?: unknown; reason?: string }) => [
+    { ...s, answers: [...s.answers, answer(type, type.endsWith("_ok") ? m.value : m.reason)] },
+    [],
+  ];
+  const machine = Machine.make({
+    model: Model,
+    msg: Msg,
+    cmds: [StartChild.startChild, StartChild.stopChild],
+    init: (loaded) => [loaded ?? { stepped: 0, answers: [] }, []],
+    update: {
+      start: (s: Model, m: { ask: { program: string; name: string } }) => [
+        { ...s, stepped: s.stepped + 1 },
+        [StartChild.startChild({ program: m.ask.program, name: m.ask.name })],
+      ],
+      stop: (s: Model, m: { name: string }) => [
+        { ...s, stepped: s.stepped + 1 },
+        // A plain string on purpose: the host, not the type, judges the name.
+        [StartChild.stopChild({ name: m.name } as never)],
+      ],
+      start_child_ok: keep("start_child_ok"),
+      start_child_err: keep("start_child_err"),
+      stop_child_ok: keep("stop_child_ok"),
+      stop_child_err: keep("stop_child_err"),
+    } as never,
+  });
+  return Program.make({
+    name,
+    machine,
+    state: { v: 1, upgrades: [] },
+    view: (s) => s,
+    refuse: () => null,
+    inputs: { start: "Ask for a child", stop: "Stop a child" },
+    outputs: {},
+    writes: {},
+    wake: () => null,
+  });
+};
+
+let withStoppers: Record<string, unknown> | undefined;
+
+/** The loader's programs for a stopper's runner: every program, plus the three stoppers. */
+const stopperPrograms = (): Record<string, unknown> => {
+  withStoppers ??= { ...PROGRAMS, ...Object.fromEntries([...STOPPER_PROGRAMS].map((p) => [p, stopper(p)])) };
+  return withStoppers;
+};
 
 /** The host's mail grant: `sender:1` mails both starters, so their steps run on another process's letter. */
 export const HOST: Grants = { "sender:1": ["starter:1", "starter:2"] };
@@ -293,28 +395,59 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
   const shared = store.shared(faulting(store.sql("ledger"), world.fault), next);
   const context = yield* Layer.buildWithScope(shared, scope);
   const children = Context.get(context, Children);
+  // Desk S1: the door's SessionManager, on its own store. Every key is a member but the outsider's.
+  const sessions = Context.get(
+    yield* Layer.buildWithScope(
+      SessionManager.layer(
+        store.sql("sessions"),
+        (key) => (key === OUTSIDER_KEY ? Effect.fail(new NotGranted()) : Effect.succeed(memberWriter(key))),
+        { input: () => false, event: () => false },
+      ),
+      scope,
+    ),
+    SessionManager,
+  );
+  const hold = Effect.gen(function* () {
+    const held = world.hold;
+
+    if (held !== undefined) {
+      world.hold = undefined;
+      yield* Deferred.succeed(held.entered, undefined);
+      yield* Deferred.await(held.release);
+    }
+  });
   const runnerContext = Context.add(
-    context,
+    Context.add(context, SessionManager, sessions),
     Children,
+    // Every member of the real service passes through; only `start` may be held for a race.
     Children.of({
-      start: Effect.fnUntraced(function* (child, from) {
-        const hold = world.hold;
-
-        if (hold !== undefined) {
-          world.hold = undefined;
-          yield* Deferred.succeed(hold.entered, undefined);
-          yield* Deferred.await(hold.release);
-        }
-
-        return yield* children.start(child, from);
-      }),
+      ...children,
+      start: (...args: Parameters<typeof children.start>) => Effect.andThen(hold, children.start(...args)),
     }),
   );
+  /** The door's two steps before a delivery: the input is recorded with its sender, then delivered. */
+  const deliver = (input: unknown, name: string, pid: string) => {
+    const i = input as Incoming;
+    return sessions
+      .record({
+        id: i.envelope.id,
+        by: i.envelope.by,
+        client: i.envelope.by.key,
+        process: pid,
+        name,
+        personOnly: false,
+        digest: i.id,
+        traceId: i.span.traceId,
+        span: i.span,
+        arrivedAt: i.envelope.arrivedAt,
+      } as never)
+      .pipe(Effect.andThen(sessions.delivered(i.envelope.id, pid)), Effect.orDie);
+  };
   const runners = new Map<string, ProgramRunner["Service"]>();
   const runner = Effect.fnUntraced(function* (name: string) {
     const held = world.names.get(name);
 
-    if (held === undefined || !RUNS.has(held.program)) {
+    if (held === undefined || !(RUNS.has(held.program) || STOPPER_PROGRAMS.has(held.program))) {
       return yield* Effect.die(new Error(`no runner steps ${name}`));
     }
 
@@ -339,13 +472,16 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
               traceId: i.span.traceId,
               build: BUILD,
             }),
+          // The real door backs `sign` with its SessionManager's signer, as this does.
+          sign: (id: string, parent: string, kind: string) =>
+            sessions.signer(parent, held.pid, kind).pipe(Effect.provideService(SignRequest, { id })),
           commit: () => Effect.die("no write declared"),
           own: () => Effect.die("no write declared"),
         };
       }),
     );
     const own = Layer.mergeAll(
-      ProgramLoader.layer(PROGRAMS, {}),
+      ProgramLoader.layer(STOPPER_PROGRAMS.has(held.program) ? stopperPrograms() : PROGRAMS, {}),
       ProcessStore.layer(faulting(store.sql(`process-${name}`), world.fault), { process: held.pid }),
       Layer.succeed(Alarm, { set: () => Effect.void }),
       Layer.succeed(WatcherManager, { publish: () => Effect.void }),
@@ -369,7 +505,11 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
         )
       : ProgramRunner.layer(descriptor, options);
     const built = yield* Layer.buildWithScope(layer.pipe(Layer.provide(own)), scope);
-    const made = Context.get(built, ProgramRunner);
+    const real = Context.get(built, ProgramRunner);
+    const made: ProgramRunner["Service"] = {
+      ...real,
+      msg: (input) => Effect.andThen(deliver(input, name, held.pid), real.msg(input)),
+    };
     runners.set(held.pid, made);
     return made;
   });
@@ -384,7 +524,18 @@ const savedModel = Effect.fnUntraced(function* (store: Store, name: string, pid:
   return Option.getOrUndefined(decodeModel(saved?.saved.model ?? null));
 });
 
+// Effect Arbitrary has no fast-check adapter, and the walk is fast-check's `fc.commands`: one seed
+// draws one value from the schema's own Arbitrary.
+const generated = <S extends Schema.Top>(schema: S): fc.Arbitrary<S["Type"]> =>
+  fc.nat().map((seed) => {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's map takes a plain value, so one sample is drawn here
+    const [value] = Effect.runSync(Arbitrary.sampleEffect(Arbitrary.schema(schema), { seed, count: 1 }));
+    return value as S["Type"];
+  });
+
 const Cell = fc.record({
+  /** Desk S1, L1: the member whose letter asks for a start. */
+  member: generated(Id.Person),
   move: fc.nat(),
   pick: fc.nat(),
   alt: fc.nat(),
@@ -428,7 +579,17 @@ type Move =
   | "worker_before_exit"
   | "worker_after_exit"
   | "boundary_start"
-  | "checkpoint_starts";
+  | "checkpoint_starts"
+  // Desk S1
+  | "member_start"
+  | "outsider_start"
+  | "stopper_start"
+  | "stop_own"
+  | "stop_other"
+  | "stop_ended";
+
+/** The moves that need the three stoppers booted. */
+const STOPS: ReadonlySet<Move> = new Set(["stopper_start", "stop_own", "stop_other", "stop_ended"]);
 
 /** A forged operand for each extra field a program might add beside its Cmd. */
 const forged = (field: string, world: World): unknown => {
@@ -471,11 +632,11 @@ const walk = (
     const inContext = <A, E>(effect: Effect.Effect<A, E, Layer.Success<ReturnType<Store["shared"]>>>) =>
       effect.pipe(Effect.provide(life.context));
     const all = (extra: Iterable<string> = []) => inContext(store.entries([...world.names.keys(), ...extra]));
-    const letter = (input: unknown): Incoming => {
+    const letter = (input: unknown, by: Writer = person): Incoming => {
       const n = ++world.n;
       return {
         id: `letter-${n}`,
-        envelope: { id: inputId(n), by: person, arrivedAt: 1794099600000 + n, input },
+        envelope: { id: inputId(n), by, arrivedAt: 1794099600000 + n, input },
         sentAt: "2026-11-11T01:00:00Z",
         seen: 0,
         span: { traceId: TRACE, spanId: "00f067aa0ba902b7" },
@@ -491,9 +652,9 @@ const walk = (
           return answer;
         }),
       );
-    const door = Effect.fnUntraced(function* (name: string, input: unknown) {
+    const door = Effect.fnUntraced(function* (name: string, input: unknown, by: Writer = person) {
       const runner = yield* life.runner(name);
-      yield* call(runner.msg(letter(input)), `${name}'s letter`);
+      yield* call(runner.msg(letter(input, by)), `${name}'s letter`);
     });
     const answers = Effect.fnUntraced(function* (name: string) {
       const held = world.names.get(name) as Name;
@@ -563,8 +724,27 @@ const walk = (
       [...world.names].filter(([, h]) => h.live && RUNS.has(h.program) && h.program !== "plain").map(([n]) => n);
     const starters = () => runnable();
     const ended = () => [...world.names].filter(([n, h]) => !h.live && world.parents.has(n)).map(([n]) => n);
+    const stoppers = () => STOPPERS.map(([n]) => n).filter((n) => world.names.get(n)?.live === true);
+    /** Desk S1, L3: each stopper's children, by state. */
+    const stopperChildren = (live: boolean) =>
+      [...world.names].filter(
+        ([n, h]) => h.live === live && STOPPERS.some(([s]) => s === world.parents.get(n) && world.names.get(s)?.live),
+      );
+    /** Every process row written after `rev`, outside the inboxes. */
+    const processRows = (rev: number) =>
+      Effect.map(all(), (rows) => rows.filter((e) => e.rev > rev && e.stream.startsWith("processes")));
+    /** What each known name's process state is now, read from the process table. */
+    const states = Effect.fnUntraced(function* () {
+      const out = new Map<string, string>();
 
-    for (const [name, program] of BOOT) {
+      for (const n of world.names.keys()) {
+        out.set(n, (yield* inContext(ProcessManager.use((p) => p.status(n)))).state._tag);
+      }
+
+      return out;
+    });
+
+    for (const [name, program] of [...BOOT, ...(moves.some((m) => STOPS.has(m)) ? STOPPERS : [])]) {
       const started = yield* inContext(
         ProcessManager.use((p) =>
           p.start(Start.cases.first.make({ id: `boot:${name}`, name, code: { program, hash: BUILD } }), brainFrom()),
@@ -594,6 +774,12 @@ const walk = (
         worker_after_exit: runnable().length > 0 && next.calls() < PIDS.length - 6,
         cut_exit: runnable().length > 0 && next.calls() < PIDS.length - 6,
         checkpoint_starts: starters().length > 0 && next.calls() < PIDS.length - 6,
+        member_start: starters().length > 0 && next.calls() < PIDS.length - 6,
+        outsider_start: starters().length > 0,
+        stopper_start: stoppers().length > 0 && next.calls() < PIDS.length - 6,
+        stop_own: stopperChildren(true).length > 0,
+        stop_other: stoppers().length > 0,
+        stop_ended: stopperChildren(false).length > 0,
         boundary_start: starters().length > 0 && next.calls() < PIDS.length - 6,
       };
       const options = moves.filter((move) => can[move]);
@@ -1130,6 +1316,137 @@ const walk = (
           seen.add("already_present");
           break;
         }
+        case "member_start": {
+          // L1: a member's letter asks for any program, granted to the requester or not.
+          const name = choose(starters(), cell.pick);
+          const held = world.names.get(name) as Name;
+          const program = choose(ANY_PROGRAM, cell.alt);
+          const target = fresh(program);
+          const before = (yield* answers(name)).length;
+          yield* door(name, { type: "start", ask: { program, name: target } }, memberWriter(cell.member));
+          const told = yield* lastAnswer(name, before);
+          expect(told, `L1: ${cell.member}'s letter may start ${program}`).toMatchObject({ type: "start_child_ok" });
+          expect(
+            Schema.decodeUnknownOption(Started)(told.outcome)._tag,
+            "L1: a member's start answers in Started's shape",
+          ).toBe("Some");
+          expect(tagged(told.outcome), "L1: a fresh name answers started").toBe("started");
+          yield* sync([{ name: target, requester: held.pid }]);
+          expect(world.names.get(target)?.program, "L1: the child runs the program asked for").toBe(program);
+          seen.add(`member_${program}`);
+          break;
+        }
+        case "outsider_start": {
+          // L2: the sender of the start's parent is checked, never the life that asked: its owner
+          // is a member, and a check of it would let this start through.
+          const name = choose(starters(), cell.pick);
+          const target = fresh(choose(UNGRANTED, cell.alt));
+          const program = target.slice(0, target.indexOf(":"));
+          const before = (yield* answers(name)).length;
+          const revBefore = yield* head;
+          yield* door(name, { type: "start", ask: { program, name: target } }, outsider);
+          expect(yield* lastAnswer(name, before), "L2: a start whose letter's sender is no member").toEqual({
+            type: "start_child_err",
+            outcome: "forbidden",
+          });
+          expect(yield* processRows(revBefore), "L2: a refused start writes no process row").toEqual([]);
+          expect(yield* registered(target), "L2: a refused start registers nothing").toBe(false);
+          seen.add("outsider_refused");
+          break;
+        }
+        case "stopper_start": {
+          const name = choose(stoppers(), cell.pick);
+          const held = world.names.get(name) as Name;
+          const target = fresh();
+          const before = (yield* answers(name)).length;
+          yield* door(name, { type: "start", ask: { program: "merger", name: target } });
+          expect(tagged((yield* lastAnswer(name, before)).outcome), "L3: a stopper starts its child").toBe("started");
+          yield* sync([{ name: target, requester: held.pid }]);
+          seen.add("stopper_started");
+          break;
+        }
+        case "stop_own": {
+          // L3: OTP's terminate_child: the requester's own child ends with shutdown.
+          const [target, child] = choose(stopperChildren(true), cell.alt);
+          const name = world.parents.get(target) as string;
+          const before = (yield* answers(name)).length;
+          const was = yield* states();
+          yield* door(name, { type: "stop", name: target });
+          expect(yield* lastAnswer(name, before), "L3: a stop of its own child answers null").toEqual({
+            type: "stop_child_ok",
+            outcome: null,
+          });
+          const exits = yield* exitedRows(child.pid);
+          expect(exits, "L3: the child's life ends once").toHaveLength(1);
+          expect(body(exits[0])["reason"], "L3: a stopped child ends with shutdown").toEqual(SHUTDOWN);
+          expect(
+            (yield* inContext(ProcessManager.use((p) => p.status(target)))).state._tag,
+            "L3: the stopped child is no longer live",
+          ).not.toBe("live");
+          const now = yield* states();
+
+          for (const [other, state] of was) {
+            if (other !== target) {
+              expect(now.get(other), `L3: a stop ends only its target, not ${other}`).toBe(state);
+            }
+          }
+
+          for (const watch of world.watches.filter((w) => w.target === child.pid)) {
+            const watcher = [...world.names].find(([, h]) => h.pid === watch.watcher)?.[0] as string;
+            const downs = (yield* all()).filter(
+              (e) =>
+                e.stream === `${watcher}/inbox` &&
+                JSON.stringify(body(e)["m"] ?? null).includes('"DOWN"') &&
+                (body(e)["m"] as { ref?: string } | undefined)?.ref === watch.ref,
+            );
+            expect(downs.length, "L3: each watcher of a stopped child gets one DOWN").toBe(1);
+            expect((body(downs[0])["m"] as { reason?: unknown }).reason, "L3: the DOWN says shutdown").toEqual(
+              SHUTDOWN,
+            );
+            seen.add("down_shutdown");
+          }
+
+          world.watches.splice(
+            0,
+            world.watches.length,
+            ...world.watches.filter((w) => w.target !== child.pid && w.watcher !== child.pid),
+          );
+          child.live = false;
+          seen.add("stopped_own");
+          break;
+        }
+        case "stop_other": {
+          // L3: any name but the requester's own children: another stopper's child, a boot process,
+          // another stopper, or the requester itself.
+          const name = choose(stoppers(), cell.pick);
+          const others = [...world.names].filter(([n, h]) => h.live && world.parents.get(n) !== name);
+          const [target, held] = choose(others, cell.alt);
+          const before = (yield* answers(name)).length;
+          const revBefore = yield* head;
+          yield* door(name, { type: "stop", name: target });
+          expect(yield* lastAnswer(name, before), `L3: ${name} may not stop ${target}`).toEqual({
+            type: "stop_child_err",
+            outcome: "not_child",
+          });
+          expect(yield* processRows(revBefore), "L3: a refused stop writes no process row").toEqual([]);
+          expect(yield* exitedRows(held.pid), "L3: another's process keeps its life").toEqual([]);
+          seen.add("not_child");
+          break;
+        }
+        case "stop_ended": {
+          const [target] = choose(stopperChildren(false), cell.alt);
+          const name = world.parents.get(target) as string;
+          const before = (yield* answers(name)).length;
+          const revBefore = yield* head;
+          yield* door(name, { type: "stop", name: target });
+          expect(yield* lastAnswer(name, before), "L3: a stop of an ended child").toEqual({
+            type: "stop_child_err",
+            outcome: "noproc",
+          });
+          expect(yield* processRows(revBefore), "L3: a refused stop writes no process row").toEqual([]);
+          seen.add("noproc");
+          break;
+        }
         case "retry_saved": {
           // A library caller asks a saved Cmd id again, after the child or the requester ended.
           const [id, saved] = choose([...world.starts], cell.pick);
@@ -1449,6 +1766,30 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["door_start", "mail_start", "forged"],
       ["started", "mailed_start", "forged"],
       200,
+    );
+    prop(
+      "Desk S1 L1: a start caused by any member's letter is allowed for any program, with no grant, and answers in Started's shape",
+      open,
+      ["member_start", "door_start", "mail_start"],
+      ["member_start"],
+      ANY_PROGRAM.map((program) => `member_${program}`),
+      200,
+    );
+    prop(
+      "Desk S1 L2: the member checked is the sender of the start's parent, never the program that asked",
+      open,
+      ["member_start", "outsider_start"],
+      ["member_start", "outsider_start"],
+      ["member_starter", "member_plain", "outsider_refused"],
+      200,
+    );
+    prop(
+      "Desk S1 L3: stop_child ends only the requester's own child, with shutdown and one DOWN per watcher; another's is not_child, an ended one noproc",
+      open,
+      ["stopper_start", "stop_own", "stop_other", "stop_ended", "watch"],
+      ["stopper_start", "stop_own", "stop_other", "stop_ended", "watch"],
+      ["stopper_started", "stopped_own", "down_shutdown", "not_child", "noproc"],
+      100,
     );
     prop(
       "L6: bad_cmd, then no_program, then bad_name, then bad_input, each writing nothing; an undeclared Cmd writes nothing",
