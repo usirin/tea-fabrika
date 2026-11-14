@@ -49,6 +49,22 @@ export type Backend = {
   readonly recall: Effect.Effect<string>;
   /** A reload: the same profile and key, a new page or client. */
   readonly reload: Effect.Effect<void>;
+  /** A client that draws pixels: types `line` with the cursor at its end, and reads how the span
+   *  layer lines up with the input. The headless client draws nothing, so it has none. */
+  readonly lined?: (line: string) => Effect.Effect<Lined>;
+};
+
+/** What the span layer really draws, against the input it sits behind. */
+export type Lined = {
+  /** The characters the layer draws a box for, in order: the line exactly, spaces included. */
+  readonly drawn: string;
+  /** Indexes of characters inside the input's text box whose layer box is not where the input
+   *  draws that character (more than 1 px off). */
+  readonly off: ReadonlyArray<number>;
+  /** How many characters fall inside the input's text box, so a check over none shows. */
+  readonly seen: number;
+  /** The input's own scroll, in px: above 0 when the line is wider than the field. */
+  readonly scrolled: number;
 };
 
 /** Polls `check` every 100 ms for at most 60 s. */

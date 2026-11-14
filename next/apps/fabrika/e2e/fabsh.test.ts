@@ -9,9 +9,9 @@
 import { ClientKeyError } from "@kampus/libfabrika/transport/ClientKey";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
 import { Effect, Schema } from "effect";
-import type { BrowserContext, Page } from "playwright";
+import type { BrowserContext, Locator, Page } from "playwright";
 import { describe, expect, it } from "vitest";
-import { type Backend, FABSH, headlessBackend, typeAndRun } from "./fabsh.test-support.ts";
+import { type Backend, FABSH, headlessBackend, type Lined, typeAndRun } from "./fabsh.test-support.ts";
 import { browser, type Dev, devServer, home, profile, suite, tab, waiting } from "./p14.test-support.ts";
 
 /** Each run's own limit in ms: a dev.ts start (up to 180 s), a grant and the typed line. */
@@ -70,6 +70,68 @@ const describedBy = (page: Page) =>
           .join(" ")
           .trim(),
       ),
+  );
+
+/**
+ * Where the layer draws each character, against where the input draws it. The input's own text is
+ * clear, so its place is measured with its own font on a canvas, from its text box's left edge less
+ * its scroll; each layer character's place is its range box. A character with no box is not drawn.
+ */
+const measure = (field: Locator, line: string) =>
+  Effect.promise(() =>
+    field.evaluate((input: HTMLInputElement, line): Lined => {
+      const layer = input.closest("form")?.querySelector("[aria-hidden='true']:has(> [data-role])") ?? null;
+
+      if (layer === null) {
+        return { drawn: "", off: [], seen: 0, scrolled: 0 };
+      }
+
+      const style = getComputedStyle(input);
+      const ctx = document.createElement("canvas").getContext("2d");
+
+      if (ctx === null) {
+        return { drawn: "", off: [], seen: 0, scrolled: input.scrollLeft };
+      }
+
+      ctx.font = style.font;
+      ctx.letterSpacing = style.letterSpacing === "normal" ? "0px" : style.letterSpacing;
+      const box = input.getBoundingClientRect();
+      const from = box.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
+      const to = box.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
+      const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT);
+      let drawn = "";
+      let at = 0;
+      let seen = 0;
+      const off: Array<number> = [];
+
+      for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+        const text = node.textContent ?? "";
+
+        for (let i = 0; i < text.length; i++, at++) {
+          const range = document.createRange();
+          range.setStart(node, i);
+          range.setEnd(node, i + 1);
+          const rect = range.getClientRects()[0];
+
+          if (rect === undefined || rect.width === 0) {
+            continue;
+          }
+
+          drawn += text[i];
+          const want = from - input.scrollLeft + ctx.measureText(line.slice(0, at)).width;
+
+          if (want >= from && want + rect.width <= to) {
+            seen++;
+
+            if (Math.abs(rect.left - want) > 1) {
+              off.push(at);
+            }
+          }
+        }
+      }
+
+      return { drawn, off, seen, scrolled: input.scrollLeft };
+    }, line),
   );
 
 /** A Chromium tab of a fresh profile, open at the instance, its socket routed. */
@@ -139,6 +201,21 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
         return value;
       }),
       reload: run(() => page.reload()).pipe(Effect.asVoid),
+      lined: (line) =>
+        Effect.gen(function* () {
+          // A person's key at the end of the line: the input scrolls its caret into view on a key,
+          // and a `fill` alone moves no caret.
+          yield* run(() => field.fill(line.slice(0, -1)));
+          yield* run(() => field.press("End"));
+          yield* run(() => field.press(line.slice(-1)));
+
+          // The tile draws the line on its next render, after `fill` resolves (at most 10 s).
+          for (let n = 0; n < 100 && (yield* run(() => field.inputValue())) !== line; n++) {
+            yield* Effect.sleep("100 millis");
+          }
+
+          return yield* measure(field, line);
+        }),
     };
     return backend;
   });
@@ -200,6 +277,22 @@ describe("fabsh L17: one suite, browser and headless, on a real local instance",
             expect(run.letters, `${name}: one letter, the whole line, the one thing that decides`).toEqual(["help"]);
             expect(run.typed, `${name}: the keys typed mid-line are never saved`).toBe(false);
             expect(run.recalled, `${name}: history survives a reload`).toBe("help");
+
+            if (backend.lined !== undefined) {
+              // pinned: the layer dropped every space between spans, as a flex row drops a text run
+              // of spaces, and never scrolled with the input, so a line wider than the field lost
+              // its letters past the edge (the review of b7df197).
+              const long = `help ${"this-is-a-long-line ".repeat(12).trim()}`;
+
+              for (const line of ["hlep x", long]) {
+                const lined = yield* backend.lined(line);
+                const said = JSON.stringify(line);
+                expect(lined.drawn, `${name}: the layer draws ${said} exactly`).toBe(line);
+                expect(lined.seen, `${name}: some of ${said} is inside the field`).toBeGreaterThan(0);
+                expect(lined.off, `${name}: each drawn letter of ${said} sits where the input draws it`).toEqual([]);
+                expect(lined.scrolled > 0, `${name}: ${said} scrolls the field`).toBe(line === long);
+              }
+            }
           }),
           context,
         ),
