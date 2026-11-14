@@ -175,6 +175,7 @@ const loseFirstAnswers = () => {
         }
       }
 
+      // Each branch picks one overload of the merged DOM and Node WebSocket types; a union fits neither.
       if (data instanceof Blob) {
         super.send(data);
       } else {
