@@ -1547,14 +1547,23 @@ describe("P18 L3: each frame reaches exactly one owner", () => {
     ({ list }) => {
       // A knock's answer settles only once a grant wait renews, which few walks reach: not counted.
       // `stolen` is a live flight's id on a past dial, the frame only the dial check stops.
-      const seen: Record<string, number> = { owner: 0, nothing: 0, handshake: 0, online: 0, old: 0, stolen: 0 };
+      const seen: Record<Expect["_tag"] | "old" | "online" | "stolen", number> = {
+        owner: 0,
+        nothing: 0,
+        handshake: 0,
+        settles: 0,
+        none: 0,
+        online: 0,
+        old: 0,
+        stolen: 0,
+      };
 
       for (const walk of list) {
         foldFrames(walk, ({ prev, m, next, expect: e }) => {
           if (m.type === "frame") {
             const dial = m.dial;
             const route = dial === socketDial(prev) ? e._tag : "old";
-            seen[route] = (seen[route] ?? 0) + 1;
+            seen[route] += 1;
             const named = Option.getOrUndefined(answerId(m.text))?.id;
             seen.stolen += route === "old" && prev.flight.some((f) => f.id === named) ? 1 : 0;
           }
@@ -1564,7 +1573,7 @@ describe("P18 L3: each frame reaches exactly one owner", () => {
       }
 
       expect(
-        ["owner", "nothing", "handshake", "online", "old", "stolen"].every((k) => (seen[k] ?? 0) > 0),
+        (["owner", "nothing", "handshake", "online", "old", "stolen"] as const).every((k) => seen[k] > 0),
         JSON.stringify(seen),
       ).toBe(true);
       return true;
