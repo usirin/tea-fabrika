@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-tier-1-fabsh-start-question-settled",
+  "date": "2026-11-14",
+  "by": "plan",
+  "model": null,
+  "rule": "doc_drift",
+  "location": {
+    "path": "docs/plan/tier-1.md",
+    "line": 213
+  },
+  "says": "Tier 1's step 2 still lists how fabsh may start any program, when a start right names one exact pair, as open with no decision found, and the walks table repeats it for step 2, but decision 0170 (2026-11-13) settled it: a start is checked against the member whose input caused it, and fabsh holds no permission of its own.",
+  "proof": "docs/plan/tier-1.md:213 says 'How `fabsh` may start any program when a start right names one exact pair (open; no decision found)', and docs/plan/tier-1.md:343 lists 'how `fabsh` may start any program' as an owner walk before step 2; .decisions/0170-a-start-is-checked-against-its-sender.md, status accepted, date 2026-11-13, decides 'A start is checked against the member whose input caused it' and 'fabsh and the desk hold no start permission of their own'.",
+  "cost": "A planner or the owner may spend a walk on a settled call, or plan a fabsh grant that 0170 forbids.",
+  "head": "0b825a76d912a451ae5ddb0a6a8348913845ddb8",
+  "ticket": null,
+  "pr": null
+}
