@@ -1714,9 +1714,11 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
  * to grant it. `route` checks that the client is still admitted, spends the sender's rate-limit
  * budget and then handles one named call. A call that sends an input to a process is saved as a
  * binding. `accept` appends a delivered input to the process inbox only when it matches that
- * binding, else it refuses with `NotGranted`. `sign`, `signer`, `append` and `checkDelivery` serve
- * a process answering an input it was delivered, and refuse with `not_delivered` when the input
- * does not match its saved binding.
+ * binding, else it refuses with `NotGranted`. It fails with a `bad_row` ledger error when the input
+ * does not decode. `checkDelivery` refuses with `not_delivered` when an input does not match its
+ * saved binding. `sign`, `signer` and `append` serve a process answering an input it was delivered.
+ * They refuse with `SigningRefused`: `not_delivered` when the process is not live or no delivery is
+ * saved, and `spent`, `ended`, `person_only` or `signal` in the other cases.
  *
  * @stability unstable
  * @category services

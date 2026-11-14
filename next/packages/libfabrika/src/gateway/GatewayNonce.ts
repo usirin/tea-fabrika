@@ -17,7 +17,7 @@ import type { gatewayStore } from "./GatewayStore.ts";
  * The 32-byte signing key is made once and saved in the store, so a restart keeps it. `issue`
  * returns a nonce bound to a client and the current time. `check` returns the time the nonce
  * expires, or null when it is malformed, from the future, older than `ttl` or signed for another
- * client. Nothing is stored until `spend`, which a caller runs inside a store transaction after
+ * client. No nonce is stored until `spend`, which a caller runs inside a store transaction after
  * `check`. It answers false for an expired or already spent nonce, and fails with a storage error
  * when `cap` live receipts are held.
  *

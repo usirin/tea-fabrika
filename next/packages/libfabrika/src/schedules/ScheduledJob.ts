@@ -8,8 +8,8 @@ import { Machine } from "@demlik/tea/effect";
 import { Duration, Option, Result, Schema } from "effect";
 
 /**
- * Schema for the job's state: `idle` with the next due time, or `running` with the time it was due.
- * Both keep the period in milliseconds.
+ * Schema for the job's state: `idle` with the next due time, or `running` with the time of the
+ * timer message that started it. Both keep the period in milliseconds.
  *
  * @stability unstable
  * @category models
@@ -19,7 +19,8 @@ export const Model = Schema.TaggedUnion({
   running: { due: Schema.Number, period: Schema.Int },
 });
 /**
- * The job's state: `idle` with the next due time, or `running` with the time it was due.
+ * The job's state: `idle` with the next due time, or `running` with the time of the timer message
+ * that started it.
  *
  * @stability unstable
  * @category models
@@ -47,12 +48,14 @@ export class ScheduledJobError extends Schema.TaggedError<ScheduledJobError>()("
 export const wake = (model: Model): number | null => (model._tag === "idle" ? model.next : null);
 
 /**
- * Creates the machine for a repeating job, or fails with `ScheduledJobError` for a bad period.
+ * Creates the machine for a repeating job, as a `Result` that holds `ScheduledJobError` for a bad
+ * period.
  *
  * **Details**
  *
  * The machine starts idle and due at time 0, unless it is given a saved state. A timer message at
- * or after the due time starts the job: the machine runs `work` with that time and the period. When
+ * or after the due time starts the job: the machine runs `work` with the timer's time and the
+ * period. When
  * the command settles, ok or error, it goes idle again and the next due time is the settle time
  * plus the period. A timer message that arrives early, or while running, changes nothing.
  *

@@ -35,7 +35,7 @@ const decodeConnection = Schema.decodeUnknownSync(Connection);
 const AWAY = 75_000;
 
 /**
- * Service that records one connection per client and lists the live ones for a key.
+ * Service that records one connection per client and lists a key's connections, each with its state.
  *
  * **Details**
  *

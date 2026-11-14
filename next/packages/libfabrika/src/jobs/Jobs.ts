@@ -10,7 +10,8 @@ import type { Rev } from "../Rev.ts";
 import type { Executor, Job, Recorded, Request, Result } from "./Job.ts";
 
 /**
- * A job call failed. The `reason` says why, and `cause` keeps the storage error when there is one.
+ * A job call failed. The `reason` says why. `cause` keeps the decode or ledger error underneath,
+ * when there is one.
  *
  * @stability unstable
  * @category errors
