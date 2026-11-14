@@ -4,6 +4,7 @@ import { applyCell } from "@demlik/tea";
 import { Clock, Context, Deferred, Effect, Exit, Queue, Redacted, Ref, Schema, Scope, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
+import { HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess } from "effect/process";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
@@ -81,7 +82,8 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
 ) {
   const config = options,
     scope = yield* Effect.scope,
-    ids = yield* ProcessIdGenerator;
+    ids = yield* ProcessIdGenerator,
+    client = yield* HttpClient.HttpClient;
   const outbox = yield* brainOutbox(options.home),
     runtimeScope = yield* Scope.make(),
     events = yield* Queue.unbounded<{ readonly event: RuntimeEvent; readonly cause: Cause }>(),
@@ -118,25 +120,20 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
 
     const url = `http://127.0.0.1:${port}`;
     const fail = (cause: unknown) => new ControlError({ reason: "unreachable", cause });
-    const request = yield* Effect.try({
-      try: () => ({
-        method: "POST",
-        headers: {
-          // oxlint-disable-next-line fabrika/no-redacted-value -- the private HTTP header sends the control bearer
-          authorization: `Bearer ${Redacted.value(token)}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ target, project, name, method, args }),
-      }),
+    const body = yield* Effect.try({
+      try: () => JSON.stringify({ target, project, name, method, args }),
       catch: fail,
     });
-    // The Promise proxies below run this call with no context, so it has no `HttpClient` to ask for.
-    // One marker line serves both checks, since each reads only the line above the call.
-    // oxlint-disable-next-line fabrika/no-promises -- edge: the private runtime socket is an HTTP transport for object calls. @effect-diagnostics-next-line globalFetchInEffect:off
-    const response = yield* Effect.tryPromise({ try: () => fetch(url, request), catch: fail });
-    const badRow = (cause: unknown) => new ControlError({ reason: "bad_row", cause });
-    // oxlint-disable-next-line fabrika/no-promises -- edge: the binding transport response returns a Promise
-    const raw = yield* Effect.tryPromise({ try: () => response.json(), catch: badRow });
+    const response = yield* HttpClientRequest.post(url).pipe(
+      // oxlint-disable-next-line fabrika/no-redacted-value -- the private HTTP header sends the control bearer
+      HttpClientRequest.setHeader("authorization", `Bearer ${Redacted.value(token)}`),
+      HttpClientRequest.bodyText(body, "application/json"),
+      client.execute,
+      // No span and no trace header for a control call: the span sink flushes through this call.
+      Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
+      Effect.mapError(fail),
+    );
+    const raw = yield* response.json.pipe(Effect.mapError((cause) => new ControlError({ reason: "bad_row", cause })));
     const answer = yield* Schema.decodeUnknownEffect(Response)(raw).pipe(
       Effect.mapError((cause) => new ControlError({ reason: "bad_row", cause })),
     );

@@ -1,4 +1,5 @@
 import { Cause, Effect, Path, Predicate, Schema } from "effect";
+import { FetchHttpClient } from "effect/http";
 
 class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {
   reason: Schema.Literal("storage"),
@@ -46,7 +47,7 @@ export const localInstance = Effect.fn("brain.localInstance")(function* (
     catch: (cause) => new BrainError({ reason: "storage", cause }),
   });
   // Alchemy listens with a strict port, so a taken one fails here and no other port is tried.
-  const started = startDev(built, options).pipe(Effect.provide(ProcessIdGenerator.layer));
+  const started = startDev(built, options).pipe(Effect.provide([ProcessIdGenerator.layer, FetchHttpClient.layer]));
   return yield* started.pipe(
     Effect.catchCause((cause): Effect.Effect<never, PortError | Effect.Error<typeof started>> =>
       portTaken(cause)
