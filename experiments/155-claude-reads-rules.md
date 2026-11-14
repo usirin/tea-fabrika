@@ -1,3 +1,8 @@
+---
+date: "2026-10-26"
+summary: "Yes. Agent SDK 0.3.296, Claude Code 2.1.296, haiku, one run per variant, code words caught by a proxy on the model calls. `settingSources: [\"project\"]` loads top and nested `CLAUDE.md`, `@file` imports and `.claude/rules/`, but also runs the project's hooks outside the sandbox, applies its env (Claude Code's own variables too) and its `apiKeyHelper`; `disableAllHooks` stops only the hooks. `projectConfigRoot` on an empty folder keeps all of that out while the rule files still load from the working folder; a missing folder makes Claude refuse to start. Claude reads no `AGENTS.md` by default, even with no `CLAUDE.md`; the built-in `cc-plugin-agents-md` option `claude-md-and-agents-md` loads top and nested ones. Permissions and sandbox never loosened, the project plugin never loaded, MCP kept out by `strictMcpConfig`. Builder, reviewer and planner switched to `ownRules`; the reviewer keeps main's pasted copy as the rules it judges by; sorter and the ACP builder stay on `[]`. About $0.31. Confidence 85%."
+---
+
 # 155. Can Claude read a repository's rules while its settings stay out?
 
 The question: the [direction note](../docs/direction/agents-read-rules-the-normal-way.md) says

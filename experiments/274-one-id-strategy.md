@@ -1,3 +1,9 @@
+---
+date: "2026-11-07"
+scripts: "none; a throwaway script made example ids and the math, not kept"
+summary: "Reading, not a measurement; `next/`. The input id's 32-bit random run part per door start repeats: `1 - exp(-N²/2^33)`, 1.2% at 10,000 starts, 50% at 77,163, 98% at 182,500. At a guessed 500 to 3,000 starts a day, that is 50% in 26 to 154 days, and a repeat can sign a write as the wrong person. The 16-bit note id `n-7f3a` repeats at about 301 notes. The letter id repeats if a client's counter resets. A UUIDv7 written as a TypeID collides at about `k²/2^75`: 3 in 10^17 at 1,000 ids in one millisecond. Lean 80%. For outside events, the lean is to dedupe in the ledger on the source's key, 70%. Decided as [one id per thing](../.decisions/0211-one-typeid-per-thing.md), with the input id added on 11-08. The study's \"a number in place of an id\" did not survive. No model, $0."
+---
+
 # 274. Do `next/`'s settled id shapes repeat, and what one id strategy fixes them?
 
 Read on 2026-11-07; moved here on 2026-11-11. **This is reading, not a measurement,** plus one

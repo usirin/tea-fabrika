@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-01"
+summary: "Both versions, today's lane first. Twelve principles, each with the known way, ticket 117's real run, and the type or test that holds it. A person is asked only for a judgment; red after a build goes back to the builder; prevent, then fix, then stop; a stuck or crashed lane resumes from the step that broke and never starts over; after a judgment the lane goes on from the step before; every stop saves its resume point; a step is idempotent, keyed by its inputs; retries are bounded at one level; a skipped check never looks clean; an ask names where each pick resumes; cost and attention are counted; nobody writes their own exam. From experiment 186, which also lists 35 places in PR 289 that break one."
+---
+
 # Pipeline guidelines: a factory that resumes, and asks a person only to judge
 
 **Decided 2026-11-01.** The owner set P1, P2, P4, P5 and P6, the core of P7 (every step is

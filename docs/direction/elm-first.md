@@ -1,3 +1,8 @@
+---
+state: "decided"
+summary: "Name what Elm does before adding any new shape. Parents are written by hand. Exceptions are named, with their reason; the first is tsh lines (changed 2026-10-28). The factory is one thin coordinator program, not a line (2026-10-29). Every piece of UI state lives in a tea machine, never `useState` (2026-10-30): `useMachine` in today's version, one `useSyncExternalStore` hook in `next/` (2026-11-01)."
+---
+
 # Elm first
 
 Decided before this repo started; it comes with `@demlik/tea`, which is the Elm

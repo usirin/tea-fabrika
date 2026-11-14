@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-31"
+summary: "Every version we name is exact: the catalog, overrides and all four dependency fields, peers as `catalog:`. `pnpm lint` fails on a range, a tag, `git:` or `file:`, and `pnpm add` writes exact. A bump is one line someone chose. Only the lockfile holds what our dependencies depend on, and this does not touch that."
+---
+
 # Exact npm versions only
 
 Decided 2026-10-31 by the owner. This covers the whole repo, today's version and `next/`: every

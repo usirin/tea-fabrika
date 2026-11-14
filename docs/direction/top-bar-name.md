@@ -1,3 +1,7 @@
+---
+summary: "Today's version, and built. Tile F and \"fabrika\" centered on the window, on macOS. They take no room and do nothing, and go whole when the bar's own words come within 24px."
+---
+
 # The top bar carries the icon and the name, and they give way first
 
 **Decided by the owner on 2026-11-01. Today's version, and built.** The bar across the top of the

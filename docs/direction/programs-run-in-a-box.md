@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-24 (experiments 127, 128); never a Console API key, each job on its starter's own subscription token, and that token goes in the job's box, the one rule change, since it is the way Anthropic allows (2026-10-25); a token in an account another person holds is not clearly allowed, so that acceptance is marked wrong (2026-10-25); the wall's edges open"
+summary: "The box goes around a fabrika program, not an agent harness: a `Sandbox` service with a layer per box (Docker, sandbox-runtime, none), and fabrika starts the program as a child inside it. Flags, inputs, outputs and the Cmds the app allows cross the wall; a Cmd that needs a key is passed out and done by the app. Tools are served inside the box, each call a Cmd. No real key goes in, the model login included. Code that comes out of a box runs only in a box. Same machine, one interpret entry changed."
+---
+
 # Programs run in a box
 
 Decided 2026-10-24. How some edges behave is still open (see the end).

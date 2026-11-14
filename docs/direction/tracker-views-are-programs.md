@@ -1,3 +1,8 @@
+---
+state: "proposed 2026-10-28; one program per view, the `linked`, `nested` and `moved` facts, and the whose-turn line decided 2026-11-06; walked at Tier 2"
+summary: "Every tracker view is its own small tea program over the one ledger (`ticket`, `board`, `list` first), sharing only the ledger and one fold. Status is a fold; done is a merged PR or a person's close once answered, never a drag. A ticket's page leads with whose turn it is (\"Ready for your review\", \"Agent working: build, 12 min\"), then properties, sub-issues, a live agent panel, one row per fact, comments folded. \"next: triage\" only for a ticket a lane drives. Hand-run agents post `started`, `link` and `ended` through `Tickets`; a PR's checks are read from GitHub by code. New facts: `linked`, `nested`, `moved`. Replaces PRs 135 and 153."
+---
+
 # Tracker views are programs
 
 **Proposed 2026-10-28.** Walked when Tier 2 starts (owner, 2026-11-08): tracker views and ticket facts. Not settled, except two parts marked decided: section 7, and one

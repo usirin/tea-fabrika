@@ -1,3 +1,8 @@
+---
+state: "decided, the owner chose it"
+summary: "The new version grows in `next/` beside today's, which keeps running. When it takes a job over, the pull request that switches deletes the old part. First a slice you can touch, then the tracker, the core, programs and the pipeline. Experiments and field notes stay as files for now. Changes the sweep: the core is rebuilt too."
+---
+
 # Clean slate: the new code beside the old, the old deleted as it is replaced
 
 **Decided: the owner chose it. Proposed 2026-10-30.** It starts now that all five layers (transport,

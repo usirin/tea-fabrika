@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-08"
+summary: "Today's version, ticket 276. A window with no project shows a welcome page: \"Open a folder to start\", one line, the recent projects (name, faint path, time) and Open Folder… last. In a project window the name in the top bar is a button with a chevron, as Linear's workspace name, and opens a box of recent projects over the tiles, Open Folder… last. Cmd-O opens that box; File > Open Folder stays the system's sheet. Not taken: a projects tile and a rail. Built from experiment 237."
+---
+
 # The project window: a welcome page first, then the name is a switcher
 
 **Decided 2026-11-08.** The owner picked A + C after a walk of four designs, for today's version

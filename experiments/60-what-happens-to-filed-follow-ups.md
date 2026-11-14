@@ -1,3 +1,8 @@
+---
+date: "2026-10-12"
+summary: "Every merged pull request of kamp-us/phoenix and kamp-us/demlik, read for its Deviations section. 143 of 1,612 closing pull requests (8.9%) file a new issue for a gap, and of 36 read by hand 10 were part of a criterion's own words; 4 of those kept the ticket open with `Part of`. The 289 follow-ups leave triage after a median 49 minutes, then 35% are built (median 9.9 hours), 41.5% are closed as not planned and 16% sit open at a median 25 days, the same as any agent-filed issue. No reviewer passed a leftover in silence, none held one back, and the owner was asked before the merge once in 36. The larger pile files nothing: one closing pull request in four narrows a criterion, and of 20 read 11 met its point another way, 7 could not be met as written and 3 left work over. What holding a pull request back would cost is not in the record."
+---
+
 # 60. What happens to a follow-up filed for work a pull request left undone
 
 Today's fabrika lets a builder land a pull request that leaves something

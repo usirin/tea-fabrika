@@ -1,3 +1,8 @@
+---
+state: "decided; names replaced 2026-10-22; 2026-11-01: in `next/`, `@kampus/tuval` is its own package, what is drawn from fabrika's logic, approved with Tier 1's plan; 2026-11-08: why libfabrika exists, anyone can build a client exactly like fabrika on it alone, so a file a from-scratch client would write again belongs in libfabrika; where the pipeline lives open"
+summary: "This repo is a workshop. Later, everything above tea is one open-source project, `kamp-us/fabrika`: the library `@kampus/libfabrika` (program, host, shell, ledger, agents), the app `@kampus/fabrika` that people open, with Tuval as its gui's codename, and the pipeline on the library's public names (`@kampus/pipeline`, a working name). Old experiments move to a private place first. Nothing moves until the experiment is done. tea is never edited from here."
+---
+
 # Where each piece lives
 
 Decided 2026-10-18. Parts were set 2026-10-17. Where the pieces go was replaced

@@ -1,3 +1,8 @@
+---
+where: "next/ settings"
+when: "Adding a setting, or reading or writing a settings file, a settings snapshot or the settings reference"
+---
+
 # One settings declaration gives both encodings
 
 ```mermaid

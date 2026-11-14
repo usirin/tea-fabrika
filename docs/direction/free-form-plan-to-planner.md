@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-01"
+summary: "Talk a plan through in free form, file it as a ticket, and the plan step makes the real plan. A tier is a project. Tier 1 goes this way after ticket 117, with its split into tickets by hand, once. No splitter on today's version; the whole flow is built in `next/`, in Tier 6."
+---
+
 # A free-form plan goes to the planner
 
 Decided 2026-11-01, with all its leans. Tier 1 goes this way once, with its last step by hand. The

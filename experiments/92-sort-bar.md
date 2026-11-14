@@ -1,3 +1,9 @@
+---
+date: "2026-10-18"
+scripts: "`92-sort-bar.ts`, `lib/sort.ts`, `92-value-bar.json`, `92-written-bar.json`, `92-truth.json`, `results/92-sort-bar.json`"
+summary: "Partly. A bar drafted by a separate agent from demlik's record alone, with all 45 test tickets kept from it, caught none of 88's three \"no\"s: the repo's only closures for worth were the test tickets. Adding the three clauses today's pipeline already has in writing (ceremony, churn, hardening with no incident) caught both hardening tickets every time; real \"no\"s closed went from 2 of 16 answers to 8 of 16, with 0 false \"no\"s in 132 answers on real yeses, the route at 58 of 66 (88: 56), and 45 of 45 the same both runs. Every \"no\" still missed needed the code or a run; one reporter argued past the bar in the ticket itself. Jev (three questions, one call) agreed with Claude on 91% of duplicate answers, 95% of yes/no and 89% of routes, but said \"no\" 0 of 6 times Claude did, and one confident miss would close a built ticket as a duplicate. About 90 times cheaper, 35 times faster. Confidence 70%. $5.11 Claude, about 6 cents Jev."
+---
+
 # 92. Sort with the repo's bar for what is worth doing
 
 The question: once sort's brief carries the repo's bar for what is worth

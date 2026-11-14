@@ -1,3 +1,8 @@
+---
+date: "2026-11-10"
+summary: "Reading, not a measurement, plus one probe. tmux, Neovim, Git, Ghostty, Helix, WezTerm, Zed, VS Code, Cargo, Kubernetes, twelve-factor and its critics, Effect, OTP and Elm agree: work with an empty file, declare each setting once with its default and words, read sources in one order with the project over the person and flags on top, show where a value came from, and say a wrong value at its key. They split on unknown keys (kubectl and Helix refuse, WezTerm and the Kubernetes server warn). The probes found a `Config` cannot see an unknown key (a typo gives the default with no word), an open table comes whole from one source under `orElse`, and the error names the key but not the file or line. The editor probe (NVIM 0.11.3, Taplo 0.10.0, Tombi 1.11.2): a schema from `Schema.toJsonSchemaDocument` gave completion, hover and diagnostics in both servers through one `#:schema` line; keys need `Schema.optionalKey`, `withDecodingDefaultKey` drops the words and default, and `$schema` is added by hand. `next/`'s local instance breaks most of it: five sticky flags, no file, the record cap in three shapes, and one more program only a test can load. Feeds [settings](../docs/direction/settings.md). | $0"
+---
+
 # How do makers let people set a choice, and what does `next/`'s local instance teach?
 
 Read 2026-11-10. **This is reading, not a measurement.** Three small probes ran against the

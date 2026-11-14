@@ -1,3 +1,9 @@
+---
+date: "2026-10-18"
+scripts: "`wip/src/laws/`, `wip/src/stages/ship/ready.ts`, `90-reducer-laws.ts`, `results/90-reducer-laws.json`"
+summary: "Yes. A breadth-first runner walks every Msg sequence to a bound through the real ship, review, build and loop reducers, Cmds answered in any order, restarts and stray Listens included, and prints the shortest sequence that breaks a law. 19 laws: 14 hold. 5 break: review takes a pass with a named limit as met (3 messages); the builder's summary can close another ticket (5); the loop ships a pass at a head it did not build (4); the loop takes a late answer from an earlier round when one can come twice (5); ship's gate trusts `reviews: passed` over a failed kind beside it, which today's reader cannot produce (2). Ship and review wait on checks with no count, so their searches never end. All 17 planted mistakes caught in 2 to 7 messages. Not in any machine: \"keep going\" with a limit, and a stuck task leaving a plan. `ReadyToMerge` is a class only `ReadyToMerge.of(proof)` can make, from one verdict row per criterion pinned to the head and green checks there; not wired. Without echoes every search is under 2 s; echoes reach a minute by depth 10. Confidence 85% it should be a standard check per machine. $0."
+---
+
 # 90. Every message order through the real reducers
 
 The question: can we prove the pipeline's rules by trying every order of

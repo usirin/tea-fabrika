@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-31; order set 2026-11-01; order changed 2026-11-05 by the owner: `next/` first, pipeline paused; merge rule amended 2026-11-09 by [0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md)"
+summary: "Every pull request, in either version, goes through today's pipeline programs. A step that cannot run yet goes by hand for that pull request, logged in `field/`. Since 2026-11-05 the pipeline programs are paused and `next/` does not wait on them: Tier 1 is built by the lead session's agents, the steps by hand, the lead agent reading every diff before a merge. The lead merges any pull request once every step passed and nothing really loosens; only real loosening or a new design call waits on the owner."
+---
+
 # Every pull request goes through the pipeline's steps
 
 **Decided 2026-10-31, and widened the same day. Order set 2026-11-01.** This is about

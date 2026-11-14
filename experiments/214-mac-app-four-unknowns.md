@@ -1,3 +1,8 @@
+---
+date: "2026-11-05"
+summary: "`next/`; the Tier 1 plan's spike P4, on Electron 45.2.1 as npm ships it (signed `adhoc`, no team), macOS 14.3.1, five runs that agreed. All four are yes, so none of T8's ways out is needed for this pass. launchd: the app bootstraps a plist from its temp home as a `gui/<uid>` agent running its own binary as Node; the brain outlives a `SIGKILL` of the app, and `bootout` stops it, though `launchctl print` still finds the label right after `bootout` returns, so Quit must wait. `safeStorage`'s async API works under `_electron.launch` with a temp `userData`, but on the real login Keychain: Playwright's `--use-mock-keychain` does not reach it, so a sealing test makes a real `<productName> Safe Storage` item and must name its app and delete the item, or seal through a test Layer. The Keychain: seal, first open and second open never blocked (7 to 12 ms, 30-second limit), so no prompt held a call; a rebuilt or re-signed binary was not tried and may still ask. `canPromptTouchID()` is true; `promptTouchID` was never called. Each run removes its label, plist and Keychain item. No model, $0."
+---
+
 # T8's four unknowns on a Mac: launchd, safeStorage, the Keychain, Touch ID
 
 Run 2026-11-05. **About `next/`.** This is the Tier 1 plan's spike P4, the four unknowns that

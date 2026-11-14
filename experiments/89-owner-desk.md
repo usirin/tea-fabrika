@@ -1,3 +1,9 @@
+---
+date: "2026-10-18"
+scripts: "`wip/src/asks/`, `packs/owner-desk/`, `packs/ask-log/`, `packs/ui-verification/`"
+summary: "Partly. The core names no pack, and the layer gate makes that a lint error. Three packs (owner-desk, ask-log, ui-verification) turn on from one `packs` line in `tsh.toml`. The desk shows the six 86b plans (565 changed after approval shows only what changed), a stuck task told \"keep going 3\" that asks again when the rounds run out, and demlik #68 ruled with each branch, on markdown or a GitHub-comment stand-in with the same ledger. With the desk off the core runs and its asks wait in the ledger. The packs forced three core changes, none naming a pack: a `waiting` snapshot (events alone left the inbox stale), a generic `check` ask with attachments (how ui-verification reaches the desk without knowing it), and a `holds` count (a listener cannot stop a ship unless the core knows how many to wait for: a slot, seen from the other side). 53 tests, reds committed first. No agent, $0. Confidence 75%."
+---
+
 # 89. The owner's desk as an add-on pack
 
 The question: does "the core emits, a pack answers, the core never knows the

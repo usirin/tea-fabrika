@@ -1,3 +1,9 @@
+---
+date: "2026-10-23"
+scripts: "`124-kill-every-survivor.ts`, `results/124-kill-every-survivor.json`"
+summary: "One round on every ticket, $0.86 in all. On copies of 123's vitest-runner trees (#483, #367, #355, merge commit, 122's check), Stryker 10.1.1 with per-test coverage and `--incremental`, and a skip list fixed first: a Stryker ignorer plugin that skips error and log text. Each live mutant went to the verify writer (`claude -p`, opus, 122's flags, $4 cap a call), about a promise or not, to answer with a test in its own file or \"cannot be told apart\" and why. 29 lived: 28 killed, 1 claimed (#355, an empty array in a private `WeakSet`; it held by hand). 123's equal rewrite on #483 made one new mutant, `>= 399`; the writer killed it with a faked 399 reply, so 123's \"no test can tell it apart\" was wrong, as was 122's guess on one #355 survivor. `--force` agreed with every incremental answer; no writer touched another file. The tests are examples, not properties; on #483 they pin the `[redacted]` text, and one exists only to kill Stryker's own `\"Stryker was here!\"`. The skip list took 2 of #483's 24 live mutants and 3 kills of an acceptance criterion (the error message holds the detail); skipping every `StringLiteral` would take 8. Writers 181 s, Stryker 320 s. Confidence 70%."
+---
+
 # 124. Can the verify writer kill every mutant that lives, and what does the skip list cost?
 
 The question: Promises in the pipeline

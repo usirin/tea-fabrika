@@ -1,3 +1,8 @@
+---
+date: "2026-11-10"
+summary: "`next/`, at `7aa4f45a`. One agent as the author, reading only libfabrika's exported files, `docs/tutorials/` and the counter. Half: it wrote \"tally\" (add, rename, bump, remove; one agent input; a read port) with 6 pure laws and a restart law in about six minutes, `pnpm typecheck` exit 0. It could not load it: the program list is the app's `src/table.ts`, and the build's `programs` option only tests reach (0068, 0069, P38). No window (P14) and no agent door (P25) exist yet. Gaps with no home: both tutorials teach today's `@kampus/fabrika-old`; an agent's person-only input is refused `bad_msg`, the same reason as five other causes; no runner test kit, so a restart law copies 11 services of wiring; the counter has no README; a new program needs its own row in the root `boundary-rules.json` to pass lint. 13 gaps in all. One run, a small program with no Cmds, an agent's minutes. Tokens not visible; no other model, $0 beyond the agent."
+---
+
 # 253. Can an author outside the fabrika team build a program for `next/` with only what such an author has?
 
 Run 2026-11-10 on main at `7aa4f45a`. **Every claim here is about `next/`** unless it names today's

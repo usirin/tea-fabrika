@@ -1,3 +1,9 @@
+---
+date: "2026-10-30"
+scripts: "`170-experiments-program.ts`, `results/170-experiments-program.json` (counts only); the code it builds is `packages/pipeline/src/experiments/` and `programs/experiments`, `experiment`, `compare`, `markdown`"
+summary: "Yes, from the blocks we have, with 16 gaps, none a blocker for part 1 (one since closed: a run's key from its caller, so a second import adds nothing, and the run's id made from that key, not its order): an `Experiments` service with its own facts on the ledger, and four small programs over it. The old log read into a ledger in memory in 0.7 s: 167 write-ups, 180 results files, 148 that fit the run record, 24 names for cost. Only 7 of 20 experiments with two or more old runs compare on a shared metric, so old results stay for reading. $0, no key, no model."
+---
+
 # 170. The experiments program, on today's ledger (part 1)
 
 **Answer.** Yes, it builds from the blocks we have, with 16 gaps, none of them a blocker for

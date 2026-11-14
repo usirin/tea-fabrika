@@ -442,7 +442,7 @@ What the owner sees: `pnpm lint` reads CSS, and six rules, each with its count.
 - **False alarms, measured before the rules land.**
   - Every fire of each rule is counted on the tree (`window.css`, 4,012 lines; `manti-reset.css`; `tokens.css`).
   - Every fire is counted again on an outside set, read in place and never copied in: Manti 0.13.0's `dist/*.css` (about 1,875 lines), React Flow 12.12.0's `style.css`, and `experiments/142-web-terminals/page.css`.
-  - Each fire is checked by hand against what the rule means. The counts, the declarations scanned and every false fire go in an experiment write-up under the next free number, with an index row.
+  - Each fire is checked by hand against what the rule means. The counts, the declarations scanned and every false fire go in an experiment write-up under the number `records.ts next experiments` gives, with its own frontmatter (0522).
   - A rule with a false fire is fixed before the pull request lands (see "No warnings" above).
 - **Moving tests into these rules is a proposal only.** Nothing moves in this pull request. The proposals are below.
 
@@ -509,7 +509,7 @@ What the owner sees: `pnpm lint` reads CSS, and six rules, each with its count.
 | `oxlint-plugins/css/*.ts` | 3 | six rules | 550 |
 | `oxlint-plugins/css/fixtures/{bad,good}/*.css` (new) | 3 | 12 fixtures | 180 |
 | `oxlint-plugins/stylelint.test.ts` | 3 | properties 21 to 30 | 320 |
-| `experiments/NN-stylelint-false-alarms.md` and its index row | 3 | the counts | 150 |
+| `experiments/NN-stylelint-false-alarms.md`, with its frontmatter | 3 | the counts | 150 |
 | `exam-paths.json` | 1, 2, 3 | rows below | 14 |
 | `docs/direction/oxlint-and-oxfmt.md`, the AGENTS.md Checks block | 3 | stylelint in `pnpm lint` | 15 |
 

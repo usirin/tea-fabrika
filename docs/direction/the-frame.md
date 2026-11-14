@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-03, undecided parts proposed; today's version; walked if a tryout is picked"
+summary: "Both versions, today's app read on main. One place that names the 50 parts of fabrika's window (the top bar, the tiles, the status bar, what opens over the tiles), each with a plain meaning, the industry's word with a source, the note that decides it, and where it is built. Fourteen clashes, each decided with the owner: \"chassis\" becomes frame; \"popup\" goes for popover and menu; the bottom line becomes the status bar; the action bar and the keys line become one toolbar, with key hints for words that press nothing; the ask desk becomes the inbox program; the desk becomes tezgah; the 4px between tiles is the divider, with an i3-style resize mode; \"window\", \"panel\", \"zoom\" and \"ask\" each keep one meaning. The words are in `.glossary/TERMS.md`. The parts nobody decides yet stay proposed. The Design canvas comes next."
+---
+
 # The frame: every part of the window, named once
 
 **Decided 2026-11-03.** Today's version; walked if a tryout is picked (owner, 2026-11-08). The words below were picked by the owner one by one and are in the

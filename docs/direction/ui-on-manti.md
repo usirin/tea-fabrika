@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-30; the split and the four clashes proposed; today's version; walked if a tryout is picked"
+summary: "Every part of the app's UI is Manti UI's (`@manti-ui/react`, `@manti-ui/styles`, MIT, 0.13.0 held exact): Zag.js machines for behavior, `--manti-*` tokens for the look. The design package's `tokens.css` sets those tokens from our own names, so nothing of Manti's palette shows, and the app's `manti-reset.css` keeps Manti's reset to Manti's parts. Three PRs: the base and every keycap, then the popovers on Zag's machines, then the program windows. Focus still goes back where it was, and one popover is open at a time, as popovers.md says."
+---
+
 # The app's UI is built on Manti UI, with our own tokens
 
 **Decided 2026-10-30 by the owner:** fabrika's UI is built on

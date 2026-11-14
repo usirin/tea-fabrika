@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-01"
+summary: "`next/`. Every key is a row, in the person's own `~/.fabrika/keybindings.toml`; a program for keys arrives in Tier 2, and Tier 1 reads the file. Today's app has a keys editor since keys PR 1 (ticket 174); program and mode keys are PR 2. The file's shape, clashes and reload were leans, all approved; matching on a non-Latin layout (60%) is the first to test."
+---
+
 # Keybindings are configurable
 
 **Decided 2026-11-01 by the owner:** every keybinding is configurable from day one, the prefix

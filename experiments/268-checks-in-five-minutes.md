@@ -1,3 +1,9 @@
+---
+date: "2026-11-11"
+scripts: "none; a count of GitHub run data, nothing ran"
+summary: "Today's CI, the last 40 merged PRs (885 to 944). Median 390 s, p90 1,012 s; whole-suite runs 964 s median. Eight fixes, none running fewer tests: lane matrix about 300 s, split six slow `.agents/` files about 220 s, cancel superseded main runs about 70 s (300 s p90, owner's call), apt cache about 175 s at p90, rebalance shards 60 to 100 s, blobless checkout about 20 s, trim e2e 40 to 60 s; parallel typecheck and lint not needed. Floor about 260 to 300 s with no queue; about 65% sure the median goes under 300 s. Narrowing `--changed` or the rerun triggers rejected as loosening. Paid runners answered no by 0112. No model, $0."
+---
+
 # 268. What gets a pull request's checks under five minutes, and how low can they go?
 
 Measured on 2026-11-11 from GitHub's own run data, landed the same day. **This is a count of

@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-25"
+summary: "When the app finds a host on another link version, it names both and offers \"stop the old host and start this one\". On another build, it attaches with a banner and the same button. First, each machine's saved state is checked against its own schema with tea's `migrate`, so old state is refused, not loaded on trust."
+---
+
 # An old host is named, then restarted
 
 **Decided 2026-10-25 by the owner.** Tracker ticket 12. Sections 1, 2 and 3

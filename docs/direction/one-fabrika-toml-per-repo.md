@@ -1,3 +1,8 @@
+---
+state: "decided; built with agents, build, review, checks, ship and ledger tables (experiment 107); 2026-10-30: the `.fabrika/` folder and `~/.fabrika` home decided; 2026-11-01: the repo's file built, review rules are `[review]`, the home not built; nested folders for monorepos (nearest wins, inherit only by `extends`) and repo programs proposed; 2026-10-31: where packs come from decided (lock, cache, no catalog word), how their code runs open; walked at Tier 5"
+summary: "Knobs are numbers, names or picks between tested paths, in TOML; the step order stays in code. Empty file changes nothing, unknown key fails, a run copies its settings when filed. Packs are listed here, one `[pack.<name>]` with `from` and `ref`, pinned in `.fabrika/fabrika.lock`; `~/.fabrika/packs` only caches code, as Cargo and Go do; any repo can offer packs in `.fabrika/packs/`. Each key left out gets a named default, printed at start. The repo's file lives at `.fabrika/fabrika.toml`; a person's own settings at `~/.fabrika/fabrika.toml`, which replaces `ledger.json` and `tsh.toml`."
+---
+
 # One fabrika.toml per repo
 
 Decided 2026-10-05. Packs added 2026-10-18. Walked when Tier 5 starts (owner, 2026-11-08): repo programs and their settings. The full story is

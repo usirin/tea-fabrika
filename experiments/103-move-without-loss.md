@@ -1,3 +1,8 @@
+---
+date: "2026-10-21"
+summary: "Yes. tea-program, tea-host, tsh and most of wip moved with `git mv` into one private package, `@kampus/fabrika`: parts `program/`, `host/`, `shell/`, `pipeline/` (name still open) and `agents/`. The top level gives the services and the code that runs anywhere; each platform is a Layer on a subpath (`/memory`, `/sqlite`, `/http`, `/local`, `/storage/node`, `/otel`, `/agents/claude`, `/agents/acp`). Tests 2029 before and after, the same names: 0 dropped, 0 newly skipped, 0 failing. Laws and planted mistakes the same (34 ledger, 61 host machine, 42 pipeline, 11 world plants caught). The top level bundles for a browser with 0 `node:*`, Miniflare, Agent SDK, ACP or OpenTelemetry modules (251 modules), now a `pnpm lint` check; `code-graph --layers` 0 violations; each check failed on its plant. `node:crypto` swapped for the global `crypto.randomUUID`; tea's `runTraceId` copied as a plain SHA-256 so the top level loads no OpenTelemetry. 13 names in two old modules: `Call` and `Monitor` stay Elm modules, 10 picked. Two-hosts tutorial 30/30 under `kill -9`; agents tutorial 8/8 with real haiku ($0.0009). No build yet (108). Confidence 90%."
+---
+
 # 103. The move without loss
 
 The question: can `tea-program`, `tea-host`, `tsh` and most of `wip` become one

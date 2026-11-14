@@ -1,3 +1,9 @@
+---
+date: "2026-10-10"
+scripts: "none"
+summary: "A data set: 23 closed kamp-us/demlik issues, each fixed by one merged PR, kept in `replay/`."
+---
+
 # 46. A replay set: an answer key from closed tickets
 
 Not an experiment, a data set. Until now we judged triage by eye on one

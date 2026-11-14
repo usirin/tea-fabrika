@@ -1,3 +1,8 @@
+---
+date: "2026-10-18"
+summary: "Yes; TLA+ not needed for the machines we have. Lanes of the real loop, build, review and ship over a small model of GitHub and the ledger. Raw: 2 lanes 2,876 states (0.18 s), 3 lanes 249,770 (17 s); each option multiplies by 2 to 12. Symmetry halves 2 lanes and cuts 3 lanes 6 times; partial-order reduction cuts 40 to 60%; both cut 3 lanes 14 times; same laws found as the full search on every world. \"Every lane ends\" under weak fairness: no fair loop or dead state in the real code; the planted pre-fix ship wait is printed as a lasso, a planted ignored post as a dead state. Real breaks: with no claim two lanes work one ticket (2 steps) and a failed head can land (22); with no queue the second lane lands on a main it never tested (26); the loop stops to ask the owner at the first stall while the asks core has no ask until the second (19). All 6 planted mistakes caught. Normal suite: 2 lanes with up to two options; script: 3 lanes with up to two; past that over 4 million states. Confidence 80%. $0."
+---
+
 # 91. Laws over several machines at once
 
 The question: experiment 90 checks one machine at a time. Can the same

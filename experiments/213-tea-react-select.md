@@ -1,3 +1,8 @@
+---
+date: "2026-11-03"
+summary: "Library probes for `next/`, tea 0.23.0 (demlik PRs 856 and 859). 20 Chromium runs per row, both engines, compiled and plain: three tiles that pick `m.views[id]` with tile b clicked three times draw a0 b3 c0, with 0 console errors, Strict Mode too; a parent reading the whole model redraws every tile (a3 b3 c3), compiled too; a selector that builds a new object is refused, \"Maximum update depth exceeded\"; a selector over a changing prop never draws the old part. So `useRuntime` with a selector is the window's hook and no stand-in is written; a selector picks, never builds. 400 of 400 trials on tea 0.23.0 from npm, through Babel's Compiler, not oxc's. No model, $0."
+---
+
 # tea 0.23.0's selector under the React Compiler
 
 **A tile that reads its part through `useRuntime`'s selector redraws only when that part

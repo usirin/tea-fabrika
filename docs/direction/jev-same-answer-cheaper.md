@@ -1,3 +1,8 @@
+---
+state: "decided; 2026-10-28: the two additions (experiment 167)"
+summary: "Jev is measured by agreement with the big model, never trusted to remove a person. A new question asked at volume, which no agent asks, is measured against hand labels and controls instead; an agent turn costs the person's own plan quota as well as dollars."
+---
+
 # Jev: the same answer, cheaper
 
 Decided 2026-10-10.

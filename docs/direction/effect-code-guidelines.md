@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-11"
+summary: "`next/`. How Effect's own team would build each file, as eight principles, each with real before and after code: use what Effect and Alchemy ship; a failure keeps its cause, is caught by its tag and is never thrown from pure code; a long body is a `make` with a shelf of named pieces; control state is a saved tea machine; a layer asks for what it needs; public exports are documented and comments say why; imports and ids read like Effect's; a difference from Effect keeps its reason beside it. Each has a kind (lint, law, pattern, taste) and says what holds it. The Alchemy port goes first in the fix order. From experiment 262; the rules are in 0120."
+---
+
 # Effect code guidelines
 
 **Decided 2026-11-11.** The owner approved the eight principles, the shape and the smaller calls

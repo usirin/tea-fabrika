@@ -1,3 +1,9 @@
+---
+date: "2026-10-23"
+scripts: "`122-verify-writer-replay.ts`, `results/122-verify-writer-replay.json`"
+summary: "Yes on one ticket of three; on the other two it caught exactly what the PR's own tests caught, and never less on the promise. The verify writer of `docs/direction/promises-in-the-pipeline.md`, replayed on kamp-us/demlik #483, #367 and #355 with the owner's three promises: one `claude -p` (claude-opus-5-5, six tools, no web, no `gh`, no settings) per ticket, on the base tree with fresh git history, given the promise and today's fabrika's triaged body, writes one fast-check test. All three red on base and green on merge, 3 runs of 3; no import change, no other file. Stryker 9.6.1 on the PR's changed source lines, TypeScript checker on, command runner (its vitest runner reported no coverage on vitest 5.0.1); killers sorted into tests at base (a), PR tests (b), the agent's (c). #483: 126 mutants, 38 refused, 88 valid; a 6, b 60, c 26; c not a 22, only c 4 (status exactly 400, and `null` in a body, both clients); b not c 38, all outside the key promise (the account error text, the marker, keeping the body). #367: 11 valid; a 7, b 8, c 8, same set as b. #355: 6 valid; a 2, b 4, c 4, same set as b. #483's promise was half kept at base (the thrown error carried no body), so red came from `fetchPost`'s body only. #367's check copied the plan's formula as its answer. No writer reached for the fix. Recommendation: keep the step; mutate only a promise's `covers` lines; grade per property so `already_kept` can fire. $1.04 for the writers (3.5 minutes), about 6 minutes of Stryker. Confidence 70%."
+---
+
 # 122. Can an agent write a check for a plain-sentence promise that catches what the repo's own tests miss?
 
 The question: Promises in the pipeline

@@ -1,3 +1,9 @@
+---
+date: "2026-10-28"
+scripts: "`168-the-factory-is-one-line.ts`, `lib/factory-line.ts` (the fake ledger, the stage programs, the shapes and an in-process tsh), `results/168-shapes.json`, `results/168-help.txt` (the help text the agent read), `results/168-agent-codex.json`, `results/168-agent-codex-noship-cannot-again.json`, `results/168-agent-scripted.json`"
+summary: "Through the tracker. Four shapes on fake agents, ticket #7 sent back once by review, #8 skipped, #9 stuck: a named pipe, a wire back (`review ^build`, as sugar), a parent program, and through the tracker (review's send is a fact, the tracker hands #7 out again, every stage reads fresh). All four ran the whole line end to end, 11 runs each; Ctrl-C (130) and the same line again ran only build, review and ship again in all four. By hand the pipe shapes never end (Ctrl-C needed), or lose #7 when the pipe does not hold build open: Kahn's cycle problem. The parent ends and ships but hides build and review from `jobs`. Through the tracker the line is exactly `tracker | triage | plan | build | review | ship`, no new syntax, and by hand it does one lap. GPT sol through Codex wrote right lines 24 of 24 from `programs` and `--describe` (8 tasks, 3 tries), and said \"no line\" to a job nothing does; a scripted stand-in, not an agent, showed tsh catching wrong flags but letting `ship --ticket 12` run on a ticket nobody filed. No package code changed. $0: fake factory agents, Codex on the ChatGPT plan (225k input tokens). Lean: through the tracker, a parent only for a hand line that must loop with a lap limit. Confidence 70%; two lines on one ledger, untested, would run build twice. Not taken (2026-10-29): it was an exploration; the factory stays one thin coordinator program, and a hand line runs one part again."
+---
+
 # 168. The factory is one tsh line: which loop shape lets review send a ticket back?
 
 The question: a stage can answer `send`. Review says `send:build:checks_red`

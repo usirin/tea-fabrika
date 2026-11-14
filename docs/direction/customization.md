@@ -1,3 +1,8 @@
+---
+state: "proposed, D1 with D3 decided 2026-11-08"
+summary: "Today's version first. A program offers, the person places, the frame draws. The top bar has one glance slot the person picks (lean); a program never adds itself to the bar (lean). The inbox is one list in two groups, Your turn then Messages, in its glance (a popover) and its tile; Space unfolds a look in place, and a person's place rule may float it; \"Open all\" is the inbox's command with its key. A program never says where it opens (lean). From experiment 206."
+---
+
 # Customization: a program offers, the person places, the frame draws
 
 **Proposed 2026-11-08.** Decided by the owner on 2026-11-08: study 206's D1 with D3. The inbox

@@ -1,3 +1,9 @@
+---
+date: "2026-10-30"
+scripts: "`171-alchemy-local-twin.ts` (the driver, Node built-ins only), `171-alchemy-local-twin/` (a workspace package: `stack.ts` with `twinStack`, `twin.ts`, `bytes.ts`, `inproc.ts`, `client.ts`, `parent.ts`), `results/171-alchemy-local-twin.json`"
+summary: "Yes. The ledger server's own Alchemy stack, deployed at stage `local` from code with `.alchemy/` named as a Layer: no CLI, no account, only 127.0.0.1. Same Worker, DOs and bindings (plus Alchemy's five `ALCHEMY_*`), facts kept across stop, crash and restart. One child, workerd, in our group; no bundler process (today's twin keeps an esbuild one, 50 to 120 MB). Alchemy restarts a killed workerd behind the same URL in 0.3 to 0.5 s; dying with the parent and stopping by group are ours, one ppid guard. Deploy build and local build are the same bytes (entry 268,897 B, one sha256); `bundle: false` serves a built file byte for byte. Cost: 1.2 to 1.4 s and about 395 MB from a built bundle, against 0.3 to 0.4 s and 285 MB today, Node and Electron alike; about 1 s is loading Alchemy, which must ship outside the host bundle. Tests: both start in under 0.2 s in-process, but Alchemy cannot reuse a port in one process and has no `outboundService`, so tests stay on Miniflare fed Alchemy's Worker file. Lean: move the app's twin; confidence 70% (packaged app and crash loops untried). $0, nothing deployed."
+---
+
 # 171. Can the app host run the ledger as Alchemy's local stage, instead of our own twin?
 
 Yes. The ledger server's own Alchemy stack runs at its local stage from a

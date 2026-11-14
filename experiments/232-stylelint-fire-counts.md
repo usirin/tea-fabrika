@@ -1,3 +1,8 @@
+---
+date: "2026-11-08"
+summary: "Today's version, ticket 245 PR 3. Six rules over main's 2,061 declarations, the tree's 2,060, and 5,015 outside declarations from Manti 0.13.0, React Flow 12.12.0 and experiment 142. Hand-checked false fires: zero for each rule on each set. Tree fires: 153 token, 20 raw color, 0 Radix step, 0 owner, 0 motion, 6 size. Outside: 1,680, 614, 0, 0, 135, 3. Fixed named-color shorthand misses and the font angle/line-height parser; all six stay errors. No model, $0."
+---
+
 # 232. Stylelint fires checked by hand
 
 Today's version, tracker ticket 245, design foundations PR 3. Run 2026-11-08 with

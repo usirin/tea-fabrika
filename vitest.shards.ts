@@ -6,6 +6,7 @@ import { BaseSequencer, type TestSpecification } from "vitest/node";
 // two-minute lane files can land on one machine while another runs only one-second files.
 
 const LANE = "packages/pipeline/src/stages/pipeline/lane";
+const E2E = "next/apps/fabrika/e2e";
 
 /**
  * Seconds per file from the repo root: medians of today's test-file times in CI runs
@@ -18,7 +19,9 @@ const LANE = "packages/pipeline/src/stages/pipeline/lane";
  * next/ rows use attempt 1 of green runs 43544589151 (push to main), 43551626086 (merge queue
  * group) and 43556494864 (push to main), rounded to one decimal: the median of the three samples,
  * or the larger of those in hand when a run did not hold the file. The samples and their jobs are
- * in vitest.shards.test.ts.
+ * in vitest.shards.test.ts. The 8 end-to-end rows (next/apps/fabrika/e2e and the tuval key law) use
+ * attempt 1 of runs 43601966383 (job 132468657925), 43601964962 (job 132468687674) and 43605298688
+ * (job 132478645693), the median of the three, from Vitest's printed Duration per file.
  * A file with no row is placed by the fallback at the median measured time; CI's `shard-times`
  * step prints its real seconds for a later row.
  */
@@ -107,6 +110,13 @@ export const measured: Record<string, number> = {
   "apps/fabrika/src/window/terminal.test.ts": 0.4,
   "apps/fabrika/src/window/tile.test.ts": 0.1,
   "apps/fabrika/src/window/type-scale.test.ts": 0.0,
+  [`${E2E}/chaos-revoke.test.ts`]: 46.7,
+  [`${E2E}/electron-launchd.test.ts`]: 1.5,
+  [`${E2E}/first-window.test.ts`]: 222.2,
+  [`${E2E}/instance.test.ts`]: 23.7,
+  [`${E2E}/one-file.test.ts`]: 14.6,
+  [`${E2E}/resources.laws.test.ts`]: 366.6,
+  [`${E2E}/stored.test.ts`]: 1.2,
   "next/apps/fabrika/src/brain-life.test.ts": 26.5,
   "next/apps/fabrika/src/build-command.test.ts": 2.2,
   "next/apps/fabrika/src/build.test.ts": 41.6,
@@ -345,6 +355,7 @@ export const measured: Record<string, number> = {
   "next/packages/libfabrika/src/transport/SshsigWebauthn.test.ts": 0.6,
   "next/packages/libfabrika/src/transport/internal/binaryCryptoFailure.test.ts": 0.0,
   "next/packages/libfabrika/src/transport/internal/connection.test.ts": 1.8,
+  "next/packages/tuval/src/browser/key.laws.test.ts": 7.1,
   "next/programs/chaos/src/program.laws.test.ts": 1.5,
   "next/programs/checklist/src/client.laws.test.ts": 0.1,
   "next/programs/checklist/src/program.laws.test.ts": 0.2,

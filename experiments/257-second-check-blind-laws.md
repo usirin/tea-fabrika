@@ -1,3 +1,8 @@
+---
+date: "2026-11-11"
+summary: "`next/`, 0093's second check, on ticket 707's waiting machine (`waiting.ts`, 185 lines, 144 mutants, all sampled at seed 119120). Yes, as many, not more. A file written from the plan alone, before any mutation result and without opening `waiting.test.ts`, killed 98 of 144 in the skill's container, the same 98 as the old file, mutant for mutant (13 survived, 33 static ignored, both). A final version with a longer walk (`minLength: 10`, `size: 60`) and type fixes (the first version failed `pnpm typecheck`) killed 99: `waiting.ts:172`, a leave from a row with other clients copying that row over all rows, which neither first walk reached (0 of 580 steps). The other 12 survivors are empty-case guards, equivalent by reading. Six of the plan's plants failed their laws once and were not kept; the type, gateway and lint plants were not run here. 0093's trial ends by its own rule. Tokens not visible, dollars not measured. About 75% sure: one small file, both files already walk, static mutants unmeasured."
+---
+
 # 257. Does a law file written from the plan alone, blind to the old tests, kill as many mutants as the old one?
 
 Measured on 2026-11-11, on main at `bbb13727b`, in a worktree on the branch

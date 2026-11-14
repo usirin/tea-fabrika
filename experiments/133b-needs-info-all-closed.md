@@ -1,3 +1,9 @@
+---
+date: "2026-10-24"
+scripts: "`133b-needs-info-all-closed.ts`, `133b-truth.json`, `results/133b-needs-info-all-closed.json`; reads `133-truth.json` and 133's results"
+summary: "No, and surer. All 69 closed phoenix tickets that ever had `status:needs-info`, read by hand: 133's 15, the other 36 of its 51, and 18 filed from #7852 on that its count missed (a fresh label read finds 100 ever, 70 closed, 30 open; a GraphQL read at 100 a page found only 65). 49 waited only for an owner's permission (38 no leave to close, mostly no agent footer; 11 no open milestone at that priority), 17 on an owner's ruling, 2 on the code, 1 on the filer (#1919, one external link and an instruction to paste its content in; no answer). A missing fact changed the end on 11: 6 in the code, 5 with an owner, 0 with the filer. 13 parks asked the filer; an owner ruled or gave leave on 8, a code read answered 4, 1 had no answer. A blind second reader matched 133 on all three fields for 7 of 15; on re-reading, 5 of 133's \"code\" labels were permission parks by 133's own rule, which does not move the answer. Today's sort on the 54 (sonnet, no tools, 200-issue window): same answer both runs on 49; with 133's answers, the real end on every run for 40 of 69; misses were the code 7, the window 9, an owner's later no 5, duplicates in the brief not taken 3, research on built tickets 3, other 2; none needed the filer. It asked for a ruling on 3 of the 17 that waited on one. $3.06 for 108 sorts. Confidence 85%."
+---
+
 # 133b. Every closed needs-info ticket: does triage need "ask the filer"?
 
 Experiment 133 read 15 of the closed kamp-us/phoenix tickets that once carried

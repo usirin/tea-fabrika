@@ -1,3 +1,8 @@
+---
+date: "2026-10-28"
+summary: "Shape B of the program API study works, with one hole. **Adopted 2026-10-30, built in https://github.com/usirin/tea-fabrika/pull/195**: one mailbox per run, and control inputs (`{control: true}`, tsh's Ctrl-C) with their own bound of 16, so Ctrl-C is taken behind 999 lines and with the mailbox full (`shell/ctrl-c.test.ts`). The spike: one mailbox per run, `main` hands `serve` one handler per input, `Program.fork` beside the order. Order: the old merge broke a tell A then B in 409 of 1,000 random runs, the mailbox in 0 of 1,300; on real code the old asks refused an answer told right after its ruling, and ship shipped 1, 3, 2. Types: each handler's value is inferred from its schema; a missing handler, an extra name, a wrong type and a bad `until` are compile errors. Flood: 1,000,000 tells give 1,000 queued and the rest `MailboxFull`, memory flat (the real mailbox, rerun 2026-10-30: the same). The hole: 999 lines piled behind a slow line fill tsh's mailbox and Ctrl-C is refused. Wrong in the study: \"the bound fixes the tsh trap\" (half), and ship's `forget` needs no fork. Wrong in the spike: \"the value in hand counts against the bound\". The spike's tsh copy and its tests were dropped when it left the packages; they are in the PR's first commit. No model, $0. Confidence 75%."
+---
+
 # 164: One mailbox and a handler table, as a typed spike
 
 Date: 2026-10-28. No model, no network, no key, $0.

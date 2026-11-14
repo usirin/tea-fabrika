@@ -1,3 +1,9 @@
+---
+date: "2026-11-10"
+scripts: "none; reading, nothing ran"
+summary: "Reading, not a measurement; `next/`'s planned door (P25, exam only) and today's `packages/fabrika/src/mcp/`. 20 sources: Cloudflare's Code Mode, its MCP server (about 1,000 tokens against 1.17 million), Dynamic Workers and Workflows, Anthropic's code execution post (150,000 to 2,000 tokens, no method) and programmatic tool calling (a paused call times out after about 4 minutes), Pydantic's 5,276 graded runs (code mode costs +21% to +38% at 5 items, 47% to 75% less at 200; retries repeated writes), CodeAct, CaMeL, arXiv 2602.15945 (sixteen attack classes), plus Temporal, Restate and Effect's `effect/workflow` on resume. Four shapes: A one tool per input (the exam pins it), B a free script resumed by replay, C a flow as data, D read-only code plus a flow tool. Lean, 65%: keep A, add C's `flow_start` when bulk writes come, then D's read-only `query`. The doubt is whether agents write good flows as data. A settling experiment is sketched, not run. Answers 0074's open door question. Agent time only, $0."
+---
+
 # 265. Should fabrika's MCP door be a "code mode" door, and how would an agent's script stay resumable?
 
 **This is reading, not a measurement.** Read on 2026-11-10, written up on 2026-11-11. Nothing was

@@ -1,3 +1,8 @@
+---
+state: "decided in pieces, see the note"
+summary: "Twelve services take a ticket to a merge, each behind a standard where one fits. `Ci` leaves `CodeHost`. Our own CI is one more `Ci` Layer: a job is a lease on the ledger, a machine pulls it and opens no port, runs it in a fresh box with no key (Docker with gVisor on Linux, a Tart VM on a Mac, two at most), and writes a signed result. A machine joins with the owner's approval of its key."
+---
+
 # The services fabrika needs, and CI on our own machines
 
 **Decided, in pieces:**

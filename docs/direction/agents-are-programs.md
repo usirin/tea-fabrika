@@ -1,3 +1,8 @@
+---
+state: "proposed 2026-10-29, reshaped 2026-10-30; walked at Tier 5"
+summary: "`programs/claude` and `programs/codex`, one `defineProgram` each, wiring the same parts from the SDK on top of the `Agents` service; no program-maker function (rejected 2026-10-30). Run by hand it opens a chat tile; in a pipe or as a stage's child run it opens none, as `claude` vs `claude -p`. A stage starts one by name through the host, hands it a JSON Schema on `--schema`, and decodes the plain answer with its own schema; a misfit ends the stage stuck. Cancel by turn number. Needs the one mailbox (tracker #94) first. Experiment 169 is the spike."
+---
+
 # An agent is a program: `claude` and `codex`, at parity
 
 Proposed 2026-10-29, reshaped 2026-10-30 after experiment 169 (tracker #87). Walked when Tier 5 starts (owner, 2026-11-08): claude and codex programs.

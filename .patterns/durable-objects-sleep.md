@@ -1,3 +1,8 @@
+---
+where: "next/ Durable Objects"
+when: "Adding work, a loop, a timer, a socket, telemetry or saved state to code that runs in a Durable Object"
+---
+
 # A Durable Object works inside a wake, saves state for later, and sleeps
 
 ```mermaid

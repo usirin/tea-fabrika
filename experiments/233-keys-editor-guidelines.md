@@ -1,3 +1,9 @@
+---
+date: "2026-11-08"
+scripts: "none"
+summary: "Today's version; reading about fifteen makers (VS Code, Zed, JetBrains, macOS, Ableton, Linear, Raycast, the keyboard map spec, Colemak Mod-DH, WCAG) and a look step: four designs built in the app on a local branch and shot at five layouts, 150 states with a real shot each. The makers agree on one searchable list with recording in the row; ours sits in a tile, not over the tiles. The owner picked the list and a keyboard map as a second view, on the person's own keyboard layout and physical layout, since Karabiner and QMK leave the system saying QWERTY. Today's editor has the right jobs and the wrong look: a box over the tiles, mono, rows of internals. Feeds the proposed keys editor note. $0."
+---
+
 # How should the keys editor look and sit, and what does today's editor teach?
 
 Read 2026-11-08. **This is reading, not a measurement,** with one look step that ran. It feeds

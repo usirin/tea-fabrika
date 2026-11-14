@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-25; the bridge dropped; sections 1, 2, 5 and the ask box built 2026-10-26, the live row next; its dollars decided 2026-11-06"
+summary: "One top line folded from facts (done, closed, waits on you, running, stuck, idle, next); nine lane fact kinds, one row each; a running agent is one live row with a link to its log, never its tool calls; no bridge for today's Claude Code agents, which post plain comments until the pipeline runs lanes; done is a merge or a user's close, never an agent's word."
+---
+
 # What a ticket's view shows
 
 **Decided 2026-10-25: sections 1, 2, 3 and 5, as written. Section 4, the

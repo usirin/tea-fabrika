@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-01, contrast and its open points decided 2026-11-07, APCA leaned"
+summary: "`next/`, Tier 2. A theme is the person's own config: one TOML file per theme in `~/.fabrika/themes/`, picked by `theme = \"<name>\"` in `~/.fabrika/fabrika.toml`, as Helix, Zed and Ghostty do. A theme is a full set of named colors. A Radix pick is the default way in; a Base16, Base24 or Ghostty file is the other, read in its own format, mapped in, and it keeps its own colors. A built-in `themes` program picks with a live preview and imports files. A theme that repair changes is saved as `<name>-fabrika`, never under its upstream name. A theme that fails contrast is nudged at load (`fix = \"nudge\"`, the default): one checker shared with the token build, lightness only in OKLCH, text, icon and border colors only, capped with fabrika's own value past the cap, never rewriting the file; `fix = \"off\"` shows it as written with the same warnings. Proposed: the data shape, live switching, what a third-party program gets. Today's app moves to the built-in `fabrika` and `fabrika-light` values (ticket 144). *Changed 2026-11-07: a theme sets only global tokens; built-ins are generated from the token files; `turn` becomes `turn-fill`, focus slate a9. Decided 2026-11-07: a Radix pick is only a gray and an accent, checked over all 300 in the token build; `fix` covers app colors, terminal text per cell and the cursor; `[theme] contrast` sets the text floor, 4.5 up to 21, never lower; a repaired cursor gets its own `[repaired]` row. Leaned: WCAG 2.2 now, APCA as a second floor after a measurement.*"
+---
+
 # People bring their own themes
 
 **Decided 2026-11-01 by the owner**, after [experiment 177](../../experiments/177-themes.md). Each

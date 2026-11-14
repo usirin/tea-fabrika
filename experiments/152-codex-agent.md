@@ -1,3 +1,8 @@
+---
+date: "2026-10-26"
+summary: "Yes, close enough for a second runner. `codex exec --json` (codex-cli 0.163.0, ChatGPT plan) folds into the Draft's Msgs; our Effect schema works as `--output-schema` under OpenAI's strict mode, which refuses an optional field (HTTP 400); `resume <id>` continues a thread, but Codex picks the id. A temp `CODEX_HOME` holding only a symlink to the login keeps the owner's config and global `AGENTS.md` out (`--ignore-user-config` does not drop the `AGENTS.md`), which experiment 76 thought could not be done. SIGINT stops a run in 0.2 s; SIGTERM, the SDK's abort, leaves the agent's command running. Network off and writes held by flag, but `/tmp` stays writable and reads are open everywhere until a permission profile (beta) denies home. (Later, not measured here: denying home whole stops every Node script under home, since Seatbelt refuses even `lstat` on it. Today's version closes what is beside the opened folders instead, so home's own names can be listed and an ordinary entry made during a run is open: `homeFence` in `packages/fabrika/src/agents/acp/harness.ts`.) No turn, time or money limit; no dollars on a plan, the weekly limit only in the saved session. On fixtures/format-bytes, 10 checks by code, 5 runs a side: Codex (gpt-6-luna, low) and Claude (haiku, low, builder options) both 5 of 5 right and typed; median 10.6 s against 41.1 s, 471 against 4,897 output tokens; Claude $0.28. OpenAI calls API keys the default for automation and says not to use a plan login on public repositories. Confidence 70%."
+---
+
 # 152. A Codex agent, run the way we run Claude
 
 The question: the repo runs Claude Code through the Agent SDK as a Draft: a tea Sub over the SDK's

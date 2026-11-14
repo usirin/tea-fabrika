@@ -1,3 +1,9 @@
+---
+date: "2026-11-06"
+scripts: "none"
+summary: "`next/`'s tracker; reading about 20 makers (Linear, GitHub, Jira, Kubernetes, Gmail, Notion, Shortcut, OmniFocus, Prometheus, a library, a hospital) plus read-only counts over kamp-us/phoenix's 3,000 newest issues, not a measurement. They agree: a label is a short, person-made list of words for finding work; typed values are fields, moving state is the system's, and a label that routes or has an owner becomes its own concept. Phoenix broke each: 1,463 of 2,158 closed issues still say triaged or ready, two priorities on one issue, 35 issues with two homes, 27 of 59 labels in use, and one shared login so no label says who wrote it. Six guidelines; Area is the first label group, pick-one and guessable (lean was 65%), decided 2026-11-06 with D1 and D4 built first. | $0"
+---
+
 # When is something a label on a ticket, and when must it be its own field or fact?
 
 Read 2026-11-06. **This is reading, not a measurement,** plus read-only counts over the 3,000

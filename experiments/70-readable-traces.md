@@ -1,3 +1,8 @@
+---
+date: "2026-10-17"
+summary: "Yes. Each stage is its own service, so its own color, in one trace per line: `service.name` is written as a span attribute and the exporter's view moves it to a resource per service. Every `keep.run` takes a `Drawing`: the span's name (`round 1`, `pr #597`), its service, a plain name per Cmd and Sub (`read ticket`, `waiting on checks`), and tags (ticket, round, pr, short head, outcome, cost). The root is `operate ticket #6`; the typed line is only in `tsh.line`, tested. `stuck:*`, `ask:*` and a red round are red, set on export from the outcome. An agent's chat and tool spans fold into the span that started it (`builder · 12 turns`, turns and tools as events). The made-up parent is dropped on export: no \"invalid parent\" warning, kill and attach still one trace. `trace:up` moved to Jaeger 2.21.0 on the same Badger volume; the half-dark page was jaeger-ui 1.76's bug. Live: operate on a sandbox ticket merged in 18 minutes for $0.50, 20 spans in 5 services, against 148 spans in one before. Found: per-turn output tokens are far too low (tea). `@demlik/tea` unchanged."
+---
+
 # 70. Readable traces: a tsh line a person can read in Jaeger
 
 ```sh

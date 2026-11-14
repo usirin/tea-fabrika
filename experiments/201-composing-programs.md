@@ -1,3 +1,8 @@
+---
+date: "2026-11-02"
+summary: "Today's version; part ran, part reading, not a measurement. Outline round 2 split an outline and a board into six small programs on one shared row type: six compositions, every pipe passing today's fit check, shot on Electron at five layouts through a stand-in host. A tree cannot go on a pipe as a tree (the shape check refuses `Schema.suspend`), so it goes flat with a `parent` key; a drawer alone shows nothing; two lines cannot share a ticket tile by pipe. A read-only audit found 16 second jobs in 5 places: `ticket`, `runs` and `map` each run the tracker's whole machine, the tracker holds a second ticket page, and the frame holds the asks list. Feeds the composing rules C1 to C11 of [program guidelines](../docs/direction/program-guidelines.md#composing-programs-c1-to-c11), decided 2026-11-02. $0 in API calls."
+---
+
 # 201. How do small programs compose on pipes, and where does one program hold another's job?
 
 Built and read 2026-11-02. **Part ran, part is reading; neither is a measurement.** Two pieces of

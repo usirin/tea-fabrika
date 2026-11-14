@@ -1,3 +1,8 @@
+---
+where: "next/"
+when: "Adding a service or its Layer, deciding which file a Layer or adapter goes in, or giving an object class its runtime"
+---
+
 # A service file holds its contract; each Layer is a sibling file, composed once at the edge
 
 ```mermaid

@@ -1,3 +1,8 @@
+---
+date: "2026-10-04"
+summary: "Jev can tell an example touches its rule (idle inputs accepted 0 of 121). It cannot tell the result is right: `parseDuration(\"1.5h\") -> 4500` scored 0.89."
+---
+
 # 18. Does this example show what the sentence claims?
 
 `18-example-fits-claim.ts`. If the example is exact data, code writes the visible

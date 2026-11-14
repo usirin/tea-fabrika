@@ -1,3 +1,8 @@
+---
+date: "2026-11-11"
+summary: "`next/`; $0. Yes, in the local runtime. Alchemy's engine (`Stack.make`, `Plan.make`, `Apply.apply`) ran inside a Durable Object under workerd, with a state store written over the ledger stand-in. Apply, a second apply with no change, a changed prop, a dropped resource and a removed program all did what they should. It does not go through `deploy()`, which loads the Node platform and reads `.env` from disk. About 90% for what ran; Cloudflare itself and a program loaded through Worker Loader were not tried. Numbered 276 on its branch."
+---
+
 # 281. Can a program declare what should exist as resources, and can Alchemy's own engine apply them inside the brain when the program is loaded?
 
 Numbered 276 on its branch. It landed as 281, because main's 276 is

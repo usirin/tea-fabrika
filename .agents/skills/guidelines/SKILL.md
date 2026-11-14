@@ -28,7 +28,7 @@ Read `AGENTS.md` first. Its rules on names, writing, version and the public repo
 ### 1. Check what is settled
 
 - Search `docs/guidelines/` (any page on the area), `.decisions/`, what is
-  left of `docs/direction/`, `experiments/README.md` and `docs/plan/` (README, `tiers.md`,
+  left of `docs/direction/`, `experiments/` (the `records.ts list experiments` lines) and `docs/plan/` (README, `tiers.md`,
   `tier-1.md`) for the area.
 - Write down each decided point with its source. A decided point is marked decided everywhere
   and is never asked again.
@@ -125,7 +125,8 @@ request opens, even when no study is running (owner, 2026-11-08).
 
 ### 6. Write the experiment
 
-`experiments/NN-<area>.md`, the next free number. Shape, from 182, 183 and 184:
+`experiments/NN-<area>.md`, with the number from
+`node .agents/skills/lead/scripts/records.ts next experiments`. Shape, from 182, 183 and 184:
 
 - The title is the question. Line one: the date read, and **"This is reading, not a
   measurement."** unless something ran. It links the page and names the Design canvas "<Area>
@@ -165,11 +166,14 @@ links it.
   `references/guideline-page.md`, with a filled one and a checklist. Step 5's shots that are not
   on the page stay private.
 
-### 8. Add the index rows
+### 8. List the page and the experiment
 
 - One row in `docs/guidelines/README.md`: the area, what the page covers, then its status,
   `proposed`. If the folder or its README does not exist yet, create it with this first row.
-- One row in `experiments/README.md`: number, question, files, date, the answer, $.
+- The experiment gets no row: it opens with its own frontmatter (`date`, `scripts`, `summary`, with
+  the answer and the $ in `summary`), in the shape
+  [`experiments/README.md`](../../../experiments/README.md#the-experiments) gives
+  ([0522](../../../.decisions/0522-no-folder-keeps-an-index-table.md)).
 
 ### 9. Build and publish the deck and the prototype
 

@@ -1,3 +1,8 @@
+---
+state: "proposed; walked at Tier 6"
+summary: "Review once, fully. Later rounds only check the list, and the loop ends when a lap leaves it no shorter. A replay found the lists do shrink, and that the rule needs more ways in and a looser stop."
+---
+
 # A review list can only shrink
 
 Proposed 2026-10-11. Walked when Tier 6 starts (owner, 2026-11-08): the review stage's findings and retry stop. An idea being worked out, not a decision. It belongs to

@@ -1,3 +1,8 @@
+---
+date: "2026-11-07"
+summary: "`next/`'s ledger (P6) and P37's span sink; a reading study plus one local measurement with Python's `sqlite3` on P6's tables, not on workerd. An entry is about 467 bytes on disk in a blend (339 a short letter, 624 a fact, 1,138 a comment), so one project object lasts about 3.9 years at 15,000 entries a day (a guess) and 4 months at 2 writes a second. The first wall is a process's JobRecord: one of today's job records took 117 MB of spans in 42 hours, about 150 days to 10 GB. Kafka orders only inside a partition; KIP-405 and Kurrent's archive move closed stretches out, delete only after the copy, and keep the order. Leans: JobRecord parts (80%), `Blobs` by hash in Tier 2 (80%), sealed stretches before Tier 5 (70%), no stream sharding (85%). No model, $0."
+---
+
 # 225. How does the ledger outgrow one 10 GB object?
 
 Measured and read 2026-11-07. About `next/`'s ledger (P6, on main since

@@ -1,3 +1,8 @@
+---
+where: "next/ host code"
+when: "Keeping state that changes between calls, adding a limit, reading the time, or writing a retry or a loop that repeats"
+---
+
 # State shared across fibers is a Ref; time comes from Clock; a repeat is a Schedule
 
 ```mermaid

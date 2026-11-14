@@ -1,3 +1,9 @@
+---
+date: "2026-11-07"
+scripts: "none"
+summary: "About Manti, which both versions use; reading only, not a measurement, at adobe/react-spectrum `82959b6a` and Zag 1.47.0. React Aria uses a single-select listbox with 2D arrows and `aria-selected`; the lean for Manti is a native radio group (65%), since it has ARIA-AT data and works in forms. React Aria's color naming (OKLCH, about 215 lines, 34 languages) is Apache-2.0 and can be ported with its notice. Zag's swatches expose no selected state, no group name and no arrow keys, and no Zag issue covers it. No product limits picks to passing colors. Base of [Manti issue 157](https://github.com/manti-ui/ui/issues/157). No model, $0."
+---
+
 # 226. How does React Aria build an accessible color swatch picker?
 
 Read 2026-11-07. This is reading, not a measurement. About Manti, which both versions of fabrika

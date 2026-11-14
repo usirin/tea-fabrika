@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-29; 18 sweep PRs mapped; throws 2026-11-08"
+summary: "No `somethingOf` names. Data with behavior is a `Schema.Opaque` with static helpers, so values stay plain objects; names follow Effect (`make`, `fromX`, `toX`). Not `Schema.Class`: a spread of one fails to save. Errors move in the error pass. In `next/`, throws follow Effect: `make` and `decodeSync` throw, for trusted input only; saved state, the wire and disk take `makeEffect` or `decodeEffect` (2026-11-08)."
+---
+
 # Data is a `Schema.Opaque` with its helpers on it; no `somethingOf`
 
 Decided 2026-10-29. Changed the same day from `Schema.Class` to `Schema.Opaque`,

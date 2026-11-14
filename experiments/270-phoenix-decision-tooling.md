@@ -1,3 +1,8 @@
+---
+date: "2026-11-11"
+summary: "Reading plus four read-only runs. Phoenix finds decisions the same way we do (ADR 0129, which 0008 copied) and still misses them (issues 9132, 7483, 3172). It has three tools we lack: `adr sweep` (ranks decisions by rare shared words in title, gloss and Decision), `adr resolve` (cite only live) and `grill read` (keeps a recommendation apart from a ruling). Its only hard gate is at merge, for governed paths. The sweep ranked the right decisions 2nd and 6th for the Tier 6 miss and found nothing for the pipe-letters miss, whose rule lived only in a direction note. Sweeping the notes too made both worse. Leans: try the sweep as advice (70%), add a lint for live citations (80%), a backlinks list (80%), and move note rules into decision files (85%). The last two became 0115. Agent time only, $0."
+---
+
 # 270. What does phoenix's fabrika do to make agents find a decision, and would it have caught our two misses?
 
 Read and run on 2026-11-11. **This is reading, plus four read-only runs of one tool, not an

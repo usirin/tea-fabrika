@@ -1,3 +1,8 @@
+---
+date: "2026-11-01"
+summary: "Reading, not a measurement. The known way is tmux's: a prefix, named key tables, rows of key to command word, defaults first and the person's rows over them (Ghostty, kitty, VS Code, Zed, Windows Terminal all do it). Ableton's Key Map mode binds by pointing; Linear and Superhuman teach with Cmd-K and `?` and do not let a person rebind. Three things bite: unbinding the prefix and F6 traps focus in a terminal tile (WCAG 2.1.2), so a table must keep a way out; on German, French and Turkish-F Macs `|` needs Option, so today's `keyName` names it `<a-|>` and split cannot be pressed (probe on CLDR layout data, not a real keyboard); and Chromium reserves no keys in an installed app window, so a browser's lost keys are not one list. `toLowerCase` breaks Turkish `İ` and `I`. No screen reader was run. $0."
+---
+
 # How do others make keys configurable, and what bites?
 
 Read 2026-11-01. **This is reading, not a measurement.** One small script ran against
