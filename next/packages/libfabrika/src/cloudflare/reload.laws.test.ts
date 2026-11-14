@@ -54,6 +54,15 @@ import { type Env, type ProjectDoorOptions, ProjectService, projectLayer } from 
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {}, DurableObject: class {} }));
 
 const SEED = 119120;
+
+/** A Promise the law awaited rejected: fast-check's failed assertion, or a Response body that did not read. */
+class Rejected extends Schema.TaggedError<Rejected>()("Rejected", { cause: Schema.Defect() }) {}
+
+const rejected = (cause: unknown) => new Rejected({ cause });
+
+const ProcessKey = Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String]));
+
+const EntryBody = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown));
 const PROGRAM = "fabrika/counter";
 const BRAIN_BUILD = "brain-build-test";
 const TOKEN = "control-token-test";
@@ -206,7 +215,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
     },
     PROCESS: {
       getByName: (key: string) => {
-        const [, name] = JSON.parse(key) as [string, string];
+        const [, name] = Schema.decodeUnknownSync(ProcessKey)(key);
         return {
           configure: async (d: Pick<Descriptor, "id" | "name" | "build" | "program">) => {
             if (unreachable.has(name)) {
@@ -394,7 +403,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
         rev: Number(row.rev),
         tag: String(row._tag),
         build: String(row.build),
-        body: JSON.parse(String(row.body)) as Readonly<Record<string, unknown>>,
+        body: Schema.decodeUnknownSync(EntryBody)(String(row.body)),
       })),
   };
 });
@@ -456,8 +465,9 @@ const law = (body: (g: fc.GeneratorValue) => Effect.Effect<void, unknown, Scope.
   Effect.gen(function* () {
     // edge: fast-check owns the Promise callback; each generated run owns a fresh Effect scope.
     const property = fc.asyncProperty(fc.gen(), (g) => Effect.runPromise(Effect.scoped(body(g))));
+    const options = { seed: SEED, numRuns: runs, endOnFailure: true };
     // edge: fast-check answers its assertion through a Promise.
-    yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns: runs, endOnFailure: true }));
+    yield* Effect.tryPromise({ try: () => fc.assert(property, options), catch: rejected });
   });
 
 /** A walk over one booted Project: installs, failures made from the current source, starts and restarts. */
@@ -598,7 +608,7 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
 });
 
 // edge: the control boundary answers with a platform Response.
-const json = (response: Response) => Effect.promise(() => response.json());
+const json = (response: Response) => Effect.tryPromise({ try: (): Promise<unknown> => response.json(), catch: rejected });
 
 describe("P15 slice 1: the brain installs and selects code", () => {
   it.live(

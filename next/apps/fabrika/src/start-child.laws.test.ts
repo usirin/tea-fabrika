@@ -10,6 +10,7 @@ import { Recipient } from "@kampus/libfabrika/processes/Process";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
 import { Effect, Exit, Layer, Logger, ManagedRuntime, Result, Schema, Scope } from "effect";
+import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { assert, describe, expect, it, vi } from "vitest";
 import {
@@ -539,7 +540,7 @@ const storageCall = Effect.fnUntraced(function* (
       // The pause is a real one, since this law runs on the test clock, which never moves by itself.
       for (let tries = 0; fixture.undelivered() > 0; tries++) {
         expect(tries, "L11: the boot's own start is delivered before the migration").toBeLessThan(1000);
-        yield* Effect.promise(() => pause(5));
+        yield* TestClock.withLive(Effect.sleep("5 millis"));
       }
 
       fixture.legacyDescriptors();

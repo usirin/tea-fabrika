@@ -132,6 +132,9 @@ const poisonCode = built("poison");
 const requesterCode = built("requester");
 const responderCode = built("responder");
 
+/** A call on a Durable Object stub rejected. */
+class StubFailure extends Schema.TaggedError<StubFailure>()("StubFailure", { cause: Schema.Defect() }) {}
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-08T04:00:00.000Z";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -1136,9 +1139,10 @@ StartsTest.law(
           count++;
           expect(yield* Effect.promise(() => owner.object.open("settings-audit"))).toMatchObject({ view: { count } });
         } else if (move === "successor") {
-          yield* Effect.promise(() =>
-            owner.object.restart({ id: `settings-restart-${index}`, build: counterCode.hash }),
-          );
+          yield* Effect.tryPromise({
+            try: () => owner.object.restart({ id: `settings-restart-${index}`, build: counterCode.hash }),
+            catch: (cause) => new StubFailure({ cause }),
+          });
           const rows = yield* Effect.promise(() => w.project.info());
           const successor = rows.find((row) => row.name === first!.name)!;
           expect(successor.process).not.toBe(pid);

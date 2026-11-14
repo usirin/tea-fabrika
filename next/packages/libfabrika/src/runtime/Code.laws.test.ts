@@ -72,7 +72,10 @@ const step = (model: Model, msg: Msg): readonly [Model, ReadonlyArray<Cmd>] => {
   return [next, cmds as ReadonlyArray<Cmd>];
 };
 
-const roundTrip = (model: Model): unknown => JSON.parse(JSON.stringify(Schema.encodeSync(Code.Selected)(model)));
+/** The selection as stored: encoded to JSON text, then decoded back from that text. */
+const Stored = Schema.fromJsonString(Code.Selected);
+
+const roundTrip = (model: Model): Model => Schema.decodeUnknownSync(Stored)(Schema.encodeSync(Stored)(model));
 
 const hashes = fc.uint8Array({ minLength: 32, maxLength: 32 }).map((b) => Buffer.from(b).toString("hex"));
 const names = fc.stringMatching(/^[a-z_][a-z0-9-]{0,7}\/[a-z_][a-z0-9-]{0,7}$/);
@@ -214,7 +217,7 @@ describe("P15 slice 1: the brain's code per program", () => {
         const w = walk(programs, tape, (before, move, after, cmds, w) => {
           // The Model is legal and survives its own schema at every step.
           expect(Schema.is(Code.Selected)(after)).toBe(true);
-          expect(Schema.decodeUnknownSync(Code.Selected)(roundTrip(after))).toEqual(after);
+          expect(roundTrip(after)).toEqual(after);
           const { id, program, hash } = move.msg;
           const current = w.selected.get(program);
 

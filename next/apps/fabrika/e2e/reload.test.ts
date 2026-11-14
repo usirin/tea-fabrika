@@ -11,7 +11,7 @@
 // (`node next/apps/fabrika/e2e.ts`), one file at a time, never in a sandbox that refuses them.
 import { NodeServices } from "@effect/platform-node";
 import { build } from "@kampus/libfabrika/build";
-import { Effect, FileSystem, type Layer, Path, Schedule, type Scope, Stream } from "effect";
+import { Effect, FileSystem, type Layer, Path, Schedule, Schema, type Scope, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import { ChildProcess } from "effect/process";
@@ -42,15 +42,21 @@ declare global {
   }
 }
 
+/** A Playwright call rejected: the browser, its page or a script run in the page failed. */
+class BrowserFailure extends Schema.TaggedError<BrowserFailure>()("BrowserFailure", { cause: Schema.Defect() }) {}
+
+const browserCall = <A>(work: () => Promise<A>) =>
+  Effect.tryPromise({ try: work, catch: (cause) => new BrowserFailure({ cause }) });
+
 /** A browser with one page on the instance's own origin, given back with the scope. */
 const page = (url: string) =>
   Effect.gen(function* () {
     const browser = yield* Effect.acquireRelease(
-      Effect.promise(() => chromium.launch({ headless: true })),
-      (b) => Effect.promise(() => b.close()),
+      browserCall(() => chromium.launch({ headless: true })),
+      (b) => Effect.orDie(browserCall(() => b.close())),
     );
-    const p = yield* Effect.promise(() => browser.newContext().then((c) => c.newPage()));
-    yield* Effect.promise(() => p.goto(url));
+    const p = yield* browserCall(() => browser.newContext().then((c) => c.newPage()));
+    yield* browserCall(() => p.goto(url));
     return p;
   });
 
@@ -59,7 +65,7 @@ const page = (url: string) =>
  * IndexedDB, the signed hello, and JSON-RPC over the door's WebSocket. Answers `call`.
  */
 const driver = (p: Page, url: string, tab: string) =>
-  Effect.promise(() =>
+  browserCall(() =>
     p.evaluate(
       async ({ url, tab }) => {
         const bytes = (s: string) => new TextEncoder().encode(s);
@@ -136,6 +142,7 @@ const driver = (p: Page, url: string, tab: string) =>
               return;
             }
 
+            // oxlint-disable-next-line eslint/no-restricted-properties -- this runs inside the browser page, where Effect Schema is not loaded
             const frame = JSON.parse(String(data));
             frames.push(frame);
 
@@ -162,7 +169,7 @@ const driver = (p: Page, url: string, tab: string) =>
 
 /** One JSON-RPC call through the page's driver. */
 const rpc = (p: Page, method: string, params: unknown) =>
-  Effect.promise(() => p.evaluate(async ({ method, params }) => window.p15.call(method, params), { method, params }));
+  browserCall(() => p.evaluate(async ({ method, params }) => window.p15.call(method, params), { method, params }));
 
 /** The page's key, granted by the founder through grant.ts, as a person does it. */
 const grant = (p: Page, url: string, fingerprint: string, key: string) =>
@@ -192,7 +199,7 @@ const grant = (p: Page, url: string, fingerprint: string, key: string) =>
       }),
     );
     expect(Number(exitCode), `grant.ts client: ${printed}`).toBe(0);
-    yield* Effect.promise(() => p.waitForFunction(() => window.p15.frames.some((f) => f.method === "reinitialized")));
+    yield* browserCall(() => p.waitForFunction(() => window.p15.frames.some((f) => f.method === "reinitialized")));
   });
 
 /** Runs one law's world: every resource it acquired is given back when it ends. */
