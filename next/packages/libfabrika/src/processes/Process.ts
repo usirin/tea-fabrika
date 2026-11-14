@@ -418,6 +418,15 @@ export const inNoticeSpace = led("notice");
  */
 export const noticeId = (key: string): string => JSON.stringify(["notice", key]);
 
+/** The names the brain's own `registered` lines in `control` register, each once, in log order. */
+const registered = (control: ReadonlyArray<Entry>, by: string): ReadonlyArray<string> => [
+  ...new Set(
+    control
+      .filter((entry) => entry._tag === "registered" && entry.by === by)
+      .map((entry) => Schema.decodeUnknownSync(ProcessEvent.cases.registered)(valueFor(entry)).name),
+  ),
+];
+
 /**
  * Class that folds the ledger's process events into the current table of names, lives and
  * watches, and answers what a call on it would be allowed to do.
@@ -436,29 +445,52 @@ export class ProcessTable {
   static readonly stream = PROCESSES;
   static readonly events = eventStream;
   readonly #by: string;
+  readonly #machine: ReturnType<typeof processTableFor>;
   readonly #model: Model;
 
-  constructor(entries: Iterable<Entry>, by: string) {
+  /** Folds `entries`, oldest first, onto `base`'s table, or onto an empty one. */
+  constructor(entries: Iterable<Entry>, by: string, base?: ProcessTable) {
     this.#by = by;
-    const machine = processTableFor(by);
-    let model = machine.init(null, undefined)[0];
+    this.#machine = base === undefined ? processTableFor(by) : base.#machine;
+    let model = base === undefined ? this.#machine.init(null, undefined)[0] : base.#model;
 
     for (const entry of entries) {
-      model = applyCell(machine, model, { type: "recorded", entry })[0];
+      model = applyCell(this.#machine, model, { type: "recorded", entry })[0];
     }
 
     this.#model = model;
   }
 
+  /** The table folded from rev 0: the `processes` stream and every registered name's stream. */
   static read(read: (stream: string, after: number) => Iterable<Entry>, by: string): ProcessTable {
+    return new ProcessTable(ProcessTable.entries(read, by), by);
+  }
+
+  /** Every entry `read` folds from rev 0, oldest first. */
+  static entries(read: (stream: string, after: number) => Iterable<Entry>, by: string): ReadonlyArray<Entry> {
     const control = [...read(ProcessTable.stream, 0)];
-    const names = control
-      .filter((entry) => entry._tag === "registered" && entry.by === by)
-      .map((entry) => Schema.decodeUnknownSync(ProcessEvent.cases.registered)(valueFor(entry)).name);
-    return new ProcessTable(
-      [...control, ...names.flatMap((name) => [...read(eventStream(name), 0)])].sort((a, b) => a.rev - b.rev),
-      by,
+    return [...control, ...registered(control, by).flatMap((name) => [...read(eventStream(name), 0)])].sort(
+      (a, b) => a.rev - b.rev,
     );
+  }
+
+  /**
+   * The entries past the log rev `rev` this table has not folded, oldest first: the `processes`
+   * stream and each name this table knows past `rev`, and from rev 0 the stream of a name those new
+   * entries register, since its entries may sit below `rev`.
+   */
+  after(read: (stream: string, after: number) => Iterable<Entry>, rev: number): ReadonlyArray<Entry> {
+    const control = [...read(ProcessTable.stream, rev)];
+    const known = [...this.#model.names.keys()].flatMap((name) => [...read(eventStream(name), rev)]);
+    const fresh = registered(control, this.#by)
+      .filter((name) => !this.#model.names.has(name))
+      .flatMap((name) => [...read(eventStream(name), 0)]);
+    return [...control, ...known, ...fresh].sort((a, b) => a.rev - b.rev);
+  }
+
+  /** A new table with `entries` folded onto this one, oldest first; this table is unchanged. */
+  fold(entries: Iterable<Entry>): ProcessTable {
+    return new ProcessTable(entries, this.#by, this);
   }
 
   start(request: Start, caller: Caller, from: From): Result.Result<Option.Option<StartAnswer>, ProcessError> {

@@ -9,7 +9,7 @@
 import { Context, Effect, Layer, Option, Result, Schema, Stream } from "effect";
 import { type Ledger, type LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
-import { lineFor } from "../ledger/Log.ts";
+import { Entry, lineFor } from "../ledger/Log.ts";
 import type { Rev } from "../Rev.ts";
 import { short } from "../telemetry/Trace.ts";
 import { decodeExitReason, type ExitReason } from "./ExitReason.ts";
@@ -42,6 +42,9 @@ type Failure = ProcessError | LedgerError;
  * key. Every event this manager writes carries that `by`, and its fold trusts no other.
  */
 type Wiring = Caller & { readonly by: string };
+/** A folded process table, the log rev it was folded through, and the entry at that rev, if any. */
+type Folded = { readonly table: ProcessTable; readonly rev: Rev; readonly entry: Entry | undefined };
+const sameEntry = Schema.toEquivalence(Entry);
 
 const failed = Effect.fnUntraced(function* (error: Failure) {
   yield* Effect.annotateCurrentSpan({ [tag("answer")]: "refused", [tag("reason")]: error.reason });
@@ -137,7 +140,62 @@ export class ProcessManager extends Context.Service<
       ProcessManager,
       Effect.gen(function* () {
         const tx = yield* LedgerTransaction;
-        const fold = (turn: LedgerTurn) => ProcessTable.read(turn.read, caller.by);
+        // The table this layer last folded from committed entries, and the log rev it was folded
+        // through: a read model of the ledger, kept in memory for the layer's life, as an informer's
+        // cache. Only a fold made before its own turn appends anything replaces it, so a turn that
+        // rolls back never reaches it.
+        let folded: Folded | undefined;
+        const fromZero = (turn: LedgerTurn): Folded => {
+          const entries = ProcessTable.entries(turn.read, caller.by);
+          const entry = entries.at(-1);
+          return { table: new ProcessTable(entries, caller.by), rev: entry?.rev ?? 0, entry };
+        };
+        // Folds only the entries past the saved rev, or from rev 0 when the saved point no longer
+        // fits the ledger. Every answer is the one a fold from rev 0 gives.
+        const forward = (turn: LedgerTurn): Folded => {
+          if (folded === undefined) {
+            return fromZero(turn);
+          }
+
+          const { table, rev, entry } = folded;
+          let read = turn.read;
+
+          // The guard: the entry at the saved rev is still there and the same. A rollback or a
+          // rewrite below the saved rev fails it, and the table is folded again from rev 0. The
+          // same read gives that stream's new entries, so the guard costs no extra query.
+          if (entry !== undefined) {
+            const [kept, ...rest] = turn.read(entry.stream, rev - 1);
+
+            if (kept === undefined || !sameEntry(kept, entry)) {
+              return fromZero(turn);
+            }
+
+            read = (stream, after) => (stream === entry.stream && after === rev ? rest : turn.read(stream, after));
+          }
+
+          const fresh = table.after(read, rev);
+          const [oldest] = fresh;
+          const last = fresh.at(-1);
+
+          if (oldest === undefined || last === undefined) {
+            return folded;
+          }
+
+          // A name the new entries register may have entries below the saved rev; folding them after
+          // the saved table would break log order, so the table is folded again from rev 0.
+          if (oldest.rev <= rev) {
+            return fromZero(turn);
+          }
+
+          return { table: table.fold(fresh), rev: last.rev, entry: last };
+        };
+        // The table inside a turn that may already have appended: folded forward, never saved.
+        const fold = (turn: LedgerTurn) => forward(turn).table;
+        // The table at the start of a turn, before it appends: folded forward and saved.
+        const committed = (turn: LedgerTurn) => {
+          folded = forward(turn);
+          return folded.table;
+        };
         // The brain writes every line here; `from` keeps the call's person, parent and trace, and
         // `asked` keeps the caller's own key. The fold trusts `by` alone and never reads `asked`.
         const line = (from: From, event: Parameters<typeof lineFor>[1]) =>
@@ -145,7 +203,7 @@ export class ProcessManager extends Context.Service<
         const checked = Effect.fnUntraced(function* <A>(
           step: (table: ProcessTable, turn: LedgerTurn) => Result.Result<A, ProcessError>,
         ) {
-          return yield* Effect.fromResult(yield* tx.transact((turn) => step(fold(turn), turn)));
+          return yield* Effect.fromResult(yield* tx.transact((turn) => step(committed(turn), turn)));
         });
         const signal = (
           table: ProcessTable,
@@ -410,7 +468,7 @@ export class ProcessManager extends Context.Service<
             }).pipe(Effect.tapError(failed)),
           ).pipe(Stream.withSpan("process.receive"));
         const info = Effect.fn("process.info")(function* () {
-          return yield* tx.transact((turn) => fold(turn).info);
+          return yield* tx.transact((turn) => committed(turn).info);
         });
         return {
           resolve: Effect.fn("process.resolve")(function* (process: string) {
@@ -460,7 +518,7 @@ export class ProcessManager extends Context.Service<
           table: fold,
           info: info(),
           isLive: Effect.fn("process.isLive")(function* (process: string) {
-            return yield* tx.transact((turn) => fold(turn).isLive(process));
+            return yield* tx.transact((turn) => committed(turn).isLive(process));
           }),
         };
       }),
