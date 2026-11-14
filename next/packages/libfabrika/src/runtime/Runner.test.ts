@@ -3014,7 +3014,7 @@ describe("P11 recovery gaps and durable installation", () => {
     }),
   );
   it.live(
-    "S3 plant, replace without recording: a successful wake upgrade records ran and the checkpoint's build (L6)",
+    "S3 scenario: one v1 checkpoint woken by a v3 build; a successful wake upgrade records ran and the checkpoint's build (L6), which the plant that replaces without recording breaks",
     () =>
       onDisks(async (world) => {
         const w = await world({ build: "new-build" });
