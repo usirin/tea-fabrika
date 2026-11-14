@@ -566,8 +566,21 @@ describe("P15 slice 1: hot reload on the real instance", () => {
                 }
               }
 
+              // The plan's L17 row: the path is repo-relative. A bundle error names the file it is in,
+              // which may be a file the program imports, so the path lies in the program's folder.
+              const folder = copy.relative.slice(0, copy.relative.indexOf("/") + 1);
+
               for (const fact of facts.filter((e) => e._tag === "code.failed" && e.body.path !== undefined)) {
-                expect(fact.body.path).toBe(copy.relative);
+                const named = String(fact.body.path);
+                const relative =
+                  !named.startsWith("/") &&
+                  !/^[A-Za-z]:/.test(named) &&
+                  !named.split(/[/\\]/).includes("..") &&
+                  !named.includes(copy.home);
+                expect(
+                  relative && named.startsWith(folder),
+                  `code.failed's path is repo-relative and inside ${folder}: ${named}`,
+                ).toBe(true);
               }
             }
 
