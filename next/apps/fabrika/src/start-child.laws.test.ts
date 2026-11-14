@@ -22,11 +22,14 @@ import {
   SENT,
 } from "./start-child.test-support.ts";
 
+// Each built-in program's hash is the SHA-256 of its source, as `BuiltProgram` requires.
+const CODE = vi.hoisted(() => ({
+  counter: { hash: "efe899c74558f20b08bbc19bf0228c0c25bddb7871d80bd34ac8b33c030b3698", source: "counter" },
+  child: { hash: "ddc9e669194254cef019a29d3619a2c16592e5d52e1a81e98b01bd52319149a3", source: "child" },
+}));
+
 vi.mock("virtual:fabrika-built", () => ({
-  programs: {
-    "fabrika/counter": { hash: "counter-test", source: "counter" },
-    "p42/child": { hash: "child-test", source: "child" },
-  },
+  programs: { "fabrika/counter": CODE.counter, "p42/child": CODE.child },
   assets: {},
 }));
 
@@ -271,7 +274,7 @@ const projectSecrets = Effect.fnUntraced(function* (
   let child = {
     id: `${project.boot.process}/1/0`,
     name: "child:secret",
-    code: { program: "p42/child", hash: "child-test" },
+    code: { program: "p42/child", hash: CODE.child.hash },
     requester: Recipient.cases.process.make({ process: project.boot.process }),
     input: { type: "inc" },
   };
@@ -488,7 +491,7 @@ const storageCall = Effect.fnUntraced(function* (
   const child = {
     id: `${project.boot.process}/1/0`,
     name: "child:storage",
-    code: { program: "p42/child", hash: "child-test" },
+    code: { program: "p42/child", hash: CODE.child.hash },
     requester: Recipient.cases.process.make({ process: project.boot.process }),
     input: { type: "inc" },
   };
@@ -524,6 +527,15 @@ const storageCall = Effect.fnUntraced(function* (
     rev = started.value.rev;
 
     if (path === "migration") {
+      // A table from before the pending column held delivered starts only: each start was
+      // configured before it answered. The boot's own start is delivered after the build (ticket
+      // 762), so wait for it, or the migration would mark an undelivered start as delivered.
+      // The pause is a real one, since this law runs on the test clock, which never moves by itself.
+      for (let tries = 0; fixture.undelivered() > 0; tries++) {
+        expect(tries, "L11: the boot's own start is delivered before the migration").toBeLessThan(1000);
+        yield* Effect.promise(() => pause(5));
+      }
+
       fixture.legacyDescriptors();
       yield* reopen;
     }
@@ -746,7 +758,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
           const child = {
             id: `${boot}/1/0`,
             name: "child:cut",
-            code: { program: "p42/child", hash: "child-test" },
+            code: { program: "p42/child", hash: CODE.child.hash },
             requester: Recipient.cases.process.make({ process: boot }),
             input: { type: "inc" },
           };
@@ -779,7 +791,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
                 id: Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(committed[0]?.body).process,
                 name: child.name,
                 program: "p42/child",
-                build: "child-test",
+                build: CODE.child.hash,
                 owner: fixture.configured[0]?.descriptor.owner,
               },
               wake: true,

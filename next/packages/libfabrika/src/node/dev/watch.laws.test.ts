@@ -16,7 +16,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, FileSystem, Option, Path, Queue, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 import { expectTypeOf } from "vitest";
 import type * as Dev from "./dev.ts";
 import { watchPrograms } from "./watch.ts";
@@ -284,9 +284,13 @@ describe("P15 slice 1: the watcher", () => {
                   ? { _tag: "loaded", program: selected.name }
                   : { _tag: "failed", reason: move === "syntax" ? "bundle" : "compiler" },
               );
-              const rebuilds = spans.filter((span) => span.name === "watch.rebuild");
-              expect(rebuilds).toHaveLength(1);
-              const span = rebuilds[0]!;
+              // Rolldown may already have sent a second START to END cycle for the same bytes: macOS
+              // reports the write above after the watcher starts. The plan lets a repeated event
+              // rebuild and absorbs it as `same`, so the first span is the answer's, and the count
+              // of rebuilds that changed anything is checked below, once every repeat has ended.
+              const rebuilds = () => spans.filter((span) => span.name === "watch.rebuild");
+              const span = rebuilds()[0];
+              assert(span !== undefined, "the answered rebuild recorded its span");
               expect(span.status._tag).toBe("Ended");
               expect(span.attributes.get("program")).toBe(selected.name);
               expect(span.attributes.get("outcome")).toBe(answer._tag);
@@ -328,6 +332,24 @@ describe("P15 slice 1: the watcher", () => {
                     _tag: "same",
                   });
                 }
+              }
+
+              yield* Effect.sleep("20 millis").pipe(
+                Effect.repeat({ until: () => rebuilds().every((rebuild) => rebuild.status._tag === "Ended") }),
+                Effect.timeoutOrElse({
+                  duration: "10 seconds",
+                  orElse: () => Effect.die(new Error("a repeated rebuild never ended")),
+                }),
+              );
+              expect(rebuilds().length, "the repeated notifications reached the watcher").toBeGreaterThan(1);
+              expect(
+                rebuilds().filter((rebuild) => rebuild.attributes.get("outcome") !== "same"),
+                "one save records exactly one rebuild that changed or failed; every repeat records `same`",
+              ).toEqual([span]);
+
+              for (const rebuild of rebuilds()) {
+                expect(rebuild.attributes.get("program")).toBe(selected.name);
+                expect(Number(rebuild.attributes.get("ms"))).toBeGreaterThanOrEqual(0);
               }
 
               seen.add(move);

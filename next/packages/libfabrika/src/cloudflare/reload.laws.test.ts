@@ -21,7 +21,20 @@
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Context, Deferred, Effect, Exit, Fiber, Layer, Option, Redacted, Schedule, Schema, Scope } from "effect";
+import {
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Logger,
+  Option,
+  Redacted,
+  Schedule,
+  Schema,
+  Scope,
+} from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf, vi } from "vitest";
 import { lineFor } from "../ledger/Log.ts";
@@ -140,6 +153,10 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
   const descriptors = new Map<string, Pick<Descriptor, "id" | "name" | "build" | "program">>();
   const running = new Map<string, string>();
   const refusing = new Set<string>();
+  /** Names whose object cannot be reached: a start to one is saved by the Project and stays pending. */
+  const unreachable = new Set<string>();
+  /** A delivery to a name waits on its gate, as a `configure` still on its way. */
+  const configureGates = new Map<string, Effect.Effect<void>>();
   /** Every call on every isolate, by its Worker Loader id. */
   const isolates = new Map<string, Array<string>>();
   const sources = new Map<string, string>([[builtHash, source]]);
@@ -174,6 +191,16 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
         const [, name] = JSON.parse(key) as [string, string];
         return {
           configure: async (d: Pick<Descriptor, "id" | "name" | "build" | "program">) => {
+            if (unreachable.has(name)) {
+              throw new Error("the Process object is unreachable");
+            }
+
+            const gate = configureGates.get(name);
+
+            if (gate !== undefined) {
+              await Effect.runPromise(gate);
+            }
+
             descriptors.set(name, d);
 
             if (!running.has(d.id)) {
@@ -330,6 +357,8 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
     descriptors,
     running,
     refusing,
+    unreachable,
+    configureGates,
     policy: (pid: string) => Effect.suspend(() => doorPolicy(pid)),
     isolates,
     sources,
@@ -611,6 +640,138 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             }
           }),
         100,
+      ),
+    300_000,
+  );
+
+  // L4, lost push (A-Boot-Push), with ticket 762's pending starts. Plant: push the boot's swap to a
+  // start before it is delivered; drop a failed boot swap without a log line.
+  it.live(
+    "L4: a start still pending at boot is delivered and then swapped to the selected code exactly once, and a swap that fails at boot is logged with its process and healed by the next boot",
+    () =>
+      law(
+        (g) =>
+          Effect.gen(function* () {
+            const i = yield* instance(baseFixture());
+            const start = (name: string) =>
+              i.run(
+                i.p.start(
+                  Start.cases.first.make({ id: `start:${name}`, name, code: { program: PROGRAM, hash: i.builtHash } }),
+                  origin,
+                ),
+              );
+            // Starts the Project saved while their objects could not be reached: each stays pending.
+            const late = Array.from({ length: g(fc.integer, { min: 1, max: 3 }) }, (_, n) => `late:${n}`);
+
+            for (const name of late) {
+              i.unreachable.add(name);
+              expect(Exit.isFailure(yield* Effect.exit(start(name))), `${name}'s start is not delivered`).toBe(true);
+            }
+
+            for (let n = g(fc.integer, { min: 0, max: 2 }); n > 0; n--) {
+              yield* start(`ready:${n}`);
+            }
+
+            // Saves that land while those starts are pending. An install may fail on a pending
+            // object; the selection it wrote is what every process must reach.
+            let current = baseFixture();
+            let selected = i.builtHash;
+
+            for (let n = g(fc.integer, { min: 1, max: 3 }); n > 0; n--) {
+              current = { ...current, k: current.k + g(fc.integer, { min: 1, max: 9 }) };
+              yield* Effect.exit(install(i, `pending_save_${n}`, current));
+              selected = yield* hash(sourceFor(current));
+            }
+
+            expect(code(i).at(-1)?.body.hash, "the last save is selected").toBe(selected);
+            // Every process the Project holds, read from its own table: a pending start has no object yet.
+            const held = () =>
+              i.db
+                .prepare("SELECT process, value FROM dev_descriptors")
+                .all()
+                .map((row) => ({
+                  pid: String(row["process"]),
+                  name: Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ name: Schema.String })))(
+                    row["value"],
+                  ).name,
+                }));
+            const behind = () => held().filter(({ pid }) => i.running.get(pid) !== selected);
+            const settled = (done: () => boolean, label: string) =>
+              Effect.suspend(() => (done() ? Effect.void : Effect.fail(label))).pipe(
+                Effect.retry(Schedule.spaced("5 millis")),
+                Effect.timeoutOrElse({ duration: "5 seconds", orElse: () => Effect.die(new Error(label)) }),
+              );
+            const lines: Array<string> = [];
+            const logged = Logger.layer([
+              Logger.make((options) => {
+                lines.push(Logger.formatJson.log(options));
+              }),
+            ]);
+            i.unreachable.clear();
+            const left = behind();
+            expect(
+              left.map(({ name }) => name),
+              "every pending start is behind the selection",
+            ).toEqual(expect.arrayContaining(late));
+            const down = g(fc.boolean);
+
+            if (down) {
+              // Every swap of this boot fails. Each process left behind is named in a log line.
+              i.swapGates.set(selected, Effect.die("the swap did not arrive"));
+            }
+
+            // The boot's deliveries are held on their way, so its swaps have time to overtake them.
+            const entered = yield* Deferred.make<void>();
+            const release = yield* Deferred.make<void>();
+
+            for (const name of late) {
+              i.configureGates.set(
+                name,
+                Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release))),
+              );
+            }
+
+            const before = i.completed.length;
+            const pushes = i.pushed.length;
+            const restarting = yield* Effect.forkScoped(i.restart.pipe(Effect.provide(logged)));
+            yield* Deferred.await(entered).pipe(
+              Effect.timeoutOrElse({
+                duration: "5 seconds",
+                orElse: () => Effect.die(new Error("the boot never sent a pending start to its object")),
+              }),
+            );
+            yield* Effect.sleep("30 millis");
+            expect(
+              i.pushed
+                .slice(pushes)
+                .filter((p) => late.includes(p.name))
+                .map((p) => p.name),
+              "no swap reaches a start before its delivery",
+            ).toEqual([]);
+            yield* Deferred.succeed(release, undefined);
+            yield* Fiber.join(restarting);
+            i.configureGates.clear();
+
+            if (down) {
+              yield* settled(
+                () => left.every(({ pid }) => lines.some((line) => line.includes(pid))),
+                "a failed boot swap left no log line for its process",
+              );
+              expect(behind(), "a failed swap leaves each process on its old code").toEqual(left);
+              i.swapGates.delete(selected);
+              yield* i.restart;
+            }
+
+            yield* settled(() => behind().length === 0, "a process stayed on its old code after the boot");
+            expect(
+              i.completed
+                .slice(before)
+                .map((p) => [p.name, p.hash])
+                .toSorted(),
+              "each process behind the selection is swapped once, a start pending at boot after its delivery",
+            ).toEqual(left.map(({ name }) => [name, selected]).toSorted());
+          }),
+        50,
       ),
     300_000,
   );
