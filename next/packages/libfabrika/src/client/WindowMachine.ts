@@ -589,6 +589,16 @@ const shook = (s: WindowModel, m: HandshakeIn): Step => {
     ];
   }
 
+  // The door's reason exists only in its answer, so the refusal is written the moment it comes. The
+  // Link keeps its own stall and backoff path, so a passing refusal heals on its own.
+  if (handshake._tag === "refused" && s.handshake._tag !== "refused") {
+    const { dial, reason, ms } = handshake;
+    return [
+      next,
+      [...sent, record({ record: ClientRecord.cases.connect.make({ dial, result: "refused", reason, ms }) })],
+    ];
+  }
+
   const told = outcome(s.handshake, handshake, s.fingerprint ?? "");
 
   if (told === null) {
@@ -620,6 +630,7 @@ const answerTo = (
   result: unknown,
   ms: number,
   fingerprint: string,
+  handshake: Handshake,
 ): ReadonlyArray<OwnerMsg> => {
   switch (call) {
     case "read":
@@ -638,11 +649,15 @@ const answerTo = (
         onSome: (value) => [{ type: "send_ok", ...on, value, ms }],
       });
     case "knock":
-      // A renewed knock keeps or renews the code the Link shows.
+      // A renewed knock keeps or renews the code the Link shows, but only while the handshake still
+      // waits on its dial: the handshake decides whether the reply is current. After a grant it is
+      // stale, and only its flight settles.
       return Option.match(Schema.decodeUnknownOption(WaitingCode)(result), {
         onNone: () => [],
         onSome: (w) => [
-          { type: "not_granted", dial: on.dial, fingerprint, ...w, ms },
+          ...(handshake._tag === "waiting" && handshake.dial === on.dial
+            ? [{ type: "not_granted" as const, dial: on.dial, fingerprint, ...w, ms }]
+            : []),
           { type: "knock_ok", ...on, value: null, ms },
         ],
       });
@@ -696,7 +711,7 @@ const frameIn = (s: WindowModel, m: Frame, own: (s: WindowModel, msg: OwnerMsg) 
     const tag = flight.call._tag;
     const msgs: ReadonlyArray<OwnerMsg> =
       frame.error === undefined
-        ? answerTo(tag, on, frame.result, m.ms ?? 0, s.fingerprint ?? "")
+        ? answerTo(tag, on, frame.result, m.ms ?? 0, s.fingerprint ?? "", s.handshake)
         : [
             {
               type: `${tag}_err`,
