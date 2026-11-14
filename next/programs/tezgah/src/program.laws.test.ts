@@ -31,8 +31,14 @@
 //   `no_workspace` for any `did` while tezgah has no workspace at all. A refusal changes nothing.
 //
 // Every law walks: each move is picked from what is possible in the state the walk folded, such as a
-// split from a live tile, an answer to a start that is really waiting, or a close of a live tile. A
-// tile with a split waiting on its start is not closed here: what such a close does is not decided.
+// split from a live tile, an answer to a start that is really waiting, or a close of a live tile.
+//
+// Plan amendment, 2026-11-14 (after S2a's tests step), two cases the walk now reaches on purpose:
+// - L6: a close of the tile a waiting split is placed at, before its `start_child` answers. On the
+//   answer the new tile goes after the workspace's focused tile, with half of that tile's share, in
+//   the split's direction; the started process is never lost: the tile shows it.
+// - L9: an `attach` of a workspace that already exists changes nothing: it is taken, not refused,
+//   and the view, the model and the Cmds stay as they were.
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { type Stepper, stepper } from "@kampus/libfabrika";
@@ -145,7 +151,15 @@ type Cmd = { readonly type: string; readonly [key: string]: unknown };
 
 type Waiting =
   | { readonly _tag: "attach"; readonly workspace: number; readonly tile: string; readonly cmd: Cmd }
-  | { readonly _tag: "split"; readonly from: string; readonly tile: string; readonly dir: Dir; readonly cmd: Cmd };
+  | {
+      readonly _tag: "split";
+      readonly from: string;
+      readonly tile: string;
+      readonly dir: Dir;
+      readonly cmd: Cmd;
+      /** The workspace `from` was on when the split was asked. */
+      readonly space: string;
+    };
 
 type Dir = "right" | "down";
 const DOES = { right: "tezgah.split_right", down: "tezgah.split_down" } as const;
@@ -220,7 +234,18 @@ const started = (cmd: Cmd, kind: "started" | "already_started", w: World) => {
     : { _tag: "already_started", process, name: cmd["name"] };
 };
 
-type Kind = "attach" | "split_right" | "split_down" | "close" | "answer" | "refuse" | "stop" | "reused" | "unknown";
+type Kind =
+  | "attach"
+  | "reattach"
+  | "split_right"
+  | "split_down"
+  | "close"
+  | "close_waiting"
+  | "answer"
+  | "refuse"
+  | "stop"
+  | "reused"
+  | "unknown";
 
 /** One move of `kind`, picked from what is possible in `w`, or null when nothing of that kind is. */
 const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
@@ -264,7 +289,9 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
       const tile = typeId("tile", w.next++);
       const e = take(p, w, { type: "did", does: DOES[dir], from, via, tile }, false);
       const cmd = starts(e.cmds)[0];
-      const waiting: Waiting | undefined = cmd === undefined ? undefined : { _tag: "split", from, tile, dir, cmd };
+      const space = spaceWith(w.view, from)?.id ?? "";
+      const waiting: Waiting | undefined =
+        cmd === undefined ? undefined : { _tag: "split", from, tile, dir, cmd, space };
 
       if (waiting !== undefined) {
         w.waiting.push(waiting);
@@ -273,8 +300,22 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
       return { move: `split ${dir} ${from} -> ${tile}`, ...e, from, ...(waiting === undefined ? {} : { waiting }) };
     }
 
+    case "reattach": {
+      const n = w.view.workspaces[pick % Math.max(w.view.workspaces.length, 1)]?.n;
+
+      if (n === undefined) {
+        return null;
+      }
+
+      return {
+        move: `reattach ${n}`,
+        ...take(p, w, { type: "attach", workspace: n, tile: typeId("tile", w.next++) }, false),
+      };
+    }
+
+    case "close_waiting":
     case "close": {
-      const free = tiles.filter((t) => !pending.has(t));
+      const free = tiles.filter((t) => (kind === "close") !== pending.has(t));
       const from = free[pick % Math.max(free.length, 1)];
 
       if (from === undefined) {
@@ -400,108 +441,121 @@ const loaded = async () => {
 describe("Desk S2a: tezgah's layout changes, at the program", () => {
   it("L6: a split puts the new tile after the focused one with half its share, and focus moves to it, only after start_child_ok", async () => {
     const p = await loaded();
-    const seen = { asked: 0, dropped: 0, placed: 0, attached: 0 };
+    const seen = { asked: 0, dropped: 0, placed: 0, attached: 0, rehomed: 0 };
     fc.assert(
-      fc.property(tape(["split_right", "split_down", "answer", "refuse", "attach", "close"], 40), (cmds) => {
-        const events = walk(p, cmds);
-        expect(
-          events.slice(0, 2).map((e) => [e.result._tag, starts(e.cmds).length, live(e.after).length]),
-          "L6: each walk's attach asks for one start and shows nothing, and its answer makes workspace 1's one tile",
-        ).toEqual([
-          ["stepped", 1, 0],
-          ["stepped", 0, 1],
-        ]);
+      fc.property(
+        tape(
+          ["split_right", "split_down", "answer", "refuse", "attach", "close", "close_waiting", "close_waiting"],
+          40,
+        ),
+        (cmds) => {
+          const events = walk(p, cmds);
+          expect(
+            events.slice(0, 2).map((e) => [e.result._tag, starts(e.cmds).length, live(e.after).length]),
+            "L6: each walk's attach asks for one start and shows nothing, and its answer makes workspace 1's one tile",
+          ).toEqual([
+            ["stepped", 1, 0],
+            ["stepped", 0, 1],
+          ]);
 
-        for (const e of events) {
-          if (e.move.startsWith("split") && e.waiting !== undefined) {
-            seen.asked++;
-            expect(e.result._tag, `L6: ${e.move} is taken`).toBe("stepped");
-            expect(e.after, `L6: ${e.move} changes no view before its start answers`).toEqual(e.before);
-            expect(starts(e.cmds), `L6: ${e.move} asks for one start`).toHaveLength(1);
-            expect(live(e.after), `L6: ${e.move}'s tile is not on any workspace yet`).not.toContain(e.waiting.tile);
-          }
-
-          if (e.waiting?._tag === "split" && e.answer === "refused") {
-            seen.dropped++;
-            expect(e.after, `L6: ${e.move} drops the split and changes nothing`).toEqual(e.before);
-          }
-
-          if (e.waiting?._tag === "split" && e.answer === "started") {
-            seen.placed++;
-            const { from, tile, dir, cmd } = e.waiting;
-            const was = spaceWith(e.before, from);
-            const now = spaceWith(e.after, tile);
-            expect(was, `L6: ${from} was on a workspace`).toBeDefined();
-            expect(now?.id, `L6: ${tile} joins ${from}'s workspace`).toBe(was?.id);
-            const old = rects(was!.layout);
-            const fresh = rects(now!.layout);
-            const r = old.get(from)!;
-            const half =
-              dir === "right"
-                ? { kept: { ...r, w: r.w / 2 }, made: { ...r, x: r.x + r.w / 2, w: r.w / 2 } }
-                : { kept: { ...r, h: r.h / 2 }, made: { ...r, y: r.y + r.h / 2, h: r.h / 2 } };
-            near(fresh.get(from), half.kept, `L6: ${from} keeps the first half after a split ${dir}`);
-            near(fresh.get(tile), half.made, `L6: ${tile} takes the second half, after ${from}`);
-
-            for (const [other, rect] of old) {
-              if (other !== from) {
-                near(fresh.get(other), rect, `L6: ${other} keeps its place`);
-              }
+          for (const e of events) {
+            if (e.move.startsWith("split") && e.waiting !== undefined) {
+              seen.asked++;
+              expect(e.result._tag, `L6: ${e.move} is taken`).toBe("stepped");
+              expect(e.after, `L6: ${e.move} changes no view before its start answers`).toEqual(e.before);
+              expect(starts(e.cmds), `L6: ${e.move} asks for one start`).toHaveLength(1);
+              expect(live(e.after), `L6: ${e.move}'s tile is not on any workspace yet`).not.toContain(e.waiting.tile);
             }
 
-            const shown = order(now!.layout);
-            expect(shown.indexOf(tile), `L6: ${tile} follows ${from} in reading order`).toBe(shown.indexOf(from) + 1);
-            expect(now?.focus, "L6: focus moves to the new tile").toBe(tile);
-            expect(now?.recent[0], "L6: the new tile is the newest in recent").toBe(tile);
-            const made = e.after.tiles.find((t) => t.id === tile);
-            expect(made, "L6: the new tile shows the started process, as tezgah's child, with no cursor").toMatchObject(
-              {
+            if (e.waiting?._tag === "split" && e.answer === "refused") {
+              seen.dropped++;
+              expect(e.after, `L6: ${e.move} drops the split and changes nothing`).toEqual(e.before);
+            }
+
+            if (e.waiting?._tag === "split" && e.answer === "started") {
+              seen.placed++;
+              const { tile, dir, cmd } = e.waiting;
+              const was = e.before.workspaces.find((s) => s.id === e.waiting?.space);
+              // Plan amendment (a): a split whose tile was closed while its start waited is placed
+              // after the workspace's focused tile instead.
+              const gone = !live(e.before).includes(e.waiting.from);
+              seen.rehomed += gone ? 1 : 0;
+              const from = gone ? was!.focus : e.waiting.from;
+              const now = spaceWith(e.after, tile);
+              expect(was, `L6: ${e.waiting.from}'s workspace is still there`).toBeDefined();
+              expect(now?.id, `L6: ${tile} joins the split's workspace, never lost`).toBe(was?.id);
+              const old = rects(was!.layout);
+              const fresh = rects(now!.layout);
+              const r = old.get(from)!;
+              const half =
+                dir === "right"
+                  ? { kept: { ...r, w: r.w / 2 }, made: { ...r, x: r.x + r.w / 2, w: r.w / 2 } }
+                  : { kept: { ...r, h: r.h / 2 }, made: { ...r, y: r.y + r.h / 2, h: r.h / 2 } };
+              near(fresh.get(from), half.kept, `L6: ${from} keeps the first half after a split ${dir}`);
+              near(fresh.get(tile), half.made, `L6: ${tile} takes the second half, after ${from}`);
+
+              for (const [other, rect] of old) {
+                if (other !== from) {
+                  near(fresh.get(other), rect, `L6: ${other} keeps its place`);
+                }
+              }
+
+              const shown = order(now!.layout);
+              expect(shown.indexOf(tile), `L6: ${tile} follows ${from} in reading order`).toBe(shown.indexOf(from) + 1);
+              expect(now?.focus, "L6: focus moves to the new tile").toBe(tile);
+              expect(now?.recent[0], "L6: the new tile is the newest in recent").toBe(tile);
+              const made = e.after.tiles.find((t) => t.id === tile);
+              expect(
+                made,
+                "L6: the new tile shows the started process, as tezgah's child, with no cursor",
+              ).toMatchObject({
                 shows: cmd["name"],
                 program: cmd["program"],
                 child: true,
                 cursor: null,
-              },
-            );
-            expect(new Set(e.after.tiles.map((t) => t.n)).size, "L6: each tile has its own t<n>").toBe(
-              e.after.tiles.length,
-            );
+              });
+              expect(new Set(e.after.tiles.map((t) => t.n)).size, "L6: each tile has its own t<n>").toBe(
+                e.after.tiles.length,
+              );
 
-            for (const space of e.after.workspaces) {
-              if (space.id !== now?.id) {
-                expect(space, "L6: another workspace is untouched").toEqual(
-                  e.before.workspaces.find((s) => s.id === space.id),
-                );
+              for (const space of e.after.workspaces) {
+                if (space.id !== now?.id) {
+                  expect(space, "L6: another workspace is untouched").toEqual(
+                    e.before.workspaces.find((s) => s.id === space.id),
+                  );
+                }
               }
             }
-          }
 
-          if (e.waiting?._tag === "attach" && e.answer !== undefined && e.answer !== "refused") {
-            seen.attached++;
-            const space = e.after.workspaces.find((s) => s.n === e.waiting?.workspace);
-            expect(space, "L6: an attach's answer makes its workspace with its one tile, focused").toMatchObject({
-              layout: e.waiting.tile,
-              focus: e.waiting.tile,
-              recent: [e.waiting.tile],
-            });
-            expect(
-              e.after.tiles.find((t) => t.id === e.waiting?.tile),
-              "L6: the first tile shows its start",
-            ).toMatchObject({
-              shows: e.waiting.cmd["name"],
-              child: e.answer === "started",
-            });
-          }
+            if (e.waiting?._tag === "attach" && e.answer !== undefined && e.answer !== "refused") {
+              seen.attached++;
+              const space = e.after.workspaces.find((s) => s.n === e.waiting?.workspace);
+              expect(space, "L6: an attach's answer makes its workspace with its one tile, focused").toMatchObject({
+                layout: e.waiting.tile,
+                focus: e.waiting.tile,
+                recent: [e.waiting.tile],
+              });
+              expect(
+                e.after.tiles.find((t) => t.id === e.waiting?.tile),
+                "L6: the first tile shows its start",
+              ).toMatchObject({
+                shows: e.waiting.cmd["name"],
+                child: e.answer === "started",
+              });
+            }
 
-          if (e.result._tag === "stepped") {
-            expect([...e.after.tiles.map((t) => t.id)].sort(), `${e.move}: the tiles are the layouts' tiles`).toEqual(
-              [...live(e.after)].sort(),
-            );
+            if (e.result._tag === "stepped") {
+              expect([...e.after.tiles.map((t) => t.id)].sort(), `${e.move}: the tiles are the layouts' tiles`).toEqual(
+                [...live(e.after)].sort(),
+              );
+            }
           }
-        }
-      }),
+        },
+      ),
       { seed: SEED, numRuns: 200 },
     );
-    // Every case of the law was walked: a split asked, refused, placed, and a workspace attached.
+    // Every case of the law was walked: a split asked, refused, placed, placed after the focused
+    // tile once its own tile closed (plan amendment (a)), and a workspace attached.
     expect(
       Object.values(seen).every((n) => n > 0),
       `L6: the walks reached every case ${JSON.stringify(seen)}`,
@@ -512,43 +566,46 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
     const p = await loaded();
     const seen = { last: 0, heir: 0, kept: 0 };
     fc.assert(
-      fc.property(tape(["close", "close", "split_right", "split_down", "answer", "answer", "attach"], 40), (cmds) => {
-        for (const e of walk(p, cmds)) {
-          if (!e.move.startsWith("close") || e.from === undefined) {
-            continue;
+      fc.property(
+        tape(["close", "close", "close_waiting", "split_right", "split_down", "answer", "answer", "attach"], 40),
+        (cmds) => {
+          for (const e of walk(p, cmds)) {
+            if (!e.move.startsWith("close") || e.from === undefined) {
+              continue;
+            }
+
+            const space = spaceWith(e.before, e.from)!;
+            const was = order(space.layout);
+
+            if (was.length === 1) {
+              seen.last++;
+              expect(e.result, "L7: the last tile of a workspace never closes").toEqual({
+                _tag: "refused",
+                reason: "last_tile",
+              });
+              expect(e.after, "L7: a refused close changes nothing").toEqual(e.before);
+              continue;
+            }
+
+            expect(e.result._tag, `L7: ${e.move} is taken`).toBe("stepped");
+            const now = e.after.workspaces.find((s) => s.id === space.id)!;
+            expect(order(now.layout), `L7: ${e.from} leaves and the rest keep their order`).toEqual(
+              was.filter((t) => t !== e.from),
+            );
+            const i = was.indexOf(e.from);
+            const heir = was[i + 1] ?? was[i - 1];
+            seen[space.focus === e.from ? "heir" : "kept"]++;
+            expect(now.focus, "L7: focus goes to the next open tile in reading order, else the one before").toBe(
+              space.focus === e.from ? heir : space.focus,
+            );
+            expect(now.recent, "L7: recent drops the closed tile").not.toContain(e.from);
+            expect(
+              e.after.tiles.map((t) => t.id),
+              "L7: the closed tile leaves the tiles",
+            ).not.toContain(e.from);
           }
-
-          const space = spaceWith(e.before, e.from)!;
-          const was = order(space.layout);
-
-          if (was.length === 1) {
-            seen.last++;
-            expect(e.result, "L7: the last tile of a workspace never closes").toEqual({
-              _tag: "refused",
-              reason: "last_tile",
-            });
-            expect(e.after, "L7: a refused close changes nothing").toEqual(e.before);
-            continue;
-          }
-
-          expect(e.result._tag, `L7: ${e.move} is taken`).toBe("stepped");
-          const now = e.after.workspaces.find((s) => s.id === space.id)!;
-          expect(order(now.layout), `L7: ${e.from} leaves and the rest keep their order`).toEqual(
-            was.filter((t) => t !== e.from),
-          );
-          const i = was.indexOf(e.from);
-          const heir = was[i + 1] ?? was[i - 1];
-          seen[space.focus === e.from ? "heir" : "kept"]++;
-          expect(now.focus, "L7: focus goes to the next open tile in reading order, else the one before").toBe(
-            space.focus === e.from ? heir : space.focus,
-          );
-          expect(now.recent, "L7: recent drops the closed tile").not.toContain(e.from);
-          expect(
-            e.after.tiles.map((t) => t.id),
-            "L7: the closed tile leaves the tiles",
-          ).not.toContain(e.from);
-        }
-      }),
+        },
+      ),
       { seed: SEED, numRuns: 200 },
     );
     expect(
@@ -597,6 +654,8 @@ const Pick = fc.record({
   type: fc.constant("pick" as const),
   kind: fc.constantFrom<Kind>(
     "attach",
+    "reattach",
+    "reattach",
     "split_right",
     "split_down",
     "answer",
@@ -612,7 +671,7 @@ const Pick = fc.record({
 describe("Desk S2a L9: tezgah refuses what names nothing", () => {
   it("L9: a reused tile id, an unknown from or a missing workspace is refused with its reason and writes nothing", async () => {
     const p = await loaded();
-    const seen: Record<string, number> = { no_workspace: 0, id_reused: 0, missing: 0 };
+    const seen: Record<string, number> = { no_workspace: 0, id_reused: 0, missing: 0, reattach: 0 };
     fc.assert(
       fc.property(
         fc.boolean(),
@@ -628,6 +687,16 @@ describe("Desk S2a L9: tezgah refuses what names nothing", () => {
           for (const { kind, pick } of picks) {
             const model = JSON.stringify(w.model);
             const e = move(p, w, kind, pick);
+
+            if (e !== null && kind === "reattach") {
+              // Plan amendment (b): an attach of a workspace that exists is taken and changes nothing.
+              seen["reattach"] = (seen["reattach"] ?? 0) + 1;
+              expect(e.result, `L9: ${e.move} is taken, not refused`).toEqual({ _tag: "stepped" });
+              expect(e.after, `L9: ${e.move} changes no view`).toEqual(e.before);
+              expect(JSON.stringify(w.model), `L9: ${e.move} changes no model`).toBe(model);
+              expect(e.cmds, `L9: ${e.move} starts nothing`).toEqual([]);
+              continue;
+            }
 
             if (e === null || (kind !== "reused" && kind !== "unknown")) {
               continue;

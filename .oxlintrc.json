@@ -1006,7 +1006,8 @@
               "runtime",
               "gateway",
               "schedules",
-              "client"
+              "client",
+              "tezgah"
             ],
             "folders": ["node", "cloudflare", "coordination"],
             "files": ["index", "Id", "Testing", "ProcessId", "Sql", "Rev", "SpanTag"],
