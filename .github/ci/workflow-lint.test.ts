@@ -43,7 +43,10 @@ const name = fc.string({ maxLength: 20 });
 // N is E4's, in vitest.shards.test.ts, so the generated workflows below vary it.
 const onE2e = "startsWith(matrix.shard, 'e2e-')";
 
-const e2eCommand = `node next/apps/fabrika/e2e.ts --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
+const e2eCommand = `node next/apps/fabrika/e2e.ts $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
+
+// On a pull request only: the merge queue and main run the whole suite.
+const changedOnPullRequests = `\${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
 
 const nextLegs = (count: number) => [
   ...Array.from({ length: count }, (_, i) => `e2e-${i + 1}`),
@@ -145,9 +148,9 @@ const valid = (label: string, extra: string) => ({
       strategy: { "fail-fast": false, matrix: { shard: nextLegs(2) as (string | number)[] } },
       steps: [
         {
-          run: 'pnpm exec vitest run next/ --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"',
+          run: 'pnpm exec vitest run next/ $CHANGED --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"',
           if: `!${onE2e}`,
-          env: { SHARD: `\${{ matrix.shard }}/5` },
+          env: { SHARD: `\${{ matrix.shard }}/5`, CHANGED: changedOnPullRequests },
         },
         {
           name: "chromium",
@@ -156,7 +159,7 @@ const valid = (label: string, extra: string) => ({
             "sudo sh .github/ci/apt.sh update\n" +
             "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium\n",
         },
-        { run: e2eCommand, if: onE2e, env: { SHARD: `\${{ matrix.shard }}/2` } },
+        { run: e2eCommand, if: onE2e, env: { SHARD: `\${{ matrix.shard }}/2`, CHANGED: changedOnPullRequests } },
         {
           name: "edges",
           if: "matrix.shard == '1' && github.event_name == 'pull_request'",

@@ -378,10 +378,13 @@ export const lintWorkflow = (text: string): string[] => {
     Object.keys(matrix).length ===
       1, "next's legs are e2e-1 to e2e-N in order, then 1 to 5, all strings, with no other matrix entries");
   require(strategy["fail-fast"] === false, "next lets every shard finish");
+  // On a pull request CHANGED is `--changed=<base> --passWithNoTests`, so only the tests a change
+  // reaches run; on the merge queue and main it is empty, so the whole suite runs as the backstop.
   const nextCommand =
-    'pnpm exec vitest run next/ --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
+    'pnpm exec vitest run next/ $CHANGED --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
   // The leg `e2e-k` with SHARD `e2e-k/N` asks Vitest for shard `k/N` of the end-to-end files.
-  const e2eCommand = `node next/apps/fabrika/e2e.ts --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
+  const e2eCommand = `node next/apps/fabrika/e2e.ts $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
+  const changedOnPullRequests = `\${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
   const adviceCommand = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"';
   // Only these whole scripts are allowed; shell aliases and alternate paths cannot add work.
   const allowed = [
@@ -415,6 +418,17 @@ export const lintWorkflow = (text: string): string[] => {
     new RegExp(`^\\$\\{\\{\\s*matrix\\.shard\\s*\\}\\}/${e2eCount}$`).test(
       e2eShard,
     ), "next's end-to-end step passes --shard <leg>/<the count of e2e legs>");
+
+  // Both test steps narrow to the changed files on a pull request only. Any other value could narrow
+  // the merge queue or main, where the whole suite is the backstop for what the import graph misses.
+  for (const [step, name] of [
+    [testStep, "vitest"],
+    [e2eStep, "end-to-end"],
+  ] as const) {
+    require(map(step?.["env"])["CHANGED"] ===
+      changedOnPullRequests, `next's ${name} step narrows with --changed on pull requests only`);
+  }
+
   // E3. Both kinds of leg write next.json, so the advice comes after both test steps.
   const advice = nextSteps.find((s) => s["run"] === adviceCommand);
   require(testStep !== undefined &&
