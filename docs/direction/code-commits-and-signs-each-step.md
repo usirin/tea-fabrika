@@ -10,6 +10,10 @@ and MAIN checks saved run bounds and owners before signing missing notes. Existi
 calls remain valid. This note stays proposed for `next/`; the call approves neither removing Git
 from agent tools nor adding signing roles. Mutation still uses the tests key.
 
+Owner, 2026-11-13 ([0161](../../.decisions/0161-no-step-signing-by-hand.md)): today's hand-run
+tooling stops signing, so the paragraph above no longer holds for it. This note stays proposed for
+`next/`.
+
 ```ts
 // A sketch, next/. One step program, after its agent answers. The agent ran no git and holds no key.
 // tea's Msgs keep `type`; our outcomes are `_tag` unions with the five verbs.

@@ -91,7 +91,7 @@ The owner, on 2026-11-09, decided the tooling uses these instead of its own wiri
   the harness's stream, which the Agent interface already gives.
 - [Why libfabrika exists](../docs/direction/where-each-piece-lives.md#why-libfabrika-exists-decided-2026-11-08):
   anyone can build a client from scratch on libfabrika. The lane tooling is that client.
-- The lead-tooling fast track in [AGENTS.md](../AGENTS.md#two-versions-side-by-side): these changes
+- The lead-tooling fast track in [AGENTS.md](../AGENTS.md#how-a-change-lands): these changes
   are tooling, so they skip the plan, tests, mutation and review steps.
 
 ## Decision

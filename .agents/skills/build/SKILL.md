@@ -10,6 +10,13 @@ You make the test writer's red laws green, in product code only, as the approved
 
 A brief names the ticket, the plan's path, the branch, and what this round fixes. This skill holds
 the rest.
+[`AGENTS.md`, "Finish your task"](../../../AGENTS.md#finish-your-task) says when to keep going, what needs
+no approval and how to write the report.
+
+A fix round after a review is one agent doing both jobs: it writes the law and the fix together,
+with no tests step first ([0177](../../../.decisions/0177-fix-round-is-one-agent.md)). Its brief is
+[the lead skill's template](../lead/SKILL.md#when-a-review-sends-back), and it follows this skill
+for the product code.
 
 ## Steps
 
@@ -22,7 +29,8 @@ the rest.
    read [0054](../../../.decisions/0054-read-upstream-before-patching-it.md) asks for, goes back to
    plan, never into the build.
 4. **Run** the relevant narrow laws.
-5. **Commit** with the step-commit skill.
+5. **Commit** with the step-commit skill. When `drive.ts` runs you in a box, commit nothing: leave every
+   change in the tree, and drive commits and signs it as one step commit.
 6. **Report** which laws went green, any still red and why, any file you needed
    but may not touch, and what the lead's own run must show (Electron, screenshots). If every law
    was already green at the start and you changed nothing, do not commit: put
@@ -46,7 +54,15 @@ unchanged as its own file in `field/findings/`.
 The test config and typecheck.sh hold worker, home and typecheck limits.
 
 - Step-commit checks staged formatting. Run `pnpm lint` once.
-- Electron cannot start in a box. Reason from the code and say what the lead's rerun must show.
+- A host-only law the plan names runs on the real machine before any review, and the build is not
+  done until it has passed there ([0178](../../../.decisions/0178-host-only-laws-run-first.md)). You do not
+  start it on the owner's Mac yourself: on 2026-11-13 one such run ended every process the owner
+  had open. In your report, list each line the test can reach that signals a process or calls
+  launchd (`kill`, `process.kill`, `launchctl bootout`, `launchctl kill`), and for each one what
+  makes a wrong target impossible. The lead reads those lines, asks the owner, and then runs it or
+  tells you to.
+- On the real machine a test touches only its own label, files and processes. It uses its own temp
+  home, never takes focus, and leaves nothing behind. One Electron test app at a time.
 
 ## Never
 

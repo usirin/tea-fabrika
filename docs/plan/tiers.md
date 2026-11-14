@@ -3,6 +3,47 @@
 **Tier 1 approved 2026-11-01. Tiers 2 to 7 proposed. Order of work set 2026-11-01.** Walked when
 Tier 2 starts (owner, 2026-11-08): the first proposed tier's plan.
 
+**Changed 2026-11-13 ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)): the next thing built is `fabsh`, pipes, `summon` and `join`, working
+for real, with whatever they need, so fabrika is built inside fabrika.** The tiers below still show
+the order from before that day: `fabsh` and pipes in Tier 2, agents in Tier 5, rooms in no tier,
+and thin slices in Tier 1. The changed Tier 1 is written, and 0159 and that section win wherever
+this page differs.
+
+**Approved by the owner on 2026-11-13: what Tier 1 is now.** Tier 1 is the four primitives,
+`fabsh`, pipes, `summon` and `join`, working for real in `next/`, on the base its built rows
+already give. Done is seen in the Electron app and in a browser tab, built side by side. The pieces, in build order, and the mark on every row are in
+[the four primitives first](./tier-1.md#the-four-primitives-first). These pieces came in from
+other tiers:
+
+- From Tier 2: `fabsh` as a program in a tile, pipes (first for `fabsh`'s built-ins), and the desk
+  program with split, close and the prefix key
+  ([0279](../../.decisions/0279-tuval-is-a-package-desk-in-tier-2.md), amended by 0159).
+- From Tier 4: hands, only far enough to run an agent's turn (the lead's reading, from
+  [talk where you work](../direction/talk-where-you-work.md#in-next-summon-is-an-alias-with-a-session)).
+- From Tier 5: the link to the agent harnesses, `summon`, `@name` and the list of names
+  ([0157](../../.decisions/0157-summon-starts-an-agent-and-at-talks-to-it.md)), with the
+  [Tier 5 laws](#tier-5-laws-decided-2026-11-07) for any agent fabrika starts.
+- From the inbox's later tiers: the inbox past its thin row, so `@person` and an agent's message
+  reach it ([0151](../../.decisions/0151-a-thin-inbox-is-a-tier-1-row.md),
+  [0521](../../.decisions/0521-an-agents-message-is-an-inbox-row.md)).
+- From no tier: rooms and `join` ([0158](../../.decisions/0158-no-dms-only-rooms.md), the
+  [summon guidelines](../direction/summon-guidelines.md#rooms-mentions-and-turns-in-order)).
+
+Three of Tier 1's own rows come with them (owner, 2026-11-13,
+[0159's amendments](../../.decisions/0159-fabsh-pipes-summon-join-first.md#amendments)):
+
+- The Electron app (P19), built beside the browser tab from the first piece that draws. This is
+  the rule [below](#the-rules): a tier's demo works in a browser tab and an Electron window.
+- The menu bar extra (P21), in its simplest version: approve and deny, in a shape the full one
+  grows from.
+- The cloud instance (P24), built alongside once the window works, with each piece deployed there
+  as it lands.
+
+The 12 rows the four do not need wait, and none leaves the plan. Recovery and the rest of the
+cloud rows (P26, P27, P28, P29, P36) are the first work after done. Until then daily work lives
+only in the laptop's ledger; the owner accepted that risk on 2026-11-13. The tables below still
+show the order from before 2026-11-13.
+
 All the work on `next/` is one plan of seven tiers. Each tier is one pass across all five layers
 and across fabrika's six core ideas, and each ends with something a person can use. No layer and no
 core idea gets finished alone, and none waits for the tier that finishes it: every core idea gets a
@@ -33,7 +74,7 @@ Tier 7 others   ---------------------------------------------->  someone else ca
 Only Tier 1 is committed. It started 2026-11-05 with its exam. `next/` does not wait on today's
 pipeline, which is paused: the lead session's agents build Tier 1 by hand, with the pipeline's steps
 for each pull request, one [Tier 1 row](./tier-1.md#the-pull-requests-one-at-a-time) at a time.
-Tier 1 has 43 rows. How many are on main, and where the rest stand, is in
+Tier 1 has 44 rows. How many are on main, and where the rest stand, is in
 [the plan's state](./README.md#where-we-are-now). A tier is a project. The approval of 2026-11-01
 covers what Tier 1 builds, not its breakdown.
 
@@ -391,3 +432,10 @@ Git history keeps the old wording.
   and of programs working together.
 - 2026-11-11, [0111](../../.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md): the merge
   queue's first stage joins Tier 1 as P43, and Tier 6 hardens it.
+- 2026-11-13, [0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md): the next thing built is `fabsh`, pipes, `summon` and
+  `join`, working for real, with whatever they need. Tier 1 changes to put them first, in its own
+  pull request; no tier table above is changed yet.
+- 2026-11-13, approved by the owner: the changed Tier 1, in
+  [the four primitives first](./tier-1.md#the-four-primitives-first). Pieces come in from Tiers 2,
+  4 and 5 and from no tier. The Electron app, the thin menu bar and the cloud instance are built
+  beside them; 12 rows wait, and recovery is the first work after done.

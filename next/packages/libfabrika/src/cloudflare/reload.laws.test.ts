@@ -308,6 +308,13 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
       }),
     ).pipe(Scope.provide(scope));
     project = Context.get(context, ProjectService);
+    // The build forks its configure calls (ticket 762), so a law that reads `descriptors` waits
+    // for the Project's record of them, `dev_descriptors.pending`, to clear first.
+    yield* Effect.suspend(() =>
+      sql.exec("SELECT process FROM dev_descriptors WHERE pending>0").length === 0
+        ? Effect.void
+        : Effect.fail("a start is not yet delivered to its object"),
+    ).pipe(Effect.retry(Schedule.spaced("5 millis")), Effect.timeout("5 seconds"), Effect.orDie);
     return project;
   });
   yield* boot();

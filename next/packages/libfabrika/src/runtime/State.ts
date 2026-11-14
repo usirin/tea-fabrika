@@ -1,6 +1,10 @@
-// Saved state, next/: a model saved with its shape's number, the build that saved it and the inbox
-// rev it has folded up to (Tier 1, P11; saved-state S3). An old number climbs through named
-// upgrades, one number each, and decodes only at the end. A failure keeps the old bytes.
+/**
+ * Saved state: a model saved with its shape's number, the build that saved it and the inbox rev it
+ * has folded up to. An old number climbs through named upgrades, one number each, and decodes only
+ * at the end. A failure keeps the old bytes.
+ *
+ * @stability unstable
+ */
 import { Result, Schema } from "effect";
 import { Rev } from "../coordination/index.ts";
 import { ProgramDown, type State } from "./Program.ts";
@@ -22,6 +26,19 @@ const down = (): ProgramDown => new ProgramDown({ reason: "saved_state" });
 const downFrom = (cause: unknown): ProgramDown =>
   new ProgramDown({ reason: "saved_state", error: "ProgramDown", cause });
 
+/**
+ * Schema for a saved model: the model as JSON, the version `v` of its shape, the build that saved
+ * it, and `after`, the last inbox rev it has folded.
+ *
+ * **Details**
+ *
+ * `Saved.upgrade` brings an older saved value up to the program's current version. A failure
+ * there throws `ProgramDown` with `saved_state` and leaves the value it was given unchanged, so a
+ * program that cannot read its state stops without losing it.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export class Saved extends Schema.Opaque<Saved>()(Row) {
   /**
    * Climbs `raw` to `state.v` through `state.upgrades`, in order, then decodes it with the state's

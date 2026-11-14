@@ -1,3 +1,9 @@
+/**
+ * Why a process ended, as data: the exit reason, when two reasons are the same exit, and the
+ * decoder for a reason that comes from outside.
+ *
+ * @stability unstable
+ */
 import { Schema } from "effect";
 
 /** A captured failure's class, such as `TypeError`: the same 256-character bound as other brain text. */
@@ -16,6 +22,12 @@ export const ExitReason = Schema.TaggedUnion({
     error: Schema.optionalKey(ErrorClass),
   },
 });
+/**
+ * Why a process ended, as `ExitReason` decodes it.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type ExitReason = typeof ExitReason.Type;
 
 /** Two reasons are the same exit when their fields are, wherever each copy came from. */

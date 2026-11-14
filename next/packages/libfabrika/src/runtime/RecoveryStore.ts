@@ -1,3 +1,9 @@
+/**
+ * Where one registered name's recovery journal is kept: the journal row, and its receipts in rows
+ * of their own, in the object's SQLite.
+ *
+ * @stability unstable
+ */
 import { Context, Effect, Layer, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { type Sql } from "../Sql.ts";
@@ -14,9 +20,13 @@ type Journal<S extends Kept> = Schema.Codec<S, unknown> & {
 };
 
 type Store<S extends Kept> = {
+  /** The saved journal with every receipt merged back in, or null before the first save. */
   readonly load: Effect.Effect<S | null, LedgerError>;
+  /** Checks the whole journal, then writes it and its changed receipts in one transaction. */
   readonly save: (value: unknown) => Effect.Effect<void, LedgerError>;
+  /** The input one letter's receipt kept, or null. */
   readonly input: (letter: string) => Effect.Effect<Schema.Json | null, LedgerError>;
+  /** One letter's receipt, or null. */
   readonly receipt: (letter: string) => Effect.Effect<Receipt | null, LedgerError>;
 };
 
@@ -187,6 +197,23 @@ export const recoveryStore = <S extends Kept>(
   };
 };
 
+/**
+ * Service that keeps one registered name's recovery journal and its receipts in the object's own
+ * SQLite.
+ *
+ * **Details**
+ *
+ * The journal is checked whole against its caller's schema on every load and save. A receipt that
+ * a save leaves out stays stored.
+ *
+ * **Gotchas**
+ *
+ * A save that would grow the database past `capacity` fails with `storage` and keeps the old rows.
+ * A row that does not decode, or that is stored under another name, fails with `bad_row`.
+ *
+ * @stability unstable
+ * @category services
+ */
 export class RecoveryStore extends Context.Service<RecoveryStore, Store<Kept>>()(
   "@kampus/libfabrika/runtime/RecoveryStore",
 ) {

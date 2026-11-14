@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterAll, describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
 import { Effect, Exit, Schema } from "effect";
 import { asks } from "./edges.ts";
 
@@ -103,78 +103,97 @@ describe("asks", () => {
 });
 
 describe("edges.ts, as CI runs it", () => {
-  const repo = mkdtempSync(join(tmpdir(), "edges-"));
-  afterAll(() => rmSync(repo, { recursive: true, force: true }));
   const { GITHUB_STEP_SUMMARY: _summary, ...env } = process.env;
   const quiet = { ...env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
-  const git = (...args: ReadonlyArray<string>) => {
-    const out = spawnSync("git", ["-c", "user.name=exam", "-c", "user.email=exam@example.com", ...args], {
-      cwd: repo,
-      encoding: "utf8",
-      env: quiet,
-    });
-
-    if (out.status !== 0) {
-      throw new Error(`git ${args.join(" ")}: ${out.stderr}`);
-    }
-
-    return out.stdout.trim();
-  };
-  const put = (path: string, text: string) => {
-    mkdirSync(dirname(join(repo, path)), { recursive: true });
-    writeFileSync(join(repo, path), text);
-  };
   const script = join(import.meta.dirname, "edges.ts");
-  const edges = (base: string, extra: Record<string, string> = {}) =>
-    spawnSync(process.execPath, [script, "--base", base], {
-      cwd: repo,
-      encoding: "utf8",
-      env: { ...quiet, ...extra },
-    });
+  // Each test builds its own repository in its own scope, which removes it when the test ends (0061).
+  const scenario = Effect.acquireRelease(
+    Effect.sync(() => mkdtempSync(join(tmpdir(), "edges-"))),
+    (repo) => Effect.sync(() => rmSync(repo, { recursive: true, force: true })),
+  ).pipe(
+    Effect.map((repo) => {
+      const git = (...args: ReadonlyArray<string>) => {
+        const out = spawnSync("git", ["-c", "user.name=exam", "-c", "user.email=exam@example.com", ...args], {
+          cwd: repo,
+          encoding: "utf8",
+          env: quiet,
+        });
 
-  git("init", "-q", "-b", "main");
-  put(PRODUCT, file(EDGE, CALL));
-  git("add", ".");
-  git("commit", "-q", "-m", "base");
-  const base = git("rev-parse", "HEAD");
-  put(PRODUCT, file(EDGE, CALL, EDGE, CALL));
-  put(OTHER, file(RUN_EDGE, "export const b = 1;"));
-  git("add", ".");
-  git("commit", "-q", "-m", "head");
+        if (out.status !== 0) {
+          throw new Error(`git ${args.join(" ")}: ${out.stderr}`);
+        }
 
-  it("prints one line per new edge with [ok] [no], and exits 0", () => {
-    const out = edges(base);
-    expect(out.stderr).toBe("");
-    expect(out.status).toBe(0);
-    expect(out.stdout.trim().split("\n")).toEqual([
-      "Edges this pull request adds, for the owner:",
-      `${OTHER}:3  fabrika/no-effect-run-outside-edge  edge: the platform calls it  [ok] [no]`,
-      `${PRODUCT}:5  fabrika/no-promises  edge: a Durable Object answers a Promise  [ok] [no]`,
-    ]);
-  });
+        return out.stdout.trim();
+      };
+      const put = (path: string, text: string) => {
+        mkdirSync(dirname(join(repo, path)), { recursive: true });
+        writeFileSync(join(repo, path), text);
+      };
+      const edges = (base: string, extra: Record<string, string> = {}) =>
+        spawnSync(process.execPath, [script, "--base", base], {
+          cwd: repo,
+          encoding: "utf8",
+          env: { ...quiet, ...extra },
+        });
 
-  it("in GitHub Actions, notes each line of the diff and writes the step summary", () => {
-    const summary = join(repo, "..", `${repo.split("/").pop()}-summary.md`);
-    const out = edges(base, { GITHUB_STEP_SUMMARY: summary });
-    expect(out.status).toBe(0);
-    expect(out.stdout).toContain(
-      `::notice file=${OTHER},line=3::fabrika/no-effect-run-outside-edge -- edge: the platform calls it`,
-    );
-    expect(readFileSync(summary, "utf8")).toContain(`- \`${PRODUCT}:5  fabrika/no-promises`);
-    rmSync(summary);
-  });
+      git("init", "-q", "-b", "main");
+      put(PRODUCT, file(EDGE, CALL));
+      git("add", ".");
+      git("commit", "-q", "-m", "base");
+      const base = git("rev-parse", "HEAD");
+      put(PRODUCT, file(EDGE, CALL, EDGE, CALL));
+      put(OTHER, file(RUN_EDGE, "export const b = 1;"));
+      git("add", ".");
+      git("commit", "-q", "-m", "head");
+      return { repo, put, edges, base };
+    }),
+  );
 
-  it("says so when there is nothing to ask", () => {
-    const out = edges("HEAD");
-    expect(out.status).toBe(0);
-    expect(out.stdout.trim()).toBe("No new edge comments in this pull request.");
-  });
+  it.effect("prints one line per new edge with [ok] [no], and exits 0", () =>
+    Effect.gen(function* () {
+      const { edges, base } = yield* scenario;
+      const out = edges(base);
+      expect(out.stderr).toBe("");
+      expect(out.status).toBe(0);
+      expect(out.stdout.trim().split("\n")).toEqual([
+        "Edges this pull request adds, for the owner:",
+        `${OTHER}:3  fabrika/no-effect-run-outside-edge  edge: the platform calls it  [ok] [no]`,
+        `${PRODUCT}:5  fabrika/no-promises  edge: a Durable Object answers a Promise  [ok] [no]`,
+      ]);
+    }),
+  );
 
-  it("exits 2, naming the file, when a file does not parse", () => {
-    put(OTHER, "export const = ;\n");
-    const out = edges(base);
-    expect(out.status).toBe(2);
-    expect(out.stderr).toContain(OTHER);
-    expect(out.stdout).not.toContain("[ok] [no]");
-  });
+  it.effect("in GitHub Actions, notes each line of the diff and writes the step summary", () =>
+    Effect.gen(function* () {
+      const { repo, edges, base } = yield* scenario;
+      const summary = join(repo, "..", `${repo.split("/").pop()}-summary.md`);
+      const out = edges(base, { GITHUB_STEP_SUMMARY: summary });
+      expect(out.status).toBe(0);
+      expect(out.stdout).toContain(
+        `::notice file=${OTHER},line=3::fabrika/no-effect-run-outside-edge -- edge: the platform calls it`,
+      );
+      expect(readFileSync(summary, "utf8")).toContain(`- \`${PRODUCT}:5  fabrika/no-promises`);
+      rmSync(summary);
+    }),
+  );
+
+  it.effect("says so when there is nothing to ask", () =>
+    Effect.gen(function* () {
+      const { edges } = yield* scenario;
+      const out = edges("HEAD");
+      expect(out.status).toBe(0);
+      expect(out.stdout.trim()).toBe("No new edge comments in this pull request.");
+    }),
+  );
+
+  it.effect("exits 2, naming the file, when a file does not parse", () =>
+    Effect.gen(function* () {
+      const { put, edges, base } = yield* scenario;
+      put(OTHER, "export const = ;\n");
+      const out = edges(base);
+      expect(out.status).toBe(2);
+      expect(out.stderr).toContain(OTHER);
+      expect(out.stdout).not.toContain("[ok] [no]");
+    }),
+  );
 });
