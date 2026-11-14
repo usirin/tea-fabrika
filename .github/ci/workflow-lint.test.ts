@@ -925,7 +925,12 @@ const faults: [string, (workflow: Workflow) => void, string][] = [
   [
     "a /6 denominator",
     (w) => {
-      w.jobs.next.steps[0]!.env!.SHARD = w.jobs.next.steps[0]!.env!.SHARD.replace(/\/5$/, "/6");
+      // Keeps the generated spacing; LE2's one-error check fails if there is no SHARD to change.
+      const env = w.jobs.next.steps[0]!.env!;
+
+      if (env.SHARD !== undefined) {
+        env.SHARD = env.SHARD.replace(/\/5$/, "/6");
+      }
     },
     "next's vitest step passes --shard <leg>/<the count of numbered legs>",
   ],
