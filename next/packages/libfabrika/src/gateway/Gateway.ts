@@ -92,6 +92,12 @@ const refuseRate = Effect.fn("gateway.route")(function* (retryAfter: number) {
   return RateRefusal.make({ reason: "rate_limited", retryAfter });
 });
 
+// A draft past its own budget is counted as a press's refusal is, under its own piece: no row, no text.
+const refuseDraft = Effect.fn("gateway.draft")(function* (retryAfter: number) {
+  yield* Effect.annotateCurrentSpan(REFUSED, "rate_limited");
+  return RateRefusal.make({ reason: "rate_limited", retryAfter });
+});
+
 const ok = (result: typeof Schema.Json.Type) => Answer.cases.ok.make({ result });
 
 // A dead letter stops the sender's outbox. Other program refusals keep their full reply.
@@ -1084,7 +1090,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   /**
    * One draft frame on the ephemeral lane: checked like a send's session and key, then its own
    * budget, the process's life and its program's draft, and routed. It writes no input row, no
-   * binding and no ledger entry, and runs under the quiet tracer, so no span holds it.
+   * binding and no ledger entry, and runs under the quiet tracer, so no span holds it. A refusal
+   * from its budget comes back for `route` to count.
    */
   const drafted = Effect.fnUntraced(function* (
     attached: { readonly identity: { readonly as: string; readonly key: string } },
@@ -1136,11 +1143,28 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return no("no_draft");
     }
 
-    const answer = yield* options.draft(pid, m).pipe(
+    // The captured context holds the recording tracer, so the quiet one goes inside it.
+    const answer = yield* silent(options.draft(pid, m)).pipe(
       Effect.provideContext(context),
       Effect.mapError((cause) => new LedgerError({ reason: "unreachable", cause })),
     );
     return "ok" in answer ? ok(answer.ok) : no(answer.err === "refused" ? (answer.reason ?? "refused") : answer.err);
+  });
+  /** A rate refusal's count must land: a count the sink could not write fails the call. */
+  const counted = Effect.fnUntraced(function* (refusal: Effect.Effect<typeof RateRefusal.Type>) {
+    const answer = yield* refusal;
+    yield* sink.check.pipe(
+      Effect.mapError(
+        (cause) =>
+          new SinkError({
+            reason: cause.reason,
+            held: cause.held,
+            message: RateCountFailure.fields.message.literal,
+            cause,
+          }),
+      ),
+    );
+    return answer;
   });
   const route = Effect.fnUntraced(function* (
     client: ConnectionId,
@@ -1157,7 +1181,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     const { attached, raw } = checked.success;
 
     if (method === "process.draft") {
-      return yield* silent(drafted(attached, raw, params));
+      const answer = yield* silent(drafted(attached, raw, params));
+      return Schema.is(RateRefusal)(answer) ? yield* counted(refuseDraft(answer.retryAfter)) : answer;
     }
 
     // One budget per authenticated key, hands included, before a window or agent becomes a Writer.
@@ -1175,19 +1200,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         return yield* new LedgerError({ reason: "storage", cause: budget.failure });
       }
 
-      const answer = yield* refuseRate(Duration.toMillis(budget.failure.reason.retryAfter));
-      yield* sink.check.pipe(
-        Effect.mapError(
-          (cause) =>
-            new SinkError({
-              reason: cause.reason,
-              held: cause.held,
-              message: RateCountFailure.fields.message.literal,
-              cause,
-            }),
-        ),
-      );
-      return answer;
+      return yield* counted(refuseRate(Duration.toMillis(budget.failure.reason.retryAfter)));
     }
 
     if (reserved(params) || (method === "process.send" && reserved(rawObject(params)?.m))) {
