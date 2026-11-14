@@ -103,6 +103,10 @@ before `fabsh` is built, and S2 to S7 before `summon`; say yes after reading `al
 the first cloud deploy. The other open calls are listed in
 [the section](./tier-1.md#the-owners-walks-and-decisions-by-step), each tied to its step.
 
+*2026-11-13:* ticket 921, the layering debt, slice 1 is in review in `next/`
+([PR 1189](https://github.com/kamp-us/tea-fabrika/pull/1189)): the session manager, the recovery
+store and the gateway each fail with their own error and a tagged reason, in place of the ledger's.
+
 *2026-11-12:* P19 slice 1, tracker ticket 881, is built on its branch in `next/`, awaiting
 review: the brain-service contracts, lifecycle machine and launchd adapter. The box checks only controlled services;
 the real launchd and Electron restart and cleanup check remains with the host lead.
