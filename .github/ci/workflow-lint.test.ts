@@ -53,6 +53,16 @@ const changedOnPullRequests = `\${{ github.event_name == 'pull_request' && forma
 // text, so the import graph would drop them (the plan for CI paths, slice 2).
 const changedUnlessReaders = `\${{ github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
 
+// The readers step's: on a pull request whose vitest step narrows with CHANGED, the reader tests
+// run whole on leg 1, from changes' `readers`, so `--changed` cannot drop them.
+const narrows = "github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/'";
+const readersIf = `!cancelled() && matrix.shard == '1' && ${narrows} && needs.changes.outputs.readers != ''`;
+
+const readersCommand =
+  'pnpm exec vitest run $READERS --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/readers.json"';
+
+const adviceCommand = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json" "$RUNNER_TEMP/readers.json"';
+
 const nextLegs = (count: number) => [
   ...Array.from({ length: count }, (_, i) => `e2e-${i + 1}`),
   "1",
@@ -79,7 +89,7 @@ const valid = (label: string, extra: string) => ({
       "timeout-minutes": 5,
       outputs: {
         ...Object.fromEntries(
-          ["check", "typecheck", "test", "e2e", "field", "build", "today"].map((key) => [
+          ["check", "typecheck", "test", "e2e", "field", "build", "today", "readers"].map((key) => [
             key,
             `\${{ steps.diff.outputs.${key} }}`,
           ]),
@@ -195,7 +205,13 @@ const valid = (label: string, extra: string) => ({
           run: 'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
         },
         { run: "pnpm install --frozen-lockfile" },
-        { name: "shard times", if: "!cancelled()", run: 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"' },
+        {
+          name: "readers",
+          if: readersIf,
+          env: { READERS: `\${{ needs.changes.outputs.readers }}` },
+          run: readersCommand,
+        },
+        { name: "shard times", if: "!cancelled()", run: adviceCommand },
       ],
     },
     e2e: {
@@ -263,12 +279,12 @@ const wiring = fc
       clean.jobs.next.steps[0]!.env!.SHARD = `\${{${gap}matrix.shard${gap}}}/5`;
       clean.jobs.next.steps[2]!.env!.SHARD = `\${{${gap}matrix.shard${gap}}}/${e2es}`;
 
-      // The vitest step's guard and the three leg conditions, respaced around each operator.
-      for (const step of clean.jobs.next.steps.slice(0, 4)) {
+      // The vitest step's guard and the four leg conditions, respaced around each operator.
+      for (const step of [...clean.jobs.next.steps.slice(0, 4), clean.jobs.next.steps[5]!]) {
         step.if = `\${{${gap}${step.if?.replace(/ *(==|!=|&&) */g, `${gap}$1${gap}`)}${gap}}}`;
       }
 
-      clean.jobs.next.steps[5]!.if = `\${{${gap}!cancelled()${gap}}}`;
+      clean.jobs.next.steps[6]!.if = `\${{${gap}!cancelled()${gap}}}`;
     }
 
     return clean;
@@ -616,12 +632,20 @@ const plants: [string, (workflow: Workflow) => void][] = [
       },
     ],
   ),
-  // E3: shard times after both test steps, so an e2e leg's next.json is read too.
+  // E3: shard times after every test step, so an e2e leg's next.json and leg 1's readers.json are
+  // read too.
   [
     "next timing advice before the end-to-end step",
     (w) => {
-      const [advice] = w.jobs.next.steps.splice(5, 1);
+      const [advice] = w.jobs.next.steps.splice(6, 1);
       w.jobs.next.steps.splice(2, 0, advice!);
+    },
+  ],
+  [
+    "next timing advice before the readers step",
+    (w) => {
+      const [advice] = w.jobs.next.steps.splice(6, 1);
+      w.jobs.next.steps.splice(5, 0, advice!);
     },
   ],
   [
@@ -722,23 +746,27 @@ const plants: [string, (workflow: Workflow) => void][] = [
       step.run = step.run.replace(flag, "");
     },
   ]),
-  ...["missing", "duplicate", "before tests", "wrong report"].map((fault): [string, (w: Workflow) => void] => [
-    `next timing advice ${fault}`,
-    (w) => {
-      const advice = w.jobs.next.steps[5]!;
+  ...["missing", "duplicate", "before tests", "wrong report", "without readers.json"].map(
+    (fault): [string, (w: Workflow) => void] => [
+      `next timing advice ${fault}`,
+      (w) => {
+        const advice = w.jobs.next.steps[6]!;
 
-      if (fault === "missing") {
-        w.jobs.next.steps.splice(5, 1);
-      } else if (fault === "duplicate") {
-        w.jobs.next.steps.push({ ...advice });
-      } else if (fault === "before tests") {
-        w.jobs.next.steps.splice(5, 1);
-        w.jobs.next.steps.unshift(advice);
-      } else {
-        advice.run = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/other.json"';
-      }
-    },
-  ]),
+        if (fault === "missing") {
+          w.jobs.next.steps.splice(6, 1);
+        } else if (fault === "duplicate") {
+          w.jobs.next.steps.push({ ...advice });
+        } else if (fault === "before tests") {
+          w.jobs.next.steps.splice(6, 1);
+          w.jobs.next.steps.unshift(advice);
+        } else if (fault === "wrong report") {
+          advice.run = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/other.json"';
+        } else {
+          advice.run = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"';
+        }
+      },
+    ],
+  ),
   ...[
     "",
     "success()",
@@ -750,9 +778,81 @@ const plants: [string, (workflow: Workflow) => void][] = [
   ].map((condition): [string, (w: Workflow) => void] => [
     `next timing advice condition ${condition || "absent"}`,
     (w) => {
+      w.jobs.next.steps[6]!.if = condition;
+    },
+  ]),
+  // After PR 1230: when CHANGED narrows the vitest step, the reader tests run whole on leg 1, from
+  // changes' `readers`. Each fault would drop them, run them where the whole suite already does,
+  // run every test, or run a copy of the list.
+  ...(
+    [
+      ["on every leg", `!cancelled() && ${narrows} && needs.changes.outputs.readers != ''`],
+      ["on the number 1", `!cancelled() && matrix.shard == 1 && ${narrows} && needs.changes.outputs.readers != ''`],
+      ["on the merge queue and main too", `!cancelled() && matrix.shard == '1' && needs.changes.outputs.readers != ''`],
+      [
+        "on every pull request, the reader filter included",
+        `!cancelled() && matrix.shard == '1' && github.event_name == 'pull_request' && needs.changes.outputs.readers != ''`,
+      ],
+      ["with an empty list, which runs every test", `!cancelled() && matrix.shard == '1' && ${narrows}`],
+      ["skipped after a failed test step", `matrix.shard == '1' && ${narrows} && needs.changes.outputs.readers != ''`],
+      ["never", "false"],
+      ["with no condition", ""],
+    ] as const
+  ).map(([fault, condition]): [string, (w: Workflow) => void] => [
+    `next readers ${fault}`,
+    (w) => {
       w.jobs.next.steps[5]!.if = condition;
     },
   ]),
+  [
+    "next readers step gone",
+    (w) => {
+      w.jobs.next.steps.splice(5, 1);
+    },
+  ],
+  [
+    "next readers step twice",
+    (w) => {
+      w.jobs.next.steps.push({ ...w.jobs.next.steps[5]! });
+    },
+  ],
+  ...[
+    'pnpm exec vitest run "$READERS" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/readers.json"',
+    'pnpm exec vitest run $READERS --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/readers.json"',
+    'pnpm exec vitest run $READERS --changed main --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/readers.json"',
+    'pnpm exec vitest run $READERS --passWithNoTests --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/readers.json"',
+    'pnpm exec vitest run $READERS --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"',
+    'pnpm exec vitest run next/apps/fabrika/src/exam/ --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/readers.json"',
+  ].map((run): [string, (w: Workflow) => void] => [
+    `next readers command ${run}`,
+    (w) => {
+      w.jobs.next.steps[5]!.run = run;
+    },
+  ]),
+  ...[
+    { READERS: `\${{ needs.changes.outputs.filter }}` },
+    { READERS: "next/apps/fabrika/src/exam/ next/packages/libfabrika/src/node/build/" },
+    { READERS: `\${{ needs.changes.outputs.readers || 'next/' }}` },
+    {},
+    { READERS: `\${{ needs.changes.outputs.readers }}`, CHANGED: changedOnPullRequests },
+  ].map((readersEnv): [string, (w: Workflow) => void] => [
+    `next readers env ${JSON.stringify(readersEnv)}`,
+    (w) => {
+      Object.assign(w.jobs.next.steps[5]!, { env: readersEnv });
+    },
+  ]),
+  [
+    "changes hides readers",
+    (w) => {
+      delete w.jobs.changes.outputs["readers"];
+    },
+  ],
+  [
+    "changes takes readers from the parser's pass",
+    (w) => {
+      w.jobs.changes.outputs["readers"] = `\${{ steps.same.outputs.readers || steps.diff.outputs.readers }}`;
+    },
+  ],
   ...[" --changed main", " --passWithNoTests", " file.test.ts"].map((suffix): [string, (w: Workflow) => void] => [
     suffix,
     (w) => {
@@ -1262,10 +1362,25 @@ const faults: [string, (workflow: Workflow) => void, string][] = [
   [
     "the timing advice before the end-to-end step",
     (w) => {
-      const [advice] = w.jobs.next.steps.splice(5, 1);
+      const [advice] = w.jobs.next.steps.splice(6, 1);
       w.jobs.next.steps.splice(2, 0, advice!);
     },
-    "next timing advice follows both test steps even after failure, unless cancelled",
+    "next timing advice follows every test step even after failure, unless cancelled",
+  ],
+  // After PR 1230: the readers step on every leg, and on every pull request, each named alone.
+  [
+    "the readers step on every leg",
+    (w) => {
+      w.jobs.next.steps[5]!.if = `!cancelled() && ${narrows} && needs.changes.outputs.readers != ''`;
+    },
+    `next runs ${readersCommand} once, only on leg 1 when CHANGED narrows, with its pinned condition`,
+  ],
+  [
+    "the readers step under the reader filter too",
+    (w) => {
+      w.jobs.next.steps[5]!.if = `!cancelled() && matrix.shard == '1' && github.event_name == 'pull_request' && needs.changes.outputs.readers != ''`;
+    },
+    `next runs ${readersCommand} once, only on leg 1 when CHANGED narrows, with its pinned condition`,
   ],
 ];
 

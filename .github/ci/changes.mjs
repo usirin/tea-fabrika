@@ -360,7 +360,8 @@ const parserVersion = () => {
 
 /**
  * What one pass prints. The first pass (`same` false) needs no install: every job's flag, then
- * `filter` from the paths alone and `probe`. The parser's pass (`same` true) runs after the
+ * `filter` from the paths alone, `probe`, and `readers`, the reader paths whatever changed: a pull
+ * request whose `--changed` run follows imports runs them beside it. The parser's pass (`same` true) runs after the
  * parser's install and prints `next` and `filter` again, with the paths program.ts proved; when
  * program.ts cannot load, it prints what the first pass printed, so a failed install runs every
  * next/ test. `note` hears one line per candidate file and the parser's version.
@@ -384,6 +385,7 @@ export const outputs = async ({ same, env, run = git, load = () => import("./pro
       ...Object.fromEntries(Object.entries(flags).map(([job, on]) => [job, String(on)])),
       filter: filterOf(first),
       probe: String(worth),
+      readers: readers.join(" "),
     };
   }
 

@@ -958,6 +958,36 @@ it("property: probe changes no flag: the first pass prints the same flags for an
   );
 });
 
+it("property: the first pass prints readers as the reader list joined by spaces, for any paths and event", async () => {
+  // law: the next job's readers step takes its paths from this output, so a pull request whose
+  // `--changed` run follows imports still runs the tests that read files as text. The list lives
+  // only in changes.mjs; the workflow never copies it.
+  const broken: Runner = () => ({ status: 128, stdout: "" });
+  await fc.assert(
+    fc.asyncProperty(
+      fc.array(fc.oneof(known, next), { maxLength: 10 }).filter((list) => list.every((p) => !p.includes("\0"))),
+      fc.oneof(scopedEvent, fc.constantFrom("schedule", "workflow_dispatch")),
+      fc.boolean(),
+      fc.boolean(),
+      async (paths, event, draft, readable) => {
+        const printed = await ci.outputs({
+          same: false,
+          env: envOf(event, draft),
+          run: readable ? git(paths, "") : broken,
+        });
+        expect(printed["readers"]).toBe(ci.readers.join(" "));
+      },
+    ),
+    {
+      ...options,
+      examples: [
+        // pinned: a next/ change on a pull request, the run whose `--changed` drops the readers.
+        [["next/packages/libfabrika/src/transport/Wire.ts"], "pull_request", false, true],
+      ],
+    },
+  );
+});
+
 it("scenario: with no parser to import, --same prints what the first pass printed", async () => {
   // scenario: the import of program.ts rejects, as it does when the parser's install failed. Then
   // a parser that proves every path, and one that proves all but one, for the same runs.
