@@ -392,6 +392,10 @@ describe("each rule refuses what it is there to refuse", () => {
       // E6's docs rule is on for listed libfabrika folders only: jsdocs.test.ts generates its files
       // and plants one per left-out kind at real paths with the real lint config.
       "jsdocs",
+      // A service's written type and its static members are planted at next/ paths with the real
+      // lint config in written-service-type.test.ts and no-static-layer.test.ts.
+      "written-service-type",
+      "no-static-layer",
       // P16's rule reads the program package, so generated packages plant it in its own test file.
       "program-package-layout",
       // Generated no-question-word-key.test.ts plants run at next/ and .agents/ paths with the real
