@@ -1,0 +1,18 @@
+{
+  "id": "2026-11-13-build-without-typecheck-took-three-rounds",
+  "date": "2026-11-13",
+  "lanes": [
+    "kamp-us/tea-fabrika#921"
+  ],
+  "stage": "build",
+  "kind": "cost",
+  "what": "Slice 1 changed the error types of three stores. The first build ran no typecheck, by the brief's cap, and missed callers whose types the new errors reach: the runner, the checked writer, the gateway's deliver option and four test fakes. The lane's one typecheck then took three build rounds and three tests rounds, one package level at a time, because pnpm stops the recursive run at the first package that fails, so the app's errors only showed once the library was clean. Those six rounds cost about $8.50 at list price.",
+  "cause": "The brief held the typecheck to one at the end of the lane, and the recursive typecheck hides the errors of the packages that depend on the first failing one.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "A build that changes an exported error or service type runs one typecheck before it commits, in its own step, or runs the type checker with no bail so every package's errors show at once.",
+  "test": "Count build and tests rounds per lane on the next slice that changes a service's error type.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1189"
+  ]
+}

@@ -1,14 +1,18 @@
 // T695, next/. The door's storage and its SYN-cookie keys keep the failure they translate (decision
 // 0043 rule 12). A suite on any `Sql`, read through its module as `GatewayCauseTest.suite(law, harness)`;
-// the module that owns the driver runs it, and gives the ledger's error class, which a gateway file
-// may not import (0062).
+// the module that owns the driver runs it (0062).
+//
+// Ticket 921 slice 1: both files fail with `GatewayError`, the error of the service they serve
+// (0055), and its tagged reason keeps the fault from below (0119). This is the plan's law 8 for the
+// two files: every plant below builds the error without its `cause`. The laws read the error by
+// its `_tag`, so the harness hands in no error class.
 //
 // Audit sites: `GatewayStore.ts:27` (a throw in the atomic step), `GatewayStore.ts:40` (a saved
 // state row that does not decode), `GatewayNonce.ts:26` (a saved key that does not decode, and one
 // of the wrong length, which has no cause), `GatewayNonce.ts:29` (the one WebCrypto callback that
 // importKey, sign and verify share).
 import { describe, expect } from "@effect/vitest";
-import { Effect, Result, Schema } from "effect";
+import { Effect, Predicate, Result, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
@@ -22,15 +26,10 @@ const failures: fc.Arbitrary<object> = fc.oneof(
   fc.record({ code: fc.string(), detail: fc.jsonValue() }, { noNullPrototype: true }),
 );
 
-/** The error the door's store fails with, named through its own calls. */
-type StoreError = Effect.Error<ReturnType<ReturnType<typeof gatewayStore>["atomic"]>>;
-
-/** What the module that owns the driver gives: fresh storage, and the stores' error class. */
+/** What the module that owns the driver gives: fresh storage. */
 export type Harness = {
   /** A fresh, empty database. */
   readonly fresh: () => Sql;
-  /** The stores' own error class, which the laws find in a failure's chain. */
-  readonly LedgerError: new (fields: { readonly reason: StoreError["reason"]; readonly cause?: unknown }) => StoreError;
 };
 
 /** Runs one property: generated input, each case an Effect on the real code. The runner gives it. */
@@ -44,6 +43,15 @@ const throwing = (sql: Sql, failure: unknown): Sql => ({
   },
 });
 
+/** What an error keeps beneath it: the cause under its tagged reason (0119), or its own. */
+const beneath = (error: unknown): unknown => {
+  if (Predicate.hasProperty(error, "reason") && Predicate.hasProperty(error.reason, "cause")) {
+    return error.reason.cause;
+  }
+
+  return Predicate.hasProperty(error, "cause") ? error.cause : undefined;
+};
+
 /** An error and every cause under it, outermost first. */
 const chain = (error: unknown): ReadonlyArray<unknown> => {
   const found: Array<unknown> = [];
@@ -51,11 +59,19 @@ const chain = (error: unknown): ReadonlyArray<unknown> => {
 
   while (typeof at === "object" && at !== null && !found.includes(at)) {
     found.push(at);
-    at = "cause" in at ? at.cause : undefined;
+    at = beneath(at);
   }
 
   return found;
 };
+
+/** Whether `link` is the door's own error for a saved row that does not decode. */
+const isBadRow = (link: unknown): boolean =>
+  Predicate.hasProperty(link, "_tag") &&
+  link._tag === "GatewayError" &&
+  Predicate.hasProperty(link, "reason") &&
+  Predicate.hasProperty(link.reason, "_tag") &&
+  link.reason._tag === "BadRow";
 
 /** One WebCrypto call rejects with `failure` while `work` runs: an own property shadows the method. */
 const rejecting = <A, E>(method: "importKey" | "sign" | "verify", failure: unknown, work: Effect.Effect<A, E>) =>
@@ -77,18 +93,19 @@ const rejecting = <A, E>(method: "importKey" | "sign" | "verify", failure: unkno
 const TTL = 60_000;
 const CAP = 100;
 
-export const suite = (law: Law, { fresh, LedgerError }: Harness) => {
+export const suite = (law: Law, { fresh }: Harness) => {
   describe("T695, the door's store keeps what failed", () => {
-    // C1, GatewayStore.ts:27. Plant: `catch: () => new LedgerError({ reason: "storage" })`.
+    // C1, GatewayStore.ts:27. Plant: build the `Storage` reason without the caught value.
     law(
-      "C1: a generated throw in the atomic step is `storage` with that value as its cause",
+      "C1: a generated throw in the atomic step is the door's own `Storage` with that value as its cause",
       fc.record({ failure: failures, name: fc.string() }),
       ({ failure, name }) =>
         Effect.gen(function* () {
           const store = gatewayStore(throwing(fresh(), failure));
           const error = yield* Effect.flip(store.atomic(() => store.get(name, Schema.String)));
-          expect(error.reason).toBe("storage");
-          expect(error.cause).toBe(failure);
+          expect(error._tag).toBe("GatewayError");
+          expect(error.reason._tag).toBe("Storage");
+          expect(error.reason.cause).toBe(failure);
         }),
     );
 
@@ -102,11 +119,10 @@ export const suite = (law: Law, { fresh, LedgerError }: Harness) => {
           yield* store.atomic(() => store.set(name, Schema.String, value));
           store.sql.exec("UPDATE gateway_state SET value=? WHERE name=?", JSON.stringify(bad), name);
           const error = yield* Effect.flip(store.atomic(() => store.get(name, Schema.String)));
-          expect(error).toBeInstanceOf(LedgerError);
-          const links = chain(error);
-          const row = links.find((link) => link instanceof LedgerError && link.reason === "bad_row");
-          expect(row, "a bad_row LedgerError is in the chain").toBeInstanceOf(LedgerError);
-          expect(Schema.isSchemaError((row as StoreError).cause), "it holds the decoder's own failure").toBe(true);
+          expect(error._tag).toBe("GatewayError");
+          const row = chain(error).find(isBadRow);
+          expect(row, "a `BadRow` GatewayError is in the chain").toBeDefined();
+          expect(Schema.isSchemaError(beneath(row)), "it holds the decoder's own failure").toBe(true);
         }),
     );
   });
@@ -114,23 +130,24 @@ export const suite = (law: Law, { fresh, LedgerError }: Harness) => {
   describe("T695, the door's SYN-cookie key keeps what failed", () => {
     // C3, GatewayNonce.ts:26. Plant: drop the decode failure from the `storage` error.
     law(
-      "C3: a saved key that is not base64url is `storage` carrying the decoder's failure",
+      "C3: a saved key that is not base64url is the door's own `Storage` carrying the decoder's failure",
       fc.record({ secret: fc.string().map((s) => `${s}!`) }),
       ({ secret }) =>
         Effect.gen(function* () {
           const store = gatewayStore(fresh());
           yield* store.atomic(() => store.set("challengeKey", Schema.String, secret));
           const error = yield* Effect.flip(gatewayNonce(store, TTL, CAP));
-          expect(error.reason).toBe("storage");
+          expect(error._tag).toBe("GatewayError");
+          expect(error.reason._tag).toBe("Storage");
           const decoded = Base64Url.decode(secret);
           expect(Result.isFailure(decoded)).toBe(true);
-          expect(error.cause).toEqual(Result.isFailure(decoded) ? decoded.failure : null);
+          expect(error.reason.cause).toEqual(Result.isFailure(decoded) ? decoded.failure : null);
         }),
     );
 
-    // C6, GatewayNonce.ts:26. Plant: make the cause field required.
+    // C6, GatewayNonce.ts:26. Plant: put a made-up cause on the reason.
     law(
-      "C6: a saved key that decodes to the wrong length is `storage` with no cause",
+      "C6: a saved key that decodes to the wrong length is the door's own `Storage` with no cause",
       fc.record({ size: fc.integer({ min: 0, max: 64 }).filter((n) => n !== 32), seed: fc.integer() }),
       ({ size, seed }) =>
         Effect.gen(function* () {
@@ -138,15 +155,16 @@ export const suite = (law: Law, { fresh, LedgerError }: Harness) => {
           const key = Base64Url.encode(Uint8Array.from({ length: size }, (_, i) => (seed + i) & 255));
           yield* store.atomic(() => store.set("challengeKey", Schema.String, key));
           const error = yield* Effect.flip(gatewayNonce(store, TTL, CAP));
-          expect(error.reason).toBe("storage");
-          expect(error.cause).toBeUndefined();
+          expect(error._tag).toBe("GatewayError");
+          expect(error.reason._tag).toBe("Storage");
+          expect(error.reason.cause).toBeUndefined();
         }),
     );
 
-    // C5, GatewayNonce.ts:29: one shared callback for importKey, sign and verify. Plant: restore
-    // the zero-argument `const fail = () => new LedgerError({ reason: "crypto" })`.
+    // C5, GatewayNonce.ts:29: one shared callback for importKey, sign and verify. Plant: make it
+    // zero-argument, so the `Crypto` reason is built without the rejection.
     law(
-      "C5: a generated WebCrypto rejection on any call the nonce makes is `crypto` with that cause",
+      "C5: a generated WebCrypto rejection on any call the nonce makes is the door's own `Crypto` with that cause",
       fc.record({
         steps: fc.array(fc.record({ call: fc.constantFrom("importKey", "sign", "verify"), failure: failures }), {
           minLength: 1,
@@ -161,8 +179,9 @@ export const suite = (law: Law, { fresh, LedgerError }: Harness) => {
           for (const { call, failure } of steps) {
             if (call === "importKey") {
               const error = yield* Effect.flip(rejecting(call, failure, gatewayNonce(store, TTL, CAP)));
-              expect(error.reason).toBe("crypto");
-              expect(error.cause).toBe(failure);
+              expect(error._tag).toBe("GatewayError");
+              expect(error.reason._tag).toBe("Crypto");
+              expect(error.reason.cause).toBe(failure);
               continue;
             }
 
@@ -170,16 +189,18 @@ export const suite = (law: Law, { fresh, LedgerError }: Harness) => {
 
             if (call === "sign") {
               const error = yield* Effect.flip(rejecting(call, failure, nonce.issue(client)));
-              expect(error.reason).toBe("crypto");
-              expect(error.cause).toBe(failure);
+              expect(error._tag).toBe("GatewayError");
+              expect(error.reason._tag).toBe("Crypto");
+              expect(error.reason.cause).toBe(failure);
               continue;
             }
 
             // verify needs a nonce in the right shape and still in its window: issue one first.
             const issued = yield* nonce.issue(client);
             const error = yield* Effect.flip(rejecting(call, failure, nonce.check(client, issued)));
-            expect(error.reason).toBe("crypto");
-            expect(error.cause).toBe(failure);
+            expect(error._tag).toBe("GatewayError");
+            expect(error.reason._tag).toBe("Crypto");
+            expect(error.reason.cause).toBe(failure);
           }
         }),
     );

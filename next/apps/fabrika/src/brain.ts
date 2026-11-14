@@ -13,7 +13,6 @@ import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import type { Activity, Start } from "@kampus/libfabrika/processes/Process";
 import { fetch } from "@kampus/libfabrika/workers";
 import { control } from "@kampus/libfabrika/workers/control";
-import { ConnectionService } from "@kampus/libfabrika/workers/gateway";
 import {
   processRuntime,
   ProcessService,
@@ -30,7 +29,7 @@ import { Effect, Redacted, Schema } from "effect";
 import { assets, programs } from "virtual:fabrika-built";
 import type { ConnectionId } from "./door.ts";
 import { Objects } from "./objects.ts";
-import { connectionRuntime, projectRuntime, type Env } from "./runtime.ts";
+import { projectRuntime, type Env } from "./runtime.ts";
 
 /**
  * Durable Object for the Project: each RPC method runs the matching `ProjectService` call, and
@@ -336,52 +335,6 @@ export class Process extends DurableObject<Env> {
   }
 }
 
-/**
- * Durable Object for one connection at the door: its `fetch`, WebSocket events, `ring`, `probe` and
- * `notify` run the matching `ConnectionService` call.
- *
- * @stability unstable
- * @category objects
- */
-export class Connection extends DurableObject<Env> {
-  readonly runtime = settingsWire(connectionRuntime(this.ctx, this.env).contextEffect);
-
-  fetch(request: Request) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Worker fetch returns a Promise
-    return this.runtime.runPromise(ConnectionService.use((g) => g.fetch(request)));
-  }
-
-  webSocketMessage(ws: WebSocket, text: string | ArrayBuffer) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the WebSocket event enters Effect
-    return this.runtime.runPromise(ConnectionService.use((g) => g.message(ws, text)));
-  }
-
-  webSocketClose(ws: WebSocket, code: number) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the WebSocket event enters Effect
-    return this.runtime.runPromise(ConnectionService.use((g) => g.close(ws, code)));
-  }
-
-  webSocketError(ws: WebSocket) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the WebSocket event enters Effect
-    return this.runtime.runPromise(ConnectionService.use((g) => g.close(ws)));
-  }
-
-  ring(stream: string, rev: number) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return this.runtime.runPromise(ConnectionService.use((g) => g.ring(stream, rev)));
-  }
-
-  probe(session: string) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return this.runtime.runPromise(ConnectionService.use((g) => g.probe(session)));
-  }
-
-  notify(client: string, news: unknown) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return this.runtime.runPromise(ConnectionService.use((g) => g.notify(client, news)));
-  }
-}
-
 const deployment = Schema.decodeUnknownSync(
   // oxlint-disable-next-line fabrika/no-stage-word -- edge: these are Alchemy's own runtime binding names
   Schema.Struct({ ALCHEMY_STACK_NAME: Schema.NonEmptyString, ALCHEMY_STAGE: Schema.NonEmptyString }),
@@ -403,6 +356,14 @@ const Bridge = makeDurableObjectBridge(DurableObject, meta);
  * @category objects
  */
 export class RecordPart extends Bridge("RecordPart") {}
+
+/**
+ * Durable Object for one connection at the door, bridged to Alchemy's object of that name.
+ *
+ * @stability unstable
+ * @category objects
+ */
+export class Connection extends Bridge("Connection") {}
 
 /**
  * Worker entrypoint that receives the program isolates' tail events, bridged to Alchemy's Worker.

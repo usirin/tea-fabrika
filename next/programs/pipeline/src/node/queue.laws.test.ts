@@ -8,6 +8,7 @@ import * as CodeHostTest from "@kampus/libfabrika/codehost/CodeHostTest";
 import { InputId, Writer } from "@kampus/libfabrika/coordination";
 import { Doorbell, Ledger } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
+import { LedgerTransaction } from "@kampus/libfabrika/ledger/LedgerTransaction";
 import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
 import type { StartGrant } from "@kampus/libfabrika/processes/Children";
 import * as ChildrenLedger from "@kampus/libfabrika/processes/ChildrenLedger";
@@ -57,6 +58,8 @@ const NAME = "queue:1";
 const BUILD = "queue-laws";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const owner = Writer.cases.person.make({ key: "SHA256:law", for: "person_01m6v5270hf3c8x2q7w9z4k5mn" });
+/** The process manager's own caller: the brain registered every name, so its fold answers them. */
+const brain = Owner.cases.brain.make({});
 
 const from = {
   by: "SHA256:brain",
@@ -180,7 +183,7 @@ const life = Effect.fnUntraced(function* (
   const manager = ProcessManager.layer(
     {
       by: from.by,
-      owner: Owner.cases.brain.make({}),
+      owner: brain,
       recipient: Recipient.cases.client.make({ client: "brain", session: "process_0000000000e008000000000099" }),
     },
     ids,
@@ -341,17 +344,23 @@ const open = Effect.fnUntraced(function* (
       span: { traceId: TRACE, spanId: "00f067aa0ba902b7" },
     });
   });
+  // One fold of the process table answers every name. `status` folds the whole log on each call,
+  // and one call for each name was half of S2's time, which ran out on a busy CI machine.
   const statuses = Effect.gen(function* () {
     const rows = yield* Ledger.use((ledger) => Stream.runCollect(ledger.read("processes", 0)));
     const registrations = rows
       .filter((row) => row._tag === "registered")
       .map((row) => Schema.decodeUnknownSync(Schema.Struct({ name: Schema.String, program: Schema.String }))(row.body));
+    const processes = yield* ProcessManager;
+    const answers = yield* LedgerTransaction.use((tx) =>
+      tx.transact((turn) => {
+        const table = processes.table(turn);
+        return registrations.map((entry) => ({ entry, status: table.status(entry.name, brain) }));
+      }),
+    );
     return yield* Effect.forEach(
-      registrations,
-      (entry) =>
-        ProcessManager.use((p) => p.status(entry.name)).pipe(
-          Effect.map((status) => ({ ...entry, state: status.state })),
-        ),
+      answers,
+      ({ entry, status }) => Effect.fromResult(status).pipe(Effect.map((found) => ({ ...entry, state: found.state }))),
       { concurrency: 1 },
     );
   });

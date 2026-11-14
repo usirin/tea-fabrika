@@ -19,7 +19,9 @@ append(stream, id, line) { return this.runtime.runPromise(/* ... */); }
   `Effect.tryPromise`, and it holds no logic. *From 2026-11-09
   ([0041](../../.decisions/0041-object-classes-are-effect-objects.md)): a Durable Object class
   is written with Alchemy's Effect model, so once its port (ticket 502) lands, an object method
-  is no longer an edge we write. Until then the edge lines in `brain.ts` stay.*
+  is no longer an edge we write. Until then the edge lines in `brain.ts` stay. `RecordPart` and
+  `Connection` have moved (2026-11-13): their methods are Effects, and a call to `Connection`
+  goes through Alchemy's typed stub and `reach`. `Project` and `Process` keep their edge lines.*
   *Also from 2026-11-09
   ([0042](../../.decisions/0042-platform-pieces-go-through-alchemy.md)): every platform piece,
   in the cloud and in the local instance, is used through Alchemy's Effect form, so a platform call

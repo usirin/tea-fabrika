@@ -32,6 +32,9 @@ const testEnv = {
   BASE: `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`,
 };
 
+// 0524, ticket 933 (L7): the check job's one ratchet step, which holds every list file to shrinking.
+const ratchet = 'node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"';
+
 const toolingExcludes = "--exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**'";
 const fieldIf = "steps.diff.outputs.field == 'true'";
 const name = fc.string({ maxLength: 20 });
@@ -74,6 +77,7 @@ const valid = (label: string, extra: string) => ({
         { run: "pnpm lint" },
         { name: "promises", if: build, run: "pnpm promises gate" },
         { run: "pnpm build", if: build },
+        { name: "lists only shrink", env: testEnv, run: ratchet },
       ] as Record<string, unknown>[],
     },
     typecheck: {
@@ -123,23 +127,24 @@ const valid = (label: string, extra: string) => ({
       needs: "changes",
       if: guard("next"),
       "timeout-minutes": 17,
-      strategy: { "fail-fast": false, matrix: { shard: [1, 2, 3, 4, 5, 6] } },
+      strategy: { "fail-fast": false, matrix: { shard: ["e2e", "1", "2", "3", "4", "5"] as (string | number)[] } },
       steps: [
         {
           run: 'pnpm exec vitest run next/ --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"',
-          env: { SHARD: `\${{ matrix.shard }}/6` },
+          if: "matrix.shard != 'e2e'",
+          env: { SHARD: `\${{ matrix.shard }}/5` },
         },
         {
           name: "chromium",
-          if: "matrix.shard == 1 && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''",
+          if: "matrix.shard == 'e2e' && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''",
           run:
             "sudo sh .github/ci/apt.sh update\n" +
             "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium\n",
         },
-        { run: "node next/apps/fabrika/e2e.ts", if: "matrix.shard == 1" },
+        { run: "node next/apps/fabrika/e2e.ts", if: "matrix.shard == 'e2e'" },
         {
           name: "edges",
-          if: "matrix.shard == 1 && github.event_name == 'pull_request'",
+          if: "matrix.shard == '1' && github.event_name == 'pull_request'",
           env: { BASE: `\${{ github.event.pull_request.base.sha }}` },
           run: 'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
         },
@@ -206,9 +211,10 @@ const wiring = fc
     });
 
     if (whitespace) {
-      clean.jobs.next.steps[0]!.env!.SHARD = `\${{${gap}matrix.shard${gap}}}/6`;
+      clean.jobs.next.steps[0]!.env!.SHARD = `\${{${gap}matrix.shard${gap}}}/5`;
 
-      for (const step of clean.jobs.next.steps.slice(1, 4)) {
+      // The vitest step's guard and the three leg conditions, respaced around each operator.
+      for (const step of clean.jobs.next.steps.slice(0, 4)) {
         step.if = `\${{${gap}${step.if?.replace(/ *(==|!=|&&) */g, `${gap}$1${gap}`)}${gap}}}`;
       }
 
@@ -435,7 +441,7 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "review: SHARD matrix.sha rd",
     (w) => {
-      w.jobs.next.steps[0]!.env!.SHARD = `\${{ matrix.sha rd }}/6`;
+      w.jobs.next.steps[0]!.env!.SHARD = `\${{ matrix.sha rd }}/5`;
     },
   ],
   ...[1, 2, 3].map((index): [string, (w: Workflow) => void] => [
@@ -456,18 +462,64 @@ const plants: [string, (workflow: Workflow) => void][] = [
       w.jobs.next.steps[3]!.if = w.jobs.next.steps[3]!.if!.replace("pull_request", "pull_ request");
     },
   ],
-  [
-    "next missing shard",
+  // LE1's legs. Each list is one fault: a leg gone, a seventh leg, no e2e leg, numbers for strings.
+  ...(
+    [
+      ["drops leg 5", ["e2e", "1", "2", "3", "4"]],
+      ["drops leg e2e", ["1", "2", "3", "4", "5"]],
+      ["adds leg 6", ["e2e", "1", "2", "3", "4", "5", "6"]],
+      ["numbers six legs with no e2e", ["1", "2", "3", "4", "5", "6"]],
+      ["writes its numbered legs as numbers", ["e2e", 1, 2, 3, 4, 5]],
+      ["keeps the old six numbers", [1, 2, 3, 4, 5, 6]],
+      ["reorders its legs", ["1", "2", "3", "4", "5", "e2e"]],
+    ] as const
+  ).map(([fault, legs]): [string, (w: Workflow) => void] => [
+    `next ${fault}`,
     (w) => {
-      w.jobs.next.strategy.matrix.shard.pop();
+      w.jobs.next.strategy.matrix.shard = [...legs];
+    },
+  ]),
+  // LE1's denominator: `/6` leaves a sixth of the files on no machine, and a smaller one fails a leg.
+  ...["/6", "/3", "/4", "", "/05", "/5 "].map((denominator): [string, (w: Workflow) => void] => [
+    `next wrong denominator ${denominator || "absent"}`,
+    (w) => {
+      w.jobs.next.steps[0]!.env!.SHARD = `\${{ matrix.shard }}${denominator}`;
+    },
+  ]),
+  // LE1's vitest guard: exactly one `if`, and it is `matrix.shard != 'e2e'`.
+  [
+    "next vitest step loses its guard",
+    (w) => {
+      Reflect.deleteProperty(w.jobs.next.steps[0]!, "if");
     },
   ],
-  [
-    "next wrong denominator",
+  ...[
+    "matrix.shard != 'e2e' && false",
+    "matrix.shard == 'e2e'",
+    "matrix.shard != 'e2e' || true",
+    "matrix.shard != 1",
+  ].map((condition): [string, (w: Workflow) => void] => [
+    `next vitest guard ${condition}`,
     (w) => {
-      w.jobs.next.steps[0]!.env!.SHARD = `\${{ matrix.shard }}/3`;
+      w.jobs.next.steps[0]!.if = condition;
     },
-  ],
+  ]),
+  // LE1's leg steps: chromium and the end-to-end runner only on e2e, edges only on leg 1.
+  ...(
+    [
+      ["Chromium back on leg 1", 1, "matrix.shard == '1' && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''"],
+      ["e2e back on leg 1", 2, "matrix.shard == '1'"],
+      ["e2e back on the number 1", 2, "matrix.shard == 1"],
+      ["e2e on every numbered leg", 2, "matrix.shard != 'e2e'"],
+      ["edges on the e2e leg", 3, "matrix.shard == 'e2e' && github.event_name == 'pull_request'"],
+      ["edges on the number 1", 3, "matrix.shard == 1 && github.event_name == 'pull_request'"],
+    ] as const
+  ).map(([fault, index, condition]): [string, (w: Workflow) => void] => [
+    `next ${fault}`,
+    (w) => {
+      w.jobs.next.steps[index]!.if = condition;
+    },
+  ]),
   [
     "next fail fast",
     (w) => {
@@ -533,7 +585,7 @@ const plants: [string, (workflow: Workflow) => void][] = [
       }
     },
   ]),
-  ...["", "success()", "always()", "false", "matrix.shard == 1 && !cancelled()"].map(
+  ...["", "success()", "always()", "false", "matrix.shard == '1' && !cancelled()", "matrix.shard != 'e2e'"].map(
     (condition): [string, (w: Workflow) => void] => [
       `next timing advice condition ${condition || "absent"}`,
       (w) => {
@@ -600,13 +652,13 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "next chromium without file guard",
     (w) => {
-      w.jobs.next.steps[1]!.if = "matrix.shard == 1";
+      w.jobs.next.steps[1]!.if = "matrix.shard == 'e2e'";
     },
   ],
   [
     "next edges without event guard",
     (w) => {
-      w.jobs.next.steps[3]!.if = "matrix.shard == 1";
+      w.jobs.next.steps[3]!.if = "matrix.shard == '1'";
     },
   ],
   [
@@ -826,6 +878,43 @@ const plants: [string, (workflow: Workflow) => void][] = [
       );
     },
   ],
+  // 0524, ticket 933 (L7): a pull request that drops or mutes the ratchet would pass with a grown list.
+  [
+    "L7: the ratchet step is deleted",
+    (w) => {
+      w.jobs.check.steps = w.jobs.check.steps.filter((s) => s["run"] !== ratchet);
+    },
+  ],
+  [
+    "L7: the ratchet step skips on a condition",
+    (w) => {
+      w.jobs.check.steps[3]!["if"] = build;
+    },
+  ],
+  [
+    "L7: the ratchet step's failure does not block",
+    (w) => {
+      w.jobs.check.steps[3]!["continue-on-error"] = true;
+    },
+  ],
+  [
+    "L7: the ratchet step takes a base that keeps a first push's zeros",
+    (w) => {
+      w.jobs.check.steps[3]!["env"] = { BASE: env.BASE };
+    },
+  ],
+  [
+    "L7: the ratchet step runs twice, once muted",
+    (w) => {
+      w.jobs.check.steps.push({ ...w.jobs.check.steps[3]!, "continue-on-error": true });
+    },
+  ],
+  [
+    "L7: the ratchet command swallows its exit",
+    (w) => {
+      w.jobs.check.steps[3]!["run"] = `${ratchet} || true`;
+    },
+  ],
 ];
 
 it("accepts generated valid wiring", () => {
@@ -853,13 +942,106 @@ it("names the next command whose step or condition is wrong", () => {
   fc.assert(
     fc.property(wiring, fc.constantFrom(1, 2, 3), fc.boolean(), (broken, index, missingGuard) => {
       const step = broken.jobs.next.steps[index]!;
-      step.if = missingGuard ? (index === 2 ? "true" : "matrix.shard == 1") : "false";
+      step.if = missingGuard
+        ? index === 2
+          ? "true"
+          : index === 1
+            ? "matrix.shard == 'e2e'"
+            : "matrix.shard == '1'"
+        : "false";
       expect(lint(JSON.stringify(broken))).toEqual([
-        `check.yaml: next runs ${step.run} once on shard 1 with its original condition`,
+        `check.yaml: next runs ${step.run} once, only on leg ${index === 3 ? "1" : "e2e"}, with its pinned condition`,
       ]);
     }),
     options,
   );
+});
+
+// LE2, today's CI. LE1's four faults, each planted alone in every generated valid workflow, and the
+// one error the lint must give for it. An error list of exactly one line shows that the fault is
+// named and that nothing else hides behind it.
+// Plants, each run once on workflow-lint.ts and restored: accept any `if` on the vitest step (red:
+// the `if` taken off went unnamed); accept any denominator (red: `/6` went unnamed).
+const faults: [string, (workflow: Workflow) => void, string][] = [
+  [
+    "a /6 denominator",
+    (w) => {
+      // Keeps the generated spacing; LE2's one-error check fails if there is no SHARD to change.
+      const env = w.jobs.next.steps[0]!.env!;
+
+      if (env.SHARD !== undefined) {
+        env.SHARD = env.SHARD.replace(/\/5$/, "/6");
+      }
+    },
+    "next's vitest step passes --shard <leg>/<the count of numbered legs>",
+  ],
+  [
+    "leg 5 dropped",
+    (w) => {
+      w.jobs.next.strategy.matrix.shard.pop();
+    },
+    "next's legs are exactly e2e and 1 to 5, with no other matrix entries",
+  ],
+  [
+    "the end-to-end step back on leg 1",
+    (w) => {
+      w.jobs.next.steps[2]!.if = w.jobs.next.steps[2]!.if!.replace("'e2e'", "'1'");
+    },
+    "next runs node next/apps/fabrika/e2e.ts once, only on leg e2e, with its pinned condition",
+  ],
+  [
+    "the `if` taken off the vitest step",
+    (w) => {
+      Reflect.deleteProperty(w.jobs.next.steps[0]!, "if");
+    },
+    "next's vitest step runs on every leg but e2e, and has no other guard",
+  ],
+];
+
+it.each(faults)("LE2: names %s when it alone is planted", (_fault, mutate, error) => {
+  fc.assert(
+    fc.property(wiring, (clean) => {
+      expect(lint(JSON.stringify(clean))).toEqual([]);
+      const broken = structuredClone(clean);
+      mutate(broken);
+      expect(lint(JSON.stringify(broken))).toEqual([`check.yaml: ${error}`]);
+    }),
+    options,
+  );
+});
+
+it("L7: a check job without its ratchet step is named by that one error", () => {
+  fc.assert(
+    fc.property(wiring, (broken) => {
+      broken.jobs.check.steps = broken.jobs.check.steps.filter((s) => s["run"] !== ratchet);
+      const errors = lint(JSON.stringify(broken));
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain("ratchet.ts");
+    }),
+    options,
+  );
+});
+
+it("L7 scenario: the checked-in check.yaml fails with its ratchet step deleted, given an if, or given another base", () => {
+  const real = () => parse(readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8"));
+  const step = (w: Workflow) => w.jobs.check.steps.find((s) => s["run"] === ratchet)!;
+  expect(lint(JSON.stringify(real()))).toEqual([]);
+
+  for (const mutate of [
+    (w: Workflow) => {
+      w.jobs.check.steps = w.jobs.check.steps.filter((s) => s["run"] !== ratchet);
+    },
+    (w: Workflow) => {
+      step(w)["if"] = build;
+    },
+    (w: Workflow) => {
+      step(w)["env"] = { BASE: env.BASE };
+    },
+  ]) {
+    const broken = real();
+    mutate(broken);
+    expect(lint(JSON.stringify(broken))).not.toEqual([]);
+  }
 });
 
 it("format: the checked-in workflow passes the same wiring lint", () => {

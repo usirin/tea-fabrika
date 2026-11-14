@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { RpcCallError } from "alchemy/Rpc";
 import { Effect, Layer, Schema } from "effect";
 import * as fc from "fast-check";
 // T695, next/. The Cloudflare adapters keep the failure they translate (decision 0043 rule 12).
@@ -75,7 +76,7 @@ describe("T695, the platform clients keep what the platform rejected with", () =
   });
 
   law(
-    "C5: a generated rejection on any client call is `unreachable` with that very value as its cause",
+    "C5: a generated rejection on any client call is `unreachable` and keeps that very value, as its cause or in the one RpcCallError a Connection call wraps it in",
     fc.record({
       steps: fc.array(fc.record({ call: fc.constantFrom(...calls), failure: failures }), {
         minLength: 1,
@@ -87,10 +88,26 @@ describe("T695, the platform clients keep what the platform rejected with", () =
         for (const { call, failure } of steps) {
           const method = clients(failure)[call.client]?.[call.method];
           expect(method, `${call.client}.${call.method}`).toBeTypeOf("function");
-          const error = yield* Effect.flip((method as () => Effect.Effect<unknown, LedgerError>)());
+          // A real Request, so a client that hands `fetch` to a typed stub has one to read.
+          const error = yield* Effect.flip(
+            (method as (request: Request) => Effect.Effect<unknown, LedgerError>)(
+              new Request("http://127.0.0.1:8787/client/a/b"),
+            ),
+          );
           expect(error).toBeInstanceOf(LedgerError);
           expect(error.reason).toBe("unreachable");
-          expect(error.cause, `${call.client}.${call.method} keeps the rejection`).toBe(failure);
+          const cause: unknown = error.cause;
+
+          if (call.client !== "gateway" || call.method === "fetch") {
+            // T502 S1. A typed stub serves `fetch` through Alchemy's fetcher, not as a call: the
+            // fetcher fails typed with the rejection as its cause, and the client keeps that value.
+            expect(cause, `${call.client}.${call.method} keeps the rejection`).toBe(failure);
+          } else {
+            // T502 S1. A Connection call goes through Alchemy's typed stub and `reach`: the cause
+            // is the stub's RpcCallError, and that error holds the very value the platform threw.
+            expect(cause, `gateway.${call.method} keeps the stub's own error`).toBeInstanceOf(RpcCallError);
+            expect(Reflect.get(Object(cause), "cause"), `gateway.${call.method} keeps the rejection`).toBe(failure);
+          }
         }
       }),
   );
