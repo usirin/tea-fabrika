@@ -130,7 +130,8 @@ writing about 90,000 tokens of system prompt and tools to the cache.
   with "Azure Functions". Each call raised a `can_use_tool` control request with
   `mcp_server: { name, source: "project" }`, `server_policy_ask_only: true`, and a suggested rule
   `allow mcp__cfdocs__search_cloudflare_documentation` for `localSettings`. The session's summary
-  became "Waiting on permission: mslearn — Microsoft Docs Search", status `REQUIRES_ACTION`.
+  became "Waiting on permission" for mslearn's Microsoft Docs Search tool, status
+  `REQUIRES_ACTION`.
 - Its Bash and ToolSearch calls before that were accepted by a rule (`source: "config"`). The two
   MCP calls were not.
 - No agent answered the prompts: no agent answers a question the machine put to a person
