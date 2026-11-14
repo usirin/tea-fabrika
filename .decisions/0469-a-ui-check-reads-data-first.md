@@ -1,7 +1,7 @@
 ---
 id: 0469
 title: A UI check reads the most structured thing that shows the bug, tokens before the tree and boxes before pixels, and a found UI bug's fix lands with a law at the lowest layer that would have caught it
-status: accepted
+status: amended-in-part by [0525](0525-todays-version-is-frozen.md)
 date: 2026-11-07
 tags: [ui, verification, laws, layers]
 ---
