@@ -17,7 +17,7 @@ const root = resolve(here, "../..");
 const [script] = process.argv.slice(2);
 
 if (script === undefined || !/^[a-z-]+$/.test(script)) {
-  console.error("usage: launch.mjs <fetch|control|bundle|storage|timing>");
+  console.error("usage: launch.mjs <fetch|control|bundle|storage|timing|provider>");
   process.exit(2);
 }
 

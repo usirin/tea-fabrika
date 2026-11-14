@@ -58,10 +58,10 @@ export const providers = (sockets: ReadonlyArray<Socket>, ports: Deferred.Deferr
   );
 
 /** Deploys `stack` to the local runtime. The scope stops it. */
-export const start = <A>(stack: Parameters<typeof deploy>[0]["stack"] & { readonly _A?: A }) =>
+export const start = <A>(stack: Parameters<typeof deploy>[0]["stack"] & { readonly _A?: A }, place = "local") =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
-    return yield* deploy({ stack, stage: "local", dev: true, scope: yield* Effect.scope }).pipe(
+    return yield* deploy({ stack, stage: place, dev: true, scope: yield* Effect.scope }).pipe(
       Effect.provide(localState()),
       Effect.provide(
         Layer.mergeAll(
