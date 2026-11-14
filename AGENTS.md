@@ -37,18 +37,6 @@ Tickets go in the app's own tracker (`tracker_file`). Never open a GitHub issue 
 GitHub issues are for other people's repos
 ([the lead skill](./.agents/skills/lead/SKILL.md#tickets-and-tracker-posts)).
 
-## Decision discovery
-
-List `.decisions/`: filenames identify records, and each record's frontmatter gives
-its `id`, `title` and `status`. Read applicable records when changing the choice they
-govern or resolving conflicting guidance. Record new decisions with `/adr`
-([the adr skill](./.agents/skills/adr/SKILL.md)).
-
-There is no committed decision index and no startup hook. Filenames plus frontmatter are the
-discovery contract
-([0008](./.decisions/0008-decision-discovery-is-the-agents-md-contract.md), after
-[phoenix ADR 0129](https://github.com/kamp-us/phoenix/blob/main/.decisions/0129-adr-discovery-is-the-claude-md-contract.md)).
-
 **Rule of thumb:** a decision goes in `.decisions/`, and its long reasoning in
 `docs/direction/`. A measurement goes in `experiments/`. Something that happened on a real ticket goes in `field/`. If a
 piece of knowledge about this project lives only in a chat or in an agent's
@@ -56,6 +44,27 @@ private memory, it is in the wrong place: write it here. A decision lands as soo
 as it is made: the lead writes `.decisions/NNNN-slug.md` and starts its docs pull request in the
 same turn, and never waits for a code pull request or the end of the day (owner, 2026-11-09,
 [0001](./.decisions/0001-decisions-live-in-the-repo.md)).
+
+## Finish your task
+
+For every agent, whatever its step. A step's skill adds its own rules and its own answer format.
+
+- **Finish the whole task.** Do not end your turn while you still owe work the task asked for. Do not end with a
+  list of what is left, an offer to continue or a question about whether to go on: do the next part. An error, a
+  timeout, a locked file, an empty result, a failing tool or a red check is an ordinary obstacle. Find its cause,
+  then work through it with the access you have: wait and retry, fix the command, use another tool. An open
+  question does not hold the parts that do not need its answer.
+- **Stop only for a real blocker:** something a person decided on purpose (a file another step owns, access that
+  was held back, a rule here that says never), a new design call, or work that cannot move without a person.
+  Leave it alone, finish everything else, then say plainly what you found and exactly what you need. This
+  loosens no rule here on pushes, merges, secrets or history.
+- **These need no approval,** in your own worktree and on your own files: `pnpm format` and `pnpm lint`; a fix
+  for a lint, format or type error your own change caused; your own narrow test, run again after a change; a command
+  tried again after a timeout; an install with `--frozen-lockfile`; a commit of your own paths with the step-commit
+  skill, which pushes for you (in a box, `drive.ts` commits and pushes instead); a finding row.
+- **Report for a reader who saw none of the work.** Give the answer first, then what changed, what ran, and what
+  could not run and why. Write full sentences in plain words, use no name you made up along the way, and give a
+  path or a full URL for each thing you cite, so the report stands on its own.
 
 ## Two versions, side by side
 
@@ -104,8 +113,7 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
 - **In `next/`, use Effect's platform modules, not `node:` imports,** where they cover the job:
   `effect/process`'s `ChildProcess` to spawn, `effect/cli` for flags, `FileSystem` and `Path` for
   files. A `node:` import stays only where Effect has nothing, marked as an edge with its reason
-  (owner, 2026-11-09). The lint rule `fabrika/no-node-imports` comes with
-  [PR 530](https://github.com/usirin/tea-fabrika/pull/530).
+  (owner, 2026-11-09). The lint rule `fabrika/no-node-imports` checks it.
 - **In `next/`, use the platform through Alchemy, never directly,** in the cloud and on the laptop
   alike: no `cloudflare:*`, `miniflare`, `workerd`, `wrangler` or `@cloudflare/*` import, no raw
   platform type, and nothing that starts or talks to the local runtime except through Alchemy. A
@@ -140,7 +148,14 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   run the steps by hand, each logged in `field/`, and the lead agent reads every diff, CI
   and the leak grep before a merge. `next/` does not wait on the pipeline. No builder starts
   before an approved plan and tests that exist
-  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). A plan that only builds a decided
+  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). After a review sends a lane back, one fix agent writes the law and the fix
+  together, with no separate tests and build steps
+  ([0177](./.decisions/0177-fix-round-is-one-agent.md)). A law that can only run on the real
+  machine runs before the first review, and on the owner's Mac only after the lead has read every
+  line in it that signals a process or calls launchd and the owner has said yes
+  ([0178](./.decisions/0178-host-only-laws-run-first.md)). A lane stops at its second sent-back
+  review: the lead lands what works and files the rest as a ticket
+  ([0176](./.decisions/0176-second-send-back-stops-lane.md)). A plan that only builds a decided
   note is approved by the lead session after its own read and draft check. It writes
   `Approved by the lead agent, builds <note>; body <sha256-12>` on line 1 and replaces that line
   after any body edit, including an appended amendment. A plan that raises a new design call
@@ -177,19 +192,18 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   once every step passed, CI is green, the leak grep is clean and `loosening.sh` shows no real
   loosening after the hand check. Only real loosening of a law, or a new design call, waits on the
   owner ([0014](./.decisions/0014-the-lead-merges-when-every-step-passed.md)).
+  A pull request that only carries out what an accepted decision already owes, such as taking out a
+  check the decision dropped, does not wait either, exam paths included: the lead merges it and
+  shows it to the owner after ([0166](./.decisions/0166-owed-work-needs-no-owner-read.md)).
 - **One fresh agent per step** (owner, 2026-11-09), and the lead drives with flows, never a lane agent ([0064](./.decisions/0064-the-lead-drives-with-flows.md)). Each step's agent reads the lane's state
   file, does its one step and writes the state file back for the next; no long driver carries a
-  ticket. A drive script will chain the mechanical steps and start an agent only for judgment
-  (tracker ticket 341). The lead skill says how.
+  ticket. `chain.ts` chains the mechanical steps and starts an agent only for judgment
+  (tracker ticket 341). A recheck after a fix round resumes the same reviewer, never a fresh one
+  ([0177](./.decisions/0177-fix-round-is-one-agent.md)). The lead skill says how.
 - **No number caps a pull request's size** (owner, 2026-11-11): a plan still cuts big work into
   slices, each landing whole with its tests, by what works on its own and never to fit a count.
   Size picks who looks, and a warning drawn from our own merged pull requests only advises
   ([0099](./.decisions/0099-no-number-caps-a-pull-request.md)).
-- **An exam change that is all proper property tests merges without the owner's read** (owner,
-  2026-11-08). Proper means every new or changed law is a property, or an example labeled
-  `vector:`, `format:`, `pinned:` or `scenario:` with its reason, and `loosening.sh` shows no law got
-  narrower. A change that loosens or removes a law still waits on the owner
-  ([how a change lands](./docs/plan/README.md#how-a-change-lands)).
 - **In `next/`, the shell is `fabsh`.** `tsh` stays in today's version.
 - **In `next/`, a folder of libfabrika is a module, and its rank is a layer,** like rooms on
   floors, which stays only the analogy ([0091](./.decisions/0091-modules-and-layers.md)). A module
@@ -245,14 +259,12 @@ conflicting guidance. Record new decisions with `/adr`
 
 There is no committed decision index and no startup hook. Filenames plus frontmatter are the
 discovery contract
-([0008](./.decisions/0008-decision-discovery-is-the-agents-md-contract.md)).
+([0008](./.decisions/0008-decision-discovery-is-the-agents-md-contract.md), after
+[phoenix ADR 0129](https://github.com/kamp-us/phoenix/blob/main/.decisions/0129-adr-discovery-is-the-claude-md-contract.md)).
 
 Repo tooling adds no Claude Code hooks, SessionStart or any other (owner, 2026-11-09). A tool runs
 when called. Box cleanup (`box.sh gc`) runs on a launchd timer and after each merge, never on a
 step's start ([0101](./.decisions/0101-box-cleanup-runs-on-a-timer.md)): `gcloop.ts`.
-
-Tickets go in the app's own tracker (`tracker_file`). Never open a GitHub issue on this repo;
-GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/SKILL.md)).
 
 ## Before you design anything
 
@@ -295,7 +307,9 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
   day, and keep building. The bump that takes the release deletes the patch
   ([patch upstream locally](./docs/direction/patch-upstream-locally.md)). First read the
   package's decisions, patterns and source and build on its answer; patch only a gap or bug that
-  read proved ([0054](./.decisions/0054-read-upstream-before-patching-it.md)).
+  read proved ([0054](./.decisions/0054-read-upstream-before-patching-it.md)). An upstream issue
+  reports one bug we proved, with its repro; a list of missing features found by reading is
+  patched locally and not reported in bulk (owner, 2026-11-09).
 - **Read the installed version.** Agents know older libraries. Before you write or judge
   code against one, read the lockfile's version and that version's docs. A lint rule that
   fires a lot means ask why before you call it a false alarm.
@@ -314,6 +328,9 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
 - **Solve a problem we have.** A big vision gets saved as a note and tied back to a real
   problem. An experiment picks the tech. Aim at two people working together first:
   packages for others and publishing are recorded as later.
+- **Judge an idea against the plan, never against today's code.** A "not yet", "later" or "too
+  small today" claim is checked against what the plan says we are building, never against what
+  exists today. A plan file that is behind a decision is fixed the same turn (owner, 2026-11-11).
 - **Moving a job from an agent to code?** Say what the agent was absorbing that code will
   not (the case nobody listed), what the "I don't know" exit is, and whether the rule
   makes honesty expensive. Check a rule against real moves you made this session: would
@@ -454,10 +471,9 @@ every row.
 | A tutorial's files | `pnpm typecheck`, and every step on a fresh clone |
 | A program's window | as code, plus shots from the real built app at the five layouts ([Changing the product](#changing-the-product)) |
 
-A report says which of these ran, and which could not run and why.
-
 A flaky test is fixed the day it is seen, by removing its cause; nobody reruns it until green and moves on
-([0036](./.decisions/0036-a-flaky-test-is-fixed.md)).
+([0036](./.decisions/0036-a-flaky-test-is-fixed.md)). A refusal, failure or problem seen a second time gets its root
+cause found and a ticket filed, never another workaround or another ask (owner, 2026-11-10).
 
 `pnpm lint` fails on an export nobody uses that `unreachable-ledger.json` does
 not name yet (`pnpm lint:dead` runs that part alone). With code-graph 0.12.0,
@@ -512,7 +528,7 @@ brief carries these caps. Each one came from a laptop that became unusable.
   Never the full suite locally (owner, 2026-11-08). A change to a file that reruns every test (the
   `forceRerunTriggers` in `vitest.config.ts`: a `package.json`, the lockfile, `pnpm-workspace.yaml`,
   a tsconfig and others) makes `--changed` the full suite, so the config refuses it locally: run
-  the narrow paths of the tests you touched and of the tests that read that file, and CI runs the rest. On a pull request, CI decides what to run from
+  the narrow paths of the tests you touched and of the tests that read that file, and CI runs the ones its changed paths call for. On a pull request, CI decides what to run from
   the changed paths (`.github/ci/changes.mjs`). `pnpm typecheck` is its own job, `typecheck`, beside
   `check`'s lint and build, and runs or skips with `check` (0133). A draft pull request runs only `changes`, `field`, `typecheck` and `check`'s lint (named `lint` there), and marking it ready runs the full set on the same head ([0134](./.decisions/0134-no-code-stays-only-on-a-local-branch.md)). Only Markdown or field rows (`field/*.jsonl`, or files in `field/notes/`, `field/runs/` and `field/findings/`): it skips
   `check`, `test`, `next` and `e2e`. Only `next/` files (but not the exam helper): it runs `check` and `next`,
@@ -522,7 +538,13 @@ brief carries these caps. Each one came from a laptop that became unusable.
   picks only the tests that reach them. What a test's scripts read is derived from the scripts, never
   written in the test (`oxlint-plugins/script-reads.mjs`; `pnpm lint` fails on a script no test reaches).
   Other Markdown that a program or skill reads counts as code.
-  Anything else, and every push to main, runs all jobs, so the full suite runs after the merge. A run that
+  Anything else runs `check`, `typecheck`, `test` and `next`. Today's own checks (today's tests, `e2e`, and `check`'s
+  promises gate and build) start only when a file of today's version changed (`apps/`, `programs/`, `packages/`,
+  `fixtures/`); without one, `test` runs only the tooling tests (CI's own, the lint plugins, the root and skill
+  scripts) that reach the change. A merge queue's run and a push to main pick their jobs from their changed paths, as
+  a ready pull request does ([0174](./.decisions/0174-a-queue-run-follows-its-paths.md),
+  [0175](./.decisions/0175-every-run-follows-its-paths.md)), so nothing runs the full suite after a merge. A run that
+  cannot read its paths runs every job. A run that
   needs what CI lacks (Electron shots, a stage with workerd) still runs here. With two or more code agents running:
   `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at the very end. `tsgo` takes
   about 8 cores, so small jobs add up.
@@ -641,6 +663,10 @@ Write-ups are read by busy people, some of them not native English speakers.
   ([tiers](./docs/plan/tiers.md)). Each person answers for their own agents, so a first slice
   does not defend against them; strangers on a public address are a different case.
   Tier size never pushes work out: split the tier, and say what a new idea changes now.
+  Any piece of work follows the same order: make it work, then better, then secure, and a stuck
+  thing gets the smallest change that makes it run while the better or safer version becomes a
+  ticket (owner, 2026-11-11,
+  [0171](./.decisions/0171-make-it-work-then-better-then-secure.md)).
 - **Secure and simple.** For any security step, say when a person meets it and how
   often. No prompt on opening the app, nothing hourly. The protection goes in code, not in a
   chore.

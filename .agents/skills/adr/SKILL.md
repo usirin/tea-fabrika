@@ -9,6 +9,10 @@ One decision, one file, one docs pull request. Write it the turn the owner settl
 if nobody asked: a ruling that is not written down gets decided again, differently, by the next
 session. This skill holds the file's shape and the judgment around it.
 
+Before you write one, ask "is this a setting?" A model, an effort level or a number a person may
+change tomorrow is a setting, and gets no decision file and no pull request (owner, 2026-11-11,
+[0069](../../../.decisions/0069-choices-are-settings.md)).
+
 ```mermaid
 flowchart LR
   decides["owner decides"] --> number["find the next number"]

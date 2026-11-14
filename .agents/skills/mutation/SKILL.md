@@ -22,6 +22,8 @@ A brief names the ticket or the merged range, and the build commit or files to m
 holds the rest. The fast check's settings are
 [fast and daily mutation](../../../docs/direction/fast-and-daily-mutation.md)'s: changed lines
 first, five minutes, survivors as advice.
+[`AGENTS.md`, "Finish your task"](../../../AGENTS.md#finish-your-task) says when to keep going, what needs
+no approval and how to write the report.
 
 Never print npm, pnpm or env settings. The runner strips secret settings and redacts saved output.
 
@@ -42,7 +44,8 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
 4. **Survivors advise.** A real survivor never holds the pull request. Kill one with a new or
    tighter law, in test files only, when the law is clear; list the rest in the report. Run the
    touched tests and `pnpm lint`. Step-commit checks staged formatting.
-5. **Commit** changed laws with the step-commit skill, as `mutation`.
+5. **Commit** changed laws with the step-commit skill, as `mutation`. When `drive.ts` runs you in a box,
+   commit nothing: leave every change in the tree, and drive commits and signs it as one step commit.
 6. **Report** actual tested, killed, survived, timeout, compile-error, uncovered,
    reused and unreached counts, plus the seed and `sample.json` totals; each survivor with
    `file:line` and its status, with hand-plant evidence for startup survivors; the laws added;

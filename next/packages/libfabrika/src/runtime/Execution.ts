@@ -1,3 +1,10 @@
+/**
+ * How the runner runs a program's pure steps: in this process, or over RPC to the box the program
+ * runs in on a Worker. Both give the runner the same `Execution`, and a program failure crosses
+ * the RPC as checked data.
+ *
+ * @stability unstable
+ */
 import { type AnyCmdDef, type Tagged } from "@demlik/tea";
 import { Cause, Effect, Option, Result, Schema } from "effect";
 import * as Redacted from "effect/Redacted";
@@ -21,7 +28,7 @@ const Outcome = Schema.TaggedUnion({
 
 const Typed = Schema.Struct({ type: Schema.String });
 
-// Match P37's deletable failure-content ceiling, half a Durable Object row.
+// Match the deletable failure-content ceiling, half a Durable Object row.
 const MOST_CONTENT = 1_000_000;
 
 /** Program failures are checked RPC data; a rejected call is a transport failure. */
@@ -31,6 +38,13 @@ const Failure = {
   content: Schema.String.check(Schema.isMaxLength(MOST_CONTENT)),
 };
 
+/**
+ * Schema for a program failure as it crosses the RPC from a program's box: the `ProgramDown`
+ * reason, the class of what was thrown, and its printed content, at most 1,000,000 characters.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const ExecutionFailure = Schema.TaggedStruct("ProgramDown", Failure);
 
 /** A program's own throw rides in deletable content; a cause the runtime kept for diagnosis,
@@ -42,6 +56,17 @@ const shown = (error: ProgramDown): unknown =>
       ? new ProgramDown({ reason: error.reason, error: error.error })
       : error.cause;
 
+/**
+ * Converts a `ProgramDown` into the `ExecutionFailure` a program's box replies with.
+ *
+ * **Details**
+ *
+ * A program's own throw is printed into `content`. A cause the runtime kept only for diagnosis,
+ * which may hold the input that failed, is left out: only its reason and class cross.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const executionFailure = (error: ProgramDown) =>
   ExecutionFailure.make({
     reason: error.reason,
@@ -62,6 +87,14 @@ export const Reply = Schema.TaggedUnion({
   ProgramDown: Failure,
 });
 
+/**
+ * Schema for what the runner knows of a loaded program without holding its code: its name, its
+ * saved-state version, its delivery limit and restart policy when it declares them, the events it
+ * may write, its input ports, and its Cmd types.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const Declaration = Schema.Struct({
   name: Schema.String,
   v: Schema.Int,
@@ -72,10 +105,35 @@ export const Declaration = Schema.Struct({
   inputs: Schema.Record(Schema.String, Schema.Struct({ write: Schema.Boolean, personOnly: Schema.Boolean })),
   cmds: Schema.Array(Schema.String),
 });
+/**
+ * A loaded program's checked declaration, as `Declaration` decodes it.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Declaration = typeof Declaration.Type;
 
+/**
+ * One program's compiled source and the hash of it, as the build hands it to the Worker's loader.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type ProgramSource = { readonly hash: string; readonly source: string };
 
+/**
+ * A program's pure steps as the runner calls them. Each is an Effect that fails with
+ * `ProgramDown`.
+ *
+ * **Details**
+ *
+ * `init`, `step` and `fold` answer a `Step`. `upgrade` climbs a saved model to the program's
+ * current version. `reply` turns a Cmd's outcome into the settled Msg the program is told. `check`
+ * says whether an event passes the schema of the write the program declared under `kind`.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Execution = {
   readonly fresh: (model: unknown, msg: unknown) => Effect.Effect<Admission, ProgramDown>;
   readonly update: (model: unknown, msg: unknown) => Effect.Effect<Prepared, ProgramDown>;
@@ -90,6 +148,13 @@ export type Execution = {
   readonly admit: (m: unknown) => Effect.Effect<boolean, ProgramDown>;
 };
 
+/**
+ * The RPC methods a program's box offers: the platform's side of `Execution`, as Promises. `check`
+ * and `admit` are optional, and a box without one fails that call with `ProgramDown` `load`.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type ExecutionCalls = {
   readonly fresh: (model: unknown, msg: unknown) => Promise<unknown>;
   readonly update: (model: unknown, msg: unknown) => Promise<unknown>;
@@ -169,6 +234,19 @@ const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Sche
   });
 };
 
+/**
+ * Builds an `Execution` that steps a program in this process, from its declaration.
+ *
+ * **Details**
+ *
+ * The declaration is checked once, when the execution is built, and a bad one fails every call
+ * with `load`. A throw inside a call becomes `ProgramDown` with that call's reason: `load` for
+ * `init`, `saved_letter` for `fold`, `saved_state` for `upgrade`, and `step` for the rest. `build`
+ * is stamped on a model that `upgrade` saves.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const nodeExecution = (declared: unknown, build = "node"): Execution => {
   const pure = Effect.fromResult(stepper(declared)).pipe(
     Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
@@ -224,6 +302,22 @@ const invoke = (binding: ExecutionCalls, key: keyof ExecutionCalls, args: Readon
   return Effect.tryPromise({ try: () => Reflect.apply(method, binding, args), catch: rejected });
 };
 
+/**
+ * Builds an `Execution` that steps a program inside its box, over the box's RPC.
+ *
+ * **Details**
+ *
+ * Each reply is decoded before the runner sees it. A reply that is an `ExecutionFailure` becomes
+ * the `ProgramDown` it names, with its content as the cause.
+ *
+ * **Gotchas**
+ *
+ * A rejected call fails with `source: "rpc"`, and a reply that does not decode with
+ * `source: "decode"`. Neither decided anything about the input, so the call must be tried again.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const workerExecution = (binding: ExecutionCalls): Execution => {
   const call = (method: keyof ExecutionCalls, args: ReadonlyArray<unknown>, reason: ProgramDown["reason"]) =>
     invoke(binding, method, args).pipe(Effect.mapError((cause) => new ProgramDown({ reason, source: "rpc", cause })));

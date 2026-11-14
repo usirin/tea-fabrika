@@ -1,6 +1,6 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { grantText } from "@kampus/libfabrika/access/Text";
-import { Console, Effect, Schema, Stream } from "effect";
+import { Console, DateTime, Effect, Schema, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
@@ -79,7 +79,7 @@ const grant = Command.make(
         check: "none",
         has: [],
       },
-      sentAt: new Date().toISOString(),
+      sentAt: DateTime.formatIso(yield* DateTime.now),
     });
     const armored = yield* Effect.scoped(
       Effect.gen(function* () {

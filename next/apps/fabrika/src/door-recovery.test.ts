@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
-import { afterAll, describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
 import * as A from "@kampus/libfabrika";
 import { Grant } from "@kampus/libfabrika/access/Access";
 import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
@@ -39,48 +39,58 @@ const START = "process_0000000000e008000000000003";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const NAME = "counter:1";
 const URL = "https://fabrika.test/entry/project-socket";
-const top = mkdtempSync(join(tmpdir(), "p34-door-"));
-const opened: DatabaseSync[] = [];
 
-afterAll(() => {
-  for (const db of opened) {
-    if (db.isOpen) {
-      db.close();
-    }
-  }
+// A test's databases live in one temp folder. The scope that opens them closes every connection, then
+// removes the folder (0061).
+const disks = Effect.acquireRelease(
+  Effect.sync(() => {
+    const top = mkdtempSync(join(tmpdir(), "p34-door-"));
+    const opened: DatabaseSync[] = [];
+    let file = 0;
 
-  rmSync(top, { recursive: true, force: true });
-});
+    const open = (path: string) => {
+      const db = new DatabaseSync(path);
+      // A test process never loses power, so it skips the sync and keeps the rollback journal in memory.
+      // Every byte a law reads stays in the file and survives reopen (ticket 585, decision 0052).
+      db.exec("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF");
+      opened.push(db);
+      return db;
+    };
 
-let file = 0;
+    const disk = () => {
+      const path = join(top, `${++file}.db`);
+      let db = open(path);
+      let inner = nodeSql(db);
+      const sql: Sql = {
+        exec: (q, ...args) => inner.exec(q, ...args),
+        transaction: (f) => inner.transaction(f),
+        size: () => inner.size(),
+      };
+      return {
+        sql,
+        reopen: () => {
+          db.close();
+          db = open(path);
+          inner = nodeSql(db);
+        },
+      };
+    };
 
-const open = (path: string) => {
-  const db = new DatabaseSync(path);
-  // A test process never loses power, so it skips the sync and keeps the rollback journal in memory.
-  // Every byte a law reads stays in the file and survives reopen (ticket 585, decision 0052).
-  db.exec("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF");
-  opened.push(db);
-  return db;
-};
+    return { top, opened, disk };
+  }),
+  ({ top, opened }) =>
+    Effect.sync(() => {
+      for (const db of opened) {
+        if (db.isOpen) {
+          db.close();
+        }
+      }
 
-const disk = () => {
-  const path = join(top, `${++file}.db`);
-  let db = open(path);
-  let inner = nodeSql(db);
-  const sql: Sql = {
-    exec: (q, ...args) => inner.exec(q, ...args),
-    transaction: (f) => inner.transaction(f),
-    size: () => inner.size(),
-  };
-  return {
-    sql,
-    reopen: () => {
-      db.close();
-      db = open(path);
-      inner = nodeSql(db);
-    },
-  };
-};
+      rmSync(top, { recursive: true, force: true });
+    }),
+);
+
+type Disks = Effect.Success<typeof disks>;
 
 const field = (value: string | Uint8Array) => {
   const b = typeof value === "string" ? Buffer.from(value) : Buffer.from(value);
@@ -145,10 +155,10 @@ const policy = {
   backoff: { minMs: 100, maxMs: 800, resetAfterMs: 5000 },
 };
 
-const world = () => {
+const world = ({ disk }: Disks) => {
   const project = disk(),
     process = disk();
-  const partFiles = new Map<string, ReturnType<typeof disk>>();
+  const partFiles = new Map<string, ReturnType<Disks["disk"]>>();
   const window = key();
   const other = key();
   const founder = {
@@ -479,156 +489,158 @@ describe("P34 door recovery", () => {
           await fc.assert(
             fc.asyncProperty(fc.uuid(), fc.integer({ min: 2, max: 4 }), (letter, resends) =>
               Effect.runPromise(
-                Effect.gen(function* () {
-                  const w = world();
-                  const queued = request(false, letter);
-                  const binding = () => {
-                    const [row] = w.project.sql.exec(
-                      "SELECT value FROM gateway_bindings WHERE letter=?",
-                      `${P1}/${letter}`,
-                    );
-                    return Schema.decodeUnknownSync(
-                      Schema.fromJsonString(
-                        Schema.Struct({
-                          id: Schema.String,
-                          process: Schema.String,
-                          state: Schema.Struct({ _tag: Schema.String }),
-                        }),
-                      ),
-                    )(row?.value);
-                  };
-                  const inbox = Ledger.use((l) => Stream.runCollect(l.read(`${NAME}/inbox`, 0)));
-                  yield* w.boot;
-                  const old = yield* Effect.gen(function* () {
-                    const client = yield* w.online();
-                    // Fail the next boundary, leaving exactly this durable state.
-                    w.controls.cutRecorded = state === "allocated";
-                    // Review 5: the recorded row survives a failed trace flush.
-                    w.controls.cutFlush = state === "recorded";
-                    w.controls.cutRetryable = state === "delivered";
-                    w.controls.failDelivery = true;
-                    expect(
-                      yield* Effect.exit(Gateway.use((d) => d.route(client, "process.send", queued))),
-                    ).toMatchObject({
-                      _tag: "Failure",
-                    });
-                    expect(binding()).toMatchObject({ process: P1, state: { _tag: state } });
-                    expect(w.controls.cuts + w.controls.retryableCuts).toBe(state === "retryable" ? 0 : 1);
-                    expect(yield* inbox).toEqual([]);
-                    return binding().id;
-                  }).pipe(Effect.provide(w.layer()));
-                  w.reopen();
-                  w.controls.failDelivery = false;
-
-                  // Acceptance can race the door's saved state. Use the real runner,
-                  // keeping the unfinished door row, never fabricating a receipt.
-                  if (holds) {
-                    yield* A.ProgramRunner.use((r) =>
-                      r.msg({
-                        id: letter,
-                        envelope: {
-                          id: Schema.decodeUnknownSync(A.Id.InputId)(old),
-                          by: Writer.cases.person.make({ key: w.window.fingerprint, for: PERSON }),
-                          arrivedAt: 0,
-                          input: { type: "press", poison: false },
-                        },
-                        sentAt: queued.sentAt,
-                        seen: queued.seen,
-                        span: { traceId: from().traceId, spanId: "00f067aa0ba902b7" },
-                      }),
-                    ).pipe(Effect.provide(w.runner(P1)));
-                  }
-
-                  yield* A.ProgramRunner.use((r) => r.restart({ id: `replace-${letter}`, build: "build-a" })).pipe(
-                    Effect.provide(w.runner(P1)),
-                  );
-
-                  // Retired: the Worker's exit retires the old process's gateway sessions after it records the exit
-                  // (cloudflare/runtime.ts, `exit`), so an ended pid refuses a record. Open: a trusted exit by hand that
-                  // a kill cut between those two writes leaves the exited pid's sessions open, and nothing runs it again.
-                  if (retired) {
-                    yield* Gateway.use((d) => d.retire(P1)).pipe(Effect.provide(w.layer()));
-                  }
-
-                  w.reopen();
-                  yield* Effect.gen(function* () {
-                    const client = yield* w.online();
-                    const d = yield* Gateway;
-                    expect(yield* ProcessManager.use((p) => p.resolve(P1))).toMatchObject({
-                      name: NAME,
-                      state: { _tag: "live", process: P2 },
-                    });
-                    yield* A.ProgramRunner.use((r) => r.open("successor")).pipe(Effect.provide(w.runner(P2)));
-                    const before = yield* inbox;
-                    expect(before).toHaveLength(holds ? 1 : 0);
-                    const delivered = w.deliveries.length;
-                    let steps = w.steps();
-
-                    for (let n = 0; n < resends; n++) {
-                      expect(yield* d.route(client, "process.send", queued)).toMatchObject({
-                        _tag: "ok",
-                        result: { _tag: "accepted", pos: 1 },
+                Effect.scoped(
+                  Effect.gen(function* () {
+                    const w = world(yield* disks);
+                    const queued = request(false, letter);
+                    const binding = () => {
+                      const [row] = w.project.sql.exec(
+                        "SELECT value FROM gateway_bindings WHERE letter=?",
+                        `${P1}/${letter}`,
+                      );
+                      return Schema.decodeUnknownSync(
+                        Schema.fromJsonString(
+                          Schema.Struct({
+                            id: Schema.String,
+                            process: Schema.String,
+                            state: Schema.Struct({ _tag: Schema.String }),
+                          }),
+                        ),
+                      )(row?.value);
+                    };
+                    const inbox = Ledger.use((l) => Stream.runCollect(l.read(`${NAME}/inbox`, 0)));
+                    yield* w.boot;
+                    const old = yield* Effect.gen(function* () {
+                      const client = yield* w.online();
+                      // Fail the next boundary, leaving exactly this durable state.
+                      w.controls.cutRecorded = state === "allocated";
+                      // Review 5: the recorded row survives a failed trace flush.
+                      w.controls.cutFlush = state === "recorded";
+                      w.controls.cutRetryable = state === "delivered";
+                      w.controls.failDelivery = true;
+                      expect(
+                        yield* Effect.exit(Gateway.use((d) => d.route(client, "process.send", queued))),
+                      ).toMatchObject({
+                        _tag: "Failure",
                       });
+                      expect(binding()).toMatchObject({ process: P1, state: { _tag: state } });
+                      expect(w.controls.cuts + w.controls.retryableCuts).toBe(state === "retryable" ? 0 : 1);
+                      expect(yield* inbox).toEqual([]);
+                      return binding().id;
+                    }).pipe(Effect.provide(w.layer()));
+                    w.reopen();
+                    w.controls.failDelivery = false;
 
-                      if (!holds && n === 0) {
-                        steps = w.steps();
+                    // Acceptance can race the door's saved state. Use the real runner,
+                    // keeping the unfinished door row, never fabricating a receipt.
+                    if (holds) {
+                      yield* A.ProgramRunner.use((r) =>
+                        r.msg({
+                          id: letter,
+                          envelope: {
+                            id: Schema.decodeUnknownSync(A.Id.InputId)(old),
+                            by: Writer.cases.person.make({ key: w.window.fingerprint, for: PERSON }),
+                            arrivedAt: 0,
+                            input: { type: "press", poison: false },
+                          },
+                          sentAt: queued.sentAt,
+                          seen: queued.seen,
+                          span: { traceId: from().traceId, spanId: "00f067aa0ba902b7" },
+                        }),
+                      ).pipe(Effect.provide(w.runner(P1)));
+                    }
+
+                    yield* A.ProgramRunner.use((r) => r.restart({ id: `replace-${letter}`, build: "build-a" })).pipe(
+                      Effect.provide(w.runner(P1)),
+                    );
+
+                    // Retired: the Worker's exit retires the old process's gateway sessions after it records the exit
+                    // (cloudflare/runtime.ts, `exit`), so an ended pid refuses a record. Open: a trusted exit by hand that
+                    // a kill cut between those two writes leaves the exited pid's sessions open, and nothing runs it again.
+                    if (retired) {
+                      yield* Gateway.use((d) => d.retire(P1)).pipe(Effect.provide(w.layer()));
+                    }
+
+                    w.reopen();
+                    yield* Effect.gen(function* () {
+                      const client = yield* w.online();
+                      const d = yield* Gateway;
+                      expect(yield* ProcessManager.use((p) => p.resolve(P1))).toMatchObject({
+                        name: NAME,
+                        state: { _tag: "live", process: P2 },
+                      });
+                      yield* A.ProgramRunner.use((r) => r.open("successor")).pipe(Effect.provide(w.runner(P2)));
+                      const before = yield* inbox;
+                      expect(before).toHaveLength(holds ? 1 : 0);
+                      const delivered = w.deliveries.length;
+                      let steps = w.steps();
+
+                      for (let n = 0; n < resends; n++) {
+                        expect(yield* d.route(client, "process.send", queued)).toMatchObject({
+                          _tag: "ok",
+                          result: { _tag: "accepted", pos: 1 },
+                        });
+
+                        if (!holds && n === 0) {
+                          steps = w.steps();
+                        }
+
+                        expect(w.steps(), "resends must not apply an accepted letter again").toBe(steps);
                       }
 
-                      expect(w.steps(), "resends must not apply an accepted letter again").toBe(steps);
-                    }
+                      const rows = yield* inbox;
+                      expect(rows).toMatchObject([{ id: letter, pos: 1 }]);
 
-                    const rows = yield* inbox;
-                    expect(rows).toMatchObject([{ id: letter, pos: 1 }]);
+                      if (holds) {
+                        expect(rows).toEqual(before);
+                        // With the old sessions open a second delivery would land: the runner answers a placed
+                        // letter's first placing, so only the door's own deliveries show it was sent again.
+                        expect(w.deliveries, "a held letter is never delivered again").toHaveLength(delivered);
+                        // The held letter's answer is its first placing, read from the inbox row, and it settles
+                        // the binding on its old pid, though that pid exited, whether its sessions are retired or open.
+                        expect(yield* d.route(client, "process.send", queued)).toMatchObject({
+                          _tag: "ok",
+                          result: { _tag: "accepted", rev: before[0]!.rev, pos: before[0]!.pos },
+                        });
+                        expect(binding()).toMatchObject({ id: old, process: P1, state: { _tag: "settled" } });
+                      } else {
+                        const delivery = w.deliveries.at(-1)!;
+                        const signed = yield* Effect.result(
+                          d
+                            .signer(delivery.parent, P2, "saved")
+                            .pipe(Effect.provideService(SignRequest, { id: `write-${letter}` })),
+                        );
+                        expect({ delivery, signed }).toMatchObject({
+                          delivery: { process: P2, letter },
+                          signed: {
+                            _tag: "Success",
+                            success: { parent: delivery.parent, by: { key: w.window.fingerprint } },
+                          },
+                        });
+                        expect(delivery.parent).not.toBe(old);
+                        expect(
+                          yield* d.append({
+                            id: `write-${letter}`,
+                            parent: delivery.parent,
+                            process: P2,
+                            kind: "saved",
+                            stream: `${NAME}/events`,
+                            event: Schema.TaggedStruct("saved", { count: Schema.Int }).make({ count: 1 }),
+                          }),
+                        ).toMatchObject({ _tag: "placed" });
+                        expect(yield* Ledger.use((l) => Stream.runCollect(l.read(`${NAME}/events`, 0)))).toMatchObject([
+                          { id: `write-${letter}`, parent: delivery.parent, by: w.window.fingerprint },
+                        ]);
+                      }
 
-                    if (holds) {
-                      expect(rows).toEqual(before);
-                      // With the old sessions open a second delivery would land: the runner answers a placed
-                      // letter's first placing, so only the door's own deliveries show it was sent again.
-                      expect(w.deliveries, "a held letter is never delivered again").toHaveLength(delivered);
-                      // The held letter's answer is its first placing, read from the inbox row, and it settles
-                      // the binding on its old pid, though that pid exited, whether its sessions are retired or open.
-                      expect(yield* d.route(client, "process.send", queued)).toMatchObject({
-                        _tag: "ok",
-                        result: { _tag: "accepted", rev: before[0]!.rev, pos: before[0]!.pos },
-                      });
-                      expect(binding()).toMatchObject({ id: old, process: P1, state: { _tag: "settled" } });
-                    } else {
-                      const delivery = w.deliveries.at(-1)!;
-                      const signed = yield* Effect.result(
-                        d
-                          .signer(delivery.parent, P2, "saved")
-                          .pipe(Effect.provideService(SignRequest, { id: `write-${letter}` })),
-                      );
-                      expect({ delivery, signed }).toMatchObject({
-                        delivery: { process: P2, letter },
-                        signed: {
-                          _tag: "Success",
-                          success: { parent: delivery.parent, by: { key: w.window.fingerprint } },
-                        },
-                      });
-                      expect(delivery.parent).not.toBe(old);
                       expect(
-                        yield* d.append({
-                          id: `write-${letter}`,
-                          parent: delivery.parent,
-                          process: P2,
-                          kind: "saved",
-                          stream: `${NAME}/events`,
-                          event: Schema.TaggedStruct("saved", { count: Schema.Int }).make({ count: 1 }),
-                        }),
-                      ).toMatchObject({ _tag: "placed" });
-                      expect(yield* Ledger.use((l) => Stream.runCollect(l.read(`${NAME}/events`, 0)))).toMatchObject([
-                        { id: `write-${letter}`, parent: delivery.parent, by: w.window.fingerprint },
-                      ]);
-                    }
-
-                    expect(
-                      yield* Effect.result(
-                        d.signer(old, P2, "saved").pipe(Effect.provideService(SignRequest, { id: `old-${letter}` })),
-                      ),
-                    ).toMatchObject({ _tag: "Failure", failure: { reason: "not_delivered" } });
-                  }).pipe(Effect.provide(w.layer()));
-                }).pipe(Effect.provide(TestClock.layer())),
+                        yield* Effect.result(
+                          d.signer(old, P2, "saved").pipe(Effect.provideService(SignRequest, { id: `old-${letter}` })),
+                        ),
+                      ).toMatchObject({ _tag: "Failure", failure: { reason: "not_delivered" } });
+                    }).pipe(Effect.provide(w.layer()));
+                  }).pipe(Effect.provide(TestClock.layer())),
+                ),
               ),
             ),
             { seed: 119120, numRuns: 12 },
@@ -642,77 +654,79 @@ describe("P34 door recovery", () => {
     await fc.assert(
       fc.asyncProperty(fc.uuid(), (letter) =>
         Effect.runPromise(
-          Effect.gen(function* () {
-            const w = world();
-            const queued = request(false, letter);
-            yield* w.boot;
-            const old = yield* Effect.gen(function* () {
-              const client = yield* w.online();
-              const d = yield* Gateway;
-              expect(yield* Effect.exit(d.route(client, "process.send", request()))).toMatchObject({
-                _tag: "Failure",
-              });
-              return w.deliveries[0]!.parent;
-            }).pipe(Effect.provide(w.layer()));
-            w.reopen();
-            yield* recover(w);
-            w.controls.throws = false;
-            w.reopen();
-            yield* Effect.gen(function* () {
-              const client = yield* w.online();
-              const d = yield* Gateway;
-              expect(yield* ProcessManager.use((p) => p.resolve(P1))).toMatchObject({
-                name: NAME,
-                state: { _tag: "live", process: P2 },
-              });
-              expect(w.project.sql.exec("SELECT id FROM gateway_bindings WHERE letter=?", `${P1}/${letter}`)).toEqual(
-                [],
-              );
-              expect(yield* d.route(client, "process.send", queued)).toMatchObject({
-                _tag: "ok",
-                result: { _tag: "accepted", pos: 1 },
-              });
-              const view = yield* A.ProgramRunner.use((r) => r.open(client)).pipe(Effect.provide(w.runner(P2)));
-              expect(view).toMatchObject({ view: { count: 1 } });
-              const delivery = w.deliveries.at(-1)!;
-              const oldWrite = yield* Effect.result(
-                d.signer(old, P2, "saved").pipe(Effect.provideService(SignRequest, { id: `old-${letter}` })),
-              );
-              const freshWrite = yield* Effect.result(
-                d
-                  .signer(delivery.parent, P2, "saved")
-                  .pipe(Effect.provideService(SignRequest, { id: `fresh-${letter}` })),
-              );
-              expect({ delivery, oldWrite, freshWrite }).toMatchObject({
-                delivery: { process: P2, letter },
-                oldWrite: { _tag: "Failure", failure: { reason: "not_delivered" } },
-                freshWrite: {
-                  _tag: "Success",
-                  success: { parent: delivery.parent, by: { key: w.window.fingerprint } },
-                },
-              });
-              expect(
-                yield* d.append({
-                  id: `fresh-${letter}`,
-                  parent: delivery.parent,
-                  process: P2,
-                  kind: "saved",
-                  stream: `${NAME}/events`,
-                  event: Schema.TaggedStruct("saved", { count: Schema.Int }).make({ count: 1 }),
-                }),
-              ).toMatchObject({ _tag: "placed" });
-              const ledger = yield* Ledger;
-              expect(yield* Stream.runCollect(ledger.read(`${NAME}/events`, 0))).toMatchObject([
-                {
-                  id: `fresh-${letter}`,
-                  parent: delivery.parent,
-                  by: w.window.fingerprint,
-                  _tag: "saved",
-                  body: { count: 1 },
-                },
-              ]);
-            }).pipe(Effect.provide(w.layer()));
-          }).pipe(Effect.provide(TestClock.layer())),
+          Effect.scoped(
+            Effect.gen(function* () {
+              const w = world(yield* disks);
+              const queued = request(false, letter);
+              yield* w.boot;
+              const old = yield* Effect.gen(function* () {
+                const client = yield* w.online();
+                const d = yield* Gateway;
+                expect(yield* Effect.exit(d.route(client, "process.send", request()))).toMatchObject({
+                  _tag: "Failure",
+                });
+                return w.deliveries[0]!.parent;
+              }).pipe(Effect.provide(w.layer()));
+              w.reopen();
+              yield* recover(w);
+              w.controls.throws = false;
+              w.reopen();
+              yield* Effect.gen(function* () {
+                const client = yield* w.online();
+                const d = yield* Gateway;
+                expect(yield* ProcessManager.use((p) => p.resolve(P1))).toMatchObject({
+                  name: NAME,
+                  state: { _tag: "live", process: P2 },
+                });
+                expect(w.project.sql.exec("SELECT id FROM gateway_bindings WHERE letter=?", `${P1}/${letter}`)).toEqual(
+                  [],
+                );
+                expect(yield* d.route(client, "process.send", queued)).toMatchObject({
+                  _tag: "ok",
+                  result: { _tag: "accepted", pos: 1 },
+                });
+                const view = yield* A.ProgramRunner.use((r) => r.open(client)).pipe(Effect.provide(w.runner(P2)));
+                expect(view).toMatchObject({ view: { count: 1 } });
+                const delivery = w.deliveries.at(-1)!;
+                const oldWrite = yield* Effect.result(
+                  d.signer(old, P2, "saved").pipe(Effect.provideService(SignRequest, { id: `old-${letter}` })),
+                );
+                const freshWrite = yield* Effect.result(
+                  d
+                    .signer(delivery.parent, P2, "saved")
+                    .pipe(Effect.provideService(SignRequest, { id: `fresh-${letter}` })),
+                );
+                expect({ delivery, oldWrite, freshWrite }).toMatchObject({
+                  delivery: { process: P2, letter },
+                  oldWrite: { _tag: "Failure", failure: { reason: "not_delivered" } },
+                  freshWrite: {
+                    _tag: "Success",
+                    success: { parent: delivery.parent, by: { key: w.window.fingerprint } },
+                  },
+                });
+                expect(
+                  yield* d.append({
+                    id: `fresh-${letter}`,
+                    parent: delivery.parent,
+                    process: P2,
+                    kind: "saved",
+                    stream: `${NAME}/events`,
+                    event: Schema.TaggedStruct("saved", { count: Schema.Int }).make({ count: 1 }),
+                  }),
+                ).toMatchObject({ _tag: "placed" });
+                const ledger = yield* Ledger;
+                expect(yield* Stream.runCollect(ledger.read(`${NAME}/events`, 0))).toMatchObject([
+                  {
+                    id: `fresh-${letter}`,
+                    parent: delivery.parent,
+                    by: w.window.fingerprint,
+                    _tag: "saved",
+                    body: { count: 1 },
+                  },
+                ]);
+              }).pipe(Effect.provide(w.layer()));
+            }).pipe(Effect.provide(TestClock.layer())),
+          ),
         ),
       ),
       {
@@ -728,57 +742,59 @@ describe("P34 door recovery", () => {
     await fc.assert(
       fc.asyncProperty(fc.uuid(), (letter) =>
         Effect.runPromise(
-          Effect.gen(function* () {
-            const w = world();
-            yield* w.boot;
-            w.controls.cutRetryable = true;
-            const old = yield* Effect.gen(function* () {
-              const client = yield* w.online();
-              const d = yield* Gateway;
-              expect(yield* Effect.exit(d.route(client, "process.send", request(true, letter)))).toMatchObject({
-                _tag: "Failure",
-              });
-              expect(w.controls.retryableCuts).toBe(1);
-              const [binding] = w.project.sql.exec(
-                "SELECT json_extract(value, '$.state._tag') AS state FROM gateway_bindings WHERE letter=?",
-                `${P1}/${letter}`,
-              );
-              expect(binding?.state).toBe("delivered");
-              expect(yield* ProcessManager.use((p) => p.isLive(P1))).toBe(false);
-              expect(yield* Ledger.use((l) => Stream.runCollect(l.read(`${NAME}/inbox`, 0)))).toEqual([]);
-              return w.deliveries[0]!.parent;
-            }).pipe(Effect.provide(w.layer()));
-            w.reopen();
-            yield* recover(w);
-            w.controls.throws = false;
-            w.reopen();
-            yield* Effect.gen(function* () {
-              const client = yield* w.online();
-              const d = yield* Gateway;
-              expect(yield* ProcessManager.use((p) => p.isLive(P2))).toBe(true);
-              expect(yield* d.route(client, "process.send", request(true, letter))).toMatchObject({
-                _tag: "ok",
-                result: { _tag: "accepted" },
-              });
-              const delivery = w.deliveries.at(-1)!;
-              const oldWrite = yield* Effect.result(
-                d.signer(old, P2, "saved").pipe(Effect.provideService(SignRequest, { id: `old-${letter}` })),
-              );
-              const freshWrite = yield* Effect.result(
-                d
-                  .signer(delivery.parent, P2, "saved")
-                  .pipe(Effect.provideService(SignRequest, { id: `fresh-${letter}` })),
-              );
-              expect({ delivery, oldWrite, freshWrite }).toMatchObject({
-                delivery: { process: P2, letter, parent: expect.not.stringContaining(old) },
-                oldWrite: { _tag: "Failure", failure: { reason: "not_delivered" } },
-                freshWrite: {
-                  _tag: "Success",
-                  success: { parent: delivery.parent, by: { key: w.window.fingerprint } },
-                },
-              });
-            }).pipe(Effect.provide(w.layer()));
-          }).pipe(Effect.provide(TestClock.layer())),
+          Effect.scoped(
+            Effect.gen(function* () {
+              const w = world(yield* disks);
+              yield* w.boot;
+              w.controls.cutRetryable = true;
+              const old = yield* Effect.gen(function* () {
+                const client = yield* w.online();
+                const d = yield* Gateway;
+                expect(yield* Effect.exit(d.route(client, "process.send", request(true, letter)))).toMatchObject({
+                  _tag: "Failure",
+                });
+                expect(w.controls.retryableCuts).toBe(1);
+                const [binding] = w.project.sql.exec(
+                  "SELECT json_extract(value, '$.state._tag') AS state FROM gateway_bindings WHERE letter=?",
+                  `${P1}/${letter}`,
+                );
+                expect(binding?.state).toBe("delivered");
+                expect(yield* ProcessManager.use((p) => p.isLive(P1))).toBe(false);
+                expect(yield* Ledger.use((l) => Stream.runCollect(l.read(`${NAME}/inbox`, 0)))).toEqual([]);
+                return w.deliveries[0]!.parent;
+              }).pipe(Effect.provide(w.layer()));
+              w.reopen();
+              yield* recover(w);
+              w.controls.throws = false;
+              w.reopen();
+              yield* Effect.gen(function* () {
+                const client = yield* w.online();
+                const d = yield* Gateway;
+                expect(yield* ProcessManager.use((p) => p.isLive(P2))).toBe(true);
+                expect(yield* d.route(client, "process.send", request(true, letter))).toMatchObject({
+                  _tag: "ok",
+                  result: { _tag: "accepted" },
+                });
+                const delivery = w.deliveries.at(-1)!;
+                const oldWrite = yield* Effect.result(
+                  d.signer(old, P2, "saved").pipe(Effect.provideService(SignRequest, { id: `old-${letter}` })),
+                );
+                const freshWrite = yield* Effect.result(
+                  d
+                    .signer(delivery.parent, P2, "saved")
+                    .pipe(Effect.provideService(SignRequest, { id: `fresh-${letter}` })),
+                );
+                expect({ delivery, oldWrite, freshWrite }).toMatchObject({
+                  delivery: { process: P2, letter, parent: expect.not.stringContaining(old) },
+                  oldWrite: { _tag: "Failure", failure: { reason: "not_delivered" } },
+                  freshWrite: {
+                    _tag: "Success",
+                    success: { parent: delivery.parent, by: { key: w.window.fingerprint } },
+                  },
+                });
+              }).pipe(Effect.provide(w.layer()));
+            }).pipe(Effect.provide(TestClock.layer())),
+          ),
         ),
       ),
       {
@@ -792,7 +808,7 @@ describe("P34 door recovery", () => {
 
   it.effect("p80 plant, void delivery hides placing: forward the real runner result and stable outbox ID", () =>
     Effect.gen(function* () {
-      const w = world();
+      const w = world(yield* disks);
       yield* w.boot;
       yield* Effect.gen(function* () {
         const client = yield* w.online();
@@ -814,7 +830,7 @@ describe("P34 door recovery", () => {
         ["poison", generated],
         (value) =>
           Effect.gen(function* () {
-            const w = world();
+            const w = world(yield* disks);
             yield* w.boot;
 
             for (let n = 0; n < 3; n++) {
@@ -885,7 +901,7 @@ describe("P34 door recovery", () => {
         ["poison", generated],
         (value) =>
           Effect.gen(function* () {
-            const w = world();
+            const w = world(yield* disks);
             yield* w.boot;
             yield* Effect.gen(function* () {
               const client = yield* w.online();

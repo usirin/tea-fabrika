@@ -6,8 +6,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterAll, describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Brand, Effect, Result, Schema } from "effect";
+import { describe, expect, it } from "@effect/vitest";
+import { Arbitrary, Brand, Effect, Result, Schema, type Scope } from "effect";
 import { processId } from "../Id.test-support.ts";
 import * as Id from "../Id.ts";
 import { type InputId } from "../ledger/Log.ts";
@@ -86,25 +86,27 @@ const sessionArb = Arbitrary.schema(sessionSchema).pipe(
   Arbitrary.filter((value) => value.PROCESS !== value.OTHER_PROCESS),
 );
 
-const folder = mkdtempSync(join(tmpdir(), "p10-session-"));
-const opened: Array<DatabaseSync> = [];
-let count = 0;
+// Every database is a node:sqlite file in its own temp folder. The test's scope closes the
+// connection, then removes the folder (0061).
+const folder = Effect.acquireRelease(
+  Effect.sync(() => mkdtempSync(join(tmpdir(), "p10-session-"))),
+  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+);
 
-const database = (file = join(folder, `${++count}.db`)) => {
-  const db = new DatabaseSync(file);
-  opened.push(db);
-  return { db, sql: nodeSql(db), file };
-};
+const open = (file: string) =>
+  Effect.acquireRelease(
+    Effect.sync(() => new DatabaseSync(file)),
+    (db) =>
+      Effect.sync(() => {
+        if (db.isOpen) {
+          db.close();
+        }
+      }),
+  ).pipe(Effect.map((db) => ({ db, sql: nodeSql(db), file })));
 
-afterAll(() => {
-  for (const db of opened) {
-    if (db.isOpen) {
-      db.close();
-    }
-  }
-
-  rmSync(folder, { recursive: true, force: true });
-});
+/** A fresh file, or `file` opened again after a test closed it by hand. */
+const database = (file?: string) =>
+  file === undefined ? folder.pipe(Effect.flatMap((path) => open(join(path, "session.db")))) : open(file);
 
 const inputId = Brand.nominal<InputId>(); // Test plays the trusted door, never a public decoder.
 
@@ -168,7 +170,10 @@ const setup = ({
 
 const { parent, saved, signer, authority } = setup(sample);
 
-const authorityProperty = (name: string, law: (context: ReturnType<typeof setup>) => Effect.Effect<void, unknown>) =>
+const authorityProperty = (
+  name: string,
+  law: (context: ReturnType<typeof setup>) => Effect.Effect<void, unknown, Scope.Scope>,
+) =>
   it.effect.prop(
     name,
     [sessionArb],
@@ -244,61 +249,61 @@ describe("P10 saved signing authority", () => {
   );
   authorityProperty(
     "unknown delivery and a signer on a fresh database refuse not_delivered",
-    ({ parent, signer, authority, PROCESS }) => {
-      const { sql } = database();
-      return Effect.gen(function* () {
-        expect(yield* Effect.flip(signer())).toMatchObject({
-          _tag: "SigningRefused",
-          reason: "not_delivered",
-        });
-        const sessions = yield* SessionManager;
-        expect(yield* Effect.flip(sessions.delivered(parent, PROCESS))).toMatchObject({
-          _tag: "SigningRefused",
-          reason: "not_delivered",
-        });
-      }).pipe(Effect.provide(authority(sql)));
-    },
+    ({ parent, signer, authority, PROCESS }) =>
+      Effect.flatMap(database(), ({ sql }) =>
+        Effect.gen(function* () {
+          expect(yield* Effect.flip(signer())).toMatchObject({
+            _tag: "SigningRefused",
+            reason: "not_delivered",
+          });
+          const sessions = yield* SessionManager;
+          expect(yield* Effect.flip(sessions.delivered(parent, PROCESS))).toMatchObject({
+            _tag: "SigningRefused",
+            reason: "not_delivered",
+          });
+        }).pipe(Effect.provide(authority(sql))),
+      ),
   );
   authorityProperty(
     "replaying an input preserves its first body and refuses a different body",
-    ({ saved, parent, authority, PROCESS }) => {
-      const { sql, db } = database();
-      return Effect.gen(function* () {
-        const sessions = yield* SessionManager;
-        const input = saved();
-        yield* sessions.record(input);
-        yield* sessions.delivered(parent, PROCESS);
-        const before = snapshot(db);
-        yield* sessions.record(input);
-        expect(snapshot(db)).toBe(before);
-        expect(yield* Effect.flip(sessions.record({ ...input, digest: `${input.digest}-changed` }))).toMatchObject({
-          _tag: "SigningRefused",
-          reason: "not_delivered",
-        });
-        expect(snapshot(db)).toBe(before);
-      }).pipe(Effect.provide(authority(sql)));
-    },
+    ({ saved, parent, authority, PROCESS }) =>
+      Effect.flatMap(database(), ({ sql, db }) =>
+        Effect.gen(function* () {
+          const sessions = yield* SessionManager;
+          const input = saved();
+          yield* sessions.record(input);
+          yield* sessions.delivered(parent, PROCESS);
+          const before = snapshot(db);
+          yield* sessions.record(input);
+          expect(snapshot(db)).toBe(before);
+          expect(yield* Effect.flip(sessions.record({ ...input, digest: `${input.digest}-changed` }))).toMatchObject({
+            _tag: "SigningRefused",
+            reason: "not_delivered",
+          });
+          expect(snapshot(db)).toBe(before);
+        }).pipe(Effect.provide(authority(sql))),
+      ),
   );
   authorityProperty(
     "policy permission does not turn an ordinary input into person-only approval",
-    ({ saved, parent, signer, authority, PROCESS }) => {
-      const { sql } = database();
-      return Effect.gen(function* () {
-        const sessions = yield* SessionManager;
-        yield* sessions.record({ ...saved("person", false), name: "approve" });
-        yield* sessions.delivered(parent, PROCESS);
-        expect(yield* Effect.result(signer())).toMatchObject({
-          _tag: "Failure",
-          failure: { _tag: "SigningRefused", reason: "person_only" },
-        });
-      }).pipe(Effect.provide(authority(sql)));
-    },
+    ({ saved, parent, signer, authority, PROCESS }) =>
+      Effect.flatMap(database(), ({ sql }) =>
+        Effect.gen(function* () {
+          const sessions = yield* SessionManager;
+          yield* sessions.record({ ...saved("person", false), name: "approve" });
+          yield* sessions.delivered(parent, PROCESS);
+          expect(yield* Effect.result(signer())).toMatchObject({
+            _tag: "Failure",
+            failure: { _tag: "SigningRefused", reason: "person_only" },
+          });
+        }).pipe(Effect.provide(authority(sql))),
+      ),
   );
   authorityProperty(
     "question 16: interleaved writers keep the direct parent's identity and span",
     ({ saved, parent, signer, writer, authority, PROCESS, START, TRACE, SPAN }) =>
       Effect.gen(function* () {
-        const { sql } = database();
+        const { sql } = yield* database();
         yield* Effect.gen(function* () {
           const s = yield* SessionManager;
           yield* s.record(saved());
@@ -325,7 +330,7 @@ describe("P10 saved signing authority", () => {
       `question 16: ${reason} is distinct and changes no saved rows`,
       ({ saved, parent, signer, authority, PROCESS }) =>
         Effect.gen(function* () {
-          const { sql, db } = database();
+          const { sql, db } = yield* database();
           yield* Effect.gen(function* () {
             const s = yield* SessionManager;
             yield* s.record(saved("person", reason !== "person_only"));
@@ -366,21 +371,21 @@ describe("P10 saved signing authority", () => {
               ["write-b", "write-a"], // T540: write-b collided with the fixed second id.
               ids,
             ] as const,
-            ([firstId, secondId]) => {
-              const { sql, db } = database();
-              return Effect.gen(function* () {
-                const s = yield* SessionManager;
-                yield* s.record(saved());
-                yield* s.delivered(parent, PROCESS);
-                yield* signer(firstId);
-                const before = snapshot(db);
-                expect(yield* Effect.flip(signer(secondId))).toMatchObject({
-                  _tag: "SigningRefused",
-                  reason: "spent",
-                });
-                expect(snapshot(db)).toBe(before);
-              }).pipe(Effect.provide(authority(sql)));
-            },
+            ([firstId, secondId]) =>
+              Effect.flatMap(database(), ({ sql, db }) =>
+                Effect.gen(function* () {
+                  const s = yield* SessionManager;
+                  yield* s.record(saved());
+                  yield* s.delivered(parent, PROCESS);
+                  yield* signer(firstId);
+                  const before = snapshot(db);
+                  expect(yield* Effect.flip(signer(secondId))).toMatchObject({
+                    _tag: "SigningRefused",
+                    reason: "spent",
+                  });
+                  expect(snapshot(db)).toBe(before);
+                }).pipe(Effect.provide(authority(sql))),
+              ),
             { concurrency: 1, discard: true },
           );
         },
@@ -392,7 +397,7 @@ describe("P10 saved signing authority", () => {
     "question 16: a parent delivered to one process is refused to another",
     ({ saved, parent, signer, authority, PROCESS, OTHER_PROCESS }) =>
       Effect.gen(function* () {
-        const { sql } = database();
+        const { sql } = yield* database();
         yield* Effect.gen(function* () {
           const s = yield* SessionManager;
           yield* s.record(saved());
@@ -407,7 +412,7 @@ describe("P10 saved signing authority", () => {
     "question 16: an agent on a person-only input still cannot approve",
     ({ saved, parent, signer, authority, PROCESS }) =>
       Effect.gen(function* () {
-        const { sql } = database();
+        const { sql } = yield* database();
         yield* Effect.gen(function* () {
           const s = yield* SessionManager;
           yield* s.record(saved("agent", true));
@@ -420,7 +425,7 @@ describe("P10 saved signing authority", () => {
     "question 16: different allowed kinds can spend the same parent independently",
     ({ saved, parent, signer, writer, authority, PROCESS, kinds }) =>
       Effect.gen(function* () {
-        const { sql } = database();
+        const { sql } = yield* database();
         yield* Effect.gen(function* () {
           const s = yield* SessionManager;
           yield* s.record(saved());
@@ -434,7 +439,7 @@ describe("P10 saved signing authority", () => {
     "retry/wake: a lost answer returns the identical receipt after reopening SQLite",
     ({ saved, parent, signer, authority, PROCESS }) =>
       Effect.gen(function* () {
-        const first = database();
+        const first = yield* database();
         const session = yield* Effect.gen(function* () {
           const s = yield* SessionManager;
           yield* s.record(saved());
@@ -442,7 +447,7 @@ describe("P10 saved signing authority", () => {
           return yield* signer();
         }).pipe(Effect.provide(authority(first.sql)));
         first.db.close();
-        const reopened = database(first.file);
+        const reopened = yield* database(first.file);
         yield* Effect.gen(function* () {
           expect(yield* signer()).toEqual(session);
           expect(yield* Effect.flip(signer("other-write"))).toMatchObject({ reason: "spent" });
@@ -453,7 +458,7 @@ describe("P10 saved signing authority", () => {
     "atomic receipt: a storage failure rolls back both spend and receipt",
     ({ saved, parent, signer, authority, PROCESS }) =>
       Effect.gen(function* () {
-        const { sql, db } = database();
+        const { sql, db } = yield* database();
         const failure = commitFault(sql);
         yield* Effect.gen(function* () {
           const s = yield* SessionManager;
@@ -473,7 +478,7 @@ describe("P10 saved signing authority", () => {
     "exit/wake: an ended process cannot revive through layer rebuild or an old receipt",
     ({ saved, parent, signer, authority, PROCESS }) =>
       Effect.gen(function* () {
-        const first = database();
+        const first = yield* database();
         yield* Effect.gen(function* () {
           const s = yield* SessionManager;
           yield* s.record(saved());
@@ -482,7 +487,7 @@ describe("P10 saved signing authority", () => {
           yield* s.end(PROCESS);
         }).pipe(Effect.provide(authority(first.sql)));
         first.db.close();
-        const reopened = database(first.file);
+        const reopened = yield* database(first.file);
         expect(yield* Effect.flip(signer()).pipe(Effect.provide(authority(reopened.sql)))).toMatchObject({
           reason: "ended",
         });
@@ -492,7 +497,7 @@ describe("P10 saved signing authority", () => {
     "revocation: even the same write id must recheck live membership",
     ({ saved, parent, signer, authority, PROCESS }) =>
       Effect.gen(function* () {
-        const { sql } = database();
+        const { sql } = yield* database();
         let live = true;
         yield* Effect.gen(function* () {
           const s = yield* SessionManager;
@@ -509,7 +514,7 @@ describe("P10 saved signing authority", () => {
     "traceId cannot choose a writer or authorize a missing parent",
     ({ saved, parent, signer, authority, PROCESS, START }) =>
       Effect.gen(function* () {
-        const { sql } = database();
+        const { sql } = yield* database();
         yield* Effect.gen(function* () {
           const s = yield* SessionManager;
           yield* s.record(saved());
@@ -530,7 +535,7 @@ describe("P33, the signer refuses every id in the signal id space", () => {
     [Schema.Literals(["person", "agent", "recovered"]), Schema.String, Schema.Literals(["", " ", "\n", "\t"])],
     ([sender, key, space]) =>
       Effect.gen(function* () {
-        const { sql, db } = database();
+        const { sql, db } = yield* database();
         const { saved, signer, authority, parent } = setup(sample);
         yield* Effect.gen(function* () {
           const s = yield* SessionManager;
@@ -570,7 +575,7 @@ describe("P33, the signer refuses every id in the signal id space", () => {
   ];
   const refusedThenFree = (id: string) =>
     Effect.gen(function* () {
-      const { sql, db } = database();
+      const { sql, db } = yield* database();
       yield* Effect.gen(function* () {
         const s = yield* SessionManager;
         yield* s.record(saved());

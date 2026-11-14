@@ -3,12 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RuntimeLifecycle } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { NodeServices } from "@effect/platform-node";
-import { afterEach, expect, it } from "@effect/vitest";
+import { expect, it } from "@effect/vitest";
 import type { BrainEvent } from "@kampus/libfabrika/brain-event";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
-import { Context, Deferred, Effect, Fiber, FileSystem, Layer } from "effect";
+import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
-import * as fc from "fast-check";
 import { vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -62,81 +61,91 @@ const filesWithoutSync = Layer.effect(
   ),
 ).pipe(Layer.provideMerge(NodeServices.layer));
 
-const homes: Array<string> = [];
-
-const home = () => {
-  const folder = mkdtempSync(join(tmpdir(), "p12-m-"));
-  homes.push(folder);
-  return folder;
-};
-
-afterEach(() => {
-  vi.restoreAllMocks();
-  vi.unstubAllEnvs();
-
-  for (const folder of homes.splice(0)) {
-    rmSync(folder, { recursive: true, force: true });
-  }
-});
-
-it("a later dev command links its first start to the last runtime in that home", async () => {
-  await fc.assert(
-    fc.asyncProperty(fc.tuple(fc.string({ minLength: 1 }), fc.string({ minLength: 1 })), async (builds) => {
-      const { startDev } = await import("./instance.ts");
-      const folder = home();
-      vi.stubEnv("FABRIKA_HOME", folder);
-      const events: Array<typeof BrainEvent.Type> = [];
-      vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
-        const call = JSON.parse(String(options?.body)) as {
-          method: string;
-          args: Array<typeof BrainEvent.Type>;
-        };
-
-        if (call.method === "brain") {
-          events.push(call.args[0]!);
-        }
-
-        return Response.json({ value: call.method === "info" ? [] : null });
-      });
-      const config = {
-        home: folder,
-        name: "life-contract",
-        person: "person-test",
-        founder: "public-test-key",
-        window: null,
-        port: 18787,
-      };
-
-      for (const build of builds) {
-        await Effect.runPromise(
-          Effect.scoped(
-            startDev({ build, brain: "unused.mjs", programs: {} }, RecordWireTest.startupFixture(config)),
-          ).pipe(
-            Effect.provide(ProcessIdGenerator.layer),
-            Effect.provide(SecureRandom.layerWebCrypto),
-            Effect.provide(filesWithoutSync),
-          ),
-        );
-      }
-
-      const starts = events.filter((event) => event._tag === "started");
-      expect(starts).toHaveLength(2);
-      expect(starts[1]).toMatchObject({ after: starts[0]!.start, build: builds[1] });
-      expect(starts[1]!.start).not.toBe(starts[0]!.start);
-    }),
-    { seed: 119120, numRuns: 20, examples: [[["build-a", "build-b"]]] },
+// A test's folder, its stubbed home and its fetch spy all go back through the test's scope (0061).
+const sandbox = Effect.gen(function* () {
+  const folder = yield* Effect.acquireRelease(
+    Effect.sync(() => mkdtempSync(join(tmpdir(), "p12-m-"))),
+    (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
   );
+  yield* Effect.acquireRelease(
+    Effect.sync(() => vi.stubEnv("FABRIKA_HOME", folder)),
+    () => Effect.sync(() => vi.unstubAllEnvs()),
+  );
+  return folder;
 });
 
-it("instance readiness waits for the started event to reach the ledger", async () => {
-  await fc.assert(
-    fc.asyncProperty(fc.uuid(), async (build) => {
-      const folder = home();
-      vi.stubEnv("FABRIKA_HOME", folder);
-      const reached = Effect.runSync(Deferred.make<void>());
-      const release = Effect.runSync(Deferred.make<void>());
+const spyOnFetch = (impl: typeof fetch) =>
+  Effect.acquireRelease(
+    Effect.sync(() => vi.spyOn(globalThis, "fetch").mockImplementation(impl)),
+    () => Effect.sync(() => vi.restoreAllMocks()),
+  );
+
+// The installed runner takes runs and a seed, so the old example runs first from this callback.
+const buildsPair = Schema.Tuple([Schema.NonEmptyString, Schema.NonEmptyString]);
+const pinned: ReadonlyArray<readonly [string, string]> = [["build-a", "build-b"]];
+
+it.live.prop(
+  "a later dev command links its first start to the last runtime in that home",
+  [buildsPair],
+  ([generated]) =>
+    Effect.forEach(
+      [...pinned, generated],
+      (builds) =>
+        Effect.gen(function* () {
+          const { startDev } = yield* Effect.promise(() => import("./instance.ts"));
+          const folder = yield* sandbox;
+          const events: Array<typeof BrainEvent.Type> = [];
+          yield* spyOnFetch(async (_url, options) => {
+            const call = JSON.parse(String(options?.body)) as {
+              method: string;
+              args: Array<typeof BrainEvent.Type>;
+            };
+
+            if (call.method === "brain") {
+              events.push(call.args[0]!);
+            }
+
+            return Response.json({ value: call.method === "info" ? [] : null });
+          });
+          const config = {
+            home: folder,
+            name: "life-contract",
+            person: "person-test",
+            founder: "public-test-key",
+            window: null,
+            port: 18787,
+          };
+
+          for (const build of builds) {
+            yield* Effect.scoped(
+              startDev({ build, brain: "unused.mjs", programs: {} }, RecordWireTest.startupFixture(config)),
+            ).pipe(
+              Effect.provide(ProcessIdGenerator.layer),
+              Effect.provide(SecureRandom.layerWebCrypto),
+              Effect.provide(filesWithoutSync),
+            );
+          }
+
+          const starts = events.filter((event) => event._tag === "started");
+          expect(starts).toHaveLength(2);
+          expect(starts[1]).toMatchObject({ after: starts[0]!.start, build: builds[1] });
+          expect(starts[1]!.start).not.toBe(starts[0]!.start);
+        }),
+      { discard: true, concurrency: 1 },
+    ),
+  { arbitrary: { seed: 119120, runs: 20 } },
+);
+
+it.live.prop(
+  "instance readiness waits for the started event to reach the ledger",
+  [Schema.String.check(Schema.isUUID())],
+  ([build]) =>
+    Effect.gen(function* () {
+      const folder = yield* sandbox;
+      const reached = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
       const events: Array<typeof BrainEvent.Type> = [];
-      vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+      yield* spyOnFetch(async (_url, options) => {
         const call = JSON.parse(String(options?.body)) as {
           method: string;
           args: Array<typeof BrainEvent.Type>;
@@ -150,37 +159,34 @@ it("instance readiness waits for the started event to reach the ledger", async (
 
         return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
       });
-      const { startDev } = await import("./instance.ts");
-      await Effect.runPromise(
-        Effect.scoped(
-          Effect.gen(function* () {
-            const starting = yield* Effect.forkChild(
-              startDev(
-                { build, brain: "unused.mjs", programs: {} },
-                RecordWireTest.startupFixture({
-                  home: folder,
-                  name: "life-contract",
-                  person: "person-test",
-                  founder: "public-test",
-                  window: null,
-                  port: 18787,
-                }),
-              ),
-            );
-            yield* Deferred.await(reached);
-            yield* Effect.yieldNow;
-            expect(starting.pollUnsafe()).toBeUndefined();
-            expect(events).toMatchObject([{ _tag: "started", reason: "open", build }]);
-            yield* Deferred.succeed(release, undefined);
-            yield* Fiber.join(starting);
-          }).pipe(Effect.ensuring(Deferred.succeed(release, undefined))),
-        ).pipe(
-          Effect.provide(ProcessIdGenerator.layer),
-          Effect.provide(SecureRandom.layerWebCrypto),
-          Effect.provide(NodeServices.layer),
-        ),
+      const { startDev } = yield* Effect.promise(() => import("./instance.ts"));
+      yield* Effect.gen(function* () {
+        const starting = yield* Effect.forkChild(
+          startDev(
+            { build, brain: "unused.mjs", programs: {} },
+            RecordWireTest.startupFixture({
+              home: folder,
+              name: "life-contract",
+              person: "person-test",
+              founder: "public-test",
+              window: null,
+              port: 18787,
+            }),
+          ),
+        );
+        yield* Deferred.await(reached);
+        yield* Effect.yieldNow;
+        expect(starting.pollUnsafe()).toBeUndefined();
+        expect(events).toMatchObject([{ _tag: "started", reason: "open", build }]);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(starting);
+      }).pipe(
+        Effect.ensuring(Deferred.succeed(release, undefined)),
+        Effect.scoped,
+        Effect.provide(ProcessIdGenerator.layer),
+        Effect.provide(SecureRandom.layerWebCrypto),
+        Effect.provide(NodeServices.layer),
       );
     }),
-    { seed: 119120, numRuns: 10 },
-  );
-});
+  { arbitrary: { seed: 119120, runs: 10 } },
+);

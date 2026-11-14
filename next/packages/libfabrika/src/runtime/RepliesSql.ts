@@ -1,6 +1,9 @@
-// Terminal replies in SQL, next/: the `Replies` layer over the runtime's own recovery SQL (Tier 1,
-// P13). One SQL transaction reads the row, sends the reply machine its Msg and inserts what it
-// remembers, within the runtime's storage capacity.
+/**
+ * The `Replies` layer over the runtime's own recovery SQL. One SQL transaction reads the row, sends
+ * the reply machine its Msg and inserts what it remembers, within the runtime's storage capacity.
+ *
+ * @stability unstable
+ */
 import { applyCell } from "@demlik/tea";
 import { Effect, Layer, Result, Schema, SchemaIssue } from "effect";
 import type { Sql } from "../Sql.ts";

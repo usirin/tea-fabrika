@@ -60,6 +60,14 @@ const DRAFT_NAMES = {
 const TYPES = ["opened", "synchronize", "reopened", "ready_for_review"];
 const CANCEL = "github.event_name=='pull_request'&&github.event.action=='synchronize'";
 const BUILD = "needs.changes.outputs.build!='false'";
+// Today's tests run only when a file of today's version changed; else the tooling tests run alone
+// (0175). An unreadable flag is not 'false', so it runs today's tests.
+const TODAY = "needs.changes.outputs.today!='false'";
+const TOOLING = "!cancelled()&&needs.changes.outputs.today=='false'";
+// The commit a run's change starts from, for vitest's `--changed`: a pull request's base, a merge
+// queue group's base, or what main held before a push. All zeros (a first push) is no base.
+const TEST_BASE = `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`;
+const TOOLING_EXCLUDES = ["next/**", "apps/**", "packages/**", "programs/**"];
 
 // Chromium's OS packages come from apt, so the step first finds a mirror that answers (apt.sh).
 const chromium =
@@ -156,7 +164,7 @@ export const lintWorkflow = (text: string): string[] => {
     outputs = map(changes["outputs"]);
   require(!("if" in changes) && !("needs" in changes), "changes starts on every event");
 
-  for (const name of ["check", "typecheck", "test", "next", "e2e", "field", "build"]) {
+  for (const name of ["check", "typecheck", "test", "next", "e2e", "field", "build", "today"]) {
     require(compact(outputs[name]) === `steps.diff.outputs.${name}`, `changes exposes ${name}`);
   }
 
@@ -233,11 +241,31 @@ export const lintWorkflow = (text: string): string[] => {
   const test = map(jobs["test"]),
     scripts = commands(test);
   require(JSON.stringify(map(map(test["strategy"])["matrix"])["shard"]) === "[1,2,3,4,5,6]", "keep six shards");
-  const runs = scripts.filter((line) => line.startsWith("pnpm exec vitest run"));
-  require(runs.length === 5, "today has five test commands, including two lane commands");
   const testSteps = steps(test);
   const lane = testSteps.find((s) => s["name"] === "lane tests, one file at a time");
   const rest = testSteps.find((s) => s["name"] === "test");
+  const tooling = testSteps.find((s) => s["name"] === "tooling tests");
+  const toolingRuns = commands({ steps: [tooling] }).filter((line) => line.startsWith("pnpm exec vitest run"));
+  const runs = scripts.filter((line) => line.startsWith("pnpm exec vitest run") && !toolingRuns.includes(line));
+  require(runs.length === 5, "today has five test commands, including two lane commands");
+  require(compact(lane?.["if"]) === TODAY &&
+    compact(rest?.["if"]) === `!cancelled()&&${TODAY}`, "T1: today's tests run only on the today flag");
+  require(tooling !== undefined &&
+    compact(tooling["if"]) === TOOLING &&
+    rest !== undefined &&
+    testSteps.indexOf(rest) < testSteps.indexOf(tooling), "T2: the tooling tests run when today's do not");
+  require([lane, rest, tooling].every(
+    (step) => compact(map(step?.["env"])["BASE"]) === compact(TEST_BASE),
+  ), "T4: each test step takes its base from the pull request, the merge queue's group or the push");
+  require(toolingRuns.length === 2 &&
+    toolingRuns.every(
+      (line) =>
+        line.includes('--shard "$SHARD"') &&
+        line.includes("--passWithNoTests") &&
+        TOOLING_EXCLUDES.every((glob) => line.includes(`--exclude '${glob}'`)),
+    ) &&
+    toolingRuns.filter((line) => line.includes('--changed "$BASE"')).length ===
+      1, "T3: the tooling commands leave out today's trees and next/, on a pull request and on main");
   const times = testSteps.find((s) => s["name"] === "shard times");
   const laneRuns = commands({ steps: [lane] }).filter((line) => line.startsWith("pnpm exec vitest run"));
   const restRuns = commands({ steps: [rest] }).filter((line) => line.startsWith("pnpm exec vitest run"));
@@ -259,7 +287,7 @@ export const lintWorkflow = (text: string): string[] => {
     times !== undefined &&
     testSteps.indexOf(lane) < testSteps.indexOf(rest) &&
     testSteps.indexOf(rest) < testSteps.indexOf(times) &&
-    compact(rest["if"]) === "!cancelled()" &&
+    compact(rest["if"]).startsWith("!cancelled()") &&
     compact(times["if"]) === "!cancelled()", "L3: lanes first; rest and shard times survive failure");
   require(testFiles.some(inLaneStep), "L4: lane filter matches a real test file");
 

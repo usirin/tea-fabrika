@@ -17,6 +17,7 @@ both tools.
 | [guidelines](./guidelines/SKILL.md) | study one design area, show the choices and plan the build |
 | [adr](./adr/SKILL.md) | write one owner decision to `.decisions/`, the turn it is made |
 | [write-pattern](./write-pattern/SKILL.md) | write or re-ground one `.patterns/` doc on how the code is shaped now |
+| [pr](./pr/SKILL.md) | write a pull request's title and description, what it does first and the steps last |
 
 ## How a brief uses them
 
@@ -28,7 +29,9 @@ This round: laws d1 to d3, and d4 yourself, since commits.ts is an exam path.
 ```
 
 The skill holds what every brief used to repeat: what to read, the caps, how to commit and sign,
-what never to do, and how to report.
+what never to do, and how to report. What every step shares is in
+[`AGENTS.md`, "Finish your task"](../../AGENTS.md#finish-your-task): finish the whole task, the routine steps
+that need no approval, and a report a reader with no context can follow.
 
 An agent that meets something wrong outside its task writes one finding row, with proof, and
 keeps going: never a fix, a ticket or only a mention
@@ -48,7 +51,7 @@ owners and staged formatting; its `--commit-only` route leaves missing notes for
 Review sweeps every law and decided note, then answers once with all blocking classes and
 its finding rows. The lead skill holds the standing review brief.
 After a merge, catch-up retains the checked head in MAIN and removes safe boxes and linked worktrees.
-An exam change needs no owner read when its labels fit and both loosening and mutation find zero hits.
+An exam change needs no owner read when its labels fit and `loosening.sh` finds zero hits (0066).
 
 For a stacked child, the brief records the parent ticket, branch and signed build head. The driver
 records the child before starting it. The stack lands with `gh stack merge <pr> --squash`, then

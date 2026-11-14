@@ -16,10 +16,10 @@ import {
 import { builtinModules } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { Schema } from "effect";
+import { describe, expect, it } from "@effect/vitest";
+import { Effect, Schema } from "effect";
 import fc from "fast-check";
 import { rolldown, type Plugin } from "rolldown";
-import { afterAll, describe, expect, it } from "vitest";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
 
@@ -192,25 +192,21 @@ const ownerAt = (packages: ReadonlyArray<Package>, file: string): Package | unde
 const shown = (from: string, file: string): string => relative(from, file).split(sep).join("/");
 
 // Planted trees: each scan is seen to fire on a planted break before it is trusted on `next/`.
-const planted: Array<string> = [];
+// A tree is planted in the scope of the test that reads it, which removes it when the test ends (0061).
+const plant = (files: Readonly<Record<string, string | object>>) =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const root = realpathSync(mkdtempSync(join(tmpdir(), "next-exam-")));
 
-const plant = (files: Readonly<Record<string, string | object>>): string => {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "next-exam-")));
-  planted.push(root);
+      for (const [path, body] of Object.entries(files)) {
+        mkdirSync(dirname(join(root, path)), { recursive: true });
+        writeFileSync(join(root, path), typeof body === "string" ? body : JSON.stringify(body));
+      }
 
-  for (const [path, body] of Object.entries(files)) {
-    mkdirSync(dirname(join(root, path)), { recursive: true });
-    writeFileSync(join(root, path), typeof body === "string" ? body : JSON.stringify(body));
-  }
-
-  return root;
-};
-
-afterAll(() => {
-  for (const root of planted.splice(0)) {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
+      return root;
+    }),
+    (root) => Effect.sync(() => rmSync(root, { recursive: true, force: true })),
+  );
 
 const lines = (...each: ReadonlyArray<string>): string => `${each.join("\n")}\n`;
 
@@ -549,19 +545,21 @@ describe("reading imports", () => {
 });
 
 describe("planted breaks", () => {
-  it("P17a: the door browser check catches a Node import", async () => {
-    const tree = plant({
-      "packages/libfabrika/package.json": manifest("@kampus/libfabrika", {
-        exports: { "./gateway/*": "./src/gateway/*.ts", "./gateway/internal/*": null },
-      }),
-      "packages/libfabrika/src/gateway/Gateway.ts": lines('export {readFileSync} from "node:fs";'),
-    });
-    expect(
-      (await bundleFaults(tree)).some(
-        (fault) => fault.includes("@kampus/libfabrika/gateway/Gateway") && fault.includes("node:fs"),
-      ),
-    ).toBe(true);
-  });
+  it.effect("P17a: the door browser check catches a Node import", () =>
+    Effect.gen(function* () {
+      const tree = yield* plant({
+        "packages/libfabrika/package.json": manifest("@kampus/libfabrika", {
+          exports: { "./gateway/*": "./src/gateway/*.ts", "./gateway/internal/*": null },
+        }),
+        "packages/libfabrika/src/gateway/Gateway.ts": lines('export {readFileSync} from "node:fs";'),
+      });
+      expect(
+        (yield* Effect.promise(() => bundleFaults(tree))).some(
+          (fault) => fault.includes("@kampus/libfabrika/gateway/Gateway") && fault.includes("node:fs"),
+        ),
+      ).toBe(true);
+    }),
+  );
   const library = manifest("@kampus/libfabrika", {
     exports: { ".": "./src/index.ts", "./transport/*": "./src/transport/*.ts", "./transport/internal/*": null },
     dependencies: { effect: "catalog:" },
@@ -606,83 +604,91 @@ describe("planted breaks", () => {
     "src/stray.ts": lines("export const stray = 1;"),
   });
 
-  it("fires on each manifest break", () => {
-    expect([...manifestFaults(tree)].sort()).toEqual(
-      [
-        "packages/tuval/package.json: depends on @kampus/fabrika-old, today's version",
-        "packages/tuval/package.json: depends on @kampus/fabrika-old, a workspace package outside next/",
-        "programs/counter/package.json: not private",
-        "programs/counter/package.json: version is not 0.0.0",
-        "programs/counter/package.json: sideEffects is not false",
-        "programs/counter/package.json: no typecheck script",
-        "packages/design-taker/package.json: depends on @kampus/fabrika-design, a workspace package outside next/",
-      ].sort(),
-    );
-  });
+  it.effect("fires on each manifest break", () =>
+    Effect.gen(function* () {
+      expect([...manifestFaults(yield* tree)].sort()).toEqual(
+        [
+          "packages/tuval/package.json: depends on @kampus/fabrika-old, today's version",
+          "packages/tuval/package.json: depends on @kampus/fabrika-old, a workspace package outside next/",
+          "programs/counter/package.json: not private",
+          "programs/counter/package.json: version is not 0.0.0",
+          "programs/counter/package.json: sideEffects is not false",
+          "programs/counter/package.json: no typecheck script",
+          "packages/design-taker/package.json: depends on @kampus/fabrika-design, a workspace package outside next/",
+        ].sort(),
+      );
+    }),
+  );
 
-  it("fires on each import break, and on nothing else", () => {
-    expect([...importFaults(tree)].sort()).toEqual(
-      [
-        'packages/tuval/src/index.ts imports "@kampus/libfabrika/src/ledger/Log.ts": ./src/ledger/Log.ts is not in @kampus/libfabrika\'s exports',
-        'packages/tuval/src/index.ts imports "@kampus/libfabrika/transport/internal/binary": ./transport/internal/binary is refused by @kampus/libfabrika\'s exports',
-        'packages/tuval/src/index.ts imports "@kampus/libfabrika/transport/Nope": ./transport/Nope names no file in @kampus/libfabrika',
-        'packages/tuval/src/index.ts imports "@kampus/pipeline": @kampus/pipeline is not in its package.json',
-        'programs/counter/src/index.ts imports "../../../packages/libfabrika/src/index.ts": a relative path out of its package',
-        'apps/fabrika/src/brain.ts imports "electron": in an app, only src/entry/electron-main.ts may',
-        "src/stray.ts: sits in no package",
-      ].sort(),
-    );
-  });
+  it.effect("fires on each import break, and on nothing else", () =>
+    Effect.gen(function* () {
+      expect([...importFaults(yield* tree)].sort()).toEqual(
+        [
+          'packages/tuval/src/index.ts imports "@kampus/libfabrika/src/ledger/Log.ts": ./src/ledger/Log.ts is not in @kampus/libfabrika\'s exports',
+          'packages/tuval/src/index.ts imports "@kampus/libfabrika/transport/internal/binary": ./transport/internal/binary is refused by @kampus/libfabrika\'s exports',
+          'packages/tuval/src/index.ts imports "@kampus/libfabrika/transport/Nope": ./transport/Nope names no file in @kampus/libfabrika',
+          'packages/tuval/src/index.ts imports "@kampus/pipeline": @kampus/pipeline is not in its package.json',
+          'programs/counter/src/index.ts imports "../../../packages/libfabrika/src/index.ts": a relative path out of its package',
+          'apps/fabrika/src/brain.ts imports "electron": in an app, only src/entry/electron-main.ts may',
+          "src/stray.ts: sits in no package",
+        ].sort(),
+      );
+    }),
+  );
 
-  it("lets the exam's own files sit outside a package until the app has one", () => {
-    const early = plant({
-      "apps/fabrika/e2e.ts": lines('import {Effect} from "effect";'),
-      "apps/fabrika/e2e/door.test.ts": lines('import {it} from "vitest";'),
-      "apps/fabrika/src/exam/deps.test.ts": lines('import {it} from "vitest";'),
-      "apps/fabrika/src/brain.ts": lines('import {Effect} from "effect";'),
-    });
-    expect(importFaults(early)).toEqual(["apps/fabrika/src/brain.ts: sits in no package"]);
-  });
+  it.effect("lets the exam's own files sit outside a package until the app has one", () =>
+    Effect.gen(function* () {
+      const early = yield* plant({
+        "apps/fabrika/e2e.ts": lines('import {Effect} from "effect";'),
+        "apps/fabrika/e2e/door.test.ts": lines('import {it} from "vitest";'),
+        "apps/fabrika/src/exam/deps.test.ts": lines('import {it} from "vitest";'),
+        "apps/fabrika/src/brain.ts": lines('import {Effect} from "effect";'),
+      });
+      expect(importFaults(early)).toEqual(["apps/fabrika/src/brain.ts: sits in no package"]);
+    }),
+  );
 
-  it("fires on a top level that reaches node, cloudflare, MCP or electron", async () => {
-    const bundles = plant({
-      "packages/libfabrika/package.json": manifest("@kampus/libfabrika", {
-        exports: { ".": "./src/index.ts", "./transport/*": "./src/transport/*.ts" },
-      }),
-      "packages/libfabrika/src/index.ts": lines(
-        'import {readFileSync} from "node:fs";',
-        "export const read = readFileSync;",
-      ),
-      "packages/libfabrika/src/transport/Wire.ts": lines(
-        'import {createHash} from "node:crypto";',
-        "export const hash = createHash;",
-      ),
-      "packages/tuval/package.json": manifest("@kampus/tuval"),
-      "packages/tuval/src/index.ts": lines("export const clean = 1;"),
-      "programs/notes/package.json": manifest("@kampus/notes", {
-        exports: { ".": "./src/program.ts", "./window": "./src/view.ts" },
-      }),
-      "programs/notes/src/program.ts": lines(
-        'import {serve} from "@modelcontextprotocol/server";',
-        "export const s = serve;",
-      ),
-      "programs/notes/src/view.ts": lines('export {DurableObject} from "cloudflare:workers";'),
-      "programs/chaos/package.json": manifest("@kampus/chaos", {
-        exports: { ".": "./src/index.ts", "./window": "./src/window.ts" },
-      }),
-      "programs/chaos/src/index.ts": lines('import {app} from "electron";', "export const a = app;"),
-      "programs/chaos/src/window.ts": lines('export {a} from "./index.ts";'),
-    });
-    expect([...(await bundleFaults(bundles))].sort()).toEqual(
-      [
-        '@kampus/libfabrika reaches node:*: "node:fs" from packages/libfabrika/src/index.ts',
-        '@kampus/libfabrika/transport/Wire reaches node:*: "node:crypto" from packages/libfabrika/src/transport/Wire.ts',
-        '@kampus/notes reaches @modelcontextprotocol/*: "@modelcontextprotocol/server" from programs/notes/src/program.ts',
-        '@kampus/notes/window reaches cloudflare:*: "cloudflare:workers" from programs/notes/src/view.ts',
-        '@kampus/chaos/window reaches electron: "electron" from programs/chaos/src/index.ts',
-      ].sort(),
-    );
-  });
+  it.effect("fires on a top level that reaches node, cloudflare, MCP or electron", () =>
+    Effect.gen(function* () {
+      const bundles = yield* plant({
+        "packages/libfabrika/package.json": manifest("@kampus/libfabrika", {
+          exports: { ".": "./src/index.ts", "./transport/*": "./src/transport/*.ts" },
+        }),
+        "packages/libfabrika/src/index.ts": lines(
+          'import {readFileSync} from "node:fs";',
+          "export const read = readFileSync;",
+        ),
+        "packages/libfabrika/src/transport/Wire.ts": lines(
+          'import {createHash} from "node:crypto";',
+          "export const hash = createHash;",
+        ),
+        "packages/tuval/package.json": manifest("@kampus/tuval"),
+        "packages/tuval/src/index.ts": lines("export const clean = 1;"),
+        "programs/notes/package.json": manifest("@kampus/notes", {
+          exports: { ".": "./src/program.ts", "./window": "./src/view.ts" },
+        }),
+        "programs/notes/src/program.ts": lines(
+          'import {serve} from "@modelcontextprotocol/server";',
+          "export const s = serve;",
+        ),
+        "programs/notes/src/view.ts": lines('export {DurableObject} from "cloudflare:workers";'),
+        "programs/chaos/package.json": manifest("@kampus/chaos", {
+          exports: { ".": "./src/index.ts", "./window": "./src/window.ts" },
+        }),
+        "programs/chaos/src/index.ts": lines('import {app} from "electron";', "export const a = app;"),
+        "programs/chaos/src/window.ts": lines('export {a} from "./index.ts";'),
+      });
+      expect([...(yield* Effect.promise(() => bundleFaults(bundles)))].sort()).toEqual(
+        [
+          '@kampus/libfabrika reaches node:*: "node:fs" from packages/libfabrika/src/index.ts',
+          '@kampus/libfabrika/transport/Wire reaches node:*: "node:crypto" from packages/libfabrika/src/transport/Wire.ts',
+          '@kampus/notes reaches @modelcontextprotocol/*: "@modelcontextprotocol/server" from programs/notes/src/program.ts',
+          '@kampus/notes/window reaches cloudflare:*: "cloudflare:workers" from programs/notes/src/view.ts',
+          '@kampus/chaos/window reaches electron: "electron" from programs/chaos/src/index.ts',
+        ].sort(),
+      );
+    }),
+  );
 });
 
 // Ticket 477, kind 2 (PR 9): each module has a pair of keys, `"./<module>/*": "./src/<module>/*.ts"` and
@@ -748,35 +754,40 @@ describe("a module's front files and its internal/ in the exports map", () => {
   // The app imports a subpath of the library whose real `exports` is read from the real package. A
   // front file is reached. An internal file is refused even though it exists, and a name no file has
   // reaches nothing. Plant: `ledger/internal/ledgerStore` imported from the app, which must fail.
-  it("each module's front files are reached and its internal/ is refused to other packages", () => {
-    fc.assert(
-      fc.property(module, fc.constantFrom("front", "internal", "missing"), name, (each, kind, stem) => {
-        const subpath = kind === "internal" ? `${each}/internal/${stem}` : `${each}/${stem}`;
-        const tree = plant({
-          "packages/libfabrika/package.json": manifest(LIBRARY, { exports: real().manifest.exports }),
-          [`packages/libfabrika/src/${each}/internal/${stem}.ts`]: lines("export const inside = 1;"),
-          ...(kind === "missing"
-            ? {}
-            : { [`packages/libfabrika/src/${subpath}.ts`]: lines("export const front = 1;") }),
-          "apps/fabrika/package.json": manifest("@kampus/fabrika", { dependencies: { [LIBRARY]: "workspace:*" } }),
-          "apps/fabrika/src/use.ts": lines(`import {x} from "${LIBRARY}/${subpath}";`),
-        });
-        const faults = importFaults(tree).map((fault) => fault.replace(/^.*: /, ""));
+  const stemName = Schema.String.check(Schema.isPattern(/^[A-Za-z][A-Za-z0-9]{0,8}$/));
+  type Case = readonly [(typeof MODULES)[number], "front" | "internal" | "missing", string];
+  // pinned: the plan's plant (ticket 477), the ledger's store imported from the app, runs first.
+  const pinned: ReadonlyArray<Case> = [["ledger", "internal", "ledgerStore"]];
+  it.effect.prop(
+    "each module's front files are reached and its internal/ is refused to other packages",
+    [Schema.Literals(MODULES), Schema.Literals(["front", "internal", "missing"]), stemName],
+    (generated) =>
+      Effect.forEach(
+        [...pinned, generated],
+        ([each, kind, stem]) =>
+          Effect.gen(function* () {
+            const subpath = kind === "internal" ? `${each}/internal/${stem}` : `${each}/${stem}`;
+            const tree = yield* plant({
+              "packages/libfabrika/package.json": manifest(LIBRARY, { exports: real().manifest.exports }),
+              [`packages/libfabrika/src/${each}/internal/${stem}.ts`]: lines("export const inside = 1;"),
+              ...(kind === "missing"
+                ? {}
+                : { [`packages/libfabrika/src/${subpath}.ts`]: lines("export const front = 1;") }),
+              "apps/fabrika/package.json": manifest("@kampus/fabrika", { dependencies: { [LIBRARY]: "workspace:*" } }),
+              "apps/fabrika/src/use.ts": lines(`import {x} from "${LIBRARY}/${subpath}";`),
+            });
+            const faults = importFaults(tree).map((fault) => fault.replace(/^.*: /, ""));
 
-        expect(faults).toEqual(
-          kind === "front"
-            ? []
-            : kind === "internal"
-              ? [`./${subpath} is refused by ${LIBRARY}'s exports`]
-              : [`./${subpath} names no file in ${LIBRARY}`],
-        );
-      }),
-      {
-        ...options,
-        numRuns: 60,
-        // pinned: the plan's plant (ticket 477), the ledger's store imported from the app.
-        examples: [["ledger", "internal", "ledgerStore"]],
-      },
-    );
-  });
+            expect(faults).toEqual(
+              kind === "front"
+                ? []
+                : kind === "internal"
+                  ? [`./${subpath} is refused by ${LIBRARY}'s exports`]
+                  : [`./${subpath} names no file in ${LIBRARY}`],
+            );
+          }),
+        { discard: true, concurrency: 1 },
+      ),
+    { arbitrary: { seed: options.seed, runs: 60 } },
+  );
 });

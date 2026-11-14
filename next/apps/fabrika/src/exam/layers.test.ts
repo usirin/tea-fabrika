@@ -25,9 +25,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { Schema } from "effect";
+import { describe, expect, it } from "@effect/vitest";
+import { Effect, Schema } from "effect";
 import fc from "fast-check";
-import { afterAll, describe, expect, it } from "vitest";
 import { type Row, rowsAt } from "./rows.ts";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
@@ -169,25 +169,30 @@ const ownerAt = (packages: ReadonlyArray<Package>, file: string): Package | unde
 const shown = (from: string, file: string): string => relative(from, file).split(sep).join("/");
 
 // Planted trees: each scan is seen to fire on a planted break before it is trusted on `next/`.
-const planted: Array<string> = [];
+// A planter owns every tree its test plants. The test's scope removes them when the test ends (0061).
+const planter = Effect.acquireRelease(
+  Effect.sync(() => {
+    const roots: Array<string> = [];
+    const plant = (files: Readonly<Record<string, string | object>>): string => {
+      const root = realpathSync(mkdtempSync(join(tmpdir(), "next-exam-")));
+      roots.push(root);
 
-const plant = (files: Readonly<Record<string, string | object>>): string => {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "next-exam-")));
-  planted.push(root);
+      for (const [path, body] of Object.entries(files)) {
+        mkdirSync(dirname(join(root, path)), { recursive: true });
+        writeFileSync(join(root, path), typeof body === "string" ? body : JSON.stringify(body));
+      }
 
-  for (const [path, body] of Object.entries(files)) {
-    mkdirSync(dirname(join(root, path)), { recursive: true });
-    writeFileSync(join(root, path), typeof body === "string" ? body : JSON.stringify(body));
-  }
-
-  return root;
-};
-
-afterAll(() => {
-  for (const root of planted.splice(0)) {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
+      return root;
+    };
+    return { plant, roots };
+  }),
+  ({ roots }) =>
+    Effect.sync(() => {
+      for (const root of roots) {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }),
+);
 
 const lines = (...each: ReadonlyArray<string>): string => `${each.join("\n")}\n`;
 
@@ -471,38 +476,41 @@ describe("the real next/", () => {
 });
 
 describe("planted breaks", () => {
-  it("P17a: the gateway composes lower parts; lower parts cannot import it", () => {
-    // A module and the part the exam reads it as.
-    const lower = [
-      ["runtime", "app"],
-      ["processes", "coordination"],
-      ["ledger", "data"],
-      ["transport", "transport"],
-    ] as const;
-    const tree = plant({
-      "packages/libfabrika/package.json": manifest(LIBRARY),
-      "packages/libfabrika/src/gateway/Gateway.ts": lines(
-        'import {run} from "../runtime/Runner.ts";',
-        'import {member} from "../processes/Process.ts";',
-        'import {log} from "../ledger/Log.ts";',
-        'import {wire} from "../transport/Wire.ts";',
-      ),
-      ...Object.fromEntries(
-        lower.map(([module]) => [
-          `packages/libfabrika/src/${module}/Up.ts`,
-          lines('import {Gateway} from "../gateway/Gateway.ts";'),
-        ]),
-      ),
-    });
-    expect([...faults(tree)].sort()).toEqual(
-      lower
-        .map(
-          ([module, part]) =>
-            `packages/libfabrika/src/${module}/Up.ts imports "../gateway/Gateway.ts": ${part} may not import door`,
-        )
-        .sort(),
-    );
-  });
+  it.effect("P17a: the gateway composes lower parts; lower parts cannot import it", () =>
+    Effect.gen(function* () {
+      const { plant } = yield* planter;
+      // A module and the part the exam reads it as.
+      const lower = [
+        ["runtime", "app"],
+        ["processes", "coordination"],
+        ["ledger", "data"],
+        ["transport", "transport"],
+      ] as const;
+      const tree = plant({
+        "packages/libfabrika/package.json": manifest(LIBRARY),
+        "packages/libfabrika/src/gateway/Gateway.ts": lines(
+          'import {run} from "../runtime/Runner.ts";',
+          'import {member} from "../processes/Process.ts";',
+          'import {log} from "../ledger/Log.ts";',
+          'import {wire} from "../transport/Wire.ts";',
+        ),
+        ...Object.fromEntries(
+          lower.map(([module]) => [
+            `packages/libfabrika/src/${module}/Up.ts`,
+            lines('import {Gateway} from "../gateway/Gateway.ts";'),
+          ]),
+        ),
+      });
+      expect([...faults(tree)].sort()).toEqual(
+        lower
+          .map(
+            ([module, part]) =>
+              `packages/libfabrika/src/${module}/Up.ts imports "../gateway/Gateway.ts": ${part} may not import door`,
+          )
+          .sort(),
+      );
+    }),
+  );
   const lib = (extra: object = {}) =>
     manifest(LIBRARY, {
       exports: {
@@ -516,95 +524,102 @@ describe("planted breaks", () => {
       },
       ...extra,
     });
-  const tree = plant({
-    "packages/libfabrika/package.json": lib(),
-    "packages/libfabrika/src/index.ts": lines('export {run} from "./runtime/Runner.ts";'),
-    "packages/libfabrika/src/transport/Wire.ts": lines('import {log} from "../ledger/Log.ts";'),
-    "packages/libfabrika/src/ledger/Log.ts": lines('import {view} from "@kampus/tuval";'),
-    "packages/libfabrika/src/ledger/Log.test.ts": lines('import {counter} from "@kampus/counter";'),
-    "packages/libfabrika/src/processes/Mailbox.ts": lines('import {log} from "../ledger/Log.ts";'),
-    "packages/libfabrika/src/runtime/Runner.ts": lines(
-      'import {mailbox} from "../processes/Mailbox.ts";',
-      'import {log} from "../ledger/Log.ts";',
+  const planted = planter.pipe(
+    Effect.map(({ plant }) =>
+      plant({
+        "packages/libfabrika/package.json": lib(),
+        "packages/libfabrika/src/index.ts": lines('export {run} from "./runtime/Runner.ts";'),
+        "packages/libfabrika/src/transport/Wire.ts": lines('import {log} from "../ledger/Log.ts";'),
+        "packages/libfabrika/src/ledger/Log.ts": lines('import {view} from "@kampus/tuval";'),
+        "packages/libfabrika/src/ledger/Log.test.ts": lines('import {counter} from "@kampus/counter";'),
+        "packages/libfabrika/src/processes/Mailbox.ts": lines('import {log} from "../ledger/Log.ts";'),
+        "packages/libfabrika/src/runtime/Runner.ts": lines(
+          'import {mailbox} from "../processes/Mailbox.ts";',
+          'import {log} from "../ledger/Log.ts";',
+        ),
+        "packages/libfabrika/src/mcp/tools.ts": lines(
+          'import {run} from "../runtime/Runner.ts";',
+          'import type {Wire} from "../transport/Wire.ts";',
+        ),
+        "packages/libfabrika/src/sync/Merge.ts": lines("export const merge = 1;"),
+        "packages/tuval/package.json": manifest(TUVAL),
+        "packages/tuval/src/index.ts": lines('export {fold} from "./desktop/fold.ts";'),
+        "packages/tuval/src/desktop/layout.ts": lines('import {run} from "@kampus/libfabrika";'),
+        "packages/tuval/src/desktop/fold.ts": lines('import {log} from "@kampus/libfabrika/data";'),
+        "packages/tuval/src/window/main.ts": lines(
+          'import {layout} from "../desktop/layout.ts";',
+          'import {wire} from "@kampus/libfabrika/transport";',
+        ),
+        // P14 slice 2 (L19): the window takes the link and the design package, never a browser layer; the
+        // browser layers take transport's contracts, never the design package.
+        "packages/tuval/src/window/machine.ts": lines(
+          'import {Link} from "@kampus/libfabrika/transport/Link";',
+          'import {Client} from "@kampus/libfabrika";',
+          'import {themes} from "@kampus/fabrika-design";',
+          'import {key} from "../browser/key.ts";',
+        ),
+        "packages/tuval/src/browser/rows.ts": lines(
+          'import {ClientRows} from "@kampus/libfabrika/transport/ClientRows";',
+          'import {Client} from "@kampus/libfabrika";',
+          'import {themes} from "@kampus/fabrika-design";',
+        ),
+        "packages/tuval/src/dom/root.ts": lines('import {layout} from "../desktop/layout.ts";'),
+        "packages/tuval/src/browser/key.ts": lines(
+          'import {root} from "../dom/root.ts";',
+          'import {wire} from "@kampus/libfabrika/transport";',
+        ),
+        "packages/tuval/src/electron/menu.ts": lines('import {grant} from "@kampus/libfabrika/coordination";'),
+        "packages/tuval/src/headless/run.ts": lines('import {main} from "../window/main.ts";'),
+        "programs/notes/package.json": manifest("@kampus/notes", {
+          exports: { ".": "./src/program.ts", "./window": "./src/view.tsx" },
+        }),
+        "programs/notes/src/program.ts": lines(
+          'import {root} from "./root.ts";',
+          'import {defineProgram} from "@kampus/libfabrika";',
+        ),
+        "programs/notes/src/root.ts": lines('import {send} from "@kampus/tuval";'),
+        "programs/notes/src/view.tsx": lines(
+          'import {notes} from "./program.ts";',
+          'import {useModel} from "@kampus/tuval";',
+        ),
+        "programs/notes/src/tile.ts": lines('import {wire} from "@kampus/libfabrika/transport";'),
+        "programs/counter/package.json": manifest("@kampus/counter"),
+        "programs/counter/src/index.ts": lines('import {defineProgram} from "@kampus/libfabrika";'),
+        "apps/fabrika/package.json": manifest("@kampus/fabrika"),
+        "apps/fabrika/src/brain.ts": lines(
+          'import {log} from "@kampus/libfabrika/data";',
+          'import {fold} from "@kampus/tuval";',
+        ),
+      }),
     ),
-    "packages/libfabrika/src/mcp/tools.ts": lines(
-      'import {run} from "../runtime/Runner.ts";',
-      'import type {Wire} from "../transport/Wire.ts";',
-    ),
-    "packages/libfabrika/src/sync/Merge.ts": lines("export const merge = 1;"),
-    "packages/tuval/package.json": manifest(TUVAL),
-    "packages/tuval/src/index.ts": lines('export {fold} from "./desktop/fold.ts";'),
-    "packages/tuval/src/desktop/layout.ts": lines('import {run} from "@kampus/libfabrika";'),
-    "packages/tuval/src/desktop/fold.ts": lines('import {log} from "@kampus/libfabrika/data";'),
-    "packages/tuval/src/window/main.ts": lines(
-      'import {layout} from "../desktop/layout.ts";',
-      'import {wire} from "@kampus/libfabrika/transport";',
-    ),
-    // P14 slice 2 (L19): the window takes the link and the design package, never a browser layer; the
-    // browser layers take transport's contracts, never the design package.
-    "packages/tuval/src/window/machine.ts": lines(
-      'import {Link} from "@kampus/libfabrika/transport/Link";',
-      'import {Client} from "@kampus/libfabrika";',
-      'import {themes} from "@kampus/fabrika-design";',
-      'import {key} from "../browser/key.ts";',
-    ),
-    "packages/tuval/src/browser/rows.ts": lines(
-      'import {ClientRows} from "@kampus/libfabrika/transport/ClientRows";',
-      'import {Client} from "@kampus/libfabrika";',
-      'import {themes} from "@kampus/fabrika-design";',
-    ),
-    "packages/tuval/src/dom/root.ts": lines('import {layout} from "../desktop/layout.ts";'),
-    "packages/tuval/src/browser/key.ts": lines(
-      'import {root} from "../dom/root.ts";',
-      'import {wire} from "@kampus/libfabrika/transport";',
-    ),
-    "packages/tuval/src/electron/menu.ts": lines('import {grant} from "@kampus/libfabrika/coordination";'),
-    "packages/tuval/src/headless/run.ts": lines('import {main} from "../window/main.ts";'),
-    "programs/notes/package.json": manifest("@kampus/notes", {
-      exports: { ".": "./src/program.ts", "./window": "./src/view.tsx" },
-    }),
-    "programs/notes/src/program.ts": lines(
-      'import {root} from "./root.ts";',
-      'import {defineProgram} from "@kampus/libfabrika";',
-    ),
-    "programs/notes/src/root.ts": lines('import {send} from "@kampus/tuval";'),
-    "programs/notes/src/view.tsx": lines(
-      'import {notes} from "./program.ts";',
-      'import {useModel} from "@kampus/tuval";',
-    ),
-    "programs/notes/src/tile.ts": lines('import {wire} from "@kampus/libfabrika/transport";'),
-    "programs/counter/package.json": manifest("@kampus/counter"),
-    "programs/counter/src/index.ts": lines('import {defineProgram} from "@kampus/libfabrika";'),
-    "apps/fabrika/package.json": manifest("@kampus/fabrika"),
-    "apps/fabrika/src/brain.ts": lines(
-      'import {log} from "@kampus/libfabrika/data";',
-      'import {fold} from "@kampus/tuval";',
-    ),
-  });
+  );
 
   // Everything else in the tree is clean, the named exceptions included: mcp, the window, the
   // browser key and the electron menu reach transport; the menu reaches coordination; a program's
   // window imports its own program; the app imports anything.
   // scenario: fixed imports probe the strict-layer table's allowed and refused package names.
-  it("fires on each planted break, and on nothing else", () => {
-    expect([...faults(tree)].sort()).toEqual(
-      [
-        'packages/libfabrika/src/transport/Wire.ts imports "../ledger/Log.ts": transport may not import data',
-        'packages/libfabrika/src/ledger/Log.ts imports "@kampus/tuval": the library imports nothing above it',
-        'packages/libfabrika/src/ledger/Log.ts imports "@kampus/tuval": data may not import it',
-        'packages/libfabrika/src/ledger/Log.test.ts imports "@kampus/counter": the library imports nothing above it',
-        'packages/libfabrika/src/runtime/Runner.ts imports "../ledger/Log.ts": app may not import data',
-        'packages/libfabrika/src/sync/Merge.ts: the folder "sync" has no row in the exam\'s table',
-        'packages/tuval/src/desktop/fold.ts imports "@kampus/libfabrika/data": desktop may not import it',
-        'packages/tuval/src/headless/run.ts imports "../window/main.ts": headless may not import window',
-        'packages/tuval/src/window/machine.ts imports "../browser/key.ts": window may not import browser',
-        'packages/tuval/src/browser/rows.ts imports "@kampus/libfabrika": browser may not import it',
-        'packages/tuval/src/browser/rows.ts imports "@kampus/fabrika-design": browser may not import it',
-        'programs/notes/src/root.ts imports "@kampus/tuval": program may not import it',
-        'programs/notes/src/tile.ts imports "@kampus/libfabrika/transport": program-window may not import it',
-      ].sort(),
-    );
-  });
+  it.effect("fires on each planted break, and on nothing else", () =>
+    Effect.gen(function* () {
+      const tree = yield* planted;
+      expect([...faults(tree)].sort()).toEqual(
+        [
+          'packages/libfabrika/src/transport/Wire.ts imports "../ledger/Log.ts": transport may not import data',
+          'packages/libfabrika/src/ledger/Log.ts imports "@kampus/tuval": the library imports nothing above it',
+          'packages/libfabrika/src/ledger/Log.ts imports "@kampus/tuval": data may not import it',
+          'packages/libfabrika/src/ledger/Log.test.ts imports "@kampus/counter": the library imports nothing above it',
+          'packages/libfabrika/src/runtime/Runner.ts imports "../ledger/Log.ts": app may not import data',
+          'packages/libfabrika/src/sync/Merge.ts: the folder "sync" has no row in the exam\'s table',
+          'packages/tuval/src/desktop/fold.ts imports "@kampus/libfabrika/data": desktop may not import it',
+          'packages/tuval/src/headless/run.ts imports "../window/main.ts": headless may not import window',
+          'packages/tuval/src/window/machine.ts imports "../browser/key.ts": window may not import browser',
+          'packages/tuval/src/browser/rows.ts imports "@kampus/libfabrika": browser may not import it',
+          'packages/tuval/src/browser/rows.ts imports "@kampus/fabrika-design": browser may not import it',
+          'programs/notes/src/root.ts imports "@kampus/tuval": program may not import it',
+          'programs/notes/src/tile.ts imports "@kampus/libfabrika/transport": program-window may not import it',
+        ].sort(),
+      );
+    }),
+  );
 });
 
 // Ticket 477, PR 0: the laws of the row reader. Fixed seed, as the lead scripts' laws use.
@@ -854,94 +869,104 @@ describe("every library file has exactly one row", () => {
   // Plant: let a library file with no row pass, as the reader did before for a file at the top of
   // `src/` (it answered "an entry file" and checked nothing). Then `src/sync/Merge.ts` and a new
   // top file import anything.
-  it("a file in a row's folder has one row; a file no row claims fails, wherever it is", () => {
-    fc.assert(
-      fc.property(
-        fc.constantFrom(...folders),
-        fc.constantFrom("", "internal/"),
-        name,
-        unlisted(folders),
-        unlisted(tops),
-        (folder, inner, file, stray, loose) => {
-          const src = "packages/libfabrika/src";
-          const tree = plant({
-            "packages/libfabrika/package.json": manifest(LIBRARY),
-            [`${src}/${folder}/${inner}${file}.ts`]: lines("export const a = 1;"),
-            [`${src}/${stray}/${inner}${file}.ts`]: lines("export const a = 1;"),
-            [`${src}/${stray}/${file}.test.ts`]: lines("export const a = 1;"),
-            [`${src}/${loose}.ts`]: lines("export const a = 1;"),
-            [`${src}/${loose}.test.ts`]: lines("export const a = 1;"),
-          });
+  it.effect("a file in a row's folder has one row; a file no row claims fails, wherever it is", () =>
+    Effect.gen(function* () {
+      const { plant } = yield* planter;
+      fc.assert(
+        fc.property(
+          fc.constantFrom(...folders),
+          fc.constantFrom("", "internal/"),
+          name,
+          unlisted(folders),
+          unlisted(tops),
+          (folder, inner, file, stray, loose) => {
+            const src = "packages/libfabrika/src";
+            const tree = plant({
+              "packages/libfabrika/package.json": manifest(LIBRARY),
+              [`${src}/${folder}/${inner}${file}.ts`]: lines("export const a = 1;"),
+              [`${src}/${stray}/${inner}${file}.ts`]: lines("export const a = 1;"),
+              [`${src}/${stray}/${file}.test.ts`]: lines("export const a = 1;"),
+              [`${src}/${loose}.ts`]: lines("export const a = 1;"),
+              [`${src}/${loose}.test.ts`]: lines("export const a = 1;"),
+            });
 
-          expect(rowsAt(REAL, `next/${src}/${folder}/${inner}${file}.ts`)).toHaveLength(1);
-          // Which files fail, not what the message says.
-          expect(
-            faults(tree)
-              .map((fault) => fault.split(/:| imports /)[0])
-              .sort(),
-          ).toEqual([`${src}/${stray}/${inner}${file}.ts`, `${src}/${loose}.ts`].sort());
+            expect(rowsAt(REAL, `next/${src}/${folder}/${inner}${file}.ts`)).toHaveLength(1);
+            // Which files fail, not what the message says.
+            expect(
+              faults(tree)
+                .map((fault) => fault.split(/:| imports /)[0])
+                .sort(),
+            ).toEqual([`${src}/${stray}/${inner}${file}.ts`, `${src}/${loose}.ts`].sort());
+          },
+        ),
+        {
+          ...options,
+          numRuns: 60,
+          // pinned: the plan's plant (ticket 477), a new folder with no row, and a new top file.
+          examples: [["ledger", "", "Merge", "sync", "Loose"]],
         },
-      ),
-      {
-        ...options,
-        numRuns: 60,
-        // pinned: the plan's plant (ticket 477), a new folder with no row, and a new top file.
-        examples: [["ledger", "", "Merge", "sync", "Loose"]],
-      },
-    );
-  });
+      );
+    }),
+  );
 
   // scenario: two rows that claim one file equally, since code-graph stops on that file and names
   // no row, and the exam must not pick one for it.
-  it("scenario: a file two rows claim equally fails", () => {
-    const tree = plant({
-      "packages/libfabrika/package.json": manifest(LIBRARY),
-      "packages/libfabrika/src/ledger/Log.ts": lines("export const a = 1;"),
-    });
-    const twice = [...REAL, { name: "next-runtime", paths: ["next/packages/libfabrika/src/ledger"] }];
-    expect(faults(tree)).toEqual([]);
-    expect(faults(tree, twice)).toHaveLength(1);
-  });
+  it.effect("scenario: a file two rows claim equally fails", () =>
+    Effect.gen(function* () {
+      const { plant } = yield* planter;
+      const tree = plant({
+        "packages/libfabrika/package.json": manifest(LIBRARY),
+        "packages/libfabrika/src/ledger/Log.ts": lines("export const a = 1;"),
+      });
+      const twice = [...REAL, { name: "next-runtime", paths: ["next/packages/libfabrika/src/ledger"] }];
+      expect(faults(tree)).toEqual([]);
+      expect(faults(tree, twice)).toHaveLength(1);
+    }),
+  );
 });
 
 describe("planted breaks in the module folders", () => {
   // The rule file has a row per module, and the exam maps each row to its part (`rowParts`). Reading
   // `runtime` as the coordination part is the plant.
   const asCoordination = { ...rowParts, "next-runtime": "coordination" };
-  const tree = plant({
-    "packages/libfabrika/package.json": manifest(LIBRARY),
-    "packages/libfabrika/src/Id.ts": lines("export const id = 1;"),
-    "packages/libfabrika/src/telemetry/Sink.ts": lines('import {id} from "../Id.ts";'),
-    "packages/libfabrika/src/ledger/Log.ts": lines('import {sink} from "../telemetry/Sink.ts";'),
-    "packages/libfabrika/src/ledger/Ledger.ts": lines('import {mailbox} from "../processes/Mailbox.ts";'),
-    "packages/libfabrika/src/transport/Wire.ts": lines('import {log} from "../ledger/Log.ts";'),
-    "packages/libfabrika/src/processes/Mailbox.ts": lines(
-      'import {log} from "../ledger/Log.ts";',
-      'import {Gateway} from "../gateway/Gateway.ts";',
+  const planted = planter.pipe(
+    Effect.map(({ plant }) =>
+      plant({
+        "packages/libfabrika/package.json": manifest(LIBRARY),
+        "packages/libfabrika/src/Id.ts": lines("export const id = 1;"),
+        "packages/libfabrika/src/telemetry/Sink.ts": lines('import {id} from "../Id.ts";'),
+        "packages/libfabrika/src/ledger/Log.ts": lines('import {sink} from "../telemetry/Sink.ts";'),
+        "packages/libfabrika/src/ledger/Ledger.ts": lines('import {mailbox} from "../processes/Mailbox.ts";'),
+        "packages/libfabrika/src/transport/Wire.ts": lines('import {log} from "../ledger/Log.ts";'),
+        "packages/libfabrika/src/processes/Mailbox.ts": lines(
+          'import {log} from "../ledger/Log.ts";',
+          'import {Gateway} from "../gateway/Gateway.ts";',
+        ),
+        "packages/libfabrika/src/access/Access.ts": lines(
+          'import {mailbox} from "../processes/Mailbox.ts";',
+          'import {run} from "../runtime/Runner.ts";',
+        ),
+        "packages/libfabrika/src/runtime/Runner.ts": lines(
+          'import {mailbox} from "../processes/Mailbox.ts";',
+          'import {store} from "./ProcessStore.ts";',
+          'import {log} from "../ledger/Log.ts";',
+          'import {wire} from "../transport/Wire.ts";',
+        ),
+        "packages/libfabrika/src/runtime/ProcessStore.ts": lines('import {log} from "../ledger/Log.ts";'),
+        "packages/libfabrika/src/runtime/RecoveryStore.ts": lines('import {log} from "../ledger/Log.ts";'),
+        "packages/libfabrika/src/runtime/internal/recovery.ts": lines('import {log} from "../../ledger/Log.ts";'),
+        "packages/libfabrika/src/runtime/internal/supervisor.ts": lines('import {log} from "../../ledger/Log.ts";'),
+        "packages/libfabrika/src/coordination/index.ts": lines('export {log} from "../ledger/Log.ts";'),
+        "packages/libfabrika/src/gateway/Gateway.ts": lines(
+          'import {run} from "../runtime/Runner.ts";',
+          'import {members} from "../access/Access.ts";',
+          'import {log} from "../ledger/Log.ts";',
+          'import {wire} from "../transport/Wire.ts";',
+        ),
+        "packages/libfabrika/src/gateway/internal/waiting.ts": lines('import {wire} from "../../transport/Wire.ts";'),
+      }),
     ),
-    "packages/libfabrika/src/access/Access.ts": lines(
-      'import {mailbox} from "../processes/Mailbox.ts";',
-      'import {run} from "../runtime/Runner.ts";',
-    ),
-    "packages/libfabrika/src/runtime/Runner.ts": lines(
-      'import {mailbox} from "../processes/Mailbox.ts";',
-      'import {store} from "./ProcessStore.ts";',
-      'import {log} from "../ledger/Log.ts";',
-      'import {wire} from "../transport/Wire.ts";',
-    ),
-    "packages/libfabrika/src/runtime/ProcessStore.ts": lines('import {log} from "../ledger/Log.ts";'),
-    "packages/libfabrika/src/runtime/RecoveryStore.ts": lines('import {log} from "../ledger/Log.ts";'),
-    "packages/libfabrika/src/runtime/internal/recovery.ts": lines('import {log} from "../../ledger/Log.ts";'),
-    "packages/libfabrika/src/runtime/internal/supervisor.ts": lines('import {log} from "../../ledger/Log.ts";'),
-    "packages/libfabrika/src/coordination/index.ts": lines('export {log} from "../ledger/Log.ts";'),
-    "packages/libfabrika/src/gateway/Gateway.ts": lines(
-      'import {run} from "../runtime/Runner.ts";',
-      'import {members} from "../access/Access.ts";',
-      'import {log} from "../ledger/Log.ts";',
-      'import {wire} from "../transport/Wire.ts";',
-    ),
-    "packages/libfabrika/src/gateway/internal/waiting.ts": lines('import {wire} from "../../transport/Wire.ts";'),
-  });
+  );
 
   // scenario: each line is one named wall of today's table, met in a module folder, since the modules
   // must leave every wall standing: the ledger may not import processes, transport may not import
@@ -950,30 +975,36 @@ describe("planted breaks in the module folders", () => {
   // coordination, so their ledger imports pass until old PR 13 cuts them.
   // Plant: map `runtime` to the coordination part (`asCoordination`). Then the runner's ledger and
   // transport imports pass, and the tree's faults change.
-  it("scenario: every upward or skipped-part import fires in the module folders, and nothing else", () => {
-    const at = (file: string) => `packages/libfabrika/src/${file}`;
-    expect([...faults(tree)].sort()).toEqual(
-      [
-        `${at("ledger/Ledger.ts")} imports "../processes/Mailbox.ts": data may not import coordination`,
-        `${at("transport/Wire.ts")} imports "../ledger/Log.ts": transport may not import data`,
-        `${at("processes/Mailbox.ts")} imports "../gateway/Gateway.ts": coordination may not import door`,
-        `${at("access/Access.ts")} imports "../runtime/Runner.ts": coordination may not import app`,
-        `${at("runtime/Runner.ts")} imports "../ledger/Log.ts": app may not import data`,
-        `${at("runtime/Runner.ts")} imports "../transport/Wire.ts": app may not import transport`,
-        `${at("runtime/internal/supervisor.ts")} imports "../../ledger/Log.ts": app may not import data`,
-      ].sort(),
-    );
-    expect(faults(tree, REAL, asCoordination)).not.toEqual(faults(tree));
-  });
+  it.effect("scenario: every upward or skipped-part import fires in the module folders, and nothing else", () =>
+    Effect.gen(function* () {
+      const tree = yield* planted;
+      const at = (file: string) => `packages/libfabrika/src/${file}`;
+      expect([...faults(tree)].sort()).toEqual(
+        [
+          `${at("ledger/Ledger.ts")} imports "../processes/Mailbox.ts": data may not import coordination`,
+          `${at("transport/Wire.ts")} imports "../ledger/Log.ts": transport may not import data`,
+          `${at("processes/Mailbox.ts")} imports "../gateway/Gateway.ts": coordination may not import door`,
+          `${at("access/Access.ts")} imports "../runtime/Runner.ts": coordination may not import app`,
+          `${at("runtime/Runner.ts")} imports "../ledger/Log.ts": app may not import data`,
+          `${at("runtime/Runner.ts")} imports "../transport/Wire.ts": app may not import transport`,
+          `${at("runtime/internal/supervisor.ts")} imports "../../ledger/Log.ts": app may not import data`,
+        ].sort(),
+      );
+      expect(faults(tree, REAL, asCoordination)).not.toEqual(faults(tree));
+    }),
+  );
 
   // scenario: the real rule file claims every module folder, since a move must not land ahead of its
   // rule file change: a file planted in a module folder always has a row.
-  it("scenario: on the real rule file every module folder has a row", () => {
-    const unclaimed = faults(tree)
-      .filter((fault) => !fault.includes(" imports "))
-      .map((fault) => fault.split(": ")[0]);
-    expect(unclaimed).toEqual([]);
-  });
+  it.effect("scenario: on the real rule file every module folder has a row", () =>
+    Effect.gen(function* () {
+      const tree = yield* planted;
+      const unclaimed = faults(tree)
+        .filter((fault) => !fault.includes(" imports "))
+        .map((fault) => fault.split(": ")[0]);
+      expect(unclaimed).toEqual([]);
+    }),
+  );
 
   // scenario: the patched code-graph reads a package import by its subpath (demlik issue 915), since
   // `--layers` once mapped every import of a workspace package to the alphabetically first `exports`
@@ -982,28 +1013,31 @@ describe("planted breaks in the module folders", () => {
   // patched tool reads the import as `index.ts`, a downward edge, so no upward site shows.
   // Plant: drop the patch. `packageSourceEntry` then sorts `./src/aaa-low.ts` before
   // `./src/index.ts`, `b` reads as importing the high row, and the tool reports 1 UP and exits 1.
-  it("scenario: a root import of a package reads the root file, not its first-sorting subpath", () => {
-    const root = plant({
-      "package.json": { name: "plant", private: true, workspaces: ["pkgs/*"] },
-      "pnpm-workspace.yaml": 'packages:\n  - "pkgs/*"\n',
-      "pkgs/a/package.json": { name: "a", exports: { ".": "./src/index.ts", "./low": "./src/aaa-low.ts" } },
-      "pkgs/a/src/aaa-low.ts": "export const low = 1;\n",
-      "pkgs/a/src/index.ts": "export const root = 1;\n",
-      "pkgs/b/package.json": { name: "b" },
-      "pkgs/b/src/b.ts": 'import { root } from "a";\nexport const b = root;\n',
-      "rules.json": {
-        layers: [
-          { name: "high", paths: ["pkgs/a/src/aaa-low.ts"] },
-          { name: "mid", paths: ["pkgs/b"] },
-          { name: "low", paths: ["pkgs/a/src/index.ts"] },
-        ],
-      },
-    });
-    const bin = resolve(NEXT, "..", "node_modules", ".bin", "code-graph");
-    const run = spawnSync(bin, [".", "--layers", "--layer-rules", "rules.json"], { cwd: root, encoding: "utf8" });
-    expect(run.stdout).toContain("1 down, 0 sideways, 0 UP");
-    expect(run.status).toBe(0);
-  });
+  it.effect("scenario: a root import of a package reads the root file, not its first-sorting subpath", () =>
+    Effect.gen(function* () {
+      const { plant } = yield* planter;
+      const root = plant({
+        "package.json": { name: "plant", private: true, workspaces: ["pkgs/*"] },
+        "pnpm-workspace.yaml": 'packages:\n  - "pkgs/*"\n',
+        "pkgs/a/package.json": { name: "a", exports: { ".": "./src/index.ts", "./low": "./src/aaa-low.ts" } },
+        "pkgs/a/src/aaa-low.ts": "export const low = 1;\n",
+        "pkgs/a/src/index.ts": "export const root = 1;\n",
+        "pkgs/b/package.json": { name: "b" },
+        "pkgs/b/src/b.ts": 'import { root } from "a";\nexport const b = root;\n',
+        "rules.json": {
+          layers: [
+            { name: "high", paths: ["pkgs/a/src/aaa-low.ts"] },
+            { name: "mid", paths: ["pkgs/b"] },
+            { name: "low", paths: ["pkgs/a/src/index.ts"] },
+          ],
+        },
+      });
+      const bin = resolve(NEXT, "..", "node_modules", ".bin", "code-graph");
+      const run = spawnSync(bin, [".", "--layers", "--layer-rules", "rules.json"], { cwd: root, encoding: "utf8" });
+      expect(run.stdout).toContain("1 down, 0 sideways, 0 UP");
+      expect(run.status).toBe(0);
+    }),
+  );
 
   // scenario: the patched code-graph reads a subpath the package's `exports` map lacks as unresolved
   // (demlik issue 915), since Node refuses such a subpath (`ERR_PACKAGE_PATH_NOT_EXPORTED`) and the
@@ -1014,32 +1048,35 @@ describe("planted breaks in the module folders", () => {
   // Plant: drop the bare-name check, so every miss falls back to the package's entry. `a/missing`
   // then lands on `index.ts`, `b` reads as importing a higher row, and the tool reports 1 UP and
   // exits 1.
-  it("scenario: an unexported subpath of a package is unresolved, not the package's entry file", () => {
-    const root = plant({
-      "package.json": { name: "plant", private: true, workspaces: ["pkgs/*"] },
-      "pnpm-workspace.yaml": 'packages:\n  - "pkgs/*"\n',
-      "pkgs/a/package.json": { name: "a", exports: { ".": "./src/index.ts", "./low": "./src/low.ts" } },
-      "pkgs/a/src/index.ts": "export const root = 1;\n",
-      "pkgs/a/src/low.ts": "export const low = 1;\n",
-      "pkgs/b/package.json": { name: "b" },
-      "pkgs/b/src/b.ts": 'import { missing } from "a/missing";\nexport const b = missing;\n',
-      "pkgs/c/package.json": { name: "c" },
-      "pkgs/c/src/c.ts": 'import { root } from "a";\nexport const c = root;\n',
-      "rules.json": {
-        layers: [
-          { name: "top", paths: ["pkgs/c"] },
-          { name: "mid", paths: ["pkgs/a/src/index.ts"] },
-          { name: "bottom", paths: ["pkgs/b"] },
-        ],
-      },
-    });
-    const bin = resolve(NEXT, "..", "node_modules", ".bin", "code-graph");
-    const run = spawnSync(bin, [".", "--layers", "--layer-rules", "rules.json"], { cwd: root, encoding: "utf8" });
-    expect(run.stdout).toContain("1 down, 0 sideways, 0 UP");
-    expect(run.stdout).toContain("1 unresolved");
-    expect(run.stdout).toContain("pkgs/b/src/b.ts:1 a/missing");
-    expect(run.status).toBe(0);
-  });
+  it.effect("scenario: an unexported subpath of a package is unresolved, not the package's entry file", () =>
+    Effect.gen(function* () {
+      const { plant } = yield* planter;
+      const root = plant({
+        "package.json": { name: "plant", private: true, workspaces: ["pkgs/*"] },
+        "pnpm-workspace.yaml": 'packages:\n  - "pkgs/*"\n',
+        "pkgs/a/package.json": { name: "a", exports: { ".": "./src/index.ts", "./low": "./src/low.ts" } },
+        "pkgs/a/src/index.ts": "export const root = 1;\n",
+        "pkgs/a/src/low.ts": "export const low = 1;\n",
+        "pkgs/b/package.json": { name: "b" },
+        "pkgs/b/src/b.ts": 'import { missing } from "a/missing";\nexport const b = missing;\n',
+        "pkgs/c/package.json": { name: "c" },
+        "pkgs/c/src/c.ts": 'import { root } from "a";\nexport const c = root;\n',
+        "rules.json": {
+          layers: [
+            { name: "top", paths: ["pkgs/c"] },
+            { name: "mid", paths: ["pkgs/a/src/index.ts"] },
+            { name: "bottom", paths: ["pkgs/b"] },
+          ],
+        },
+      });
+      const bin = resolve(NEXT, "..", "node_modules", ".bin", "code-graph");
+      const run = spawnSync(bin, [".", "--layers", "--layer-rules", "rules.json"], { cwd: root, encoding: "utf8" });
+      expect(run.stdout).toContain("1 down, 0 sideways, 0 UP");
+      expect(run.stdout).toContain("1 unresolved");
+      expect(run.stdout).toContain("pkgs/b/src/b.ts:1 a/missing");
+      expect(run.status).toBe(0);
+    }),
+  );
 });
 
 // Ticket 477, kind 2: the layers. The rule file gives each module a `layer`, and the patched code-graph
@@ -1067,70 +1104,74 @@ describe("layers", () => {
   };
 
   const root = (files: Readonly<Record<string, string>>) =>
-    plant({ "package.json": { name: "plant", private: true }, ...files });
+    planter.pipe(Effect.map(({ plant }) => plant({ "package.json": { name: "plant", private: true }, ...files })));
 
   // scenario: L12 uses the actual repository row and real tool to refuse peers and platform code.
-  it("scenario: T878 L12 repositories cannot import a peer, packs or Node wiring", () => {
-    const tree = root({
-      "next/packages/libfabrika/src/repositories/Repositories.ts": lines(
-        'import {setting} from "../settings/Setting.ts";',
-        'import {open} from "../packs/Open.ts";',
-        'import {git} from "../node/repositories/RepositoriesGit.ts";',
-        'import {id} from "../Id.ts";',
-        "export {setting, open, git, id};",
-      ),
-      "next/packages/libfabrika/src/settings/Setting.ts": lines("export const setting = 1;"),
-      "next/packages/libfabrika/src/packs/Open.ts": lines("export const open = 1;"),
-      "next/packages/libfabrika/src/node/repositories/RepositoriesGit.ts": lines("export const git = 1;"),
-      "next/packages/libfabrika/src/Id.ts": lines("export const id = 1;"),
-    });
-    const run = runTool(tree, REAL);
-    expect(run.edges).toEqual([
-      "next-repositories -> next-node [upward]",
-      "next-repositories -> next-packs [upward]",
-      "next-repositories -> next-settings [sideways]",
-    ]);
-    expect(run.status).toBe(1);
-  });
+  it.effect("scenario: T878 L12 repositories cannot import a peer, packs or Node wiring", () =>
+    Effect.gen(function* () {
+      const tree = yield* root({
+        "next/packages/libfabrika/src/repositories/Repositories.ts": lines(
+          'import {setting} from "../settings/Setting.ts";',
+          'import {open} from "../packs/Open.ts";',
+          'import {git} from "../node/repositories/RepositoriesGit.ts";',
+          'import {id} from "../Id.ts";',
+          "export {setting, open, git, id};",
+        ),
+        "next/packages/libfabrika/src/settings/Setting.ts": lines("export const setting = 1;"),
+        "next/packages/libfabrika/src/packs/Open.ts": lines("export const open = 1;"),
+        "next/packages/libfabrika/src/node/repositories/RepositoriesGit.ts": lines("export const git = 1;"),
+        "next/packages/libfabrika/src/Id.ts": lines("export const id = 1;"),
+      });
+      const run = runTool(tree, REAL);
+      expect(run.edges).toEqual([
+        "next-repositories -> next-node [upward]",
+        "next-repositories -> next-packs [upward]",
+        "next-repositories -> next-settings [sideways]",
+      ]);
+      expect(run.status).toBe(1);
+    }),
+  );
 
   // scenario: a planted tree of four rows on three layers, with one upward, two sideways (one each
   // way) and two downward imports, since the law is about the tool's answer on a known tree. `mid1`
   // and `mid2` share layer 1.
   // Plant: remove the layer code from the patch. The tool then ranks by place in the list, `mid1`
   // is above `mid2`, and the sideways imports pass: the second run below is that tool's answer.
-  it("scenario: two rows on one layer share a rank, and an import between them breaks in either direction", () => {
-    const tree = root({
-      "p/top/t.ts": lines(
-        'import {m} from "../mid1/m.ts";',
-        'import {l} from "../low/l.ts";',
-        "export const t = [m, l];",
-      ),
-      "p/mid1/m.ts": lines(
-        'import {n} from "../mid2/n.ts";',
-        'import {t} from "../top/t.ts";',
-        "export const m = [n, t];",
-      ),
-      "p/mid2/n.ts": lines('import {m} from "../mid1/m.ts";', "export const n = m;"),
-      "p/low/l.ts": lines("export const l = 1;"),
-    });
-    const layers: ReadonlyArray<Row> = [
-      { name: "top", layer: 2, paths: ["p/top"] },
-      { name: "mid1", layer: 1, paths: ["p/mid1"] },
-      { name: "mid2", layer: 1, paths: ["p/mid2"] },
-      { name: "low", layer: 0, paths: ["p/low"] },
-    ];
-    const ranked = runTool(tree, layers);
-    expect(ranked.edges).toEqual(["mid1 -> mid2 [sideways]", "mid1 -> top [upward]", "mid2 -> mid1 [sideways]"]);
-    expect(ranked.summary).toContain("2 down, 2 sideways, 1 UP");
-    expect(ranked.status).toBe(1);
+  it.effect("scenario: two rows on one layer share a rank, and an import between them breaks in either direction", () =>
+    Effect.gen(function* () {
+      const tree = yield* root({
+        "p/top/t.ts": lines(
+          'import {m} from "../mid1/m.ts";',
+          'import {l} from "../low/l.ts";',
+          "export const t = [m, l];",
+        ),
+        "p/mid1/m.ts": lines(
+          'import {n} from "../mid2/n.ts";',
+          'import {t} from "../top/t.ts";',
+          "export const m = [n, t];",
+        ),
+        "p/mid2/n.ts": lines('import {m} from "../mid1/m.ts";', "export const n = m;"),
+        "p/low/l.ts": lines("export const l = 1;"),
+      });
+      const layers: ReadonlyArray<Row> = [
+        { name: "top", layer: 2, paths: ["p/top"] },
+        { name: "mid1", layer: 1, paths: ["p/mid1"] },
+        { name: "mid2", layer: 1, paths: ["p/mid2"] },
+        { name: "low", layer: 0, paths: ["p/low"] },
+      ];
+      const ranked = runTool(tree, layers);
+      expect(ranked.edges).toEqual(["mid1 -> mid2 [sideways]", "mid1 -> top [upward]", "mid2 -> mid1 [sideways]"]);
+      expect(ranked.summary).toContain("2 down, 2 sideways, 1 UP");
+      expect(ranked.status).toBe(1);
 
-    const listed = runTool(
-      tree,
-      layers.map(({ layer: _layer, ...row }) => row),
-    );
-    expect(listed.edges).toEqual(["mid1 -> top [upward]", "mid2 -> mid1 [upward]"]);
-    expect(listed.summary).toContain("0 sideways");
-  });
+      const listed = runTool(
+        tree,
+        layers.map(({ layer: _layer, ...row }) => row),
+      );
+      expect(listed.edges).toEqual(["mid1 -> top [upward]", "mid2 -> mid1 [upward]"]);
+      expect(listed.summary).toContain("0 sideways");
+    }),
+  );
 
   // The rule file's modules on the real file: one probe file per row that has a layer, each importing
   // the probe of every other row. The tool breaks exactly the imports that do not go down a layer.
@@ -1150,47 +1191,57 @@ describe("layers", () => {
       }),
     ).sort();
   };
-  const realTree = plant({
-    "package.json": { name: "plant", private: true },
-    ...Object.fromEntries(
-      SRC_ROWS.map((row) => [
-        probe(row),
-        lines(
-          ...SRC_ROWS.filter((other) => other.name !== row.name).map((other, n) => {
-            const spec = relative(dirname(probe(row)), probe(other));
-            return `import * as m${n} from "${spec.startsWith(".") ? spec : `./${spec}`}";`;
-          }),
-          "export const p = 1;",
+  const plantedReal = planter.pipe(
+    Effect.map(({ plant }) =>
+      plant({
+        "package.json": { name: "plant", private: true },
+        ...Object.fromEntries(
+          SRC_ROWS.map((row) => [
+            probe(row),
+            lines(
+              ...SRC_ROWS.filter((other) => other.name !== row.name).map((other, n) => {
+                const spec = relative(dirname(probe(row)), probe(other));
+                return `import * as m${n} from "${spec.startsWith(".") ? spec : `./${spec}`}";`;
+              }),
+              "export const p = 1;",
+            ),
+          ]),
         ),
-      ]),
+      }),
     ),
-  });
+  );
 
   // scenario: the real rule file, since "no module imports a higher layer or its own layer" is only
   // true of the rows as written. Every ordered pair of modules is one planted import.
-  it("scenario: on the real rule file only downward imports between modules pass", () => {
-    const run = runTool(realTree, REAL);
-    expect(run.edges).toEqual(expectedEdges(REAL));
-    expect(run.edges).not.toContain("next-node -> next-workers [sideways]");
-    expect(run.edges).toContain("next-processes -> next-presence [sideways]");
-    expect(run.edges).toContain("next-transport -> next-ledger [sideways]");
-    expect(run.edges).not.toContain("next-runtime -> next-ledger [upward]");
-  });
+  it.effect("scenario: on the real rule file only downward imports between modules pass", () =>
+    Effect.gen(function* () {
+      const realTree = yield* plantedReal;
+      const run = runTool(realTree, REAL);
+      expect(run.edges).toEqual(expectedEdges(REAL));
+      expect(run.edges).not.toContain("next-node -> next-workers [sideways]");
+      expect(run.edges).toContain("next-processes -> next-presence [sideways]");
+      expect(run.edges).toContain("next-transport -> next-ledger [sideways]");
+      expect(run.edges).not.toContain("next-runtime -> next-ledger [upward]");
+    }),
+  );
 
   // scenario: the plan's plant for "no module imports another module on its own layer". `next-access` is
   // put on layer 5 beside `next-runtime`: an import from the runtime to access, which went down,
   // must now fail, and no other pair changes.
-  it("scenario: a module put beside the runtime refuses an import from the runtime", () => {
-    const beside = REAL.map((row) => (row.name === "next-access" ? { ...row, layer: 5 } : row));
-    const before = runTool(realTree, REAL).edges;
-    const after = runTool(realTree, beside);
-    expect(after.edges).toEqual(expectedEdges(beside));
-    expect(after.edges.filter((edge) => !before.includes(edge))).toEqual([
-      "next-access -> next-runtime [sideways]",
-      "next-runtime -> next-access [sideways]",
-    ]);
-    expect(before.filter((edge) => !after.edges.includes(edge))).toEqual(["next-access -> next-runtime [upward]"]);
-  });
+  it.effect("scenario: a module put beside the runtime refuses an import from the runtime", () =>
+    Effect.gen(function* () {
+      const realTree = yield* plantedReal;
+      const beside = REAL.map((row) => (row.name === "next-access" ? { ...row, layer: 5 } : row));
+      const before = runTool(realTree, REAL).edges;
+      const after = runTool(realTree, beside);
+      expect(after.edges).toEqual(expectedEdges(beside));
+      expect(after.edges.filter((edge) => !before.includes(edge))).toEqual([
+        "next-access -> next-runtime [sideways]",
+        "next-runtime -> next-access [sideways]",
+      ]);
+      expect(before.filter((edge) => !after.edges.includes(edge))).toEqual(["next-access -> next-runtime [upward]"]);
+    }),
+  );
 
   // pinned: the plan's layer table (ticket 477, 0043), since the rows are written by hand and this
   // is the one place that says which module is on which layer.
@@ -1258,26 +1309,29 @@ describe("layers", () => {
 });
 
 // format: these paths are the module's import contract, so each forbidden destination is a lint input.
-it("format: P21 L12 desktop rules accept access and refuse gateway and platform modules", () => {
-  const root = plant({
-    "packages/libfabrika/package.json": manifest(LIBRARY),
-    "packages/libfabrika/src/desktop/Menu.ts": lines(
-      'import { Grant } from "../access/Access.ts";',
-      'import { Gateway } from "../gateway/Gateway.ts";',
-      'import { load } from "../node/settings/Load.ts";',
-      'import { object } from "../cloudflare/objects.ts";',
-      'import { TouchId } from "../electron/TouchId.ts";',
-    ),
-  });
-  const found = faults(root);
-  expect(found.some((f) => f.includes('imports "../access/Access.ts"'))).toBe(false);
+it.effect("format: P21 L12 desktop rules accept access and refuse gateway and platform modules", () =>
+  Effect.gen(function* () {
+    const { plant } = yield* planter;
+    const root = plant({
+      "packages/libfabrika/package.json": manifest(LIBRARY),
+      "packages/libfabrika/src/desktop/Menu.ts": lines(
+        'import { Grant } from "../access/Access.ts";',
+        'import { Gateway } from "../gateway/Gateway.ts";',
+        'import { load } from "../node/settings/Load.ts";',
+        'import { object } from "../cloudflare/objects.ts";',
+        'import { TouchId } from "../electron/TouchId.ts";',
+      ),
+    });
+    const found = faults(root);
+    expect(found.some((f) => f.includes('imports "../access/Access.ts"'))).toBe(false);
 
-  for (const path of [
-    "../gateway/Gateway.ts",
-    "../node/settings/Load.ts",
-    "../cloudflare/objects.ts",
-    "../electron/TouchId.ts",
-  ]) {
-    expect(found.some((f) => f.includes(`imports "${path}"`))).toBe(true);
-  }
-});
+    for (const path of [
+      "../gateway/Gateway.ts",
+      "../node/settings/Load.ts",
+      "../cloudflare/objects.ts",
+      "../electron/TouchId.ts",
+    ]) {
+      expect(found.some((f) => f.includes(`imports "${path}"`))).toBe(true);
+    }
+  }),
+);

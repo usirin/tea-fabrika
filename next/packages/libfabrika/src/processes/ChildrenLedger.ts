@@ -1,8 +1,14 @@
-// Starting a child on the ledger, next/ (P42 slice 1). The answer is a function of the start id's
-// state and the process table, read in one ledger turn: a saved id answers its `started` forever,
-// an unsaved one is asked afresh, in the plan's order. Only the write turn writes, and it is
-// `ProcessManager.start`'s own: the name's registration, its `started` line at the start's id and
-// its first letter, in one turn. Whatever that turn answers, the start reads again once.
+/**
+ * The `Children` layer that starts a child on the ledger.
+ *
+ * The answer is a function of the start id's state and the process table, read in one ledger turn:
+ * a saved id answers its `started` forever, and an unsaved one is asked afresh. Only the write turn
+ * writes, and it is `ProcessManager.start`'s own: the name's registration, its `started` line at
+ * the start's id and its first letter, in one turn. Whatever that turn answers, the start reads
+ * again once.
+ *
+ * @stability unstable
+ */
 import { Cause, Effect, Equal, Exit, Layer, Option, Result, Schema, Tracer } from "effect";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
@@ -39,7 +45,8 @@ const fits = (child: Child, from: From, m: Schema.Json): boolean => {
 };
 
 /**
- * Steps 2 to 5 of the plan in one turn: a saved start, the requester, the grant, then whereis.
+ * The checks after decoding, in one turn and in this order: a saved start, the requester, the
+ * grant, then whereis.
  * `none` is a free name the write turn may take.
  */
 const answer = (
@@ -89,6 +96,24 @@ const answer = (
   });
 };
 
+/**
+ * Layer that provides `Children` on the ledger, through `LedgerTransaction` and `ProcessManager`.
+ *
+ * **Details**
+ *
+ * `grants` is the host's closed list of which program may start which. A start is judged in this
+ * order: the name, the rest of the request, a saved `id`, a live requester, the grant, then the
+ * name's current holder. A requester with no grant is refused `forbidden` before it can learn
+ * whether a name exists.
+ *
+ * **Gotchas**
+ *
+ * A storage failure's cause goes to the caller only. The spans of a start record the reason and
+ * never the cause, and a defect inside a start is replaced by a plain one with no detail.
+ *
+ * @stability unstable
+ * @category layers
+ */
 export const layer = (config: {
   readonly grants: ReadonlyArray<typeof StartGrant.Type>;
 }): Layer.Layer<Children, never, LedgerTransaction | ProcessManager> =>

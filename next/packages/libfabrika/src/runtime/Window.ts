@@ -1,4 +1,8 @@
-// A program's window contract, next/: its data, presses and optional tile machine.
+/**
+ * A program's window contract: its data, presses and optional tile machine.
+ *
+ * @stability unstable
+ */
 import type { Machine } from "@demlik/tea/effect";
 import type { Schema } from "effect";
 import type { Program } from "./Program.ts";
