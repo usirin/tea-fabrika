@@ -70,6 +70,9 @@ export const Recorded = Schema.Struct({
   parent: Schema.NullOr(ParentText),
   traceId: TraceId,
   build: Text,
+  /** Absent on trusted program calls and events saved before connection facts were recorded. */
+  connection: Schema.optionalKey(Text),
+  has: Schema.optionalKey(Schema.Array(Capability)),
 });
 export type Recorded = typeof Recorded.Type;
 

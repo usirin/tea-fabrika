@@ -1,5 +1,7 @@
 import { DurableObject } from "@alchemy.run/cloudflare/Workers/DurableObject";
 import { Worker } from "@alchemy.run/cloudflare/Workers/Worker";
+import type { Effect } from "effect";
+import type { Failure } from "../settings/Start.ts";
 import type { ProjectBinding, ProcessBinding, ConnectionBinding } from "./bindings.ts";
 import type { recordWrite } from "./record.ts";
 
@@ -9,7 +11,7 @@ type Call<K extends keyof Part> = (
   chain: Parameters<typeof recordWrite>[2],
   at: number,
   ...args: Parameters<Part[K]>
-) => ReturnType<Part[K]>;
+) => Effect.Effect<Effect.Success<ReturnType<Part[K]>>, Effect.Error<ReturnType<Part[K]>> | typeof Failure.Type>;
 
 export type RecordShape = {
   write: Call<"write">;

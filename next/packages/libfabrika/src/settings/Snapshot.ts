@@ -29,6 +29,31 @@ const hashValues = Effect.fnUntraced(function* (values: Snapshot["values"]) {
   return yield* digest.digestHex(Digest.sha256, new TextEncoder().encode(text));
 });
 
+const declaredOrigin = (declaration: Setting.Setting<unknown>) =>
+  Origin.check(
+    Schema.makeFilter((origin: Origin) => {
+      if (origin._tag === "flag") {
+        return origin.name === `--${declaration.path}`;
+      }
+
+      if (origin._tag === "env") {
+        return origin.name === declaration.env;
+      }
+
+      if (origin._tag === "file") {
+        const file = origin.file;
+        return (
+          file.length > 0 &&
+          !/^(?:[\\/]|[A-Za-z]:)/.test(file) &&
+          (!file.startsWith("~") || file === "~" || file.startsWith("~/")) &&
+          (!file.startsWith("$") || file === "$FABRIKA_HOME" || file.startsWith("$FABRIKA_HOME/"))
+        );
+      }
+
+      return true;
+    }),
+  );
+
 export const make = Effect.fnUntraced(function* <A, R extends Record<string, Setting.Setting<any>>>(
   group: Setting.Group<A, R>,
   resolved: Resolved<A>,
@@ -58,7 +83,11 @@ export const read = Effect.fnUntraced(function* <A, R extends Record<string, Set
     paths.length === 0
       ? Schema.Record(Schema.String, Schema.Never)
       : Schema.Struct(Object.fromEntries(paths.map((path) => [path, schema])));
-  const envelope = Schema.Struct({ values: fields(Schema.Json), origins: fields(Origin), hash: Schema.String });
+  const origins =
+    paths.length === 0
+      ? fields(Origin)
+      : Schema.Struct(Object.fromEntries(group.declarations.map((d) => [d.path, declaredOrigin(d)])));
+  const envelope = Schema.Struct({ values: fields(Schema.Json), origins, hash: Schema.String });
   const refused = (cause: unknown) =>
     new SnapshotError({
       message: "The saved settings are invalid.",

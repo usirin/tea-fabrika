@@ -35,6 +35,7 @@ import {
   relatedIn,
   commitsSaid,
   decide,
+  heldBy,
   dockerHolder,
   endName,
   FINISH,
@@ -686,7 +687,7 @@ describe("T569 a review reads the lane's newest mutation report in its prompt, t
 });
 
 describe("T429 drive names the commits check's rule and commit, today's tooling", () => {
-  const rule = fc.constantFrom("unsigned_commit", "build_touched_exam", "broken_chain", "stale_link");
+  const rule = fc.constantFrom("unsigned_commit", "build_touched_exam", "no_exam_list", "broken_chain", "stale_link");
   const answer = fc.record({
     reason: rule,
     sha: fc.stringMatching(/^[0-9a-f]{40}$/),
@@ -694,10 +695,11 @@ describe("T429 drive names the commits check's rule and commit, today's tooling"
   });
   const lane = new Set(["tests", "build"]);
   const held = (a: { reason: string; step: string | undefined }) =>
-    !(a.reason === "stale_link" && !(a.step !== undefined && lane.has(a.step)));
+    a.reason !== "unsigned_commit" && !(a.reason === "stale_link" && !(a.step !== undefined && lane.has(a.step)));
 
-  // Plants: print only the last lines of JSON; drop the commit; name a waived stale link.
-  it("each held answer is named as rule, commit and step, and a waived stale link is not", () => {
+  // Plants: print only the last lines of JSON; drop the commit; name a waived stale link; name a
+  // missing signature.
+  it("each held answer is named as rule, commit and step, and a waived stale link or a missing signature is not", () => {
     fc.assert(
       fc.property(fc.array(answer, { minLength: 1, maxLength: 7 }), (answers) => {
         const out = answers.map((a) => JSON.stringify({ _tag: "stuck", ...a })).join("\n");
@@ -713,6 +715,107 @@ describe("T429 drive names the commits check's rule and commit, today's tooling"
 
         const more = named.length > 5 ? `; and ${named.length - 5} more` : "";
         expect(said).toBe(`commits check: ${named.slice(0, 5).join("; ")}${more}`);
+      }),
+      options,
+    );
+  });
+});
+
+// Decision 0161: a hand-run commit is plain, and no hand-run script refuses a step for a missing
+// signature. p34cs4, 2026-11-13: a lane of ten plain commits ended stuck:unsigned.
+describe("0161 a missing signature never holds a step, and the kept checks still do, today's tooling", () => {
+  const sha = fc.stringMatching(/^[0-9a-f]{40}$/);
+  const lane = fc.uniqueArray(fc.constantFrom("tests", "build", "lead")).map((steps) => new Set<string>(steps));
+  const plain = fc.array(sha, { minLength: 1, maxLength: 12 }).map((shas) => ({
+    commits: shas.length,
+    // The commits check's own answer for a lane of plain commits: one stuck line each, and exit 1.
+    check: {
+      code: 1,
+      out: shas.map((s) => JSON.stringify({ _tag: "stuck", reason: "unsigned_commit", sha: s })).join("\n"),
+      err: "",
+    },
+  }));
+  const kept = fc.record({
+    reason: fc.constantFrom("build_touched_exam", "no_exam_list", "broken_chain"),
+    sha,
+  });
+  const done: Answer = { verb: "done", to: null, reason: "", laws: "a.test.ts" };
+  const read = (commits: number, unsigned: readonly string[]) => ({
+    head: "c".repeat(40),
+    commits,
+    unsigned,
+    exam: [] as string[],
+    leaks: [] as string[],
+    left: [],
+    manifests: [],
+    plancheck: null,
+    changed: 0,
+    report: "",
+    problem: null,
+  });
+
+  // Plants: hold a missing signature; ask each commit for a `fabrika` note.
+  it("property: a lane of plain commits is held by nothing, and the step's done is done", () => {
+    fc.assert(
+      fc.property(plain, lane, fc.constantFrom("tests", "build", "mutation"), ({ commits, check }, steps, step) => {
+        const unsigned = heldBy(check, steps);
+        expect(unsigned).toEqual([]);
+        expect(decide({ ...ask, step }, read(commits, unsigned), done).outcome).toEqual({
+          kind: "done",
+          part: false,
+          head: "c".repeat(40),
+        });
+      }),
+      options,
+    );
+  });
+
+  // Plants: waive every answer once one is a missing signature; pass any exit 1.
+  it("property: a rule the check still gives holds the step beside any plain commits, and names itself", () => {
+    fc.assert(
+      fc.property(plain, fc.array(kept, { minLength: 1, maxLength: 3 }), lane, ({ commits, check }, rules, steps) => {
+        const out = [check.out, ...rules.map((r) => JSON.stringify({ _tag: "stuck", ...r }))].join("\n");
+        const unsigned = heldBy({ ...check, out }, steps);
+        const named = rules.map((r) => `${r.reason} ${r.sha.slice(0, 8)}`);
+        expect(unsigned).toEqual([`commits check: ${named.join("; ")}`]);
+        const j = decide(ask, read(commits + rules.length, unsigned), done);
+        expect(nameOf(j.outcome)).toBe("stuck:unsigned");
+        expect(j.reason).toBe(unsigned[0]);
+      }),
+      options,
+    );
+  });
+
+  // Plant: read an exit above 1, or an exit 1 with no answer, as a pass.
+  it("scenario: a check that broke, or held with no answer it could name, still holds the step", () => {
+    const steps = new Set(["tests", "build"]);
+    expect(heldBy({ code: 0, out: "", err: "" }, steps)).toEqual([]);
+    expect(heldBy({ code: 1, out: "", err: "commits: no base" }, steps)).toEqual([
+      "commits check exit 1: commits: no base",
+    ]);
+    expect(heldBy({ code: 2, out: "", err: "commits: crashed" }, steps)).toEqual([
+      "commits check exit 2: commits: crashed",
+    ]);
+  });
+
+  // Plants: drop the leak check; drop the exam-path check; drop the moved-head check.
+  it("property: with plain commits, a leak, a build on an exam path and a review that moved the head are still refused", () => {
+    fc.assert(
+      fc.property(plain, lane, ({ commits, check }, steps) => {
+        const clean = read(commits, heldBy(check, steps));
+        const leak = decide(ask, { ...clean, leaks: ["src/a.ts:3"] }, done);
+        expect(nameOf(leak.outcome)).toBe("stuck:leak");
+        expect(leak.reason).toBe("added lines leak, nothing pushed: src/a.ts:3");
+        const exam = decide(ask, { ...clean, exam: ["exam-paths.json"] }, done);
+        expect(nameOf(exam.outcome)).toBe("send:tests:exam_paths");
+        expect(exam.reason).toBe("the build touched exam paths: exam-paths.json");
+        // A leak wins over the exam path, as before.
+        expect(nameOf(decide(ask, { ...clean, leaks: ["src/a.ts:3"], exam: ["exam-paths.json"] }, done).outcome)).toBe(
+          "stuck:leak",
+        );
+        const moved = decide({ ...ask, step: "review" }, clean, done);
+        expect(nameOf(moved.outcome)).toBe("stuck:review_committed");
+        expect(moved.reason).toBe("the review moved the head to cccccccc");
       }),
       options,
     );

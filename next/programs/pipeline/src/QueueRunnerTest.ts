@@ -521,7 +521,8 @@ export const suite = (driver: Driver) =>
           }),
         ),
       // Each world finishes a faulted landing, then walks up to 24 moves, including store reopens.
-      // Measured 35.3 s for 40 worlds locally; 3 s per world covers that counted work.
+      // Measured 14.6 s for 40 worlds locally, 35.3 s before the leak check asserted once for each
+      // look; 3 s per world covers that counted work.
       { timeout: s2Runs * 3_000, arbitrary: { seed: 119120, runs: s2Runs, size: 24 } },
     );
   });

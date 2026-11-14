@@ -1,5 +1,10 @@
-// node:sqlite as the referee's `Sql`, on its own subpath so the data layer's top level names no
-// platform. For tests, never a ledger file of its own: the one ledger is a Durable Object. Tier 1, P6.
+/**
+ * `node:sqlite` as a `Sql`, on its own subpath so the data layer's top level names no platform. It
+ * backs tests and the local brain's span queue, never a ledger file of its own: the one ledger
+ * lives in the project object.
+ *
+ * @stability unstable
+ */
 import type { DatabaseSync, SQLOutputValue, StatementSync } from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for the referee's transactions
 import type { Sql, SqlValue } from "../Sql.ts";
 
@@ -12,6 +17,23 @@ const value = (column: SQLOutputValue): SqlValue => {
   throw new TypeError(`a ${typeof column} column, which the ledger never writes`);
 };
 
+/**
+ * Wraps a `node:sqlite` database as the synchronous `Sql` the referee and the span sink run on.
+ *
+ * **Details**
+ *
+ * Each query text is prepared once and reused. `transaction` begins with `BEGIN IMMEDIATE`,
+ * commits when the step returns and rolls back when it throws, then throws the step's own error
+ * again. `size` is the page count times the page size.
+ *
+ * **Gotchas**
+ *
+ * A column that is not text, a number or null throws a `TypeError`: the ledger writes none, so
+ * such a row was written by something else.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const nodeSql = (db: DatabaseSync): Sql => {
   const statements = new Map<string, StatementSync>();
   const prepared = (query: string): StatementSync => {

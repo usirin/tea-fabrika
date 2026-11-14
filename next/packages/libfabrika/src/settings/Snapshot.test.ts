@@ -17,6 +17,7 @@ import * as Files from "./Files.ts";
 import * as Setting from "./Setting.ts";
 import * as Snapshot from "./Snapshot.ts";
 import * as Sources from "./Sources.ts";
+import * as StartsTest from "./StartsTest.ts";
 import { Toml } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 
@@ -24,6 +25,51 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const check = { seed: SEED, numRuns: 100 };
 const REPO = ".fabrika/fabrika.toml";
 const PERSON = "~/.fabrika/fabrika.toml";
+
+for (const kind of StartsTest.originKinds) {
+  StartsTest.law(
+    `T753 L3 snapshot rejects forbidden ${kind} origins without a hash change`,
+    fc.tuple(StartsTest.recipe, StartsTest.originFault(kind)),
+    ([recipe, fault]) =>
+      Effect.gen(function* () {
+        const input = yield* StartsTest.input(recipe);
+        const bad = StartsTest.changeOrigin(input, fault);
+        expect(bad.settings.values).toEqual(input.settings.values);
+        expect(bad.settings.hash).toBe(input.settings.hash);
+        const exit = yield* Effect.exit(Snapshot.read(Declarations.all, bad.settings));
+        expect(Exit.isFailure(exit)).toBe(true);
+      }),
+  );
+}
+
+StartsTest.law(
+  "T753 L3 declared sources and safe display paths keep their origins and values-only hash",
+  fc.tuple(StartsTest.recipe, fc.uuid(), fc.nat()),
+  ([recipe, word, choice]) =>
+    Effect.gen(function* () {
+      const input = yield* StartsTest.input(recipe);
+      const files = [`${word}/fabrika.toml`, `~/${word}/fabrika.toml`, `$FABRIKA_HOME/${word}/fabrika.toml`];
+      const origins = Object.fromEntries(
+        Declarations.all.declarations.map((declaration, index) => {
+          const source = (choice + index) % 4;
+          return [
+            declaration.path,
+            source === 0
+              ? Sources.Origin.cases.default.make({})
+              : source === 1
+                ? Sources.Origin.cases.flag.make({ name: `--${declaration.path}` })
+                : source === 2
+                  ? Sources.Origin.cases.env.make({ name: declaration.env })
+                  : Sources.Origin.cases.file.make({ file: files[choice % files.length]!, line: 1 + (choice % 1000) }),
+          ];
+        }),
+      );
+      const settings = { ...input.settings, origins };
+      const checked = yield* Snapshot.read(Declarations.all, settings);
+      expect(checked.snapshot).toEqual(settings);
+      expect(checked.snapshot.hash).toBe(input.settings.hash);
+    }),
+);
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
 

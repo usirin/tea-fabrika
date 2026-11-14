@@ -958,6 +958,7 @@ describe("P34 runner supervision", () => {
                   expect(w.controls.timers).toEqual([]);
                   yield* Effect.gen(function* () {
                     const r = yield* ProgramRunner;
+                    const timerRev = (yield* r.open("before-timer")).rev;
                     yield* TestClock.setTime(wakeAt);
                     yield* fire(r, wakeAt);
                     yield* fire(r, wakeAt);
@@ -973,7 +974,7 @@ describe("P34 runner supervision", () => {
                     expect(w.alarm()).toBeNull();
                     const rows = yield* inbox;
                     expect(rows).toHaveLength(before.length + 1);
-                    expect(rows.at(-1)?.id).toBe(`${path === "wake" ? A : PIDS[crashes]!}/due/${wakeAt}`);
+                    expect(rows.at(-1)?.id).toBe(`${path === "wake" ? A : PIDS[crashes]!}/due/${wakeAt}/${timerRev}`);
                   }).pipe(Effect.provide(w.layer()));
                 }).pipe(Effect.provide(TestClock.layer())),
               ),

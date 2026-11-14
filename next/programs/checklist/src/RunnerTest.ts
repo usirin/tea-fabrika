@@ -8,6 +8,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import type { ProgramRunner } from "@kampus/libfabrika";
 import { Arbitrary, Effect, Schema, type Scope } from "effect";
+import { TestClock } from "effect/testing";
 import { checklist } from "./program.ts";
 
 const SEED = 119120;
@@ -311,7 +312,7 @@ export const suite = (open: Open, fresh: Fresh) =>
       { timeout: 600_000, arbitrary: { seed: SEED, runs: 50 } },
     );
 
-    it.live.prop(
+    it.effect.prop(
       "L17: a saved check keeps its note's exact bytes and its writer's checked key, and a writer clock skewed up to a day never changes the model",
       [AnyNote, Skew, Arbitrary.schema(Schema.Literals(["agent", "person"]))],
       ([note, skew, side]) =>
@@ -329,9 +330,15 @@ export const suite = (open: Open, fresh: Fresh) =>
             });
 
             expect((yield* r.msg(letter(1, person, { type: "add", name: "git" }, clock)))._tag).toBe("accepted");
-            yield* r.due(1000);
+            yield* TestClock.setTime(1000);
+            yield* r.due(0);
             expect(yield* view, "the referee's time stamps it, not the writer's").toEqual(one("open", null));
-            expect(alarms.at(-1), "since is the timer's at").toBe(1000 + DAY);
+            expect(alarms.at(-1), "since is the timer's arrivedAt").toBe(1000 + DAY);
+            expect((yield* letters).find((l) => !l.id.startsWith("checklist-"))?.m).toEqual({
+              type: "timer",
+              at: 0,
+              arrivedAt: 1000,
+            });
 
             const check = letter(2, writer, { type: "check", name: "git", note }, clock);
             expect((yield* r.msg(check))._tag).toBe("accepted");
@@ -345,15 +352,16 @@ export const suite = (open: Open, fresh: Fresh) =>
             expect(saved?.sentAt, "the writer's own clock, kept as it came").toBe(clock);
 
             expect((yield* r.msg(letter(3, person, { type: "uncheck", name: "git" }, clock)))._tag).toBe("accepted");
+            yield* TestClock.setTime(5000);
             yield* r.due(5000);
             expect(yield* view).toEqual(one("open", null));
-            expect(alarms.at(-1), "a second stamp is the second timer's at").toBe(5000 + DAY);
+            expect(alarms.at(-1), "a second stamp is the second timer's arrivedAt").toBe(5000 + DAY);
           }),
         ),
       { timeout: 600_000, arbitrary: { seed: SEED, runs: 50 } },
     );
 
-    it.live(
+    it.effect(
       "L10 scenario: a restart between an add and its timer keeps the items and states, and a fired alarm after it still stamps",
       () =>
         // The plan's scenario: close the three files mid-list and reopen, at each point where the
@@ -392,7 +400,8 @@ export const suite = (open: Open, fresh: Fresh) =>
               Effect.gen(function* () {
                 expect(yield* view(r), "the items and states come back").toEqual(both("new"));
                 expect(alarms.at(-1), "the reopened runner asks for the alarm at once again").toBe(0);
-                yield* r.due(1000);
+                yield* TestClock.setTime(1000);
+                yield* r.due(0);
                 expect(yield* view(r), "the alarm fired after the reopen stamps").toEqual(both("open"));
                 expect(alarms.at(-1)).toBe(1000 + DAY);
               }),
@@ -401,8 +410,10 @@ export const suite = (open: Open, fresh: Fresh) =>
               Effect.gen(function* () {
                 expect(yield* view(r)).toEqual(both("open"));
                 expect(alarms.at(-1), "the stamp is saved, not held in memory").toBe(1000 + DAY);
+                yield* TestClock.setTime(1000 + DAY - 1);
                 yield* r.due(1000 + DAY - 1);
                 expect(yield* view(r), "not late a millisecond early").toEqual(both("open"));
+                yield* TestClock.setTime(1000 + DAY);
                 yield* r.due(1000 + DAY);
                 expect(yield* view(r)).toEqual(both("late"));
               }),

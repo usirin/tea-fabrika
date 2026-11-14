@@ -1,10 +1,12 @@
 // Ticket 866, next/. Exercise the real Cloudflare Alarm through processRuntime.
+import { createHash } from "node:crypto";
 import { Cause, Deferred, Effect, Exit, Layer } from "effect";
 import fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../access/SessionManager.ts";
 import { Alarm } from "../runtime/Entry.ts";
 import { ProgramRunner, Sent } from "../runtime/Runner.ts";
+import * as StartsTest from "../settings/StartsTest.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { processRuntime } from "./runtime.ts";
 
@@ -21,6 +23,12 @@ const checkAlarmTime = (at: number) => {
     throw new TypeError("setAlarm requires a time greater than 0");
   }
 };
+
+// The process records its start with the Project object before it runs (T753), so the law's
+// environment carries a start's input, and its Project answers that one call and no other.
+const start = StartsTest.fixture({ name: "alarm-project", port: 8787 }, (algorithm, data) =>
+  createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+);
 
 const categories = ["zero", "negative", "past", "now", "future", "far", "clear"] as const;
 type Move = (typeof categories)[number] | "replace" | "repeat" | "advance" | "clear-again";
@@ -110,11 +118,19 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
             (spy) => Effect.sync(() => spy.mockRestore()),
           );
           const stub = new Proxy({}, { get: unexpected });
+          const project = new Proxy(
+            {},
+            { get: (_target, key) => (key === "settingsStart" ? async () => StartsTest.reply(start) : unexpected()) },
+          );
           const runtime = yield* Effect.acquireRelease(
             Effect.sync(() =>
               processRuntime(
                 platform<State>({ id: { name: JSON.stringify(["alarm-project", "alarm:866"]) }, storage }),
-                platform<Environment>({ PROJECT: { getByName: () => stub }, MEASUREMENTS: stub }),
+                platform<Environment>({
+                  INSTANCE: JSON.stringify(start),
+                  PROJECT: { getByName: () => project },
+                  MEASUREMENTS: stub,
+                }),
                 {},
               ),
             ),

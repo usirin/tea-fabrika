@@ -1,3 +1,8 @@
+/**
+ * One Rolldown bundle as an Effect, and the program bundles built on it.
+ *
+ * @stability unstable
+ */
 import { Cause, Effect, Exit, Path } from "effect";
 import effectPackage from "effect/package.json" with { type: "json" };
 import {
@@ -15,7 +20,13 @@ import type { ProgramSource } from "../../runtime/Execution.ts";
 
 export { BuildError, hash } from "../../runtime/Built.ts";
 
-/** Which bundle of a build this is. Recorded on its span, with no path or content. */
+/**
+ * Which bundle of a build this is. It is recorded on the bundle's span, with no path or content,
+ * and it decides which imports the bundle leaves external.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Phase = "program" | "window" | "tab" | "brain";
 
 type Options = {
@@ -43,6 +54,20 @@ const emitted = (output: RolldownOutput) =>
     0,
   );
 
+/**
+ * Runs one Rolldown bundle and answers its output: ES modules for the browser platform, generated
+ * in memory and never written to disk.
+ *
+ * **Details**
+ *
+ * `options.phase` decides which imports stay external: `cloudflare:workers` by default, that and
+ * every `node:` module for a brain, and none for a tab. The span records the phase, the Rolldown
+ * and Effect versions that ran, and how many files and bytes came out. A failure is a `BuildError`
+ * with `reason: "bundle"`.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const bundle = Effect.fn("build.bundle")(function* (
   input: InputOption,
   plugins: Array<Plugin>,
@@ -102,7 +127,14 @@ export const bundle = Effect.fn("build.bundle")(function* (
   );
 });
 
-/** Each program's sealed Worker Loader module: its declaration wrapped in libfabrika's box. */
+/**
+ * Bundles each selected program as one sealed Worker Loader module: its declaration wrapped in
+ * libfabrika's program box. It answers, by program name, each module's source with the SHA-256 of
+ * that source.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (options: {
   /** The folder the generated entry sits in, so package names resolve from there. */
   readonly root: string;

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-unmeasured-next-files-crowd-one-shard",
+  "date": "2026-11-13",
+  "by": "ci-fix",
+  "model": "claude-fable-5-2",
+  "rule": "flaky_test",
+  "location": {
+    "path": "vitest.shards.ts",
+    "line": 643
+  },
+  "says": "In next/, CI's shard table has no row for 70 of the 183 test files, so each counts 1 s, the four heaviest among them (Watchers 518 s, chaos.laws 382 s, RepositoriesGit 380 s and StartChild 371 s, medians of three main runs). Their machines are set by path order among the 1 s files, so a pull request that adds a test file moves them. Pull request 1054 adds five, and its split puts chaos.laws, StartChild, RepositoriesGit, IsolateUsage, queue.laws and instance-wire on one machine. There the chaos law `a forged chaos declaration cannot grant fire to another registered program`, which this pull request does not touch, timed out at its 120 s limit. Ticket 890's draft pull request 1104 already adds rows for these files.",
+  "proof": "Run 43500844526, job next (3): `Error: Test timed out in 120000ms` at next/programs/chaos/src/RunnerTest.ts:131, vitest `Duration 962.16s`, the job 16m48s of its 17 minute limit, and the shard times step printed chaos.laws 602.3, StartChild 630.6, RepositoriesGit 400.8, queue.laws 158.8, instance-wire 159.6 and IsolateUsage 113.0. On main runs 43496513880, 43493284227 and 43491011722 the same law passed (72.1 s in the first) and next (3) took 631.31s, 623.35s and 619.95s, holding chaos.laws with instance-wire, Replies, OpenRepository and queue.laws, with StartChild and RepositoriesGit on next (6). Feeding `assign` the next/ test files of each tree with `measured[path] ?? 1` gives the same two splits: by the runs' own seconds, 1,754 file-seconds on shard 3 for the pull request against 291 on shard 1, and 1,235 on shard 3 for main. `grep -c '\"next/' vitest.shards.ts` prints 113 and `git ls-files` finds 183 next/ test files.",
+  "cost": "A pull request that adds a next/ test file can be red on a law it never touched, and every run of it is red the same way, since the split is fixed by its file list. The crowded machine also runs within seconds of the job's own 17 minute limit.",
+  "head": "245fdbac122c6b1b6c8f872afe19b78a62c65275",
+  "ticket": "kamp-us/tea-fabrika#753",
+  "pr": "kamp-us/tea-fabrika#1054"
+}
