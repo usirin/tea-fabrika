@@ -429,15 +429,6 @@ describe("P15 slice 1: the watcher", () => {
                   }),
                 );
                 expect(answer).toMatchObject(broken ? { _tag: "failed", reason: "bundle" } : { _tag: "loaded" });
-                const rebuilds = spans.slice(before).filter((span) => span.name === "watch.rebuild");
-                expect(rebuilds).toHaveLength(1);
-                const span = rebuilds[0]!;
-                expect(span.status._tag).toBe("Ended");
-                expect(span.attributes.get("program")).toBe(selected.name);
-                expect(span.attributes.get("outcome")).toBe(broken ? "failed" : "loaded");
-                expect(span.attributes.get("bytes")).toEqual(expect.any(Number));
-                expect(Number(span.attributes.get("bytes"))).toBeGreaterThanOrEqual(broken ? 0 : 1);
-                expect(Number(span.attributes.get("ms"))).toBeGreaterThanOrEqual(0);
                 const acquired = opened.results.slice(results);
                 expect(acquired.some((result) => result.code === (broken ? "ERROR" : "BUNDLE_END"))).toBe(true);
                 expect(opened.results.slice(firstResult).every((result) => result.closed)).toBe(true);
@@ -448,6 +439,34 @@ describe("P15 slice 1: the watcher", () => {
                   expect(repeated, "one save produced a second change or failure answer").toMatchObject({
                     _tag: "same",
                   });
+                }
+
+                // The plan lets one save run more than one rebuild: "on each END the watcher runs
+                // buildPrograms for that program", "Rolldown's `buildDelay`: left at its default; the
+                // same-hash answer absorbs repeated events", and a save that "changes nothing in the
+                // bundle's bytes (macOS late event ...)" gives "Same hash: no fact, no swap, no view
+                // notice". So per save: exactly one rebuild that changed or failed, plus any `same`.
+                const saved = () => spans.slice(before).filter((span) => span.name === "watch.rebuild");
+                yield* Effect.sleep("20 millis").pipe(
+                  Effect.repeat({ until: () => saved().every((rebuild) => rebuild.status._tag === "Ended") }),
+                  Effect.timeoutOrElse({
+                    duration: "10 seconds",
+                    orElse: () => Effect.die(new Error("a rebuild for the save never ended")),
+                  }),
+                );
+                const rebuilds = saved();
+                const changed = rebuilds.filter((rebuild) => rebuild.attributes.get("outcome") !== "same");
+                expect(changed, "one save records exactly one rebuild that changed or failed").toHaveLength(1);
+                const span = changed[0]!;
+                expect(span.status._tag).toBe("Ended");
+                expect(span.attributes.get("program")).toBe(selected.name);
+                expect(span.attributes.get("outcome")).toBe(broken ? "failed" : "loaded");
+                expect(span.attributes.get("bytes")).toEqual(expect.any(Number));
+                expect(Number(span.attributes.get("bytes"))).toBeGreaterThanOrEqual(broken ? 0 : 1);
+                expect(Number(span.attributes.get("ms"))).toBeGreaterThanOrEqual(0);
+
+                for (const rebuild of rebuilds) {
+                  expect(rebuild.attributes.get("program")).toBe(selected.name);
                 }
 
                 const failures = yield* Queue.clear(b.failures);
