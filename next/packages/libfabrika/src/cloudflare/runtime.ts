@@ -1339,6 +1339,7 @@ export class ProjectService extends Context.Service<
     ) => Effect.Effect<ProcessReply<void>, ProjectFailure>;
     readonly processReceive: (pid: string, after: number) => Effect.Effect<ProcessReply<Array<Letter>>, ProjectFailure>;
     readonly processChild: (input: Child, origin: From) => Effect.Effect<typeof ChildReplies.Type, ProjectFailure>;
+    readonly processStop: (input: ChildStop, origin: From) => Effect.Effect<typeof StopReplies.Type, ProjectFailure>;
     /** The bootstrap process and the rev of its start. */
     readonly boot: StartAnswer;
   }
