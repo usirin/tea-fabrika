@@ -100,6 +100,13 @@
 // description (its first line is the title). An optional `## host` names the host step's commands
 // in a fenced block, one per line; a `## host` that names none is a usage error. An older brief's `## mutation` is accepted and not run,
 // unless the lane starts at mutation, which needs it. drive appends its own answer tail.
+//
+// What it writes, all under BOXES: each step's brief as `<lane>-chain<round>-<step>-brief.md`, one
+// `chain:` line per move in `state/<lane>.md`, and the judgment turn's field row in
+// `<lane>-rows.jsonl`, beside the steps' rows. The pull request's description ends with a table of
+// the steps and their list-price dollars. loosening.sh runs from the lane's merge-base with
+// origin/main to the reviewed head and is given no mapping table, so a renamed law is a hit too; a
+// loosening comment that does not post is stuck.
 
 // The chain's record, logs and brief are sync file calls: a debt agents-ledger.json named for this
 // import until three names left it and its line changed. The ledger only shrinks, so it is marked here.

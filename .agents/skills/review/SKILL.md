@@ -1,6 +1,6 @@
 ---
 name: review
-description: Do the one review of a tea-fabrika ticket's whole diff, read-only, against its approved plan and decided notes. Use when a brief says "use the review skill for ticket N", after the tests and build steps.
+description: Do the one review of a ticket's whole diff, read-only, against its approved plan and decided notes. Use when a brief says "use the review skill for ticket N", after the tests and build steps.
 ---
 
 # The one review
