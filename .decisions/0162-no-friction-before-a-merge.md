@@ -1,7 +1,7 @@
 ---
 id: 0162
 title: A pull request whose steps passed lands on green CI and a clean leak check alone, with no wait, re-run, signature or script of ours in between
-status: amended-in-part by [0164](0164-the-bot-stays-without-signing.md), [0174](0174-a-queue-run-follows-its-paths.md)
+status: amended-in-part by [0164](0164-the-bot-stays-without-signing.md), [0174](0174-a-queue-run-follows-its-paths.md), [0179](0179-an-admin-merge-is-the-owners.md)
 date: 2026-11-13
 tags: [merge, lead, friction, catchup, ci, merge-queue, organization, budget]
 ---

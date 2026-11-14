@@ -72,7 +72,7 @@ decides how many people must look at it (owner, 2026-11-10).**
 - The risk tier decides how many people must look: none, one or more. It is how fabrika decides
   whom to ask for attention, so a person looks only where their look changes the outcome.
 - An agent's approval never counts as a person's look. This is already a rule:
-  [AGENTS.md](../AGENTS.md#running-the-machine-on-a-real-ticket) says no agent approves a pull
+  [AGENTS.md](../AGENTS.md#how-a-change-lands) says no agent approves a pull
   request.
 - It applies to the product fabrika, what a repo using fabrika gets, built in `next/`.
 - This repo's own hand-run rules for merging, 0014 and the loosening hand check, do not change by
