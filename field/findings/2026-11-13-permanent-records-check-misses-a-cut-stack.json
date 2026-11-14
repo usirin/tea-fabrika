@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-permanent-records-check-misses-a-cut-stack",
+  "date": "2026-11-13",
+  "by": "tests",
+  "model": "claude-fable-5-2",
+  "rule": "missing_test",
+  "location": {
+    "path": "next/packages/libfabrika/src/node/dev/supervision-spans.test.ts",
+    "line": 315
+  },
+  "says": "The law that keeps a throw out of permanent records looks for the raw stack word for word, so a stack stored with its folders cut, as A-Sink and decision 0186 now store it, would pass if it leaked into a receipt, a dead event, a measurement or a summary.",
+  "proof": "At pull request 1012's head d58106245, lines 315 to 325 check that no permanent record contains each entry of sample.private, and sample.private holds the message and the raw value.stack (line 208). The sink now stores frames as name (file:line:column) with no folder (Sink.ts portable), so the raw stack text never appears in any stored form; the same holds for the check on content after deletion near lines 340 to 341. The message entry still catches a leak that includes the message. Found by the test step's agent and listed without a change, as its brief said.",
+  "cost": "A leak of a throw's stack into a record that cannot be deleted would pass the law, so the promise that content stays deletable can weaken without a red test.",
+  "head": "d58106245255c385a5840effc271243674fcf652",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1012"
+}
