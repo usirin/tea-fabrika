@@ -18,15 +18,10 @@ const LANE = "packages/pipeline/src/stages/pipeline/lane";
  * next/ rows use attempt 1 of green main runs 43329697311 and 43334183021, rounded to one decimal.
  * Each row uses the larger of those two samples until the third green main run supplies a median.
  * Run 43336653176 failed; the third green main run is pending. Jobs and samples follow run order below.
- * The four catchup files are one time each from PR 770's CI run 42883743294, rounded to one decimal.
  * A file not measured counts 1 s.
  */
 export const measured: Record<string, number> = {
   ".agents/skills/lead/scripts/box.test.ts": 348.7,
-  ".agents/skills/lead/scripts/catchup.cleanup.test.ts": 124.1,
-  ".agents/skills/lead/scripts/catchup.nested-storage-checkout.test.ts": 175.7,
-  ".agents/skills/lead/scripts/catchup.nested-storage-driver.test.ts": 163.6,
-  ".agents/skills/lead/scripts/catchup.test.ts": 102.4,
   ".agents/skills/lead/scripts/gc.test.ts": 0.1,
   ".agents/skills/lead/scripts/redact.test.ts": 7.2,
   ".agents/skills/lead/scripts/skillscheck.test.ts": 25.9,

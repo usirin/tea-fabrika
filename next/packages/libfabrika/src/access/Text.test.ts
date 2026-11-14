@@ -1,7 +1,8 @@
 // p42: signed bytes are schema-ordered JSON for the tagged change plus one LF. These independent
 // strings catch omitted tags, saw fields or reordered signing text. No crypto belongs here.
 import { describe, expect, it } from "@effect/vitest";
-import { Adds, type Grant } from "./Access.ts";
+import { Schema } from "effect";
+import { Adds, Grant } from "./Access.ts";
 import { grantText, revokeText, addText, enrollmentText } from "./Text.ts";
 
 const ADD_SAW = {
@@ -85,3 +86,19 @@ describe("P10 signed text", () => {
     }
   });
 });
+
+// A1: signing bytes bind the new rank exactly as they bind existing ranks.
+it.prop(
+  "A1: every signed grant retains its rank and all signed facts",
+  { grant: Grant, as: Schema.Literals(["window", "agent", "hands"]) },
+  ({ grant, as }) => {
+    const signed = { ...grant, as };
+    const text = grantText(signed);
+    expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(text)).toEqual({
+      _tag: "granted",
+      grant: signed,
+    });
+    expect(text.endsWith("\n")).toBe(true);
+  },
+  { arbitrary: { seed: 119120, runs: 100 } },
+);

@@ -81,7 +81,7 @@ const Choice = fc.record({
   id: fc.nat({ max: 5 }),
   pick: fc.nat(),
   raw: fc.string({ maxLength: 2 }),
-  as: fc.constantFrom("window", "agent"),
+  as: fc.constantFrom("window", "agent", "hands"),
   drops: fc.array(fc.tuple(fc.nat({ max: 3 }), fc.nat()), { maxLength: 3 }),
   founder: fc.constantFrom(P, P, OTHER, ""),
   name: fc.string({ maxLength: 3 }),
@@ -146,7 +146,7 @@ const withStanding = (model: Folded, test: (key: Key) => boolean): ReadonlyArray
 const SIGNERS: ReadonlyArray<readonly [number, (key: Key) => boolean]> = [
   [5, (k) => k._tag === "live" && k.rank === "person"],
   [3, (k) => k._tag === "live" && k.rank === "recovery"],
-  [1, (k) => k._tag === "live" && (k.rank === "window" || k.rank === "agent")],
+  [1, (k) => k._tag === "live" && (k.rank === "window" || k.rank === "agent" || k.rank === "hands")],
   [1, (k) => k._tag === "revoked"],
   [2, (k) => k._tag === "spent"],
   [2, (k) => k._tag === "replaced"],
@@ -369,7 +369,7 @@ const ruled = (pre: Founded, event: MemberEvent): "accepted" | Reason => {
   const signer = signerFor(event) ?? "";
   const rank = standing(pre, signer, personFor(event) ?? "");
 
-  if (rank !== "person" && rank !== "window" && rank !== "agent" && rank !== "recovery") {
+  if (rank !== "person" && rank !== "window" && rank !== "agent" && rank !== "hands" && rank !== "recovery") {
     return rank;
   }
 
@@ -403,7 +403,11 @@ const ruled = (pre: Founded, event: MemberEvent): "accepted" | Reason => {
 const dials = (keys: ReadonlyMap<string, Key>, name: string): boolean => {
   const key = keys.get(name);
 
-  if (key === undefined || key._tag !== "live" || (key.rank !== "window" && key.rank !== "agent")) {
+  if (
+    key === undefined ||
+    key._tag !== "live" ||
+    (key.rank !== "window" && key.rank !== "agent" && key.rank !== "hands")
+  ) {
     return false;
   }
 

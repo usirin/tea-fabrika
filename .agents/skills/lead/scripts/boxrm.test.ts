@@ -13,21 +13,11 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { boxTree, boxTrees, oldBoxTree } from "./lane.ts";
-
-// Read with the CI package's installed YAML parser.
-const { parse } = createRequire(new URL("../../../../.github/ci/package.json", import.meta.url))("yaml") as {
-  parse: (text: string) => { jobs: { next: { strategy: { matrix: { shard: number[] } } } } };
-};
-
-const workflow = parse(readFileSync(join(import.meta.dirname, "../../../../.github/workflows/check.yaml"), "utf8"));
-
-const nextNames: string[] = workflow.jobs.next.strategy.matrix.shard.map((index: number) => `next (${index})`);
 
 const script = join(import.meta.dirname, "box.sh");
 
@@ -157,56 +147,8 @@ const setup = (v: Input, clone: boolean, dir: string, remote?: Remote) => {
   git(work, "config", "user.email", "fixture@example.test");
   expect(git(main, "remote")).toBe(remote ? "origin" : "");
   expect(git(work, "remote")).toBe("origin");
-  const run = (chosen = name, extra: Record<string, string> = {}, entry: "direct" | "catchup" = "direct") => {
-    let command = [script, "rm", chosen];
-
-    if (entry === "catchup") {
-      const bin = join(dir, "cleanup-bin");
-      mkdirSync(bin, { recursive: true });
-      mkdirSync(join(boxes, "catchup-900/node_modules"), { recursive: true });
-      const tip = git(main, "rev-parse", "HEAD");
-      // Run the real catch-up caller and real local cleanup. Only remote reads and the
-      // pre-merge checkout are stubbed. No signing or pushing is reached.
-      const stub = `
-const {spawnSync} = require("node:child_process");
-const cmd = require("node:path").basename(process.argv[1]);
-const args = process.argv.slice(2);
-if (cmd === "gh") {
-  // Before the merge, on start and in each wait: open and ready, so the catch-up goes on.
-  if (args[0] === "pr" && args[1] === "view" && args.includes("headRefName,state,isDraft,mergeCommit")) console.log("OPEN false - main");
-  else if (args[0] === "pr" && args[1] === "view" && args.includes("state,isDraft,mergeCommit")) console.log("OPEN false -");
-  // After the merge (0015): merged at the tip, with a description that names no ticket.
-  else if (args[0] === "pr" && args[1] === "view" && args.includes("state,mergeCommit")) console.log("MERGED " + ${JSON.stringify(tip)});
-  else if (args[0] === "pr" && args[1] === "view" && args.includes("body")) console.log("");
-  else if (args[0] === "pr" && args[1] === "view") console.log("main");
-  else if (args[0] === "pr" && args[1] === "merge") process.exit(0);
-  else if (args[0] === "run") console.log("commits\\tcheck\\t2026-11-08T00:00:00Z commits: 1 commits, ticket 318");
-  else if (args[1].includes("check_name=")) console.log("github-actions");
-  // Cleanup laws supply all matrix members and a completed skip while the waiter changes.
-  else if (args[1].includes("check-runs?")) console.log(["check", "e2e", "commits", ...${JSON.stringify(nextNames)}].map(n => n + "\\tcompleted\\tsuccess").concat("next\\tcompleted\\tskipped").join("\\n"));
-  else if (args[1].includes("actions/runs?")) console.log("71\\tpull_request_target\\tcompleted\\tsuccess\\t81");
-  else process.exit(1);
-} else if (cmd === "git") {
-  if (["fetch", "checkout", "merge-base"].includes(args[0])) process.exit(0);
-  if (args[0] === "rev-parse") console.log(args.includes("--short") ? ${JSON.stringify(tip.slice(0, 7))} : ${JSON.stringify(tip)});
-  else {
-    const got = spawnSync("/usr/bin/git", args, {encoding: "utf8"});
-    process.stdout.write(got.stdout || ""); process.stderr.write(got.stderr || "");
-    process.exit(got.status ?? 1);
-  }
-} else if (cmd === "node" && args[0].endsWith("/box.ts")) {
-  // box.sh rm itself runs box.ts on the real Node.
-  process.exit(spawnSync(process.execPath, args, {stdio: "inherit"}).status ?? 1);
-} else process.exit(1);
-`;
-
-      for (const tool of ["gh", "git", "node"]) {
-        writeFileSync(join(bin, tool), `#!${process.execPath}\n${stub}`, { mode: 0o755 });
-      }
-
-      extra = { ...extra, PATH: `${bin}:/usr/bin:/bin` };
-      command = [join(import.meta.dirname, "catchup.sh"), "900", "318"];
-    }
+  const run = (chosen = name, extra: Record<string, string> = {}, _entry: "direct" = "direct") => {
+    const command = [script, "rm", chosen];
 
     const ran = spawnSync("sh", command, {
       cwd: main,
@@ -239,7 +181,7 @@ describe("box rm, today's tooling", () => {
   // Plant: review3's root-only walk misses a symlink anywhere below MAIN storage.
   // Arbitrary paths matter too: an unfamiliar storage name must fail closed.
   it.each(
-    (["direct", "catchup"] as const).flatMap((entry) =>
+    (["direct"] as const).flatMap((entry) =>
       (["gitdir", "common", "alternate"] as const).flatMap((root) =>
         [false, true].flatMap((data) =>
           ["objects/pack", "loose", "refs", "packed-refs", "logs", "index", "generated-file", "generated-folder"].map(
@@ -328,7 +270,7 @@ describe("box rm, today's tooling", () => {
             const saved = storageFiles(stored);
             expect(f.git(f.main, "rev-list", "--objects", "--all")).toBe(history);
             const got = f.run(f.name, {}, entry);
-            expect(got.code, got.text).toBe(entry === "direct" ? 1 : 0);
+            expect(got.code, got.text).toBe(1);
             expect(got.text).toMatch(new RegExp(`^kept box ${f.name}: [^\\n]+$`, "m"));
             expect(existsSync(f.work), got.text).toBe(true);
             expect(existsSync(f.data), got.text).toBe(true);
@@ -342,31 +284,29 @@ describe("box rm, today's tooling", () => {
   });
 
   // Plant: ignore a walk error below an object root, leaving uncertainty treated as safe.
-  it.each(["direct", "catchup"] as const)(
-    "T318 review3 %s keeps the pair when MAIN cannot be fully walked",
-    (entry) => {
-      fc.assert(
-        fc.property(input, fc.array(fc.stringMatching(/^[a-z]{1,8}$/), { minLength: 1, maxLength: 6 }), (v, parts) =>
-          fixture(v, (f) => {
-            const path = join(f.main, ".git/objects/pack", ...parts);
-            mkdirSync(join(path, ".."), { recursive: true });
-            symlinkSync(join(f.dir, "missing-storage"), path);
-            const got = f.run(f.name, {}, entry);
-            expect(got.code, got.text).toBe(entry === "direct" ? 1 : 0);
-            expect(got.text).toMatch(new RegExp(`^kept box ${f.name}: [^\\n]+$`, "m"));
-            expect(existsSync(f.work), got.text).toBe(true);
-            expect(existsSync(f.data), got.text).toBe(true);
-          }),
-        ),
-        { seed: 31861, numRuns: 3, endOnFailure: true },
-      );
-    },
-  );
+  it.each(["direct"] as const)("T318 review3 %s keeps the pair when MAIN cannot be fully walked", (entry) => {
+    fc.assert(
+      fc.property(input, fc.array(fc.stringMatching(/^[a-z]{1,8}$/), { minLength: 1, maxLength: 6 }), (v, parts) =>
+        fixture(v, (f) => {
+          const path = join(f.main, ".git/objects/pack", ...parts);
+          mkdirSync(join(path, ".."), { recursive: true });
+          symlinkSync(join(f.dir, "missing-storage"), path);
+          const got = f.run(f.name, {}, entry);
+          expect(got.code, got.text).toBe(1);
+          expect(got.text).toMatch(new RegExp(`^kept box ${f.name}: [^\\n]+$`, "m"));
+          expect(existsSync(f.work), got.text).toBe(true);
+          expect(existsSync(f.data), got.text).toBe(true);
+        }),
+      ),
+      { seed: 31861, numRuns: 3, endOnFailure: true },
+    );
+  });
 
   // Plant: today's guard protects only MAIN's checkout, so borrowed storage is deleted.
-  // Cover nested alternates and intermediate links through both public callers.
+  // Cover nested alternates and intermediate links. `box.sh rm` is the one public caller since
+  // catchup.sh, the other, was retired for GitHub's merge queue (0162).
   it.each(
-    (["direct", "catchup"] as const).flatMap((entry) =>
+    (["direct"] as const).flatMap((entry) =>
       (["gitdir-root", "shared", "gitdir", "commondir", "objects", "alternates", "alternates-file"] as const).flatMap(
         (binding) =>
           (binding === "gitdir-root" || binding === "shared"
@@ -459,7 +399,7 @@ describe("box rm, today's tooling", () => {
 
               expect(f.git(f.main, "rev-list", "--objects", "--all")).toBe(history);
               const got = f.run(f.name, {}, entry);
-              expect(got.code, got.text).toBe(entry === "direct" ? 1 : 0);
+              expect(got.code, got.text).toBe(1);
               expect(got.text).toMatch(new RegExp(`^kept box ${f.name}: [^\\n]+$`, "m"));
               expect(existsSync(f.work)).toBe(true);
               expect(existsSync(f.data)).toBe(true);
@@ -474,7 +414,7 @@ describe("box rm, today's tooling", () => {
   // Plant: peel a tag to its commit and accept it without retaining its annotation object.
   // Signature bytes are saved content here, not a claim about signature validity. No key is used.
   it.each(
-    (["direct", "catchup"] as const).flatMap((entry) =>
+    (["direct"] as const).flatMap((entry) =>
       (["plain", "signed", "nested"] as const).flatMap((kind) =>
         (kind === "nested"
           ? (["commit-only", "objects-only", "different-tag", "inner-only", "retained"] as const)
@@ -561,7 +501,7 @@ describe("box rm, today's tooling", () => {
 
             const got = f.run(f.name, {}, entry);
             const remove = retention === "retained";
-            expect(got.code, got.text).toBe(entry === "catchup" || remove ? 0 : 1);
+            expect(got.code, got.text).toBe(remove ? 0 : 1);
             expect(got.text).toMatch(
               new RegExp(`^${remove ? "removed" : "kept"} box ${f.name}${remove ? "$" : ": [^\\n]+$"}`, "m"),
             );
@@ -993,7 +933,7 @@ describe("box rm, today's tooling", () => {
 
   // Plant: drop the keepruns.sh call; the box's runs/ goes with the folder (field note 2026-11-09:
   // experiment 244's raw answers were lost that way).
-  it.each(["direct", "catchup"] as const)(
+  it.each(["direct"] as const)(
     "T475 %s rm moves the box's runs/ into MAIN's runs/<box>/ before the box goes",
     (entry) => {
       fc.assert(

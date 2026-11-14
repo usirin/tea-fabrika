@@ -232,6 +232,11 @@ const listed = (m: Package["manifest"]): ReadonlyMap<string, string> =>
     ),
   );
 
+/** p65's one outside package (docs/direction/fabrika-design-package.md): the design package, shared by
+ *  both versions, which the window (`@kampus/tuval`) and the app import. No other `next/` package may. */
+const DESIGN = "@kampus/fabrika-design";
+const DESIGN_TAKERS: ReadonlySet<string> = new Set(["@kampus/tuval", "@kampus/fabrika"]);
+
 /** Each package's `package.json`: private at 0.0.0, no side effects, a typecheck, nothing of today's. */
 const manifestFaults = (next: string): ReadonlyArray<string> => {
   const packages = packagesIn(next);
@@ -246,7 +251,7 @@ const manifestFaults = (next: string): ReadonlyArray<string> => {
       ...(m.scripts?.["typecheck"] === undefined ? [`${location}: no typecheck script`] : []),
       ...[...listed(m)].flatMap(([name, range]) => [
         ...(name.endsWith("-old") ? [`${location}: depends on ${name}, today's version`] : []),
-        ...(range.startsWith("workspace:") && !ours.has(name)
+        ...(range.startsWith("workspace:") && !ours.has(name) && !(name === DESIGN && DESIGN_TAKERS.has(m.name))
           ? [`${location}: depends on ${name}, a workspace package outside next/`]
           : []),
       ]),
@@ -362,6 +367,10 @@ const FRONTS: ReadonlyArray<string> = [
   "gateway/Gateway",
   "gateway/GatewayNonce",
   "gateway/GatewayStore",
+  "desktop/BrainService",
+  "desktop/BrainControl",
+  "desktop/BrainProbe",
+  "desktop/BrainSpec",
 ];
 
 /** The detail's list, the top level of the library, of tuval and of notes, plus the library's front
@@ -568,7 +577,11 @@ describe("planted breaks", () => {
     "packages/libfabrika/src/transport/Wire.ts": lines("export const wire = 1;"),
     "packages/libfabrika/src/transport/internal/binary.ts": lines("export const binary = 1;"),
     "packages/tuval/package.json": manifest("@kampus/tuval", {
-      dependencies: { "@kampus/libfabrika": "workspace:*", "@kampus/fabrika-old": "workspace:*" },
+      dependencies: {
+        "@kampus/libfabrika": "workspace:*",
+        "@kampus/fabrika-old": "workspace:*",
+        "@kampus/fabrika-design": "workspace:*",
+      },
     }),
     "packages/tuval/src/index.ts": lines(
       'import {wire} from "@kampus/libfabrika/transport/Wire";',
@@ -583,6 +596,10 @@ describe("planted breaks", () => {
       exports: { ".": "./src/index.ts" },
     },
     "programs/counter/src/index.ts": lines('import {run} from "../../../packages/libfabrika/src/index.ts";'),
+    // p65: the design package is the window's and the app's only, so the library may not name it.
+    "packages/design-taker/package.json": manifest("@kampus/design-taker", {
+      dependencies: { "@kampus/fabrika-design": "workspace:*" },
+    }),
     "apps/fabrika/package.json": manifest("@kampus/fabrika", {
       dependencies: { electron: "catalog:" },
     }),
@@ -601,6 +618,7 @@ describe("planted breaks", () => {
           "programs/counter/package.json: version is not 0.0.0",
           "programs/counter/package.json: sideEffects is not false",
           "programs/counter/package.json: no typecheck script",
+          "packages/design-taker/package.json: depends on @kampus/fabrika-design, a workspace package outside next/",
         ].sort(),
       );
     }),
@@ -693,6 +711,7 @@ describe("a module's front files and its internal/ in the exports map", () => {
     "access",
     "runtime",
     "gateway",
+    "desktop",
   ] as const;
   const module = fc.constantFrom(...MODULES);
   const name = fc.stringMatching(/^[A-Za-z][A-Za-z0-9]{0,8}$/);
@@ -776,4 +795,25 @@ describe("a module's front files and its internal/ in the exports map", () => {
       ),
     { arbitrary: { seed: options.seed, runs: 60 } },
   );
+});
+
+it("format: L12 desktop contracts bundle for a browser without their implementations", async () => {
+  // The three public contracts are a client import protocol. Loading one must not load its driver.
+  // After build plant: route a contract through BrainServiceManaged; this must fail even if all
+  // platform imports were tree-shaken from the emitted bytes.
+  const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
+  expect(library).toBeDefined();
+  const implementation =
+    /packages\/libfabrika\/src\/(?:desktop\/(?:BrainServiceManaged|internal\/)|node\/launchd\/|cloudflare\/)/;
+
+  for (const name of ["BrainService", "BrainControl", "BrainProbe"]) {
+    const entry = exportAt(exportMap(library!), `./desktop/${name}`);
+    expect(entry.kind).toBe("file");
+    const file = entry.kind === "file" ? entry.file : "";
+    expect(existsSync(file)).toBe(true);
+    const { loaded, output } = await bundleContents(NEXT, file);
+    expect(loaded).toContain(shown(NEXT, file));
+    expect(loaded.filter((path) => implementation.test(path))).toEqual([]);
+    expect(output.filter((path) => implementation.test(path))).toEqual([]);
+  }
 });

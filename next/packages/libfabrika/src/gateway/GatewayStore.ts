@@ -1,8 +1,26 @@
+/**
+ * The gateway's tables in the project's Sql. Only checked connection state and input metadata
+ * belong here. Input bodies stay out.
+ *
+ * @stability unstable
+ */
 import { Effect, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { type Sql } from "../Sql.ts";
 
-// Only checked connection state and input metadata belong here. Input bodies stay out.
+/**
+ * Creates the gateway's store over a Sql: `atomic`, `get`, `set` and the Sql itself.
+ *
+ * **Details**
+ *
+ * `atomic` runs one synchronous step in a transaction, creating the tables first, and fails with
+ * a storage error if the step throws. `get` and `set` read and write a named state value through a
+ * schema. `get` answers null when the name is absent and throws a bad-row error when the saved text
+ * does not decode, so call it inside `atomic`.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const gatewayStore = (sql: Sql) => {
   const ensure = () => {
     sql.exec("CREATE TABLE IF NOT EXISTS gateway_state (name TEXT PRIMARY KEY, value TEXT NOT NULL)");

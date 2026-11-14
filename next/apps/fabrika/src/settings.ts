@@ -1,18 +1,15 @@
-import { StartGrant } from "@kampus/libfabrika/processes/Children";
-import { gatewayLimit, gatewayWindow } from "@kampus/libfabrika/settings/Declarations";
+import { SettingsStart } from "@kampus/libfabrika";
 import { Schema } from "effect";
 
-export const Settings = Schema.Struct({
-  name: Schema.NonEmptyString,
-  person: Schema.NonEmptyString,
-  founder: Schema.NonEmptyString,
-  window: Schema.NullOr(Schema.String),
-  port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })),
-  build: Schema.NonEmptyString,
-  rateLimit: Schema.Struct({ limit: gatewayLimit.schema, window: gatewayWindow.schema }),
-  mail: Schema.optionalKey(Schema.Struct({ grants: Schema.Record(Schema.String, Schema.Array(Schema.String)) })),
-  limits: Schema.optionalKey(Schema.Struct({ recordBytes: Schema.Int.check(Schema.isGreaterThan(0)) })),
-  /** Which program may start which (P42): a right the host hands in, never a declared setting. */
-  starts: Schema.optionalKey(Schema.Array(StartGrant)),
-});
+export const Settings = SettingsStart.Input;
 export type Settings = typeof Settings.Type;
+
+export const Founding = Schema.Struct({
+  name: Settings.fields.name,
+  ...Settings.fields.founding.fields,
+  build: Settings.fields.build,
+  limits: Settings.fields.limits,
+  mail: Settings.fields.mail,
+});
+
+export type Options = Omit<Settings, "start" | "build"> & { readonly start?: string; readonly home: string };

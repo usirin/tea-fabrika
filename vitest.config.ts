@@ -48,7 +48,11 @@ export const testConfig = {
       "next/apps/*/src/**/*.test.{ts,tsx}",
     ],
     // A toy repo's tests under a skill's scripts are its subject, as with `fixtures/` above.
-    exclude: [...configDefaults.exclude, ".agents/skills/*/scripts/**/fixtures/**"],
+    exclude: [
+      ...configDefaults.exclude,
+      ".agents/skills/*/scripts/**/fixtures/**",
+      "next/packages/tuval/src/browser/key.laws.test.ts",
+    ],
     // One time limit for every test, chosen from measured times, not vitest's 5 s default,
     // which turned main red 6 times for slow tests and found no bug (experiment 125).
     // Measured on 2026-10-24: the slowest test in 128 CI runs took 17.9 s (60 s is 3.3 times

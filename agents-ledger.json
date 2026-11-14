@@ -53,22 +53,7 @@
 		{
 			"file": ".agents/skills/lead/scripts/chain.ts",
 			"rule": "fabrika(no-node-filesystem)",
-			"code": "import {"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-node-filesystem)",
 			"code": "import { join } from \"node:path\";"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-node-imports)",
-			"code": "import { spawn } from \"node:child_process\";"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-node-imports)",
-			"code": "} from \"node:fs\";"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/chain.ts",
@@ -114,11 +99,6 @@
 			"file": ".agents/skills/lead/scripts/chain.ts",
 			"rule": "fabrika(no-promises)",
 			"code": "Effect.runPromise("
-		},
-		{
-			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "const note = JSON.parse(r.out) as { _tag?: string; step?: string; ticket?: string };"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",

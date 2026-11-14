@@ -1,4 +1,8 @@
-// Only this adapter knows the parser and serializer. Edit receives source positions and text.
+/**
+ * The only adapter that knows the TOML parser and serializer. Edit receives source positions and text.
+ *
+ * @stability unstable
+ */
 import { stringify } from "@decimalturn/toml-patch";
 import { Effect, Layer, Predicate, Result, Schema } from "effect";
 import { type AST, getStaticTOMLValue, ParseError, parseTOML } from "toml-eslint-parser";
@@ -252,4 +256,14 @@ const remove = Effect.fnUntraced(function* (text: string, path: ReadonlyArray<st
   return candidate;
 });
 
+/**
+ * Layer that provides `Toml` from the TOML parser and serializer.
+ *
+ * **Details**
+ *
+ * `parse` reads a document with the parser. `set` and `remove` first parse the text, then edit it by source position, and parse the edited text again before returning it. `set` also checks that the value can be written as TOML.
+ *
+ * @stability unstable
+ * @category layers
+ */
 export const layer = Layer.succeed(Toml, Toml.of({ parse, set, remove }));

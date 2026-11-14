@@ -13,6 +13,7 @@ import { expect } from "vitest";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
+import * as RecordWireTest from "./record-wire.test-support.ts";
 
 const PROJECT = "isolate-usage-test";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -197,15 +198,17 @@ const world = Effect.gen(function* () {
   });
   const key = identity();
   const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
-  const instance = yield* localInstance(built, {
-    home,
-    name: PROJECT,
-    person: PERSON,
-    founder: key.line,
-    window: key.raw,
-    port: port.port,
-    rateLimit: { limit: 100_000, window: 60_000 },
-  });
+  const instance = yield* localInstance(
+    built,
+    RecordWireTest.settingsFixture({
+      home,
+      name: PROJECT,
+      person: PERSON,
+      founder: key.line,
+      window: key.raw,
+      port: port.port,
+    }),
+  );
   const send = yield* wire(instance.url, key);
   return { instance, built, home, send, from: { ...FROM, by: key.fingerprint, build: built.build } };
 });
@@ -325,22 +328,22 @@ const spinSample = Effect.gen(function* () {
   yield* world.send(spin, "idle", { type: "idle" });
   const idle = yield* until(
     read(world, spin),
-    (rows) => cpu(rows, "step").length === 1,
-    "the idle step produced no isolate.cpu row",
+    (rows) => cpu(rows, "update").length === 1,
+    "the idle update produced no isolate.cpu row",
   );
   yield* world.send(spin, "spin", { type: "spin" });
   const busy = yield* until(
     read(world, spin),
-    (rows) => cpu(rows, "step").length === 2,
-    "the spinning step produced no second isolate.cpu row",
+    (rows) => cpu(rows, "update").length === 2,
+    "the spinning update produced no second isolate.cpu row",
   );
-  const baseline = cpu(idle, "step").map(duration);
-  const later = cpu(busy, "step").filter((row) => !idle.some((old) => old.spanId === row.spanId));
+  const baseline = cpu(idle, "update").map(duration);
+  const later = cpu(busy, "update").filter((row) => !idle.some((old) => old.spanId === row.spanId));
   expect(later).toHaveLength(1);
   const [spinning] = later;
 
   if (spinning === undefined) {
-    return yield* Effect.die("no spinning step row");
+    return yield* Effect.die("no spinning update row");
   }
 
   yield* checkHealth(world.home, busy).pipe(Effect.provide(NodeServices.layer));
@@ -356,27 +359,34 @@ it.layer(
   { excludeTestServices: true, timeout: "180 seconds" },
 )("U9 real local isolate usage", (it) => {
   it.effect(
-    "scenario: U9 real checklist step and replay fold each record one CPU row through workerd",
+    "scenario: U9 real checklist fresh, update and replay fold each record one CPU row through workerd",
     () =>
       Effect.gen(function* () {
         const world = yield* World;
         const { instance, built, send, home } = world;
-        const checklist = yield* start(world, "checklist:1", "fabrika/checklist");
+        // P14 slice 2: the app boots `checklist:1` itself, so this scenario starts its own under the
+        // next name and measures only the steps it sent.
+        const checklist = yield* start(world, "checklist:2", "fabrika/checklist");
         yield* send(checklist, "add", { type: "add", name: "milk" });
         yield* send(checklist, "rename", { type: "rename", name: "milk", to: "bread" });
         yield* send(checklist, "remove", { type: "remove", name: "bread" });
-        const stepped = yield* until(
+        const updated = yield* until(
           read(world, checklist),
-          (rows) => calls(rows, "step").length >= 3 && cpu(rows, "step").length === calls(rows, "step").length,
-          "checklist execution.step calls did not each produce an isolate.cpu row",
+          (rows) =>
+            calls(rows, "update").length >= 3 &&
+            cpu(rows, "update").length === calls(rows, "update").length &&
+            calls(rows, "fresh").length >= 3 &&
+            cpu(rows, "fresh").length === calls(rows, "fresh").length,
+          "checklist execution.fresh and execution.update calls did not each produce an isolate.cpu row",
         );
-        expect(cpu(stepped, "step")).toHaveLength(calls(stepped, "step").length);
+        expect(cpu(updated, "update")).toHaveLength(calls(updated, "update").length);
+        expect(cpu(updated, "fresh")).toHaveLength(calls(updated, "fresh").length);
         yield* invoke(instance.process(checklist), "restart", {
           id: "replay",
           build: built.programs["fabrika/checklist"]?.hash ?? "missing",
         });
         const started = yield* until(
-          invoke(instance.project(PROJECT), "read", "processes/checklist:1", 0, "usage-probe").pipe(
+          invoke(instance.project(PROJECT), "read", "processes/checklist:2", 0, "usage-probe").pipe(
             Effect.flatMap(Schema.decodeUnknownEffect(lifecycle)),
           ),
           (rows) => rows.some((row) => row.body.after === checklist),
@@ -390,7 +400,7 @@ it.layer(
 
         // The three accepted client inputs replay. The old process's alarm stamps do not
         // drive its successor, and execution.fold spans need not be in the successor's record.
-        const replayed = calls(stepped, "step").length;
+        const replayed = calls(updated, "update").length;
         const folded = yield* until(
           read(world, successor),
           (rows) => cpu(rows, "fold").length === replayed,
@@ -400,7 +410,7 @@ it.layer(
         expect(cpu(folded, "fold")).toHaveLength(replayed);
 
         for (const [process, spans] of [
-          [checklist, stepped],
+          [checklist, updated],
           [successor, folded],
         ] as const) {
           for (const span of spans.filter((row) => row.name === "isolate.cpu")) {
@@ -409,7 +419,7 @@ it.layer(
           }
         }
 
-        yield* checkHealth(home, [...stepped, ...folded]).pipe(Effect.provide(NodeServices.layer));
+        yield* checkHealth(home, [...updated, ...folded]).pipe(Effect.provide(NodeServices.layer));
       }),
     180_000,
   );

@@ -447,7 +447,7 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
     expect(cmds[0]).toMatchObject({ type: "land", pr: 42 });
     [m] = machine.update.land_ok(m, {
       type: "land_ok",
-      value: { ok: true, detail: "merged" },
+      value: { ok: true, detail: "pr 42: queued at 0123" },
     } as never);
     expect(m.phase).toBe("over");
 
@@ -883,7 +883,7 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
   });
 });
 
-describe("T590 loosening.sh runs after review and before catch-up, today's tooling", () => {
+describe("T590 loosening.sh runs after review and before the merge queue, today's tooling", () => {
   const machine = makeMachine(limits(16));
   // A lane whose review said merge-ready and whose PR is open: the loosening Cmd is next.
   const opened = (pr: number, head: string) => {
@@ -907,7 +907,7 @@ describe("T590 loosening.sh runs after review and before catch-up, today's tooli
     .array(word, { minLength: 1, maxLength: 5 })
     .map((ws) => ws.map((w) => `a.test.ts: removed law: ${w}`));
 
-  it("an open PR runs loosening.sh on the reviewed head before any catch-up", () => {
+  it("an open PR runs loosening.sh on the reviewed head before anything is queued", () => {
     fc.assert(
       fc.property(pr, sha, (n, head) => {
         const [m, cmds] = opened(n, head);
@@ -918,7 +918,7 @@ describe("T590 loosening.sh runs after review and before catch-up, today's tooli
     );
   });
 
-  it("zero hits lands; any hit parks as ask (exit 20) with every hit; any other exit is stuck (exit 30)", () => {
+  it("zero hits goes on to the queue; any hit parks as ask (exit 20) with every hit; any other exit is stuck (exit 30)", () => {
     fc.assert(
       fc.property(pr, sha, hits, fc.integer({ min: -1, max: 255 }), (n, head, list, code) => {
         const [m] = opened(n, head);
@@ -1365,7 +1365,6 @@ describe("T675 a lane stops at its budget (0076), today's tooling", () => {
       ["stuck:unsigned", "and 5 more", "work"],
       ["stuck:unsigned", "commits check: build_touched_exam a7ff4ee8 next/apps/fabrika/tsconfig.json", "work"],
       ["stuck:unsigned", "commits check: stale_link 62865b7f step lead; build_touched_exam a7ff4ee8 x", "work"],
-      ["stuck:unsigned", "3fda8c62 has no step note", "work"],
       ["stuck:timeout", "stopped after 60 minutes", "work"],
       ["stuck:no_commit", "answered done with no commit", "work"],
       ["stuck:leak", "added lines leak, nothing pushed", "work"],
@@ -1382,7 +1381,7 @@ describe("T675 a lane stops at its budget (0076), today's tooling", () => {
   // each digit boundary (0, 1, 9, 10, 11, 99, 100) and past it. Ticket 724: no law had a tail of 10 or
   // more, so reading only one digit there would count a pure stale-link hold against the budget.
   const hold = fc.record({
-    rule: fc.constantFrom("unsigned_commit", "build_touched_exam", "broken_chain", "stale_link"),
+    rule: fc.constantFrom("no_exam_list", "build_touched_exam", "broken_chain", "stale_link"),
     sha: fc.stringMatching(/^[0-9a-f]{8}$/),
     step: fc.option(fc.constantFrom("tests", "build", "lead"), { nil: undefined }),
   });

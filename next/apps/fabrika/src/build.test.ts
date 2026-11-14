@@ -16,10 +16,35 @@ import { join, relative, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Layer, type Path, PlatformError } from "effect";
 import * as fc from "fast-check";
+import { parseSync } from "oxc-parser";
 import { rolldown } from "rolldown";
 import { afterEach, describe, expect, it } from "vitest";
 
 const homes: Array<string> = [];
+
+// L11: production React does not repeat mounts. Check the real entry's module-level boot instead.
+it("format: the page entry starts its sole Effect run outside React at module scope", () => {
+  const file = join(import.meta.dirname, "entry/browser.tsx");
+  const source = readFileSync(file, "utf8");
+  const parsed = parseSync(file, source);
+  expect(parsed.errors).toEqual([]);
+  const boots = parsed.program.body.filter((node) => {
+    if (node.type !== "ExpressionStatement" || node.expression.type !== "CallExpression") {
+      return false;
+    }
+
+    const call = node.expression.callee;
+    return (
+      call.type === "MemberExpression" &&
+      call.object.type === "Identifier" &&
+      call.object.name === "Effect" &&
+      call.property.type === "Identifier" &&
+      call.property.name === "runFork"
+    );
+  });
+  expect(boots, "a React mount never owns the page's Effect run").toHaveLength(1);
+  expect(source.match(/\brunFork\b/g), "there is only one page runtime").toHaveLength(1);
+});
 
 const runNode = <A, E>(work: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>) =>
   Effect.runPromise(work.pipe(Effect.provide(NodeServices.layer)));
@@ -324,4 +349,115 @@ describe("P12 Rolldown build", () => {
     expect(result).toMatchObject(refused("read"));
     expect(snapshot(out)).toEqual(before);
   });
+});
+
+// P14 slice 2, next/ (ticket 828): law L18 of the approved plan, on the app's real entry. The shape it
+// holds `build.ts` to: the app's build passes libfabrika's `tab` option, `src/entry/browser.tsx` with
+// three stylesheets in order (Manti's styles, the design package's tokens, Tuval's own), so the built
+// tables carry `/index.html` as text/html and `/window.js` as text/javascript, each with the SHA-256 of
+// its body, and the tab's script names no Node module. A failed build keeps the last good output.
+//
+// The walk: each attempt is chosen from the current output. With nothing published yet it builds; after
+// a good build it builds again or plants one disk failure (discovery, or the publication's write), and
+// the law reads the result against the last good bytes.
+describe("P14 slice 2, L18: the app's build carries the tab", () => {
+  const sha = async (text: string) => {
+    const { createHash } = await import("node:crypto");
+    return createHash("sha256").update(text).digest("hex");
+  };
+  const failing = (method: "glob" | "writeFileString") =>
+    Layer.effect(
+      FileSystem.FileSystem,
+      Effect.map(FileSystem.FileSystem, (fs) => ({
+        ...fs,
+        [method]: () =>
+          Effect.fail(
+            PlatformError.systemError({
+              _tag: "PermissionDenied",
+              module: "FileSystem",
+              method,
+              description: `planted ${method} failure`,
+            }),
+          ),
+      })),
+    );
+
+  it(
+    "generated build attempts: the page and the script ride in the tables with their hashes and types, and a failure keeps the last good output",
+    { timeout: 900_000 },
+    async () => {
+      const { build } = await import("./build.ts");
+      // A custom property the design package's own token sheet declares.
+      const token = /(--[a-z][a-z0-9-]*)\s*:/.exec(
+        readFileSync(resolve(import.meta.dirname, "../../../../packages/fabrika-design/src/tokens.css"), "utf8"),
+      )![1]!;
+      const seen = { built: 0, failed: 0 };
+      await fc.assert(
+        fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 3 }), (picks) =>
+          runNode(
+            Effect.scoped(
+              Effect.gen(function* () {
+                const folder = yield* Effect.acquireRelease(
+                  Effect.sync(() => mkdtempSync(join(tmpdir(), "p14-build-"))),
+                  (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
+                );
+                const out = join(folder, "dist");
+                let good: ReturnType<typeof snapshot> | null = null;
+
+                for (const pick of picks) {
+                  const moves =
+                    good === null ? (["build"] as const) : (["build", "glob", "writeFileString", "compiler"] as const);
+                  const move = moves[pick % moves.length]!;
+
+                  if (move !== "build") {
+                    const source = join(folder, "view.tsx");
+
+                    if (move === "compiler") {
+                      writeFileSync(source, `export const View = () => <p>{Date.now() + ${pick}}</p>;`);
+                    }
+
+                    const attempt =
+                      move === "compiler"
+                        ? build({ out, ledger: [], files: [source] })
+                        : build({ out, ledger: [] }).pipe(Effect.provide(failing(move)));
+                    const result = yield* Effect.result(attempt);
+                    seen.failed++;
+                    expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "BuildError" } });
+
+                    if (move === "compiler") {
+                      expect(result).toMatchObject(refused("compiler"));
+                    }
+
+                    expect(snapshot(out), `a ${move} failure changed the published output`).toEqual(good);
+                    continue;
+                  }
+
+                  const built = yield* build({ out, ledger: [] });
+                  seen.built++;
+                  const page = built.assets["/index.html"];
+                  const script = built.assets["/window.js"];
+                  expect(page, "/ serves the page").toBeDefined();
+                  expect(script, "/window.js serves the script").toBeDefined();
+                  expect(page!.type).toBe("text/html; charset=utf-8");
+                  expect(script!.type).toBe("text/javascript; charset=utf-8");
+                  expect(page!.hash).toBe(yield* Effect.promise(() => sha(page!.body)));
+                  expect(script!.hash).toBe(yield* Effect.promise(() => sha(script!.body)));
+                  expect(page!.body, "the page loads the script").toContain("/window.js");
+                  expect(script!.body, "the tab bundle names no Node module").not.toMatch(/["'`]node:[a-z]/);
+                  // Manti's defaults precede our token mapping (tier-1-detail.md, Styling).
+                  const styles = [...page!.body.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]!);
+                  expect(styles, "the tab's three stylesheets").toHaveLength(3);
+                  expect(styles[1], "the design package's tokens follow Manti's styles").toContain(token);
+                  good = snapshot(out);
+                }
+              }),
+            ),
+          ),
+        ),
+        { seed: 119120, numRuns: 30 },
+      );
+      expect(seen.built).toBeGreaterThan(0);
+      expect(seen.failed).toBeGreaterThan(0);
+    },
+  );
 });

@@ -1,8 +1,18 @@
 import { Effect, Equal, Redacted, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
+import { httpContext } from "./fetch.ts";
 import { workerLoader, type ProgramSource } from "./index.ts";
 import { ProcessClient, ProjectClient, RecordClient } from "./platform.ts";
-import { checkedPut, bucketHead, processStub, projectStub, recordStub, rpc, type Env } from "./runtime.ts";
+import {
+  checkedPut,
+  bucketHead,
+  processStub,
+  projectStub,
+  recordStub,
+  rpc,
+  settingsFailure,
+  type Env,
+} from "./runtime.ts";
 
 const Request = Schema.Struct({
   target: Schema.Literals(["project", "process", "record", "loader", "bucket"]),
@@ -42,6 +52,10 @@ const dispatch = Effect.fnUntraced(function* (
   request: typeof Request.Type,
 ) {
   const { target, project, name, method, args } = request;
+
+  if (target === "loader" || target === "bucket") {
+    yield* settingsFailure(httpContext(env));
+  }
 
   if (target === "loader") {
     const loaded = yield* workerLoader(env.LOADER, programs).load(name, project);

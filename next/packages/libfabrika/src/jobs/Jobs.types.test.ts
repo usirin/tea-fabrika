@@ -3,7 +3,8 @@
 // its module. No ledger name (`LedgerTurn`, `LedgerError`, `Line`) is part of the contract. tsc
 // checks the uncalled function below.
 import { expect, expectTypeOf, it } from "@effect/vitest";
-import { type Context, type Effect, type Layer, Schema } from "effect";
+import { type Context, type Effect, type Layer, Schema, type Stream } from "effect";
+import type { ProcessId } from "../ProcessId.ts";
 import type { Executor, Job, Recorded, Request, Result } from "./Job.ts";
 import type * as JobsFront from "./Jobs.ts";
 import { Jobs, JobsError } from "./Jobs.ts";
@@ -15,6 +16,7 @@ type Taken = Receipt & { readonly execution: string };
 const checkTypes = () => {
   // The five calls, as the contract writes them. A ledger type or error in any of them fails here.
   expectTypeOf<Context.Service.Shape<typeof Jobs>>().toEqualTypeOf<{
+    readonly forProcess: (process: typeof ProcessId.Type) => Stream.Stream<Job, JobsError>;
     readonly request: (request: Request, recorded: Recorded) => Effect.Effect<JobsFront.Receipt, JobsError>;
     readonly take: (id: string, executor: Executor, recorded: Recorded) => Effect.Effect<JobsFront.Taken, JobsError>;
     readonly started: (
