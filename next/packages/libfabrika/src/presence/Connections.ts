@@ -1,3 +1,8 @@
+/**
+ * Which clients of a key are connected now, kept in the project's Sql.
+ *
+ * @stability unstable
+ */
 import { Context, Effect, Layer, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { ProcessId } from "../ProcessId.ts";
@@ -29,6 +34,20 @@ const decodeConnection = Schema.decodeUnknownSync(Connection);
 // T6's 30-second ping tolerates a missing reply before the 75-second away boundary.
 const AWAY = 75_000;
 
+/**
+ * Service that records one connection per client and lists the live ones for a key.
+ *
+ * **Details**
+ *
+ * `join` saves a connection by client, so a second join from the same client replaces the first.
+ * `leave` removes a connection only when the client and session both match. `online` answers an
+ * empty list when the key is not admitted. Otherwise it probes each saved connection through the
+ * adapter and marks it `online`, `away` (the last reply is at least 75 seconds old) or `unknown`
+ * (the probe failed). A connection with no reply time counts from its join time.
+ *
+ * @stability unstable
+ * @category services
+ */
 export class Connections extends Context.Service<
   Connections,
   {

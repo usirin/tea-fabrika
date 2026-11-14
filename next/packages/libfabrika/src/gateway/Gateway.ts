@@ -1,3 +1,9 @@
+/**
+ * The gateway: the door a client connects to. It proves who a client is, admits it, and routes the
+ * calls it sends to the project.
+ *
+ * @stability unstable
+ */
 import { applyCell } from "@demlik/tea";
 import { Context, Duration, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream, Tracer } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
@@ -44,6 +50,13 @@ import * as Waiting from "./internal/waiting.ts";
 import { Policy as RatePolicy } from "./RateLimit.ts";
 
 const ConnectionId = Schema.NonEmptyString.pipe(Schema.brand("ConnectionId"));
+/**
+ * The id of one connection to the gateway, a non-empty string the gateway makes when the connection
+ * opens. It names a connection, not a client key.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type ConnectionId = typeof ConnectionId.Type;
 
 const quiet = Tracer.make({ span: (options) => new Tracer.NativeSpan(options) });
@@ -1690,6 +1703,24 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   };
 });
 
+/**
+ * Service that admits clients and routes their calls. `Gateway.layer(options)` builds it from the
+ * project's Sql, its ledger and access services, a rate-limit budget and the callbacks that deliver
+ * an input to a process.
+ *
+ * **Details**
+ *
+ * A client connects, answers a signed challenge and is admitted, or knocks and waits for a person
+ * to grant it. `route` checks that the client is still admitted, spends the sender's rate-limit
+ * budget and then handles one named call. A call that sends an input to a process is saved as a
+ * binding. `accept` appends a delivered input to the process inbox only when it matches that
+ * binding, else it refuses with `NotGranted`. `sign`, `signer`, `append` and `checkDelivery` serve
+ * a process answering an input it was delivered, and refuse with `not_delivered` when the input
+ * does not match its saved binding.
+ *
+ * @stability unstable
+ * @category services
+ */
 export class Gateway extends Context.Service<Gateway, Effect.Success<ReturnType<typeof make>>>()(
   "@kampus/libfabrika/gateway/Gateway",
 ) {
