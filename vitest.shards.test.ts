@@ -1199,7 +1199,7 @@ describe("the end-to-end legs", () => {
     expect(kept.flat().toSorted()).toEqual(files);
   });
 
-  it("pinned: E7 the end-to-end config runs one file at a time from the repo root, with 120 s limits", async () => {
+  it("scenario: E7 the end-to-end config, resolved through real Vitest, runs one file at a time from the repo root, with 120 s limits", async () => {
     // vitest.e2e.config.ts's values, the plan's for ticket 967: the two globs, one worker, no file
     // parallelism, the runner's old 120 s test and hook limits, `Shards`, no setup file and no
     // `passWithNoTests`, so a leg with no file fails. Plants, each run once on the config and
