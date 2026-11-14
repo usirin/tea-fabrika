@@ -1,7 +1,7 @@
 ---
 id: 0006
 title: An export no other file imports fails lint, with code-graph's strict unused-export check
-status: accepted
+status: amended-in-part by [0524](0524-no-list-lets-broken-code-pass.md)
 date: 2026-11-09
 tags: [lint, exports, code-graph, cleanup]
 ---

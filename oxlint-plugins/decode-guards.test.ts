@@ -1,6 +1,7 @@
 // Ticket 737, G1 and G3. next/ decodes input with Effect Schema (decision 0023), so oxlint's own
-// `no-restricted-properties` reports a bare `JSON.parse` there, and both new guards only advise until
-// their false alarms are counted. The fixtures are the rule's inputs (0093); the replay reads the tree.
+// `no-restricted-properties` reports a bare `JSON.parse` there, and it only advises until its false
+// alarms are counted. Since ticket 909 a wrong service ID blocks (decision 0168). The fixtures are the
+// rule's inputs (0093); the replay reads the tree.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -105,34 +106,62 @@ const lint = (files: Readonly<Record<string, string>>, args: ReadonlyArray<strin
   }
 };
 
-describe("T737 G3 the new guards advise before measured promotion", () => {
-  it("a report of only their diagnostics passes, and any blocking one beside them still fails", () => {
+/** One libfabrika file as the lint runner sees it: a service with a wrong or right ID, and a parse or none. */
+const probe = ({
+  parse,
+  id,
+  blocking,
+}: {
+  readonly parse: boolean;
+  readonly id: string | null;
+  readonly blocking: boolean;
+}) =>
+  `${[
+    'import { Context } from "effect";',
+    "",
+    `export class Probe extends Context.Service<Probe, { readonly n: number }>()("${id ?? "@kampus/libfabrika/runtime/Probe"}") {}`,
+    "",
+    `export const read = (text: string): unknown => ${parse ? "JSON.parse(text)" : "text"};`,
+    ...(blocking ? ["", "debugger;"] : []),
+  ].join("\n")}\n`;
+
+const PROBE = "next/packages/libfabrika/src/runtime/Probe.ts";
+
+describe("T737 G3 and T909: a bare JSON.parse advises, and a wrong service ID blocks", () => {
+  it("a report of only the parse advice passes, and a wrong ID or any blocking one beside it fails", () => {
     const seen = new Set<string>();
     fc.assert(
       fc.property(
         fc.record({ parse: fc.boolean(), id: fc.boolean(), blocking: fc.boolean(), name: word }),
         ({ parse, id, blocking, name }) => {
-          const lines = [
-            'import { Context } from "effect";',
-            "",
-            `export class Probe extends Context.Service<Probe, { readonly n: number }>()("${id ? `fabrika/${name}` : "@kampus/libfabrika/runtime/Probe"}") {}`,
-            "",
-            `export const read = (text: string): unknown => ${parse ? "JSON.parse(text)" : "text"};`,
-            ...(blocking ? ["", "debugger;"] : []),
-          ];
-          const ran = lint({ "next/packages/libfabrika/src/runtime/Probe.ts": `${lines.join("\n")}\n` }, [
+          const ran = lint({ [PROBE]: probe({ parse, id: id ? `fabrika/${name}` : null, blocking }) }, [
             "--warn=no-debugger",
           ]);
-          const advice = Number(parse) + Number(id);
-          expect(ran.stdout).toContain(`oxlint: ${Number(blocking)} blocking, ${advice} advice`);
+          const blocks = Number(blocking) + Number(id);
+          expect(ran.stdout).toContain(`oxlint: ${blocks} blocking, ${Number(parse)} advice`);
           expect(ran.stdout.includes(CODE)).toBe(parse);
           expect(ran.stdout.includes(ID)).toBe(id);
-          expect(ran.status, ran.stdout + ran.stderr).toBe(blocking ? 1 : 0);
+          expect(ran.status, ran.stdout + ran.stderr).toBe(blocks > 0 ? 1 : 0);
           seen.add(`${parse}:${id}:${blocking}`);
         },
       ),
       { seed: 119120, numRuns: 32 },
     );
     expect(seen.size).toBe(8);
+  });
+
+  // Law 10 of docs/plan/effect-rules-small.md. Only the real lint runner holds the advice set and the
+  // real config holds the rule's level, so two real runs stand where no generator can.
+  it("scenario: the lint runner exits 1 on a wrong service ID, and 0 on the parse advice alone", () => {
+    const wrong = lint({ [PROBE]: probe({ parse: false, id: "@kampus/libfabrika/Probe", blocking: false }) }, []);
+    expect(wrong.stdout).toContain(ID);
+    expect(wrong.stdout).toContain("oxlint: 1 blocking, 0 advice");
+    expect(wrong.status, wrong.stdout + wrong.stderr).toBe(1);
+
+    const advice = lint({ [PROBE]: probe({ parse: true, id: null, blocking: false }) }, []);
+    expect(advice.stdout).toContain(CODE);
+    expect(advice.stdout).not.toContain(ID);
+    expect(advice.stdout).toContain("oxlint: 0 blocking, 1 advice");
+    expect(advice.status, advice.stdout + advice.stderr).toBe(0);
   });
 });

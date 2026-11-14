@@ -1,0 +1,19 @@
+{
+  "id": "2026-11-13-p15b-recheck-by-a-different-reviewer",
+  "date": "2026-11-13",
+  "lanes": [
+    "kamp-us/tea-fabrika#1012"
+  ],
+  "stage": "review",
+  "kind": "friction",
+  "what": "next/ version. Decision 0177 says the same reviewer rechecks a fix round. Pull request 1012's (P15 slice 1, hot reload) first fresh review ran on claude-fable-5-2 and said merge-ready, but it ran no e2e, and CI was then red on the L17 e2e check and the supervision-spans law. Two test-only rounds followed (b04e56f0a, d58106245 on the owner's yes, decision 0186), then two merges of main (eec41c688 after pull request 1146, 6c4312bc5). The account then hit its Fable limit (HTTP 429, resets 2026-11-17), and the owner ruled that no subagent runs on a Fable model again. So the recheck went to a fresh reviewer on claude-opus-5-5 at medium effort, given the first review's full report and the diffs since, and scoped to whether the send-backs were fixed and whether the rounds or the merges broke anything.",
+  "cause": "A same-reviewer rule assumes the reviewer's model stays available. Here it did not: a usage limit, then an owner ruling. The first review's gap, no e2e, came from a brief that kept e2e off the laptop while the verdict was read as covering it.",
+  "person": true,
+  "primitive": "Check",
+  "fix": "A review step records the model it ran on and what it did not run (e2e, typecheck), and a recheck by a different reviewer is briefed with the first report whole and a narrow scope, so new taste points become tickets and not send-backs. A merge-ready verdict waits on a full CI run that includes next/'s end-to-end tests in the next (1) shard.",
+  "test": "Replay: a recheck brief built from a stored first review must carry its full findings and its not-run list, and the lane's field rows must show both reviewers' models.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1012",
+    "https://github.com/kamp-us/tea-fabrika/pull/1169"
+  ]
+}

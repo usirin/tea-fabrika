@@ -7,7 +7,7 @@
 import { makeRpcStub } from "@alchemy.run/cloudflare/Bridge";
 import { applyCell } from "@demlik/tea";
 import {
-  Cause,
+  type Cause,
   Clock,
   Context,
   Effect,
@@ -38,15 +38,27 @@ import { LedgerStreams } from "../ledger/LedgerStreams.ts";
 import * as LedgerStreamsSql from "../ledger/LedgerStreamsSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
-import { type Appended, fromHere, Line, lineFor, valueFor } from "../ledger/Log.ts";
+import { type Appended, type Entry, fromHere, Line, lineFor, valueFor, type Waited } from "../ledger/Log.ts";
 import { Referee } from "../ledger/Referee.ts";
 import * as RefereeSql from "../ledger/RefereeSql.ts";
 import { Connections } from "../presence/Connections.ts";
 import { type Child, Children, ChildrenError, type StartGrant, type Started } from "../processes/Children.ts";
 import * as ChildrenLedger from "../processes/ChildrenLedger.ts";
 import { decodeExitReason, type ExitReason } from "../processes/ExitReason.ts";
-import { Mailbox, type From } from "../processes/Mailbox.ts";
-import { Owner, ProcessError, Recipient, recoverActivity, Start } from "../processes/Process.ts";
+import { Mailbox, type From, type Letter } from "../processes/Mailbox.ts";
+import {
+  type Activity,
+  type DeadInput,
+  Owner,
+  ProcessError,
+  type ProcessInfo,
+  Recipient,
+  type Recovered,
+  recoverActivity,
+  Start,
+  type StartAnswer,
+  type State,
+} from "../processes/Process.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 import { ProcessManager, remoteProcessManager, type ProcessCalls } from "../processes/ProcessManager.ts";
 import { ProgramMail, type ProgramMailError, type Delivery, type Grants } from "../processes/ProgramMail.ts";
@@ -56,15 +68,18 @@ import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import { BuiltProgram } from "../runtime/Built.ts";
 import type { Selected } from "../runtime/Code.ts";
 import { code as codeMachine, CodeEvent, Install, Installed } from "../runtime/Code.ts";
-import { CodeStore } from "../runtime/CodeStore.ts";
+import { CodeStore, type CodeStoreError } from "../runtime/CodeStore.ts";
 import * as CodeStoreSql from "../runtime/CodeStoreSql.ts";
 import { Alarm, CheckedWriter, Recording, type Incoming } from "../runtime/Entry.ts";
 import type { Declaration } from "../runtime/Execution.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { Checkpoint, ProcessStore, RuntimeRecord } from "../runtime/ProcessStore.ts";
 import { ProgramDown } from "../runtime/Program.ts";
-import type { Descriptor } from "../runtime/Runner.ts";
+import type { RepliesError } from "../runtime/Replies.ts";
+import type { Descriptor, Opened, RunnerError, Swapped } from "../runtime/Runner.ts";
 import { defaultPolicy, ProgramRunner, Sent } from "../runtime/Runner.ts";
+import type { Publication } from "../runtime/WatcherManager.ts";
+import type { WatchersError } from "../runtime/Watchers.ts";
 import { RecordedStart } from "../settings/RecordedStart.ts";
 import * as SettingsStart from "../settings/Start.ts";
 import * as Starts from "../settings/Starts.ts";
@@ -663,7 +678,7 @@ export const complete = Effect.fn(function* <A, E, R>(
   return yield* work.pipe(
     Effect.exit,
     Effect.flatMap((exit) => {
-      if (Exit.isFailure(exit) && Schema.is(RateCountFailure)(Cause.squash(exit.cause))) {
+      if (Option.exists(Exit.findErrorOption(exit), Schema.is(RateCountFailure))) {
         return exit;
       }
 
@@ -1303,7 +1318,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     );
   });
   const push = Effect.fn("code.swap")(function* (load: string, program: string, hash: string, only?: string) {
-    const answers: Array<{ name: string; outcome: typeof import("../runtime/Runner.ts").Swapped.Type }> = [];
+    const answers: Array<{ name: string; outcome: Swapped }> = [];
 
     for (const process of yield* processes.info) {
       if (process.program !== program || (only !== undefined && process.name !== only)) {
@@ -1438,7 +1453,7 @@ const projectLogic = Effect.fn("project.init")(function* (
         return prepared;
       }
 
-      const processes: Array<{ name: string; outcome: typeof import("../runtime/Runner.ts").Swapped.Type }> = [];
+      const processes: Array<{ name: string; outcome: Swapped }> = [];
 
       for (const swap of prepared) {
         processes.push(...(yield* push(swap.load, swap.program, swap.hash)));
@@ -1705,6 +1720,9 @@ const projectLogic = Effect.fn("project.init")(function* (
   };
 }, projectStorage);
 
+/** What a call fails with once its spans are flushed and its storage errors are rendered. */
+type ProjectFailure = LedgerError | SinkError;
+
 /**
  * Service for the Project object's calls: the ledger, the door, code install, processes, mail and its
  * boot.
@@ -1712,9 +1730,130 @@ const projectLogic = Effect.fn("project.init")(function* (
  * @stability unstable
  * @category services
  */
-export class ProjectService extends Context.Service<ProjectService, Effect.Success<ReturnType<typeof projectLogic>>>()(
-  "@kampus/libfabrika/cloudflare/runtime.ProjectService",
-) {}
+export class ProjectService extends Context.Service<
+  ProjectService,
+  {
+    // Code install (P15): the store's built programs, a saved program's install and a failed build.
+    readonly code: (hash: string) => Effect.Effect<BuiltProgram | null, CodeStoreError>;
+    readonly codeInstall: (raw: unknown) => Effect.Effect<Installed, ProjectFailure>;
+    readonly codeFailed: (raw: unknown) => Effect.Effect<void, ProjectFailure>;
+    readonly mail: (
+      delivery: Delivery,
+      trace?: { traceId: string; spanId: string },
+    ) => Effect.Effect<MailReply, ProgramMailError | ProjectFailure>;
+    readonly target: GatewayCalls["target"];
+    readonly register: (client: string, gateway: string, session: string) => Effect.Effect<void>;
+    readonly publish: (client: string, update: unknown) => Effect.Effect<typeof Publication.Type, LedgerError>;
+    // The door's calls. A door fails with `unknown`, which takes in every other failure.
+    readonly connect: () => Effect.Effect<ConnectionId, ProjectFailure>;
+    readonly challenge: (client: ConnectionId) => Effect.Effect<string, unknown>;
+    readonly initialize: GatewayCalls["initialize"];
+    readonly route: (
+      client: ConnectionId,
+      method: string,
+      params: unknown,
+      reader?: string,
+    ) => Effect.Effect<typeof Answer.Type, unknown>;
+    readonly knock: (client: ConnectionId, input: { label: string }) => Effect.Effect<typeof Answer.Type, unknown>;
+    readonly grant: GatewayCalls["grant"];
+    readonly disconnect: (client: ConnectionId) => Effect.Effect<void, unknown>;
+    // Presence.
+    readonly join: (row: {
+      readonly key: string;
+      readonly client: string;
+      readonly gateway: string;
+      readonly session: string;
+      readonly at: number;
+    }) => Effect.Effect<void, ProjectFailure>;
+    readonly leave: (client: string, session: string) => Effect.Effect<void, ProjectFailure>;
+    readonly online: (key: string) => Effect.Effect<
+      ReadonlyArray<{
+        readonly key: string;
+        readonly client: string;
+        readonly gateway: string;
+        readonly session: string;
+        readonly at: number;
+        readonly state: "online" | "away" | "unknown";
+      }>,
+      ProjectFailure
+    >;
+    readonly info: Effect.Effect<ReadonlyArray<ProcessInfo>, ProjectFailure>;
+    readonly start: (
+      request: Start,
+      origin: From,
+    ) => Effect.Effect<StartAnswer, ProcessError | ProgramDown | ProjectFailure>;
+    readonly exit: (pid: string, reason: ExitReason, origin: From) => Effect.Effect<void, unknown>;
+    // The ledger, through the referee.
+    readonly read: (
+      stream: string,
+      after: number,
+      reader: string,
+    ) => Effect.Effect<ReadonlyArray<Entry>, ProjectFailure>;
+    readonly wait: (stream: string, after: number, reader: string) => Effect.Effect<Waited, LedgerError>;
+    readonly append: (stream: string, id: string, line: unknown) => Effect.Effect<Appended, ProjectFailure>;
+    // A process's own writes.
+    readonly sign: (pid: string, id: string, parent: string, kind: string) => Effect.Effect<Session, unknown>;
+    readonly commit: (
+      pid: string,
+      input: {
+        readonly id: string;
+        readonly parent: string;
+        readonly kind: string;
+        readonly stream: string;
+        readonly event: unknown;
+      },
+    ) => Effect.Effect<Appended, unknown>;
+    readonly inbox: (pid: string, input: Incoming) => Effect.Effect<Appended, unknown>;
+    readonly own: (
+      pid: string,
+      id: string,
+      stream: string,
+      event: unknown,
+      trace?: { traceId: string; spanId: string },
+    ) => Effect.Effect<Appended, Cause.NoSuchElementError | ProjectFailure>;
+    readonly brain: (event: typeof BrainEvent.Type) => Effect.Effect<Appended, ProjectFailure>;
+    // ProcessManager over trusted Project RPC: a refusal is reply data.
+    readonly processObject: (pid: string) => Effect.Effect<string, ProjectFailure>;
+    readonly processStart: (
+      request: Start,
+      origin: From,
+    ) => Effect.Effect<ProcessReply<StartAnswer>, ProgramDown | ProjectFailure>;
+    readonly processExit: (pid: string, reason: ExitReason, origin: From) => Effect.Effect<ProcessReply<void>, unknown>;
+    readonly processStatus: (owner: string) => Effect.Effect<
+      ProcessReply<{
+        readonly name: string;
+        readonly state: typeof State.Type;
+        readonly at: number;
+        readonly restarts: ReadonlyArray<number>;
+      }>,
+      ProjectFailure
+    >;
+    readonly processResolve: (
+      pid: string,
+    ) => Effect.Effect<ProcessReply<{ readonly name: string; readonly state: typeof State.Type }>, ProjectFailure>;
+    readonly processDead: (
+      pid: string,
+      dead: typeof DeadInput.Type,
+      origin: From,
+    ) => Effect.Effect<ProcessReply<void>, ProjectFailure>;
+    readonly processIsLive: (pid: string) => Effect.Effect<boolean, ProjectFailure>;
+    readonly processMonitor: (
+      ref: string,
+      pid: string,
+      origin: From,
+    ) => Effect.Effect<ProcessReply<void>, ProjectFailure>;
+    readonly processDemonitor: (ref: string, origin: From) => Effect.Effect<ProcessReply<void>, ProjectFailure>;
+    readonly processDown: (
+      pid: string,
+      policy: { readonly reason: string; readonly crashes: number; readonly until: number },
+      origin: From,
+    ) => Effect.Effect<ProcessReply<void>, ProjectFailure>;
+    readonly processReceive: (pid: string, after: number) => Effect.Effect<ProcessReply<Array<Letter>>, ProjectFailure>;
+    readonly processChild: (input: Child, origin: From) => Effect.Effect<typeof ChildReplies.Type, ProjectFailure>;
+    /** The bootstrap process and the rev of its start. */
+    readonly boot: StartAnswer;
+  }
+>()("@kampus/libfabrika/cloudflare/runtime.ProjectService") {}
 
 /**
  * Layer that provides `ProjectService` for one Project object, after its start's input is decoded and
@@ -1990,15 +2129,45 @@ const processLogic = Effect.fnUntraced(function* (
   };
 });
 
+/** What a runner call fails with: the union `ProgramRunner`'s calls name. */
+type RunnerFailure =
+  | LedgerError
+  | ProgramDown
+  | RunnerError
+  | SinkError
+  | ProcessError
+  | NotGranted
+  | RepliesError
+  | WatchersError;
+
 /**
- * Service for a Process object's calls: its runner's turns, its alarm and its saved activity.
+ * Service for a Process object's calls: its runner's turns, its code swap, its alarm and its saved
+ * activity.
  *
  * @stability unstable
  * @category services
  */
-export class ProcessService extends Context.Service<ProcessService, Effect.Success<ReturnType<typeof processLogic>>>()(
-  "@kampus/libfabrika/cloudflare/runtime.ProcessService",
-) {}
+export class ProcessService extends Context.Service<
+  ProcessService,
+  {
+    readonly usage: (rows: unknown) => Effect.Effect<void, Schema.SchemaError | SinkError>;
+    readonly msg: (input: unknown) => Effect.Effect<Sent, RunnerFailure>;
+    readonly mailed: (trace?: { traceId: string; spanId: string }) => Effect.Effect<void, RunnerFailure>;
+    readonly open: (client: string) => Effect.Effect<Opened, RunnerFailure>;
+    readonly due: (at: number) => Effect.Effect<void, RunnerFailure>;
+    readonly swap: (request: {
+      readonly load: string;
+      readonly program: string;
+      readonly hash: string;
+    }) => Effect.Effect<Swapped, RunnerFailure>;
+    readonly init: () => Effect.Effect<void, RunnerFailure>;
+    readonly restart: (request: unknown) => Effect.Effect<void, RunnerFailure>;
+    readonly alarm: () => Effect.Effect<void, RunnerFailure>;
+    readonly activity: (value: typeof Activity.Type) => Effect.Effect<void, LedgerError>;
+    /** The saved activity marker after a wake: `idle`, or `interrupted` with the step that was cut short. */
+    readonly recover: () => Effect.Effect<typeof Recovered.Type, LedgerError>;
+  }
+>()("@kampus/libfabrika/cloudflare/runtime.ProcessService") {}
 
 /**
  * Creates a Process object's runtime: `ProcessService` over its built-in programs, with the start

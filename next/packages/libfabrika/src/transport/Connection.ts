@@ -5,7 +5,7 @@
  * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
-import { Cause, Effect, Exit, Predicate, Result, Schema, Semaphore } from "effect";
+import { Effect, Exit, Option, Predicate, Result, Schema, Semaphore } from "effect";
 import { REFUSED } from "../SpanTag.ts";
 import * as State from "./internal/connection.ts";
 import { Answer, type Attached, RateCountFailure, RateRefusal, Wait } from "./Wire.ts";
@@ -219,7 +219,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
     const exit = yield* Effect.exit(options.call(request.method, request.params));
 
     if (Exit.isFailure(exit)) {
-      if (Schema.is(RateCountFailure)(Cause.squash(exit.cause))) {
+      if (Option.exists(Exit.findErrorOption(exit), Schema.is(RateCountFailure))) {
         yield* Effect.annotateCurrentSpan(REFUSED, "rate_limited");
       }
     } else {
