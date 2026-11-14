@@ -33,13 +33,25 @@ export type Backend = {
   readonly shown: Effect.Effect<ReadonlyArray<Row>>;
   /** How many sockets the client has dialed so far. */
   readonly dials: () => number;
+  /** What the client shows of its own state, for a wait that runs out. A tab has none to read. */
+  readonly last?: Effect.Effect<Last>;
 };
 
-/** The suite's own failure: a wait that ran out, named by what it waited for. */
-export class SuiteError extends Schema.TaggedError<SuiteError>()("SuiteError", { waited: Schema.String }) {}
+/**
+ * What a client last showed when a wait ran out: its link's state, its hello exchange's state and
+ * the tag of each row it wrote, in order. A refused hello then reads as a refusal, not a timeout.
+ */
+const Last = Schema.Struct({ link: Schema.String, handshake: Schema.String, rows: Schema.Array(Schema.String) });
+type Last = typeof Last.Type;
 
-/** Polls `check` every 250 ms for at most 60 s. */
-const until = (label: string, check: Effect.Effect<boolean>) =>
+/** The suite's own failure: a wait that ran out, named by what it waited for, and what it last saw. */
+export class SuiteError extends Schema.TaggedError<SuiteError>()("SuiteError", {
+  waited: Schema.String,
+  last: Schema.optionalKey(Last),
+}) {}
+
+/** Polls `check` every 250 ms for at most 60 s, then fails with what `last` reads. */
+const until = (label: string, check: Effect.Effect<boolean>, last?: Effect.Effect<Last>) =>
   Effect.gen(function* () {
     for (let n = 0; n < 240; n++) {
       if (yield* check) {
@@ -49,7 +61,7 @@ const until = (label: string, check: Effect.Effect<boolean>) =>
       yield* Effect.sleep("250 millis");
     }
 
-    return yield* new SuiteError({ waited: label });
+    return yield* new SuiteError({ waited: label, ...(last === undefined ? {} : { last: yield* last }) });
   });
 
 /** The one round trip: dial, wait, grant, sign the hello, ping in text, open, submit, read back. */
@@ -73,6 +85,7 @@ export const roundTrip = (h: Home, dev: Dev, backend: Backend) =>
     yield* until(
       `${backend.name}: milk in the view`,
       Effect.map(backend.shown, (rows) => rows.some((r) => r.name === "milk" && !r.checked)),
+      backend.last,
     );
     const r = yield* reader(h, dev);
     const inbox = yield* r.read(`${NAME}/inbox`);
@@ -119,11 +132,17 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
       count();
       return run.getState();
     });
+    const showing = Effect.map(state, (s) => ({
+      link: s.link._tag,
+      handshake: s.handshake._tag,
+      rows: rows.map((r) => r.record._tag),
+    }));
     const backend: Backend = {
       name: "headless",
       waiting: until(
         "headless: the waiting code",
         Effect.map(state, (s) => s.link._tag === "waiting_grant"),
+        showing,
       ).pipe(
         Effect.andThen(state),
         Effect.map((s) => {
@@ -136,6 +155,7 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
       online: until(
         "headless: online with its tile open",
         Effect.map(state, (s) => s.link._tag === "online" && s.tiles[0]?.reach._tag === "open"),
+        showing,
       ).pipe(Effect.orDie),
       live: Effect.map(state, (s) => s.link._tag === "online"),
       add: (name) =>
@@ -147,6 +167,7 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
         return (data?.items ?? []).map((i) => ({ name: i.name, checked: i.state === "checked" }));
       }),
       dials: count,
+      last: showing,
     };
     return backend;
   });

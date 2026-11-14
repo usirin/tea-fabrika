@@ -54,8 +54,9 @@ const headlessKey = Effect.gen(function* () {
   );
   const field = (bytes: Uint8Array) => [...new Uint8Array(new Uint32Array([bytes.length]).buffer).reverse(), ...bytes];
   const blob = new Uint8Array([...field(new TextEncoder().encode("ssh-ed25519")), ...field(raw)]);
+  // The door hashes the 32 raw key bytes, as the browser key and the P14 client do; the line keeps the blob.
   const digest = new Uint8Array(
-    yield* Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", blob), catch: failed }),
+    yield* Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", raw), catch: failed }),
   );
   return {
     fingerprint: `SHA256:${btoa(String.fromCharCode(...digest)).replace(/=+$/, "")}`,
