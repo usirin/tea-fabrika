@@ -46,12 +46,21 @@ const receiptFor = (value: unknown, letter: unknown) => {
 const TABLES = [
   "CREATE TABLE IF NOT EXISTS process_recovery (name TEXT PRIMARY KEY, value TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS process_receipts (name TEXT NOT NULL, letter TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (name, letter))",
+  // Every save by any store bumps its name's generation, so a store sees another's save in the one row it reads.
+  "CREATE TABLE IF NOT EXISTS process_recovery_generation (name TEXT PRIMARY KEY, generation INTEGER NOT NULL)",
 ];
+
+/** The journal row, with its name's generation beside it: one row, or none before the first save. */
+const JOURNAL =
+  "SELECT r.value, g.generation FROM process_recovery r LEFT JOIN process_recovery_generation g ON g.name = r.name WHERE r.name=?";
 
 const bytes = (text: string) => new TextEncoder().encode(text).length;
 
 /** A row's text column, or null when there is no row. */
 const textIn = (value: unknown): string | null => (typeof value === "string" ? value : null);
+
+/** A row's generation, or null when there is no row or no save has counted one yet. */
+const generationIn = (value: unknown): number | null => (typeof value === "number" ? value : null);
 
 /**
  * Makes the store for one name's saved journal in `sql`, checked whole against its caller's schema
@@ -94,20 +103,23 @@ export const recoveryStore = <S extends Kept>(
           ? error
           : new LedgerError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", cause: error }),
     });
-  /** What this store last read or wrote for its name: the journal row's text and each receipt row's. */
-  type Known = { readonly journal: string | null; readonly receipts: ReadonlyMap<string, string> };
+  /** What this store last read or wrote for its name: the generation it saw, and each receipt row's text. */
+  type Known = { readonly generation: number; readonly receipts: ReadonlyMap<string, string> };
   // A copy of committed rows, never control state: it only decides how many rows a save reads.
   let known: Known | null = null;
-  /** The known receipt rows, or one read of the name's receipt rows when none are known or the journal row moved. */
-  const rows = (journal: string | null): ReadonlyMap<string, string> =>
-    known !== null && known.journal === journal
+  /**
+   * The known receipt rows, or one read of the name's receipt rows when none are known or any save
+   * since, this store's or another's, moved the generation.
+   */
+  const rows = (generation: number | null): ReadonlyMap<string, string> =>
+    known !== null && known.generation === generation
       ? known.receipts
       : new Map(
           sql
             .exec("SELECT letter, value FROM process_receipts WHERE name=?", options.name)
             .map((row) => [String(row.letter), String(row.value)]),
         );
-  const readJournal = () => sql.exec("SELECT value FROM process_recovery WHERE name=?", options.name)[0];
+  const readJournal = () => sql.exec(JOURNAL, options.name)[0];
   const snapshot = (row = readJournal()) => {
     if (row === undefined) {
       return null;
@@ -142,7 +154,8 @@ export const recoveryStore = <S extends Kept>(
     }
 
     const loaded = check({ ...saved, receipts: [...receipts.values()] });
-    known = { journal: textIn(journalRow?.value), receipts: texts };
+    const generation = generationIn(journalRow?.generation);
+    known = generation === null ? null : { generation, receipts: texts };
     return loaded;
   });
   const receipt = Effect.fn("recovery.receipt")(function* (letter: string) {
@@ -167,8 +180,9 @@ export const recoveryStore = <S extends Kept>(
 
       const text = encode({ ...saved, receipts: [] });
       const committed = sql.transaction(() => {
-        const old = sql.exec("SELECT value FROM process_recovery WHERE name=?", options.name)[0];
+        const old = readJournal();
         const journal = textIn(old?.value);
+        const generation = generationIn(old?.generation);
         // Omitted receipts are retained, including during migration from the old snapshot.
         const receipts = new Map((old === undefined ? [] : decode(old.value).receipts).map((r) => [r.letter, r]));
 
@@ -176,11 +190,13 @@ export const recoveryStore = <S extends Kept>(
           receipts.set(receipt.letter, receipt);
         }
 
-        const prior = rows(journal);
+        const prior = rows(generation);
         const { changed, growth: added } = changes(options.name, prior, receipts.values());
-        const growth = bytes(text) - (journal === null ? 0 : bytes(journal)) + added;
+        // The first counted save adds its generation row: the name, and an integer of up to 8 bytes.
+        const counted = generation === null ? bytes(options.name) + 8 : 0;
+        const growth = bytes(text) - (journal === null ? 0 : bytes(journal)) + added + counted;
         const next: Known = {
-          journal: text,
+          generation: (generation ?? 0) + 1,
           receipts: new Map([...prior, ...changed.map((c) => [c.letter, c.text] as const)]),
         };
 
@@ -204,6 +220,12 @@ export const recoveryStore = <S extends Kept>(
             text,
           );
         }
+
+        sql.exec(
+          "INSERT INTO process_recovery_generation (name,generation) VALUES (?,?) ON CONFLICT(name) DO UPDATE SET generation=excluded.generation",
+          options.name,
+          next.generation,
+        );
 
         return next;
       });
