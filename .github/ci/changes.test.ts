@@ -975,7 +975,7 @@ it("scenario: with no parser to import, --same prints what the first pass printe
     [nextPaths, "merge_group"],
     [[".oxlintrc.json"], "push"],
     [[...nextPaths, ".oxlintrc.json"], "pull_request"],
-  ] as const) {
+  ] as [readonly string[], string][]) {
     const run = git(paths, comments);
     const env = envOf(event, false);
     const first = await ci.outputs({ same: false, env, run });

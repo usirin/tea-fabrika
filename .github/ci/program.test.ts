@@ -60,7 +60,7 @@ const statement = (i: number): fc.Arbitrary<Token[]> =>
         mark(";"),
       ]),
     value.map((v) => [t("name")("f"), mark("("), v, mark(")"), mark(";")]),
-    fc.constant([
+    fc.constant<Token[]>([
       t("word")("function"),
       t("name")(`w${i}`),
       mark("("),
