@@ -195,9 +195,14 @@ const checks = new WeakMap<object, (tuples: Tuples, subject: string, object: str
 const subjectFor = (sender: Sender): string => `person:${sender.for}`;
 
 /**
- * Bridges a built context class to the right's own `Self`. The one audited cast of the module, as
- * phoenix's `sealCapability`: the class names itself as its service `Self`, and its users see the
- * `Self` they declared.
+ * Bridges a built context class to the right's own `Self`: the one cast of the module, as phoenix's
+ * `sealCapability`. TypeScript cannot relate a class named as its own `Self` (the Effect class
+ * rule) to the caller's `Self`, so the value passes through `unknown` once, here only.
+ *
+ * It is sound: a context key is found by its string `key`, which is the right's `id` for `Tag` and
+ * for the caller's class that extends it, so both `Self`s name one key, and the value under it is
+ * `Proof<Self>` either way. It is applied only to the class `Permission` builds, never to a proof,
+ * so the proof's seal is untouched.
  */
 const seal = <T>(tag: unknown): T => tag as T;
 
@@ -256,15 +261,19 @@ export const Permission =
     });
   };
 
+/** `never` for a proof widened past its right, such as `Proof<unknown>`: it names no key to provide. */
+type Named<P> = unknown extends P ? never : unknown;
+
 /**
  * Puts a proof into the context under its own right's key, so an Effect that needs that right no
- * longer does. A proof of another right leaves the requirement in place.
+ * longer does. A proof of another right leaves the requirement in place, and a proof widened to
+ * `Proof<unknown>` does not compile here, since it names no right.
  *
  * @stability unstable
  * @category combinators
  */
 export const provide =
-  <P>(proof: Proof<P>) =>
+  <P>(proof: Proof<P> & NoInfer<Named<P>>) =>
   <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, Exclude<R, P>> =>
     Effect.provideService(self, proofs.keyFor(proof), proof);
 

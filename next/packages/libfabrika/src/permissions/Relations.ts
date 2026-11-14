@@ -15,9 +15,12 @@ import type { Change, Tuples } from "./Relation.ts";
  *
  * **Details**
  *
- * `bad_row`: a row the brain wrote does not decode. `refused`: a change reused an id with another
- * row, so its whole batch was refused and nothing of it written. `storage`: the ledger failed. The
- * cause is kept.
+ * `bad_row`: a row the brain wrote does not decode. `refused`: the ledger refused a line of the
+ * batch, so nothing of it was written. On the ledger that is any refusal the referee gives:
+ * `id_reused` (an id already holds another row, or another writer's line), `seen_ahead`,
+ * `too_big`, `bad_trace`, `bad_parent` or `bad_line`. The turn's `LedgerError`, kept as the cause,
+ * says only `refused`, not which. The memory layer gives it for an id reused with another row.
+ * `storage`: the ledger failed. The cause is kept.
  *
  * @stability unstable
  * @category errors
