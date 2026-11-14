@@ -21,7 +21,7 @@
 //   program declares a draft. These option names are what these laws add to the plan's sketch.
 // - Draft frames spend `draftLimit` per key and never `rateLimit`.
 import { expect, it } from "@effect/vitest";
-import { Effect, Layer, Redacted, Result as R, Schema, type Scope, Semaphore } from "effect";
+import { Context, Effect, Layer, Redacted, Result as R, Schema, type Scope, Semaphore, Tracer } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { grantText, revokeText } from "../access/Text.ts";
 import type { Sql } from "../Sql.ts";
@@ -182,17 +182,20 @@ const world = Effect.fnUntraced(function* (
       Effect.sync(() => {
         delivered.push(envelope);
       }),
+    // The Project reaches the runner through `runtime.rpc`, a span (cloudflare/runtime.ts, `rpc`).
     draft: (process: string, m: unknown) =>
       Effect.sync(() => {
         steps.push({ process, m });
         return { ok: m };
-      }),
+      }).pipe(Effect.withSpan("runtime.rpc")),
     notify: () => Effect.void,
     inputs: { schema: Schema.Json, personOnly: [], raw: [] },
     events: { personOnly: [] },
   } as Parameters<typeof Gateway.layer<Schema.Json, never, never, never>>[0];
   const life = yield* Layer.build(store.gateway(options));
   const d = yield* Gateway.pipe(Effect.provide(life));
+  // The Project runs the door under its recording tracer, the span sink's, as `wrapped` does.
+  const recording = Context.get(life, Tracer.Tracer);
   const grant = Effect.fnUntraced(function* (k: Key, id: string) {
     const value = grantText({
       id,
@@ -256,7 +259,8 @@ const world = Effect.fnUntraced(function* (
     second,
     revoke,
     disconnect: (c: Client) => d.disconnect(c.client),
-    route: (c: Client, method: string, params: unknown) => d.route(c.client, method, params),
+    route: (c: Client, method: string, params: unknown) =>
+      d.route(c.client, method, params).pipe(Effect.withTracer(recording)),
   };
 });
 
@@ -292,6 +296,23 @@ const dump = (sql: Sql): string =>
       .exec("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
       .map((t) => [String(t.name), sql.exec(`SELECT * FROM "${String(t.name).replace(/"/g, '""')}"`)]),
   );
+
+const tables = (sql: Sql) =>
+  new Set(sql.exec("SELECT name FROM sqlite_master WHERE type='table'").map((t) => String(t.name)));
+
+/** How many span rows and measurements the span sink holds: one span, one of each. */
+const spanRows = (sql: Sql): number => {
+  const held = tables(sql);
+  return ["unsent", "measurements"]
+    .filter((t) => held.has(t))
+    .reduce((n, t) => n + Number(sql.exec(`SELECT COUNT(*) AS n FROM "${t}"`)[0]?.n ?? 0), 0);
+};
+
+/** How many rate refusals the span sink has counted, across every piece and hour. */
+const rateCounted = (sql: Sql): number =>
+  tables(sql).has("sums")
+    ? Number(sql.exec("SELECT COALESCE(SUM(count), 0) AS n FROM sums WHERE refused = 'rate_limited'")[0]?.n ?? 0)
+    : 0;
 
 const Case = Schema.Struct({
   kept: Schema.Boolean,
@@ -355,12 +376,15 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
     ({ texts }) =>
       Effect.gen(function* () {
         const w = yield* world(open, { main: 1000, draft: 1000 });
+        const before = spanRows(w.store.sql);
 
         for (const [n, t] of texts.entries()) {
           const text = `${MARK}${n}${t}`;
           const answer = yield* draft(w, w.first, { text, cursor: 0, n });
           expect(answer._tag, "the draft was echoed").toBe("ok");
         }
+
+        expect(spanRows(w.store.sql), "the span sink holds a row for a draft frame").toBe(before);
 
         expect(dump(w.store.sql).includes(MARK), "the door's database holds draft text").toBe(false);
       }).pipe(Effect.scoped),
@@ -372,6 +396,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
       const w = yield* world(open, { main: b.main, draft: b.draft });
       let drafts = 0;
       let presses = 0;
+      let refused = 0;
       const total = b.drafts + b.presses;
 
       for (let i = 0; i < total; i++) {
@@ -383,6 +408,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
           expect(reason(answer), `draft ${drafts} of a budget of ${b.draft}`).toBe(
             drafts <= b.draft ? "ok" : "rate_limited",
           );
+          refused += reason(answer) === "rate_limited" ? 1 : 0;
           continue;
         }
 
@@ -392,7 +418,11 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
           reason(answer) === "rate_limited",
           `press ${presses} of a budget of ${b.main}, after ${drafts} drafts`,
         ).toBe(presses > b.main);
+        refused += reason(answer) === "rate_limited" ? 1 : 0;
       }
+
+      // The plan's Records: every budget refusal, a draft's as a press's, is a count on a span.
+      expect(rateCounted(w.store.sql), "rate refusals the span sink counted").toBe(refused);
 
       // The other key's budgets are its own.
       expect(reason(yield* draft(w, w.second, { text: "h", cursor: 1, n: 0 }))).toBe("ok");
