@@ -29,6 +29,7 @@ import { noRawTryCatch } from "./no-raw-try-catch.ts";
 import { noRedactedValue } from "./no-redacted-value.ts";
 import { noSecretEnv } from "./no-secret-env.ts";
 import { noStageWord } from "./no-stage-word.ts";
+import { noStaticLayer } from "./no-static-layer.ts";
 import { noThrowInEffectGen } from "./no-throw-in-effect-gen.ts";
 import { noTypeAssertions } from "./no-type-assertions.ts";
 import { noWallClock } from "./no-wall-clock.ts";
@@ -75,6 +76,7 @@ const plugin: Plugin = {
     "no-redacted-value": noRedactedValue,
     "no-secret-env": noSecretEnv,
     "no-stage-word": noStageWord,
+    "no-static-layer": noStaticLayer,
     "no-throw-in-effect-gen": noThrowInEffectGen,
     "no-type-assertions": noTypeAssertions,
     "no-wall-clock": noWallClock,

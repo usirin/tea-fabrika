@@ -708,3 +708,74 @@ First replay, 2026-11-13, over `next/` with the repo's config: 50 lines in 38 pr
 services drawn from every service spelling and type form, run through oxlint's `RuleTester`, then
 one real oxlint run that proves the config's wiring. This count says nothing about the false alarms
 of forms nobody has written yet.
+
+## No static member on a service class, decision 0095
+
+`fabrika/no-static-layer` blocks in the `next/` folders where its count is zero. A service file
+holds only its contract, and each layer is a sibling file that exports `layer`
+([0095](../.decisions/0095-a-service-file-holds-only-its-contract.md), E5 in
+[`docs/direction/effect-code-guidelines.md`](../docs/direction/effect-code-guidelines.md)). The
+rule refuses every static member of a class that extends `Context.Service`, not only one that
+returns a Layer (owner, 2026-11-13): a syntax rule cannot read a member's type, and a guess from
+names would miss.
+
+```ts
+export class Retries extends Context.Service<Retries, Shape>()("@kampus/libfabrika/jobs/Retries") {
+  static readonly layer = Layer.succeed(Retries, shape); // fires: move it to RetriesMemory.ts
+}
+```
+
+It fires on a static field (with or without a value), method, getter, setter, accessor and
+`static {}` block, on a class declaration or a class expression. `Context` is resolved through the
+file's scope, as `service-id` resolves it: a named, renamed or namespace import of `Context`, the
+`effect` barrel as a namespace, and `Service` imported from `effect/Context`. An instance member, a
+`declare` field and a class that extends anything else (`Schema.TaggedError`, `Schema.Opaque`) or
+nothing pass. It misses a static added from outside (`Ledger.layer = ...`, which the type check
+refuses) and a `Context.Service` reached through a local alias or a helper.
+
+**Tools looked at** ([0040](../.decisions/0040-existing-tools-before-hand-written.md)):
+Effect's checker, `@effect/tsgo` 0.63.0, has no check on a service class's static members;
+oxlint 1.90.0 has no `no-restricted-syntax`; and oxlint's `typescript/no-extraneous-class` refuses
+a class with only static members, which a class that extends `Context.Service` never is. So the rule
+is ours.
+
+**First-day count.** Replayed over all of `next/` on 2026-11-14, at `c0aaf4a24`, with the list
+widened to `next/**` in a scratch copy of the config and tests left out: oxlint read all 470 `.ts`
+and `.tsx` files in `next/`, tests included, and the rule ran on the 195 that are not tests. **26 fires, all
+read by hand, all real**: every one is a static member of a class that extends `Context.Service`.
+The plan's hand count was 27; the 27th, `access/SessionManager.ts:63` `static sign`, sits on
+`SavedInput`, which extends `Schema.Opaque`, so it is not a service class and the rule is right to
+pass it.
+
+| Module | Fires | Where |
+|---|---|---|
+| top | 1 | `Id.ts:153` |
+| `access` | 1 | `SessionManager.ts:102` |
+| `gateway` | 1 | `Gateway.ts:1696` |
+| `presence` | 1 | `Connections.ts:40` |
+| `processes` | 3 | `Mailbox.ts:168`, `ProcessIdGenerator.ts:28`, `ProcessManager.ts:132` |
+| `runtime` | 7 | `Entry.ts:115`, `Entry.ts:210`, `ProcessStore.ts:136`, `RecoveryStore.ts:220`, `Runner.ts:335`, `Runner.ts:345`, `Execution.ts:270` (`static make`) |
+| `telemetry` | 6 | `Archive.ts:40`, `Archive.ts:53`, `Records.ts:420`, `Records.ts:424`, `Records.ts:429`, `Sink.ts:246` |
+| `cloudflare` | 6 | `platform.ts:67`, `:188`, `:237`, `:258`, `:274`, `:305` (`static make`) |
+
+All paths are under `next/packages/libfabrika/src/`. Nothing fired in `next/apps/`,
+`next/programs/` or the other libfabrika folders.
+
+**The folder list.** One block in `.oxlintrc.json`, its `files` the 13 folders at zero:
+`next/apps/`, `next/programs/`, and libfabrika's `ci`, `codehost`, `coordination`, `jobs`,
+`ledger`, `node`, `packs`, `repositories`, `schedules`, `settings` and `transport`. Its
+`excludeFiles` leaves out tests, shared suites and test support (`*.test.ts`, `*.test.tsx`,
+`*Test.ts`, `*.test-support.ts`): a test may build a stand-in service any way it likes. The top
+files of libfabrika's `src/` are not listed yet: they share a folder with `Id.ts`, which still
+fires.
+
+**How it closes.** One folder a slice, each in the pull request that moves that folder's layers
+(0168): `presence`, `access`, `gateway`, `Id.ts` with the top files, `processes`, `telemetry`,
+`runtime`. `cloudflare/` closes last, when the Alchemy port (ticket 502) deletes
+`cloudflare/platform.ts`, and that pull request makes the list `next/**`.
+
+The laws are in `no-static-layer.test.ts`: a property through oxlint's RuleTester over generated
+classes (a superclass kind, an import spelling, class declaration or expression, and a list of
+static and instance members; 100 runs, seed 119120), one real lint run over a planted file per
+listed folder and per left-out kind, and the saved list of the folders listed on the day the rule
+landed, which only grows.
