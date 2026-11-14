@@ -1,3 +1,9 @@
+---
+date: "2026-11-14"
+scripts: "none kept; a 20-line Agent SDK probe and CLI runs, the short output is in the write-up"
+summary: "Both versions; about $0.14 at list price on the subscription. Yes only from inside a cloud session: its agent's `create_session` tool started one new cloud session with no click (it answered \"ready\" about 7 s later). From plain code, no: the Agent SDK 0.3.325 runs the agent as a local child process and has no cloud option, `claude -p --cloud` is refused, and `claude --cloud` behind a fake terminal got past every prompt but was refused with a 403 using the box's login. Nearest thing for fabrika: one coordinator cloud session that code feeds with messages, and that starts the workers. Its reports back to a laptop session need the owner's one-time, in-person yes per cloud session"
+---
+
 # 286. Can a program, with no person typing, start a Claude cloud session?
 
 Run on 2026-11-14 (UTC) inside one Claude cloud session (Anthropic's own cloud, Linux, Claude Code

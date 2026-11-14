@@ -1,3 +1,9 @@
+---
+date: "2026-10-27"
+scripts: "`161-triage-security-line.ts`, `lib/triage-codex.ts` (159's calls, sorts and tables, moved out; 159 prints the same), `results/161-triage-security-line.json`"
+summary: "Yes. 159's harness and model with one \"still a yes\" clause in 92b's bar: \"a security gap is not hardening\". 114 sorts, two runs each. #2563 and #8010 went to plan in all 4 answers (159: closed in all 4). \"No\" to built phoenix work fell from 12 of 20 to 7 of 20 (opus 8), and the 29 hard no's closed 57 of 58 (159: 54, opus 32). A second line against false folds on demlik moved 133's controls from 6 of 26 to 4, but lost #717's right fold, and the fold rule's own example still pulls #575 in: leave it out. Median 7.5 s a sort; no tool ran; on the plan, $2.75 for 114 sorts at OpenAI's list price. Lean: move triage to GPT sol, with the security line beside any hardening clause. Confidence 75%; a random draw of 30 built tickets would settle it."
+---
+
 # 161. Does one line fix GPT sol's closed security tickets?
 
 The question: experiment 159 found GPT sol (through this repo's Codex adapter)

@@ -1,3 +1,9 @@
+---
+date: "2026-11-04"
+scripts: "none"
+summary: "Today's version; reading, not a measurement, plus designs drawn on a private Design canvas and walked with the owner. About 30 tools, papers and specs agree: presence is a name or an avatar where the work is, takeover is one key, \"only a person\" lives on the server, and an agent is a delegate with both ids kept (RFC 8693). Talking at a spot has the best evidence (Anchored Conversations, AnchoredAI, a CHI 2026 field study); `@` in a live shell and per-input authorship in a terminal have none. Today no input carries its sender. Decided: one kind of tile, the cause carried in the data, a spot's reply kept at the spot. Leaned (proposed): an avatar plus a presence label, `@claude` in tsh. Rejected: the agent's own tile, follow, the one-shot job as the person, pairing a Cmd with its Msg. Leaned against: a word-only or edge presence, and a ring. Cost not measured: one research subagent, its tokens not logged."
+---
+
 # How does a person work with an agent in their own tile, and talk to it where they work?
 
 Read 2026-11-04. **This is reading, not a measurement.** Nothing ran, and no agent was used on a

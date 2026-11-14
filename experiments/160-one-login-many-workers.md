@@ -1,3 +1,8 @@
+---
+date: "2026-10-27"
+summary: "Yes, on fakes. One login manager per person holds the refresh token; four real `codex app-server` jobs (codex-cli 0.165.0, experimental `chatgptAuthTokens` mode) get only access tokens, against 157's fake model and token server. The access token ran out under all four at once: one refresh a round, 12 of 12 jobs right over 3 rounds, no dead login, median 12 ms added (7 ms with asks 400 ms apart). The guards are a lock plus \"is my token older than the one held\". With both off, four refreshes at once on one refresh token killed the login every round and 0 of 12 finished, as in 157's copied-file case; 157's queue made the second job wait 14.4 s. A refresh 12 s late: app-server gave up after about 10 s, asked again, the second ask shared the first refresh, the job finished 12 s late. 0 refresh tokens in any job's stdio, requests or files over 37 jobs; no `auth.json` written. Fits the person's machine or one box with several jobs, not our locker (148's rule). OpenAI says app-server auth was never permitted for hosted services; not resolved. $0. Confidence 80% (real servers), 60% (allowed)."
+---
+
 # 160: One login, many Codex jobs at once
 
 **Answer: yes, on fakes.** Four Codex jobs of one person ran at the same time.

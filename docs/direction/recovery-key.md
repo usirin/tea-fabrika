@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-06, two email unknowns open"
+summary: "`next/`, Tier 1's P5. Retitled 2026-11-06 from \"A lost Mac comes back with a recovery key on paper\", once both ways were offered. The sheet: a recovery key kept as 12 numbered words, printed first or saved as a PDF, joins `founded.keys` through an `added` fact. On a new Mac it lets in one fresh device at once, once; one question, \"Is your old Mac lost or stolen?\" (default yes), drops the old Mac and everything it let in, and the old Mac is told at once. No wait, no passphrase, a new sheet kills the old one, \"Check my sheet\" offline any time, no GitHub. Email, for the Cloudflare setup: a 6-digit code sent free through Cloudflare, every live device told, and a 24-hour wait any of them can cancel. Every device the person owns is an equal person key; an agent never is, and a tab cannot approve (lean 70%). A dropped key drops its whole grant tree, for Remove too. A Mac whose keys did not come across goes to the recovery screen, never a new founding. Open: whether email works with no domain, and whether the code reaches the inbox. From experiments 216 and 217."
+---
+
 # Account recovery: a sheet of 12 words, and email for the cloud
 
 **Proposed 2026-11-05. Decided by the owner, 2026-11-06, except two unknowns on the email path.

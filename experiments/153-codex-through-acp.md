@@ -1,3 +1,9 @@
+---
+date: "2026-10-26"
+scripts: "`153-codex-through-acp.ts`, the `codex` row in `packages/fabrika/src/agents/acp/harness.ts` and its test, `results/153-codex-through-acp.json`"
+summary: "Yes, Codex fits behind ACP. The pinned codex-acp adapter, with its own Codex home, `HOME`, a config and a plan-login check, kept the owner's MCP servers, plugins, skills and global `AGENTS.md` out (a control shows the detector works). The format-bytes job 5 of 5 right, median 12.6 s (152 direct: 10.6 s). ACP lacks a typed answer field, a cancel that ends child commands, turn token totals and our own session id: the service must add them. Temp folders stay writable; a hidden title turn goes to another model."
+---
+
 # 153: Codex through ACP, one more row in the harness table
 
 **Answer: yes, Codex fits as a provider behind ACP.** The pinned

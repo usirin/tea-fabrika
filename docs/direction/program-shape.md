@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-08"
+summary: "`next/`. The rule: in a program's API one word means one thing and there is one way to do each job; parts link by reference or a tsc check, never by two matching strings; an unused part is left out. Picks shape 2: inputs, events and outputs as values, the Msg built from the inputs (Elm ports). `Fact` becomes `Event`; `personOnly: true` is the one way to say person-only; an input is plain data; each event brings its own write Cmd, listed in `cmds`, and tsc lets only a person-only input's Msg into a person-only event's write (a `Schema.brand`); the copied `_ok`/`_err` answers are a tea problem for now; the event knows its stream, so a write stays `answered.write(msg, event)`. Probed in experiment 235."
+---
+
 # A program's shape: one thing means one thing, and one way to do each job
 
 **Decided 2026-11-08** (owner, after a walk of each part). `next/` only. From

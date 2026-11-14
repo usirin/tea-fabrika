@@ -10,6 +10,7 @@
     "effect": "4.1.2"
   },
   "devDependencies": {
+    "oxc-parser": "catalog:",
     "yaml": "catalog:"
   },
   "volta": {

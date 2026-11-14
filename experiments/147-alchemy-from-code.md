@@ -1,3 +1,9 @@
+---
+date: "2026-10-25"
+scripts: "`147-alchemy-from-code/` (`run.ts`, `parts.ts`, `ledger.ts`, `host.ts`, `net-watch.ts`, `cli.run.ts`, experiment 144's `worker.ts`, its own `package.json`), `results/147-alchemy-from-code.json`"
+summary: "Fast, and no CLI needed. alchemy 2.0.0-beta.84's `deploy` called from one running Node program, with a 4-part Layer (context, artifacts, non-interactive prompts, local state). Experiment 146's `Fabrika.Host`, warm: same inputs 2 to 5 ms, update 3 to 6, create 57 to 88, destroy 29 to 34 (its CLI: 311, 309, 568, 323); the module load, 0.2 to 1 s, is paid once. The ledger server (experiment 144's Worker and Durable Object) on Cloudflare: same inputs 18 to 56 ms (CLI 797 to 855), create 2.0 to 2.9 s (CLI 3.4 to 3.6 s), destroy 427 to 453 ms (CLI 1.2 to 1.4 s). In workerd with every `CLOUDFLARE_*` variable removed it ran and kept rows, and Node's own connection record and `lsof` saw localhost only. Credentials come in through the stack's `secrets`; telemetry and the version check never load. A rename with `RemovalPolicy.retain()` kept the old object's row and gave the new name an empty one; retain also stops `destroy`, so retained Workers are found by listing and deleted by hand. Our code can read the plan before applying: a guard refused the rename in 8 to 11 ms. In workerd the same rename plans as `update`, not `replace`, and local storage survives `destroy`. workerd stops when `deploy` returns unless we pass a scope; the host outlives even the deploying process. Lean: from code for the ledger and a standing host, with retain. The guard was dropped the same day: the Worker's name is a key in the project's `fabrika.toml`. Under $0.01, no agent, no model. Confidence 80%."
+---
+
 # 147. Alchemy from code, not the CLI
 
 The question: experiment 146 timed Alchemy only through its CLI, at 0.3 to 0.6 s a step, and

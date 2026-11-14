@@ -1,3 +1,8 @@
+---
+where: "next/"
+when: "Writing or growing a long Effect body or a layer's `Effect.gen`"
+---
+
 # A long Effect body is a shelf of small named pieces
 
 ```mermaid

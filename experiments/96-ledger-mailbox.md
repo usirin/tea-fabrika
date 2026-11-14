@@ -1,3 +1,9 @@
+---
+date: "2026-10-20"
+scripts: "`96-ledger-mailbox.ts`, `96-ledger-mailbox/`, `results/96-ledger-mailbox.json`"
+summary: "Yes: 94's three ledger gaps closed in a copy of 93's ledger, and 94's counter test passed on every run (3 of 1,000, 1 of 10,000; owner SIGKILLed 2 or 3 times, one frozen past its lease, one woken alone): exact count, every id once, replay equals live, never two writing owners, all 10 late writes of frozen owners refused `fenced`. A lease on `p` guards `p/*` (etcd's prefix lease, Kleppmann's fencing token), so progress moved to `counter:1/state` and the registry holds only claims. `append` takes \"any\" (EventStoreDB's `ExpectedRevision.Any`) with a message id deduped per stream: sends never `stale` (94: 42%), 237 injected repeats all answered `dup`, none in the inbox. `readStream`, `readLast`, a prefix `read`, and a live tail over the Durable Object's hibernatable WebSockets (data-free wake-ups, a read per wake): a watching host reads 1.2 KB a run instead of about 310 KB; send p99 4.8 to 5.7 ms (94: 10 to 11); takeover unchanged (the ttl). 93's laws 1 to 10 still pass; new laws for append-any, repeated ids, the prefix fence, reads, wake-ups and a tail across 5 SIGKILLs of Miniflare (23,237 events, none skipped or repeated), on the DO and on node:sqlite. Found: a fenced write must check the fence before the id (Kafka's epoch before sequence), or a lost owner hears `dup` for a repeat of a landed save; the first run failed on it. Not enforced: unfenced writes under a leased prefix. Confidence 80%. $0."
+---
+
 # 96. The ledger as a mailbox
 
 The question: experiment 94 ran a tea-host counter on experiment 93's ledger

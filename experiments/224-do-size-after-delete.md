@@ -1,3 +1,9 @@
+---
+date: "2026-11-07"
+scripts: "`224-do-size-after-delete.ts`, `224-do-size-after-delete/` (`worker.ts`, `alchemy.run.ts`), `results/224-do-size-after-delete-local.json`, `results/224-do-size-after-delete-cloud.json`"
+summary: "About Cloudflare, for `next/`'s ledger; workerd 1.20261012.1 through Alchemy's `alchemy dev`, then Cloudflare through `alchemy deploy`, destroyed after. Yes for `databaseSize`, no for the file: workerd computes it as (page_count - freelist_count) x page_size, so on Cloudflare it went 51.39 MB, 25.74 MB after deleting the older half, 0.04 MB after the rest. The local file stayed at 51.33 MB and new rows reused its free pages. `VACUUM` fails (\"cannot VACUUM from within a transaction\"), every `auto_vacuum` and `incremental_vacuum` pragma fails with SQLITE_AUTH, on a new object too. Under workerd's test cap a delete made room (7,500 rows where 6,000 fit); past it, SQLITE_FULL rolled the request back and restarted the object. Moving closed ranges to R2 and deleting them works, 85%; the real 10 GB limit and what storage is billed on were not tested. No model; $0 billed, about $0.06 at list price past the included rows."
+---
+
 # 224. Does deleting rows shrink a Durable Object?
 
 Measured 2026-11-07. About Cloudflare itself, for `next/`'s ledger: no code from either version of

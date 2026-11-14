@@ -1,3 +1,8 @@
+---
+date: "2026-11-13"
+summary: "`next/`, spike S0 of ticket 502's plan, on `@alchemy.run/cloudflare` 2.0.0-beta.85 in the local runtime, no deploy, no model, $0. An Effect `fetch` and `ctx.props` run, on the build Alchemy bundles and on our built file with `bundle: false`. `Control` is a branch: 0 of 300 seeded requests from outside reached it on each build, and a Worker of its own gets a public address. Alchemy's bundler takes our two plugins when called directly, one file, the same bytes twice; but a Worker's `build` prop loses the plugins in silence on the local runtime, and two instances that bundle for themselves differ (the stage name is in the bytes, and watch mode bundles differently). One bundle made by our build and run with `bundle: false` worked. A follow-up ran the designed plug point: a Worker's `source` prop names a provider module of ours, which bundles with both plugins and one Durable Object, and gives the same bytes under two stage names. The real ledger gave the same answers and rows on `state.storage.transaction` as on today's turn over 1,200 seeded calls, with 6, 24 and 96 appends at once; a throw in `Effect.sync(step)` is a defect, so the driver needs `Effect.try`. A turn costs about 180 microseconds against 90, and a call through the bridge about 94 against 30. Three lines of the plan are wrong or need a change."
+---
+
 # 285. The Alchemy port's spike: an Effect `fetch`, `Control` as a branch, Alchemy's bundler, the Effect turn, and what a call costs
 
 Run 2026-11-13 on origin/main at `c0aaf4a24`. **All claims are about `next/`.** This is spike S0 of

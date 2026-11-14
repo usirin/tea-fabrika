@@ -1,3 +1,9 @@
+---
+date: "2026-11-11"
+scripts: "none; reading and measurement of our own logs, not an experiment run"
+summary: "Today's lead tooling, the night of 2026-11-10 21:00 to 11-11 10:00, plus reading (Google's presubmit and postsubmit, Chromium's commit queue, Prow, GitHub's merge queue, Zuul, Kubernetes controllers and GC, OTP timers, SQS, Sidekiq, Temporal). Two questions sort 39 pieces of work: does it judge this change or shared state, and does the next step need it? About 25 stay in the lane. The wrong home cost: a cleanup inside every step start 8.4 lane-hours (12 starts waited over 6 min on a hung `docker ps`); a merge line run by hand shells about 28 PR-hours before the CI apt outage (20 merges, 29 reds, 10 conflict aborts); a tool checkout 36 commits stale, 12 tooling fixes never run; 19 of 20 merges closed no ticket; nobody read main's red; the 20-minute lead check 6 lane-hours over 33 parks. Lean, about 75%: a thin lane, one merge queue, three scheduled jobs. Two guesses were wrong and are kept: the tool checkout on a scheduled job (it hangs on the merge) and about 12 min of PR checks being fine (0106: five). Decided as [0108](../.decisions/0108-a-job-lives-in-a-lane-a-queue-or-a-scheduled-job.md). One night of logs. No model, $0."
+---
+
 # 260. Which pieces of work in a change belong in every lane, which in a queue, and which on a timer?
 
 Read and counted on 2026-11-11, on main. This is reading and measurement of our own logs, not an

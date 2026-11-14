@@ -1,3 +1,8 @@
+---
+state: "decided"
+summary: "Code holds the loop. An agent does one bounded job inside it. Every agent stage becomes a machine."
+---
+
 # Control lives in code
 
 Decided 2026-10-11. The idea has been there since the start of the repo; this

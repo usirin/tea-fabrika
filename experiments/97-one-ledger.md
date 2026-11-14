@@ -1,3 +1,9 @@
+---
+date: "2026-10-20"
+scripts: "`97-one-ledger.ts`, `97-one-ledger/`, `results/97-one-ledger.json`"
+summary: "Yes. 95's and 96's copies of 93's ledger merged into one, and both tests pass on it on every run, faults and pass checks unchanged: 94's counter (3 of 1,000, 1 of 10,000) and 95's agents across hosts with stub agents (3 of 200, 1 of 2,000, answerer in Docker). One fence mechanism: a fence is a claim's `pos`, so it already names its lease, and 95's `fenceOn` is gone; a live lease's fence writes its name, every stream under it (96's prefix) and any inbox (95's reply), else `fenced`. The rule both left open is closed: once a name is claimed, an unfenced write under it is `denied` for ever, live lease or not, and only a stream ending in `/inbox` stays open to anyone (the actor's private state and open mailbox, kept as Kafka's prefixed ACL / EventStoreDB's `$w`; `denied` is EventStoreDB's AccessDenied). Claims inside, around or of a claimed name's inbox are `denied`. 93's and 96's laws all still hold; new laws 16 to 18 hold on the DO in Miniflare (in process and across 5 SIGKILLs) and on node:sqlite; 7 planted mistakes caught. Counter numbers are 96's (send p99 4.2 to 5.8 ms, 0 `stale`, all late writes `fenced`). Agents: no-fault round trip Mac to container p50 3 ms, p99 7 (95: 11 and 20 to 21), because hosts tail instead of polling, workerd half the memory; faulted runs 2 to 3% slower, the container's saves p50 4 ms against 2, not fully explained. The frozen owner is now refused by the fence, not the rev. A typed `Ledger` Effect service with every refusal a tagged error. Hole: before a name's first claim, unfenced writes under it land. Confidence 80%. $0."
+---
+
 # 97. One ledger
 
 The question: experiments 95 and 96 each grew their own copy of experiment

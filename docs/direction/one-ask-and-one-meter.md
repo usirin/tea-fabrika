@@ -1,3 +1,8 @@
+---
+state: "decided in pieces, see the note"
+summary: "Five places ask a person and seven count money today. One ask: the tracker's `asked` and `answered` facts, grown, with one hash (SHA-256 of canonical JSON) of what the person saw; the first answer wins and a late one is refused. One meter: the ledger's `hold` and `charge`, which Jev and the agents count into; a dollar limit is set only with the row of a person's yes to a spend estimate. Agents run on flat subscriptions, so their list-price dollars are for comparison only; each run records how it was paid, which key variables were set (never blocked) and how full its quota is."
+---
+
 # One way to ask a person, and one meter for money
 
 **Decided, in pieces:**

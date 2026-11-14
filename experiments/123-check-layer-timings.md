@@ -1,3 +1,9 @@
+---
+date: "2026-10-23"
+scripts: "`123-check-layer-timings.ts`, `results/123-check-layer-timings.json`"
+summary: "The fast layer is 3 to 6 s a ticket, so it can run every commit; a full Stryker run is 14 s to 3 minutes; a cheap repair round needs Stryker's vitest runner, and coverage cannot fill `covers`. On copies of 122's trees (#483, #367, #355), medians of 3: typecheck 2.1 to 2.5 s, `vitest related` 1.1 to 3.3 s, the agent's check 0.5 s. Stryker 9.6.1, command runner, 122's settings plus `--incremental`: full 188, 14, 15 s, same results as 122. Repair round: (a) nothing changed, all reused, 4 to 7 s; (b) one new test that kills a survivor, all reused and wrong (#367 showed 3 survivors, `--force` 1; #483 24, truth 23), the documented limit of mutants with no per-test coverage, upstream stryker-js#6119 open; (c) one equal line changed, only its 3 to 4 mutants ran, 7 to 16 s, and on #483 it made a new survivor (`>= 399`). Stryker 10.1.1's vitest runner (released that day, \"support vitest v5\", stryker-js#6210 closed) works on vitest 5.0.1: same survivors, 52 s instead of 188 on #483, and its incremental (b) saw the changed test file and reran 31 of 128, 6 of 23, 1 of 9, right each time. v8 coverage of the agent's check alone kept all 29 of 122's survivors and 120 of #483's 126 mutants, in the same time, so it cannot tell the lines a promise is about. Recommendation: fast layer every commit; one full run after the build with the vitest runner; incremental on repair only with per-test coverage, else `--force`; do not fill `covers` from coverage. $0, about 35 minutes. Confidence 75%."
+---
+
 # 123. How long does each check layer take on real tickets, and which repeat runs can be cheap?
 
 The question: Promises in the pipeline

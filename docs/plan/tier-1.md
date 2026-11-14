@@ -474,7 +474,7 @@ log           one row per agent run, with the sha of the commit it made, and a n
 P1, PR 402, the frame
   pnpm-workspace.yaml, vitest.config.ts   next/{packages,programs,apps}/* are packages; pnpm test runs their src/**/*.test.ts
   .github/workflows/check.yaml            a `next` job: vitest run next/, Chromium once an e2e file exists, then the runner
-  next/apps/fabrika/e2e.ts                the thin runner over next/apps/fabrika/e2e/*.test.ts, one file at a time; passes while there are none
+  next/apps/fabrika/e2e.ts                the thin runner over next/apps/fabrika/e2e/*.test.ts, one file at a time, split over CI legs by measured seconds (ticket 967); a leg with no file fails
   layer-rules.json                        11 next-* layers, so pnpm lint:layers fails an upward import (p32)
   boundary-rules.json                     4 library types for next/ and libraryRoots: ["next"]; each package's row comes in its first PR's test writer commit
   src/exam/layers.test.ts                 each part imports only what the detail's table allows (p32, p65)

@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-24; first build `apps/fabrika`; 2026-10-25: a terminal running tsh with a line editor; decided the same day: the window is tiled like tmux and Tuval, every new tile runs tsh, and a program with a GUI runs in its tile; later the same day: Tuval and tmux are the default, the host runs apart from the app as tmux's server does, and macOS's own window rules hold; later still: the app is the only desk for now, the host keeps only its socket file, and a browser desk waits for a device with no app (experiment 150)"
+summary: "The fabrika app is Electron from the start: its main process runs the host and every program, one sandboxed window draws the panes, and one MessagePort carries the typed messages between them. No local port, so no secret. One copy at a time. It opens on tsh; a program with a GUI takes over the window. Its window code is built into the app for now."
+---
+
 # The GUI is an Electron app first
 
 Decided 2026-10-24. Replaces The GUI is a local web page first

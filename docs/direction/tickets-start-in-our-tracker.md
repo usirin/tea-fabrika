@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-24 and 2026-10-26; how PR status arrives leans to a watcher on the ledger's alarm"
+summary: "The tracker is in the first version: tickets are ledger facts, filed through a small form, and only people on the ledger can write one. The first demlik ticket is filed there. An approval covers the text it saw. A ticket's window is its timeline, comments included, and an open ask shows as a box there. No ticket copy goes to GitHub, which stays the code host. The tracker works like Linear: GitHub is an integration through `CodeHost` on the person's own `gh` login, over a list of connected repositories."
+---
+
 # Tickets start in our tracker
 
 Decided 2026-10-24, for the pipeline's first version.

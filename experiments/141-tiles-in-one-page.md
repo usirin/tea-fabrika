@@ -1,3 +1,9 @@
+---
+date: "2026-10-25"
+scripts: "`141-tiles-in-one-page.ts`, `results/141-tiles-in-one-page.json`"
+summary: "16 is fine on one laptop. The tiled app on fresh homes, 1, 4, 8 and 16 tiles made with the desk's own keys, window 1200 by 760. Renderer working set 151, 163, 177 and 193 MB: about 2.8 MB a terminal; the main process stays near 200 MB. Idle frames 16.7 ms median, 18.7 max at every count. Every tile printing `seq --to 2000` at once: 16.7 ms median, 33 ms max at 8 and 16. Keydown to the tile's screen text 48 ms median at 1 to 16 tiles, flat. The first run found a real bug: the page read the screen back as text after every write, and one busy tile froze the whole page for 7.8 s (3.8 to 7.8 s at every count); the guess that the canvases would be the cost was wrong. Reading it back once a frame fixed it, and added about one frame to the typing measure (31 to 48 ms), which reads the text copy, not the canvas. No agent, no model, $0. Confidence 80% on 16, 60% on the typing number."
+---
+
 # 141. How many ghostty-web terminals does one page hold?
 
 The question: the fabrika app now draws every tile in one window, and each tile is a

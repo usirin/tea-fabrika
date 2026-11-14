@@ -1,3 +1,8 @@
+---
+date: "2026-10-04"
+summary: "The matcher was right 28 of 36 times, missed 8 repeats (safe: routed as new) and made 0 wrong matches. No decided point came back in two real rounds."
+---
+
 # 29. Review remembers what a person decided
 
 Experiment 28's reviewer raised filed and withdrawn findings again in new

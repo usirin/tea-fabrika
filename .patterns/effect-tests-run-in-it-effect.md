@@ -1,3 +1,8 @@
+---
+where: "next/ tests"
+when: "Writing a test whose body runs an Effect, or a law that depends on time"
+---
+
 # An Effect test runs in `it.effect`, on the test clock
 
 ```mermaid

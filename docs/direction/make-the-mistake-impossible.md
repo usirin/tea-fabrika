@@ -1,3 +1,8 @@
+---
+state: "decided"
+summary: "A rule that matters is held by a type, a refusal or a failing test. A warning, a doc or a prompt is not protection. A skipped check never looks clean."
+---
+
 # Make the mistake impossible
 
 Decided 2026-10-12. Parts of it were set earlier, on 2026-10-04 and 2026-10-05,

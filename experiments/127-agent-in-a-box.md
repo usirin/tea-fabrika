@@ -1,3 +1,8 @@
+---
+date: "2026-10-24"
+summary: "Yes, both boxes work, one catch each. One `boxed(box, {command, args, env, cwd})` starts any stdio program in a box; the Agent SDK's `spawnClaudeCodeProcess` plugs it in, with the builder's own options. Job: haiku edits `bytes.js` in a copy of `fixtures/format-bytes` and runs one command; probes by the agent's own tool calls. srt 0.0.81 (Seatbelt): the Mac keychain is out of reach, so Claude Code starts \"Not logged in\"; with a token, a settings folder of the job's own and `CLAUDE_CODE_TMPDIR`, 3 of 3 finished, and canary, `~/.ssh`, `example.com` and the planted hook all held. The SDK's own Bash sandbox does not nest inside srt (fails closed). Docker, hardened (`--cap-drop ALL`, `no-new-privileges`, read-only root, only the copy mounted): 3 of 3, files and hook held, `example.com` reached (no egress proxy). Baseline: Bash held; the Read tool read the canary and the hook wrote outside. First SDK message, median: 272 ms none, 447 ms srt, 410 ms Docker. One login question kept private. $0.41 in all, $0.02 to $0.03 a run. Confidence 75%."
+---
+
 # 127. The agent in a box: the whole Claude Code program, not only its Bash calls
 
 The question: today the builder boxes each Bash command with Claude Code's own sandbox. The

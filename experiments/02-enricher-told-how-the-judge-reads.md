@@ -1,3 +1,9 @@
+---
+date: "2026-10-04"
+scripts: "none"
+summary: "slugify went from 0 of 3 runs finishing to 5 of 5."
+---
+
 # 2. Tell the enricher how the judge reads
 
 `src/claude.ts`, `JUDGE_BRIEF`

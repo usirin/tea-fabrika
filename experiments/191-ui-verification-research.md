@@ -1,3 +1,9 @@
+---
+date: "2026-11-02"
+scripts: "none; reading only"
+summary: "Reading, not a measurement, and no decision. A UI verification pack checks the UI the way we check machines: most checks are pure laws over tokens, the tea model and the view's tree, and few look at pixels. Seven layers, cheapest first: token laws, machine laws, DOM and ARIA laws, layout laws at the five tile layouts, golden images, a measured model judge, a person. Only the first four can block, each once its false alarms are measured here; ReDeCheck's overlap and protrusion kinds had 0 false positives, its small-range kind 22%. No public false alarm rate exists for pixel diffs or vendor AI review; vision judges were \"not accurate\" on 29% of findings, and designers agree at alpha 0.37. A golden or ARIA snapshot is exam, so no builder updates one. Best ideas from other fields: plant UI breaks to measure the checks (chip design), check the few must-see marks per frame (car displays), accept many approved images and replay recorded traces (Skia Gold, Mesa). Eight small experiments next, seven at $0. No model, $0."
+---
+
 # 191: UI verification, research and prior work
 
 Read 2026-11-02, against `main` at `912fac43`. A study by reading only: nothing was built or run,

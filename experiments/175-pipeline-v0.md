@@ -1,3 +1,9 @@
+---
+date: "2026-10-31"
+scripts: "`programs/pipeline/`, `packages/pipeline/src/stages/pipeline/`, `apps/fabrika/lane-e2e.ts` (the run), `fixtures/pipeline-lane/` (a fake `codex`, a bare remote)"
+summary: "Yes on scripted agents, today's version. In the real built app, `pipeline --ticket 1` went through triage, plan, a person's yes, exam (a written skip), test writer, build, mutation, review, push, a second yes and a merge on a local host; `runs`, `map`, `ticket` and `trace` filled from the facts with no change to their folds. The agent's box and Stryker start under the app's host. Closing the runs window does not stop the lane; a second close does, and typing the line again goes on with no finished step run twice (the builder's cut-short run starts over). The builder cannot touch the test writer's files: `stuck:exam_touched`. Never run: a live agent, real Codex, real GitHub. `gpt-6-astra` has no list price, so tokens are kept and the price is unknown, though the ticket and runs windows still show `$0.00`. $0."
+---
+
 # 175. Can one line in an app tile take a ticket through every step?
 
 **Yes, on scripted agents.** In the real built app, one typed line took a tracker ticket through

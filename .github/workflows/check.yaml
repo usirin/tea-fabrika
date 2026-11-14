@@ -37,7 +37,15 @@ jobs:
   # and on a push to main; unknown paths run the rest. History that cannot be read runs everything.
   # Today's own checks (its tests, e2e, the promises gate and the build) start only when a file of
   # today's version changed, on every event: the `today`, `e2e` and `build` outputs (0175).
+  # A change only to experiments/ runs check alone, and one only to .agents/skills/ skips next:
+  # no next/ test reads either. experiments/177-themes/schemes/, which a test reads, runs as an
+  # unknown path does.
   # These small checks still run when pnpm setup and the heavy jobs skip.
+  # `filter` is the next job's path: the next/ tests that read source as text, lint it or bundle
+  # it, when only lint rule files changed or every next/ file is the same program with other
+  # comments; else all of next/. The parser's pass (`same`) proves the second case. It runs only when
+  # every changed line looks like a comment (`probe`), and its install and run may fail without
+  # failing changes: then the first pass's `next` and `filter` stand, which run all of next/.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -45,7 +53,8 @@ jobs:
       check: ${{ steps.diff.outputs.check }}
       typecheck: ${{ steps.diff.outputs.typecheck }}
       test: ${{ steps.diff.outputs.test }}
-      next: ${{ steps.diff.outputs.next }}
+      next: ${{ steps.same.outputs.next || steps.diff.outputs.next }}
+      filter: ${{ steps.same.outputs.filter || steps.diff.outputs.filter }}
       e2e: ${{ steps.diff.outputs.e2e }}
       field: ${{ steps.diff.outputs.field }}
       build: ${{ steps.diff.outputs.build }}
@@ -65,6 +74,31 @@ jobs:
         if: ${{ !cancelled() }}
       - run: node oxlint-plugins/gitignore.mjs
         if: ${{ !cancelled() }}
+      # The parser for the `--same` pass, with the field job's filtered install, about 15 s.
+      - uses: pnpm/action-setup@v6
+        if: steps.diff.outputs.probe == 'true'
+        continue-on-error: true
+        with:
+          run_install: false
+      - uses: actions/setup-node@v7
+        if: steps.diff.outputs.probe == 'true'
+        continue-on-error: true
+        with:
+          node-version: 26.13.0
+      - run: pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts
+        if: steps.diff.outputs.probe == 'true'
+        continue-on-error: true
+      # One line per candidate file, same program or why not, and the parser's version, in the log
+      # and the job summary.
+      - id: same
+        if: steps.diff.outputs.probe == 'true'
+        continue-on-error: true
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+        run: node .github/ci/changes.mjs --same
 
   # Start beside changes. No workspace setup for Markdown alone.
   # Filtered install uses the root lockfile and all workspace supply-chain rules.
@@ -167,7 +201,8 @@ jobs:
 
   # `pnpm typecheck` alone, beside check (0133): it starts at once, a red typecheck no longer hides
   # lint's answer, and a lane reads this one job's conclusion for its head the moment it ends
-  # (chain.ts's `typechecking` phase). It runs where check runs: changes gives it check's flag.
+  # (chain.ts's `typechecking` phase). It runs where check runs, less a change only to
+  # experiments/, which the root tsconfig leaves out.
   typecheck:
     needs: changes
     if: >-
@@ -379,12 +414,20 @@ jobs:
         if: ${{ !cancelled() }}
         run: node .github/ci/shard-times.ts "$RUNNER_TEMP/lanes.json" "$RUNNER_TEMP/rest.json" "$RUNNER_TEMP/forced.json" "$RUNNER_TEMP/tooling.json"
 
-  # next/, the new version (docs/plan/tier-1.md). Every test under next/ runs when affected:
-  # the exam's tests read files and the later ones start a brain, so `--changed` in the test job,
-  # which follows imports, would not pick them up. Then the thin runner over next/apps/fabrika/e2e/,
-  # which passes while that folder is empty. Chromium is fetched only once an e2e file exists, by
+  # next/, the new version (docs/plan/tier-1.md). Every test under next/ runs when affected, or only
+  # the reader tests when changes' `filter` names them (the plan for CI paths, slice 2). The exam's
+  # tests read files and the later ones start a brain, so `--changed` in the test job, which follows
+  # imports, would not pick them up. Then the thin runner over next/apps/fabrika/e2e/, which takes
+  # no filter, so the e2e legs run every end-to-end file, and which fails on a leg with no file.
+  # Chromium is fetched only once an e2e file exists, by
   # the app's own Playwright. Electron and launchd run on the laptop first; CI gets Electron once
   # xvfb and the keychain are tried.
+  # Seven machines. Legs `1` to `5` run vitest, each a fifth of the files by measured seconds
+  # (vitest.shards.ts). Legs `e2e-1` and `e2e-2` run no vitest step: each fetches chromium and runs
+  # the end-to-end runner on its half of the end-to-end files, split by the same measured seconds
+  # (vitest.e2e.config.ts). Every leg is a quoted string, so each `if` below compares a string with
+  # a string. workflow-lint.ts pins the legs, each `/N` and each `if`; vitest.shards.test.ts (E4)
+  # pins the count of e2e legs: the fewest whose longest leg fits in half the time limit.
   next:
     needs: changes
     if: >-
@@ -398,7 +441,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: ["e2e-1", "e2e-2", "1", "2", "3", "4", "5"]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -416,26 +459,43 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec vitest run next/ --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
+      # FILTER is the path: the reader tests, or all of next/ (the plan for CI paths, slice 2). A
+      # missing filter runs all of next/. On a pull request whose filter is all of next/, only the
+      # tests whose imports reach a changed file run: Vitest's own `--changed`, which runs everything
+      # when a file in vitest.config.ts's forceRerunTriggers changed (configs, the lockfile, fixtures,
+      # .github). When the filter names the reader tests, CHANGED is empty: they read files as text,
+      # so the import graph would drop them, and the filter alone decides. The merge queue and main
+      # run the whole suite, so a test the import graph misses still runs before main moves. FILTER
+      # and CHANGED stay unquoted so each reader path and each flag is its own argument.
+      - run: pnpm exec vitest run $FILTER $CHANGED --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
+        if: ${{ !startsWith(matrix.shard, 'e2e-') }}
         env:
-          SHARD: ${{ matrix.shard }}/6
-      - name: shard times
-        if: ${{ !cancelled() }}
-        run: node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"
+          SHARD: ${{ matrix.shard }}/5
+          FILTER: ${{ needs.changes.outputs.filter || 'next/' }}
+          CHANGED: ${{ github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}
       # `--with-deps` runs apt itself, with no limit. apt.sh refreshes the lists first, on a mirror
       # that answers, the same way as the test job's apt step.
       - name: chromium
-        if: matrix.shard == 1 && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''
+        if: startsWith(matrix.shard, 'e2e-') && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''
         run: |
           sudo sh .github/ci/apt.sh update
           pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium
-      - run: node next/apps/fabrika/e2e.ts
-        if: matrix.shard == 1
+      # Leg `e2e-k` runs shard `k/2` of the end-to-end files: `${SHARD#e2e-}` drops the leg's prefix.
+      # The same narrowing on a pull request as the vitest step above.
+      - run: node next/apps/fabrika/e2e.ts $CHANGED --shard "${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
+        if: startsWith(matrix.shard, 'e2e-')
+        env:
+          SHARD: ${{ matrix.shard }}/2
+          CHANGED: ${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}
+      # After both test steps, so a vitest leg and an e2e leg each feed it their own next.json.
+      - name: shard times
+        if: ${{ !cancelled() }}
+        run: node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"
       # Tier 1, P35: each edge comment this pull request adds, one line with its reason, for the owner
       # (docs/direction/no-promises.md). In the step summary and as a note on that line of the diff.
       # It never blocks on an edge: it exits 0, or 2 only when it could not read a file.
       - name: edges
-        if: matrix.shard == 1 && github.event_name == 'pull_request'
+        if: matrix.shard == '1' && github.event_name == 'pull_request'
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: node next/apps/fabrika/src/exam/edges.ts --base "$BASE"

@@ -1,3 +1,8 @@
+---
+date: "2026-11-02"
+summary: "Reading plus a probe on main and PR 223. The makers agree: the Compiler skips rule breaks silently, the lint rules are the gate, the build stays at `panicThreshold: \"none\"`, `\"use no memo\"` is temporary and says why, and new code leaves memoizing to the Compiler. On main it compiles 103 of 105 functions and skips 2 in `pop.tsx`, each with a right lint finding inside; 176's \"5 failed\" are these 2. oxlint's `refs` and `immutability` were right 1 of 1, `purity` 8 of 8 on main but wrong once on PR 223's `main.tsx:146`, a clock read only a click calls; the Compiler's own purity check refused the 8 and passed that one. The desk's store read compiles, caches forever and draws no finding from 24 rules, so it needs a rule of ours. `memo(function X)` becomes an arrow under `pnpm format`'s `prefer-arrow-callback`, then fails `display-name`; `memo(TileView)` passes both. Babel with the Compiler took about 0.9 s on 11 files, esbuild's transform 18 ms. Feeds the proposed React Compiler note, six principles at 70% to 85%. No model, $0."
+---
+
 # React Compiler from day one: how do the makers keep an app compilable, and what does today's window break?
 
 Read and run 2026-11-02. **This is reading plus one small probe, `194-react-compiler.ts`, kept.**

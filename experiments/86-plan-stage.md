@@ -1,3 +1,9 @@
+---
+date: "2026-10-18"
+scripts: "`86-plan-stage.ts`, `86-plans/`, `results/86-plans.json`, `results/86-judge.json`, `wip/src/stages/plan/`"
+summary: "Yes for outcomes, not a sledgehammer at the criteria level, and it lost two things. A new `plan` program (Gather the ticket and code facts, one Draft, a pure Check that sends problems back into the same conversation) planned 6 closed demlik tickets read-only at each PR's base commit. A blind Sonnet judge called 93% of our 43 criteria outcomes against 49% of today's 39. Every plan was one task; criteria words 1,294 against today's 1,579; the whole plan, with summary, pointers and questions, about 3 times today's criteria text (300 words for a 7-line comment fix). Every plan passed the Check within 3 drafts. Lost: the names a user types (21 of 34 send-backs were \"names code\", mostly CLI flags, config keys and glob patterns) and the realistic end-to-end fixture the PRs for #504 and #565 built. 7 questions, 5 real; 504's two were calls today's triage made quietly, and 5 of 6 plans would wait on the owner. On 579, 3 of 5 criteria asked for more than the PR did. $0.13 to $0.95 and 28 to 105 s a plan; $4.39 in all. Confidence 70%."
+---
+
 # 86. A plan stage for every ticket
 
 The pipeline under test is report, triage (sort only), **plan**, build, review,

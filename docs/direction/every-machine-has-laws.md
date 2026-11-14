@@ -1,3 +1,8 @@
+---
+state: "decided; a bug between machines needs more, see Five steps (2026-10-22)"
+summary: "A checker walks every message order through each real reducer and checks its laws; a machine with no laws, or a message never sent, fails the suite."
+---
+
 # Every machine has laws
 
 Decided 2026-10-18.

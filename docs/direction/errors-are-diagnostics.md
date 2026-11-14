@@ -1,3 +1,8 @@
+---
+state: "proposed 2026-10-29; walked at Tier 2"
+summary: "Every error is a `Schema.TaggedError` that describes itself as one `Diagnostic`: a code, labels on the line, notes, helps and fixes. A swappable drawing service shows it in the terminal, a window, or as JSON for an agent. Every code has an explain page and a snapshot test."
+---
+
 # Errors are diagnostics, drawn the way rustc draws them
 
 Proposed 2026-10-29. Walked when Tier 2 starts (owner, 2026-11-08): fabsh's typed-pipe and command errors.

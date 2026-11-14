@@ -1,3 +1,9 @@
+---
+date: "2026-11-06, 2026-11-07"
+scripts: "none"
+summary: "`next/`, with today's palette as the example; reading, not a measurement. About 20 makers (Telescope, Raycast, VS Code, fzf, Vertico, Consult, Embark, Linear, Superhuman, Alfred, Core Spotlight, cmdk, Zag, APG, WCAG, NN/g, Ableton, the G1000, Toast) build a picker from the same five parts: a source, a ranker, rows with an id, actions, a preview. They narrow many sources in one box by a key, run Enter as the first action with a key for the rest, and each had to add a setting so rows do not move under the cursor. Today's palette follows the APG combobox but has one source, no ranking, an index selection reset on every key, and a count no screen reader hears (`pop.tsx:159`). Four designs named for the build pass; round 1 built them in today's app and shot 74 states. A won, with D's Ask row and C's pick in a tile; B lost (\"split\" at the top found nothing), and the walk joined them into one `pick`, pressed as a prototype and approved 2026-11-07. Three reading subagents, no model calls of our own, $0 for the reading; the build pass's cost was not counted."
+---
+
 # What is Cmd-K made of, if it is a picker and not a search box?
 
 Read 2026-11-06; built, shot and walked 2026-11-06 and 2026-11-07. **This is reading, not a

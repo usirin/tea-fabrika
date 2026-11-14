@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-02"
+summary: "`next/`. Anything that replaces a tea machine is banned: no Effect `Workflow` for agent turns or anything else, no replay engine, no actor runtime that holds a machine's state. Effect stays as the engine under tea's Cmds, as services, and as ideas copied from cluster (dedup by request id). Cluster may come back later, with a written reason. From experiment 174."
+---
+
 # tea is the engine
 
 `next/`. Decided by the owner on 2026-11-02. From [experiment 174](../../experiments/174-effect-on-cloudflare.md).

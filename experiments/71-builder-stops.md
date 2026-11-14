@@ -1,3 +1,9 @@
+---
+date: "2026-10-17"
+scripts: "`src/stages/build/guard.ts`, `src/stages/build/guarded.ts`, `src/stages/build/builder.ts`, `fixtures/builder-stop/`"
+summary: "Yes. The SDK starts a guard instead of `claude`: it takes a `flock` on `<copy>.lock` and `exec`s `claude`, so the kernel drops the lock when the builder dies (no PID, nothing to go stale). tsh holds a socket on the guard's fd 3; when tsh ends, `kill -9` too, the guard stops the whole tree under `claude`, groups included (each Bash command runs in a session of its own). A round keeps a session id: a builder started again `resume`s it. Live on sandbox ticket 7, three `kill -9`s of tsh, two mid command: everything gone in about 1s, never two builders in 1,014 one-second reads; the attached run resumed the same conversation, said what it had done, and opened pull 9. The resume saved the $0.42 and 80s of reading the first life did. sqlite's lock wedged after a kill and was dropped. Finding for tsh: a job started with `close %1 ticket` cannot be told its ticket after a reattach. `@demlik/tea` unchanged."
+---
+
 # 71. The builder stops with its run, one builder per working copy, and a restarted builder carries on
 
 ```sh

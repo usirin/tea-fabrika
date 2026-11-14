@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-05; fetch signing changed 2026-11-08; hand-run signing dropped 2026-11-13"
+summary: "Both versions, `next/` first. An exam change is its own commit by an agent that is not the builder, inside the same pull request. Each step's agent signs its commits with its own key, into a git note on `refs/notes/fabrika` so GitHub shows no \"Unverified\", and CI decides from that signature: no valid signature from a known step key is `stuck: unsigned_commit`, a `build` commit on an exam path `stuck: build_touched_exam`; a trailer is for people only. Each step still records its commit as a `committed` entry (in Tier 1, its `field/` row). Any exam path touched gets the lead's check, and only real loosening asks the owner ([0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md); it said: asks the owner to read it). Replaces the CI half of nobody writes their own exam. *Changed 2026-11-07: a step signs the link (step, ticket, version, tree before, tree after), not the commit ([experiment 221](../../experiments/221-signed-steps-and-rebases.md)).* *Changed 2026-11-08 (owner): today's tooling signs missing links at fetch in MAIN after checking run bounds and owners; agents still commit, and keys stay out of boxes. A catch-up conflict on exam paths goes through a tests run and is signed tests; other catch-up merges stay lead links (lead).* *Changed 2026-11-13 (owner, [0161](../../.decisions/0161-no-step-signing-by-hand.md)): today's hand-run tooling stops signing; this stays the design for `next/`'s own pipeline.*"
+---
+
 # A unit of work is a commit
 
 **Decided by the owner, 2026-11-05.** Both versions, built for `next/` first. It answers Tier 1's

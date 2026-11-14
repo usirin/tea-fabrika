@@ -1,3 +1,9 @@
+---
+date: "2026-10-21"
+scripts: "`112-reviewer-noise.ts`, `112-reviewer-noise/`, `results/112-reviewer-noise.json`, `results/112-pilot.json`"
+summary: "Mostly the model. No lane, no builder: 6 heads 105b left, each with its book as the lane had it, judged 5 times as a task review and 5 as a last review through the lane's own review machine, by haiku and by sonnet (rule written first). On the 5 pairs both models ran in full, haiku flipped 22.7% of cells (pass/fail 17.2%), sonnet 9.4% (5.5%); sonnet steady 10 of 10 groups, $0.049 a review (4.6 times haiku), 3 times faster: the rule picks sonnet. The c6 case was haiku noise (here its task review failed c6, its last review passed it; sonnet passed it 10 of 10). Findings were rare (haiku 0.16 a review, sonnet 0 in 56) and never failed a review alone; a hand sample of 20: 8 defects, 7 docs, 3 scope, 2 other. Findings that wait for a yes would have held 31 criteria in 105b and passed 7 of 59 reviews, but changed no pass's end. Second source: criteria that need the code run (c5's workspace build, a CLI-on-Node criterion): sonnet calls them unseen, haiku fails them, every time. Hole: steadier is not righter; haiku's extra fails were often real defects outside the criterion's words. $3.75 with the pilot. Confidence 75%."
+---
+
 # 112. How noisy is the reviewer, on its own?
 
 The question: in 105b the plan lane did not settle. The same code, judged

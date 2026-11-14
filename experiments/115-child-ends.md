@@ -1,3 +1,8 @@
+---
+date: "2026-10-22"
+summary: "Yes. The real lane reducer, with a model of the host (a child may end with no outcome row; its EXIT to the lane is fair) and of the lane's child Sub as `hosted/lane.ts` wires it, on experiment 91's world search unchanged. \"Every child ends with a `kid_over`\" and \"every lane ends\" both break with a 5-step lasso: start, read, first child started, it ends with no row, its EXIT reaches the lane, then the Sub reads \"no row yet\" for good. 792 states, 2,523 steps, 25 ms (995, 31 ms with refusals). A sketched Sub that also ends on the EXIT, as `stuck:no_outcome`, keeps both (832, 26 ms), and so does today's Sub when every child writes its row first (712, 22 ms): the law breaks exactly on the gap. Every wiring still reaches a merge in 19 steps. The failing run is in the script only; `hosted/lane.ts` is not changed. Confidence 85% it is found, 75% on the fix's shape. $0."
+---
+
 # 115. Does a model checker find the hosted lane's hang?
 
 The question: the hosted lane waits forever when a child ends without writing

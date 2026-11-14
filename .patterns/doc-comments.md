@@ -1,3 +1,8 @@
+---
+where: "next/packages"
+when: "Adding or changing a public export of a library, or its module file"
+---
+
 # A public export carries an Effect-shaped doc comment
 
 ```mermaid
