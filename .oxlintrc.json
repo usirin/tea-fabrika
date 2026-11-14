@@ -718,6 +718,7 @@
         "fabrika/no-effect-run-outside-edge": "error",
         "fabrika/edge-comment": "error",
         "fabrika/effect-functions": "error",
+        "fabrika/written-service-type": "error",
         "fabrika/no-cause-squash": "error",
         "fabrika/no-of": "error",
         // A question word is never a name (0081). oxlint's own rule holds every name written as an

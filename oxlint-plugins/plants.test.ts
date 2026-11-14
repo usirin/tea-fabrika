@@ -396,6 +396,8 @@ describe("each rule refuses what it is there to refuse", () => {
       // lint config in written-service-type.test.ts and no-static-layer.test.ts.
       "written-service-type",
       "no-static-layer",
+      // Generated no-cause-squash.test.ts plants run at next/ and .agents/ paths with the real lint config.
+      "no-cause-squash",
       // P16's rule reads the program package, so generated packages plant it in its own test file.
       "program-package-layout",
       // Generated no-question-word-key.test.ts plants run at next/ and .agents/ paths with the real
