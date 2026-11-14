@@ -23,6 +23,10 @@ vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
 
 const NAME = "counter:1";
 const BUILD = "build-a";
+// The counter as the build leaves it: named `pack/program`, its hash the SHA-256 of its source.
+const PROGRAM = "test/counter";
+const SOURCE = "";
+const CODE = { hash: createHash("sha256").update(SOURCE).digest("hex"), source: SOURCE };
 const Model = Schema.Struct({ count: Schema.Int });
 const Msg = Schema.Struct({ type: Schema.Literal("add"), n: Schema.Int });
 const StampedMsg = Schema.Struct({ ...Msg.fields, parent: InputId, body: Schema.String });
@@ -197,8 +201,8 @@ const projectWalk = Effect.fnUntraced(function* (
         ctx,
         { ...env, INSTANCE: JSON.stringify(instance) },
         {
-          programs: { counter: { hash: BUILD, source: "" } },
-          bootstrap: [{ name: NAME, id: "project-start", program: "counter" }],
+          programs: { [PROGRAM]: CODE },
+          bootstrap: [{ name: NAME, id: "project-start", program: PROGRAM }],
           door: harness.door(url, ProjectInput),
         },
       ),
@@ -235,7 +239,7 @@ const projectWalk = Effect.fnUntraced(function* (
   const records = new Map<string, ReadonlyArray<Entry>>();
 
   if (usage) {
-    expect(loads.has(`${BUILD}/${project.boot.process}`)).toBe(false);
+    expect(loads.has(`${CODE.hash}/${project.boot.process}`)).toBe(false);
   }
 
   for (const [n, entropy] of tape.entries()) {
@@ -261,7 +265,7 @@ const projectWalk = Effect.fnUntraced(function* (
     });
 
     if (usage) {
-      const key = `${BUILD}/${project.boot.process}`;
+      const key = `${CODE.hash}/${project.boot.process}`;
       const loaded = Schema.decodeUnknownSync(Schema.Struct({ tails: Schema.Array(Schema.Unknown) }))(loads.get(key));
       expect(loaded.tails).toHaveLength(1);
       const props = Schema.decodeUnknownSync(Props)(bound.get(loaded.tails[0]));

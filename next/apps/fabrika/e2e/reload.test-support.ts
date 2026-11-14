@@ -12,6 +12,7 @@ import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/process";
 import { localInstance } from "../src/local-instance.ts";
 import { heldPort } from "../src/port.test-support.ts";
+import * as RecordWireTest from "../src/record-wire.test-support.ts";
 
 export const APP = new URL("..", import.meta.url).pathname.replace(/\/$/, "");
 export const ROOT = new URL("../../../..", import.meta.url).pathname.replace(/\/$/, "");
@@ -84,15 +85,17 @@ export const instance = (copy: Effect.Success<typeof fixture>) =>
     // The pair stays held until the instance that used its port is gone.
     const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
     const built = yield* fixtureBuild(copy, `${home}/build`);
-    const handle = yield* localInstance(built, {
-      name: "p15-reload",
-      person: PERSON,
-      founder: founder.line,
-      window: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-      port: port.port,
-      rateLimit: { limit: 100_000, window: 60_000 },
-      home,
-    });
+    const handle = yield* localInstance(
+      built,
+      RecordWireTest.startupFixture({
+        home,
+        name: "p15-reload",
+        person: PERSON,
+        founder: founder.line,
+        window: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        port: port.port,
+      }),
+    );
     const answers = yield* Queue.unbounded<unknown>();
     // The watcher's paths are relative to the copy's folder, so no fact or line names this machine.
     yield* Effect.forkScoped(
