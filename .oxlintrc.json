@@ -1526,6 +1526,28 @@
         ],
         "eslint/no-restricted-globals": ["error", "setTimeout", "setInterval"]
       }
+    },
+    {
+      // E6 (0023, 0120): every public export of a next/ library has an Effect-shaped doc block, and
+      // its file a module block (`oxlint-plugins/jsdocs.ts`). On for the folders at zero; each fill
+      // adds its folder here when it lands, and the list ends as `next/packages/*/src/**` (Plan B,
+      // B2). `since` stays `absent` until libfabrika's first release (0118).
+      "files": ["next/packages/libfabrika/src/ci/**", "next/packages/libfabrika/src/codehost/**"],
+      "rules": { "fabrika/jsdocs": ["error", { "since": "absent" }] }
+    },
+    {
+      // Not public, so no doc block is asked: `internal/` (the modules rule asks `@internal` there),
+      // tests, test support, shared suites (`*Test.ts`), fixtures and declaration files.
+      "files": [
+        "next/**/internal/**",
+        "next/**/*.test.ts",
+        "next/**/*.test.tsx",
+        "next/**/*.test-support.ts",
+        "next/**/*Test.ts",
+        "next/**/fixtures/**",
+        "next/**/*.d.ts"
+      ],
+      "rules": { "fabrika/jsdocs": "off" }
     }
   ]
 }
