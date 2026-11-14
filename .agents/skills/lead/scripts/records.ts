@@ -29,7 +29,7 @@
 // Exit 0 with an answer. Exit 1 when origin/main cannot be fetched or read: it prints that the list
 // is unknown, never "0 records" and never a next number. Exit 2 when the command line is wrong.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Exit, Option, Schema, Stream } from "effect";
+import { Console, Effect, Exit, Option, Predicate, Schema, Stream } from "effect";
 import { Argument, Command } from "effect/cli";
 import { ChildProcess } from "effect/process";
 
@@ -338,7 +338,7 @@ if (import.meta.main) {
     ),
     {
       disableErrorReporting: true,
-      teardown: (exit, onExit) => onExit(Exit.isSuccess(exit) ? exit.value : 2),
+      teardown: (exit, onExit) => onExit(Exit.isSuccess(exit) && Predicate.isNumber(exit.value) ? exit.value : 2),
     },
   );
 }
