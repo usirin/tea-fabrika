@@ -68,6 +68,7 @@ type Props = WindowProps<typeof fabsh> & TileProps<typeof tile>;
 const FabshWindow = ({ data: view, tile: own, send }: Props) => {
   const status = useId();
   const field = useRef<HTMLInputElement>(null);
+  const layer = useRef<HTMLSpanElement>(null);
   const line = drawn(own);
   const spans = read(line.text, { builtins, programs: view.programs }).spans;
   const reasons = spans.filter((s) => s.role === "unknown").map((s) => said(s, line.text));
@@ -80,6 +81,19 @@ const FabshWindow = ({ data: view, tile: own, send }: Props) => {
       el.setSelectionRange(line.cursor, line.cursor);
     }
   }, [line.cursor, line.text]);
+
+  // The input scrolls its own clear text to keep the caret in view; the layer is moved by the same
+  // amount, so a line wider than the field draws the letters the input shows, as a highlighter over
+  // a native field does. Layout, never state: nothing reads it back.
+  const follow = () => {
+    const el = field.current;
+    const text = layer.current;
+
+    if (el !== null && text !== null) {
+      text.style.transform = el.scrollLeft === 0 ? "" : `translateX(${-el.scrollLeft}px)`;
+    }
+  };
+  useLayoutEffect(follow);
 
   const edited = (el: HTMLInputElement) =>
     send({ type: "edited", text: el.value, cursor: el.selectionStart ?? el.value.length });
@@ -125,8 +139,10 @@ const FabshWindow = ({ data: view, tile: own, send }: Props) => {
         }}
       >
         <div className="fabsh-line">
-          <div className="fabsh-spans" aria-hidden="true">
-            {layered(line.text, spans)}
+          <div className="fabsh-spans">
+            <span className="fabsh-text" aria-hidden="true" ref={layer}>
+              {layered(line.text, spans)}
+            </span>
           </div>
           <Input
             ref={field}
@@ -140,6 +156,7 @@ const FabshWindow = ({ data: view, tile: own, send }: Props) => {
             value={line.text}
             onChange={(event) => edited(event.target)}
             onSelect={(event) => moved(event.currentTarget)}
+            onScroll={follow}
             onBlur={() => send({ type: "blurred" })}
             onKeyDown={(event) => {
               if (event.key === "Tab" && !event.shiftKey) {

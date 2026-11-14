@@ -197,7 +197,8 @@ input {
 .fabsh-line {
   position: relative;
 }
-/* The spans sit behind the input's clear text, on the same metrics: Manti's md control. */
+/* The spans sit behind the input's clear text, on its metrics: the font both inherit, and the
+   inset of Manti's md control, whose input keeps no padding of its own. */
 .fabsh-spans {
   position: absolute;
   inset: 0;
@@ -205,11 +206,15 @@ input {
   align-items: center;
   padding-inline: calc(var(--s-3) + 1px);
   overflow: hidden;
-  font-size: var(--manti-text-sm);
   white-space: pre;
   pointer-events: none;
 }
+/* One inline run inside the flex row, so the spaces between spans are drawn as the input draws them. */
+.fabsh-text {
+  flex: none;
+}
 .fabsh-line input {
+  padding-inline: 0;
   color: transparent;
   caret-color: var(--text-primary);
   font-family: var(--mono);
