@@ -140,8 +140,26 @@ const world = (
     ),
   );
 
-const live = async (instance: Instance, name: string): Promise<string | undefined> =>
-  ((await instance.project(PROJECT).info()) as Array<any>).find((row) => row.name === name)?.process;
+/** A value the law needs that can really be missing: a failing expectation when it is, never a cast. */
+const defined = <A>(value: A | undefined, label: string): A => {
+  expect(value, label).toBeDefined();
+
+  if (value === undefined) {
+    throw new Error(label);
+  }
+
+  return value;
+};
+
+/** The instance's private project capability, which a local instance has. */
+const project = (instance: Instance) =>
+  defined(instance.project, "the local instance has its project capability").call(instance, PROJECT);
+
+const live = async (instance: Instance, name: string): Promise<string | undefined> => {
+  const held = project(instance);
+  const rows = (await defined(held.info, "the project capability reads its process table").call(held)) as Array<any>;
+  return rows.find((row) => row.name === name)?.process;
+};
 
 /** A stand-in for `fabrika/fabsh` that asks for one start from its first timer, a step with no
  *  member's letter behind it, and keeps every answer it was told. */
@@ -164,14 +182,23 @@ describe("fabsh slice 2a on a real instance with no start grants", () => {
   it("scenario: L21: fabsh holds no start permission: with no member's letter behind it, its start is forbidden", async () => {
     await world(
       async ({ instance }) => {
-        const pid = await until(
+        const pid = defined(
+          await until(
+            "fabsh:1 is live",
+            () => live(instance as Instance, "fabsh:1"),
+            (p) => p !== undefined,
+          ),
           "fabsh:1 is live",
-          () => live(instance as Instance, "fabsh:1"),
-          (p) => p !== undefined,
         );
         const opened = await until(
           "the stand-in was told its start's answer",
-          () => (instance as Instance).process(pid).open("audit") as Promise<any>,
+          () => {
+            const held = defined((instance as Instance).process, "the local instance has its process capability").call(
+              instance,
+              pid,
+            );
+            return defined(held.open, "the process capability opens its view").call(held, "audit") as Promise<any>;
+          },
           (o) => (o?.view?.told?.length ?? 0) > 0,
         );
         expect(opened.view.told, "L21: no grant lets a fabsh process start a program on its own").toEqual([
@@ -188,10 +215,13 @@ describe("fabsh slice 2a on a real instance with no start grants", () => {
   // `next/programs/fabsh/src/start.laws.test.ts`.
   it("scenario: L28: with starts empty, the founder's lines start any program, and each shows started in the scrollback", async () => {
     await world(async ({ instance }, client) => {
-      const fabsh = await until(
+      const fabsh = defined(
+        await until(
+          "fabsh:1 is live",
+          () => live(instance as Instance, "fabsh:1"),
+          (p) => p !== undefined,
+        ),
         "fabsh:1 is live",
-        () => live(instance as Instance, "fabsh:1"),
-        (p) => p !== undefined,
       );
       const founder = await client();
       const view = async () => (await founder.call("view.open", { pid: fabsh })).result?.view;
