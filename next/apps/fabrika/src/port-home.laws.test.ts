@@ -26,8 +26,13 @@
 import { generateKeyPairSync } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
 import { resolve } from "node:path";
+// edge: Effect SQL has no read-only open of another process's SQLite file, which the T833 law reads
+import { DatabaseSync } from "node:sqlite";
+// edge: workerd writes a Durable Object's key-value rows with V8's serializer, and only node:v8 reads it
+import { deserialize } from "node:v8";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
+import { Activity } from "@kampus/libfabrika/processes/Process";
 import { Effect, FileSystem, Layer, Path, Predicate, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";
@@ -65,11 +70,15 @@ const call = <S extends Schema.Top>(method: string, answer: S, run: () => Promis
   );
 
 /** Starts this build on `home`, asks it `use` with the build's out folder as given and as its real
- *  path, and stops it by closing the scope. */
+ *  path and with the build itself, and stops it by closing the scope. */
 const open = Effect.fnUntraced(function* <A, E, R>(
   home: string,
   founding: typeof Founding.Type,
-  use: (instance: any, dists: ReadonlyArray<string>) => Effect.Effect<A, E, R>,
+  use: (
+    instance: any,
+    dists: ReadonlyArray<string>,
+    built: Effect.Success<ReturnType<typeof build>>,
+  ) => Effect.Effect<A, E, R>,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -89,7 +98,7 @@ const open = Effect.fnUntraced(function* <A, E, R>(
     }),
   );
   const instance = yield* localInstance(built, startupFixture({ home, name: NAME, ...founding, port: at.port }));
-  return yield* use(instance, dists);
+  return yield* use(instance, dists, built);
 }, Effect.scoped);
 
 /** What the law compares: who runs under which process id, and each program's saved facts. */
@@ -228,12 +237,249 @@ const written = Effect.gen(function* () {
   yield* fs.copy(staging, FIXTURE, { overwrite: true });
 }).pipe(Effect.scoped);
 
+// T833, P15 slice 1's fix round, next/. H6 of docs/direction/hot-reload.md (0293): a step, a Cmd
+// or a job record always says which code made it. The saved home predates the code store, so its
+// descriptors name builds whose code it never kept. This build opens it on its own code for each
+// program, so every record a process writes from then on names that code, and the move is one
+// `code.loaded {was: <saved build>, hash: <this build's>, from: "open"}` on `gateway/code`, appended
+// at open before any step can run.
+//
+// The saved home keeps no private key (the writer below drops it), so no client can be admitted
+// to send an input, and the Process object takes only an input the door delivered. The records read
+// are the ones the open itself makes each process write: its checkpoint, its saved supervision
+// (the build each `begin` names), its activity marker, its lines on its own stream and its job
+// records. The saved home holds no checkpoint, so no load-time upgrade (`state.upgraded`) is read.
+// Plant: on 8ba7894a5 the open loads by name but keeps the saved hash, so a job record names it.
+
+const SavedProcess = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  program: Schema.String,
+  build: Schema.String,
+});
+
+const Descriptors = Schema.Array(Schema.Struct({ value: Schema.fromJsonString(SavedProcess) }));
+const Revs = Schema.Array(Schema.Struct({ rev: Schema.NullOr(Schema.Number) }));
+
+const Checkpoints = Schema.Array(
+  Schema.Struct({
+    process: Schema.String,
+    checkpoint: Schema.fromJsonString(Schema.Struct({ saved: Schema.Struct({ build: Schema.String }) })),
+  }),
+);
+
+const Supervisions = Schema.Array(
+  Schema.Struct({ name: Schema.String, value: Schema.fromJsonString(Schema.Struct({ build: Schema.String })) }),
+);
+
+const Markers = Schema.Array(Schema.Struct({ value: Schema.Uint8Array }));
+
+const Lines = Schema.Array(
+  Schema.Struct({
+    rev: Schema.Number,
+    stream: Schema.String,
+    _tag: Schema.String,
+    build: Schema.String,
+    body: Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)),
+  }),
+);
+
+const Jobs = Schema.Array(
+  Schema.Struct({
+    name: Schema.String,
+    attributes: Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)),
+  }),
+);
+
+/** Reads `query` from each SQLite file under `home` that has `table`, read-only, decoded as `rows`. */
+const rowsUnder = Effect.fnUntraced(function* <S extends Schema.Top>(
+  home: string,
+  table: string,
+  query: string,
+  rows: S,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const found: Array<{ file: string; rows: S["Type"] }> = [];
+
+  for (const file of yield* fs.readDirectory(home, { recursive: true })) {
+    if (!file.endsWith(".sqlite")) {
+      continue;
+    }
+
+    const raw = yield* Effect.acquireUseRelease(
+      Effect.sync(() => new DatabaseSync(path.join(home, file), { readOnly: true })),
+      (db) =>
+        Effect.sync(() =>
+          db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table) === undefined
+            ? null
+            : db.prepare(query).all(),
+        ),
+      (db) => Effect.sync(() => db.close()),
+    );
+
+    if (raw !== null) {
+      found.push({ file, rows: yield* Schema.decodeUnknownEffect(rows)(raw) });
+    }
+  }
+
+  return found;
+});
+
+/** Each record the process `saved` wrote after rev `after`, with the build it names. */
+const writtenBy = Effect.fnUntraced(function* (home: string, saved: typeof SavedProcess.Type, after: number) {
+  const named: Array<{ record: string; build: string }> = [];
+  const checkpoints = yield* rowsUnder(
+    home,
+    "process_state",
+    "SELECT process, checkpoint FROM process_state",
+    Checkpoints,
+  );
+
+  for (const { file, rows } of checkpoints) {
+    for (const row of rows.filter((r) => r.process === saved.id)) {
+      named.push({ record: "checkpoint", build: row.checkpoint.saved.build });
+
+      // The activity marker lives in the same object's key-value rows.
+      for (const marker of yield* rowsUnder(home, "_cf_KV", "SELECT value FROM _cf_KV WHERE key='activity'", Markers)) {
+        if (marker.file !== file) {
+          continue;
+        }
+
+        for (const { value } of marker.rows) {
+          const activity = yield* Schema.decodeUnknownEffect(Activity)(deserialize(value));
+
+          if (activity._tag === "stepping" && activity.process === saved.id) {
+            named.push({ record: "activity", build: activity.build });
+          }
+        }
+      }
+    }
+  }
+
+  for (const { rows } of yield* rowsUnder(
+    home,
+    "process_recovery",
+    "SELECT name, value FROM process_recovery",
+    Supervisions,
+  )) {
+    for (const row of rows.filter((r) => r.name === saved.name)) {
+      named.push({ record: "supervision", build: row.value.build });
+    }
+  }
+
+  const lines = yield* rowsUnder(
+    home,
+    "entries",
+    `SELECT rev, stream, _tag, build, body FROM entries WHERE rev > ${after} ORDER BY rev`,
+    Lines,
+  );
+
+  for (const line of lines.flatMap((found) => found.rows).filter((l) => l.stream === saved.id)) {
+    named.push({ record: `line ${line._tag}`, build: line.build });
+  }
+
+  for (const { rows } of yield* rowsUnder(home, "spans", "SELECT name, attributes FROM spans", Jobs)) {
+    for (const job of rows) {
+      const a = job.attributes;
+
+      if ((a["process"] === saved.id || a["fab.process"] === saved.id) && typeof a["build"] === "string") {
+        named.push({ record: `job ${job.name}`, build: a["build"] });
+      }
+    }
+  }
+
+  return named;
+});
+
+/** Opens a copy of the saved home under this build and checks what each saved process wrote. */
+const reopenedOnItsCode = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const saved = yield* Schema.decodeUnknownEffect(Saved)(yield* fs.readFileString(path.join(FIXTURE, "saved.json")));
+  const home = yield* fs.makeTempDirectoryScoped({ prefix: "t833-h-" });
+  yield* fs.copy(path.join(FIXTURE, "home"), home, { overwrite: true });
+  // Read from the copy, never the fixture: even a read-only open is the copy's to make.
+  const descriptors = (yield* rowsUnder(home, "dev_descriptors", "SELECT value FROM dev_descriptors", Descriptors))
+    .flatMap((found) => found.rows)
+    .map((row) => row.value);
+  const [last] = (yield* rowsUnder(home, "entries", "SELECT max(rev) AS rev FROM entries", Revs)).flatMap(
+    (f) => f.rows,
+  );
+  const after = last?.rev ?? 0;
+  expect(descriptors.length, "the saved home has its processes' descriptors").toBeGreaterThan(0);
+  const code = yield* open(home, saved.founding, (_instance, _dists, built) =>
+    Effect.succeed(Object.fromEntries(Object.entries(built.programs).map(([name, program]) => [name, program.hash]))),
+  );
+  const added = (yield* rowsUnder(
+    home,
+    "entries",
+    `SELECT rev, stream, _tag, build, body FROM entries WHERE rev > ${after} ORDER BY rev`,
+    Lines,
+  )).flatMap((found) => found.rows);
+
+  for (const descriptor of descriptors) {
+    const hash = code[descriptor.program];
+    expect(hash, `this build has ${descriptor.program}`).toBeDefined();
+    const moves = added.filter(
+      (line) =>
+        line.stream === "gateway/code" &&
+        line._tag === "code.loaded" &&
+        line.body["program"] === descriptor.program &&
+        line.body["was"] === descriptor.build,
+    );
+    // Soft, so one run reports every record that names other code, not only the first.
+    // One fact records the move from the saved build to this build's code; none when they match.
+    expect
+      .soft(
+        moves.map((line) => line.body),
+        `${descriptor.name}: one code.loaded from "open" records its move to this build's code`,
+      )
+      .toEqual(
+        hash === descriptor.build ? [] : [{ program: descriptor.program, hash, was: descriptor.build, from: "open" }],
+      );
+    const records = yield* writtenBy(home, descriptor, after);
+    expect(records.length, `${descriptor.name} wrote its records`).toBeGreaterThan(0);
+    expect
+      .soft(
+        records.filter((r) => r.build !== hash),
+        `${descriptor.name}: every record it writes names this build's code`,
+      )
+      .toEqual([]);
+
+    // Its own lines come after the fact that moved it, and no other new record names the saved build.
+    for (const line of added.filter((l) => l.stream === descriptor.id)) {
+      expect
+        .soft(line.rev, `${descriptor.name}'s ${line._tag} is after its code.loaded`)
+        .toBeGreaterThan(moves[0]?.rev ?? 0);
+    }
+
+    expect
+      .soft(
+        added
+          .filter((line) => !moves.includes(line))
+          .filter((line) => JSON.stringify([line.build, line.body]).includes(descriptor.build))
+          .map((line) => [line.stream, line._tag, line.body]),
+        `${descriptor.name}: only its code.loaded names the saved build ${descriptor.build}`,
+      )
+      .toEqual([]);
+  }
+}).pipe(Effect.scoped);
+
 describe("T502 law 5, a saved home opens under this build, next/", () => {
   // vector: one home saved from a real run of the build before the slice, since only an older
   // build can write one (the plan's Laws table, law 5).
   it.live.skipIf(process.env.T502_PORT_HOME === "write")(
     "vector: the home saved before the slice opens with the same process table and the same entries",
     () => reopened.pipe(Effect.provide(services)),
+    { timeout: 240_000 },
+  );
+
+  // vector: one home saved by a build before the code store, since only such a build can write a
+  // home whose descriptors name code it never kept (T833, the fix round's law 1; 0093's label).
+  it.live.skipIf(process.env.T502_PORT_HOME === "write")(
+    "vector: a home saved before the code store opens each process on this build's code, with one code.loaded from open, and every record it writes names that code",
+    () => reopenedOnItsCode.pipe(Effect.provide(services)),
     { timeout: 240_000 },
   );
 

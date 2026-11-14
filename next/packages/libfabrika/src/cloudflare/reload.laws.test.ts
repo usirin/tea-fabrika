@@ -23,6 +23,7 @@ import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import {
+  Cause,
   Context,
   Deferred,
   Effect,
@@ -1134,6 +1135,53 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             }
           }),
         100,
+      ),
+    300_000,
+  );
+
+  // T833, the fix round's law 2. A home saved after the code store keeps every hash it ran, so a
+  // process whose recorded build has no code is a broken home: its open fails loud, and never runs
+  // that process on other code by its program's name. Only a home that predates the code store, an
+  // empty `gateway/code` fold, loads by name (port-home.laws.test.ts holds that case).
+  // Plant: on 8ba7894a5, `recorded` in index.ts loads by name on any no_program.
+  it.live(
+    "T833: a home saved after the code store whose process's recorded build lost its code row fails the open with ProgramDown no_program, never a load by name",
+    () =>
+      law(
+        (g) =>
+          Effect.gen(function* () {
+            const i = yield* instance(baseFixture());
+            // Each install is selected and pushed, and counter:1 refuses it, so it stays on its first code.
+            i.refusing.add("counter:1");
+            let current = baseFixture();
+            const installs = g(fc.integer, { min: 1, max: 4 });
+
+            for (let n = 0; n < installs; n++) {
+              current = { ...current, k: current.k + g(fc.integer, { min: 1, max: 9 }) };
+              const next = yield* install(i, `refused_${n}`, current);
+              expect(next.answer._tag).toBe("loaded");
+            }
+
+            const pid = i.descriptors.get("counter:1")!.id;
+            const kept = i.running.get(pid)!;
+            expect(kept, "counter:1 stays on the code it started on").toBe(i.builtHash);
+            expect(
+              code(i).some((e) => e.tag === "code.loaded"),
+              "the home has its code store",
+            ).toBe(true);
+            // The broken home: the code counter:1 records is gone, and the next build's built-in differs.
+            i.db.prepare("DELETE FROM code WHERE hash=?").run(kept);
+            const replacement = { ...current, k: current.k + g(fc.integer, { min: 10, max: 99 }) };
+            const before = new Set(i.isolates.keys());
+            const exit = yield* Effect.exit(i.reopen(replacement));
+            expect(
+              Exit.isFailure(exit)
+                ? Cause.squash(exit.cause)
+                : { opened: [...i.isolates.keys()].filter((id) => !before.has(id) && id.endsWith(`/${pid}`)) },
+              "the open fails loud, and counter:1 runs no other code",
+            ).toMatchObject({ _tag: "ProgramDown", reason: "no_program" });
+          }),
+        50,
       ),
     300_000,
   );
