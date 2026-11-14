@@ -735,7 +735,14 @@ describe("P12 real dev.ts wire", () => {
     expect(accepted.every((a, n) => n === 0 || a.rev > accepted[n - 1]!.rev)).toBe(true);
     // Gateway input events occupy the intervening global revisions.
     expect(accepted.some((a, n) => n > 0 && a.rev > accepted[n - 1]!.rev + 1)).toBe(true);
-  });
+    // The limit, from measured times. The time is the law's own work: a second page needs PAGE + 3 real
+    // sends, and the gateway answers one socket's sends one at a time (sent all at once they took as long).
+    // On main's CI, in 22 runs from 43365290308 to 43529835092, all while the client still polled for its
+    // replies, this took 32.2 s at its fastest (43365290308) and 50.1 s at the median (43470989655), and was
+    // cut at 60 s in 43489825701 and 43529835092. In the last of these the scenario before it took 13.9 s
+    // against 6.6 s in 43528965610, 2.1 times, which puts this one near 112 s there. 180 s is 1.6 times
+    // that, and what the real-workerd scenarios beside it have.
+  }, 180_000);
   it("scenario: a parked wire wait receives the next append and a ready wait answers now", async () => {
     const s = await instance(),
       c = await connected(s),
