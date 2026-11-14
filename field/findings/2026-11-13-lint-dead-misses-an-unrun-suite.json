@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-lint-dead-misses-an-unrun-suite",
+  "date": "2026-11-13",
+  "by": "tests",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": ".decisions/0062-test-files-keep-the-floors.md",
+    "line": 1
+  },
+  "says": "No check refuses an exported law suite that no runner imports: pnpm lint:dead passes it.",
+  "proof": "Added next/packages/libfabrika/src/access/PlantUnrunTest.ts exporting suite(), imported by no file; pnpm lint:dead printed 'unreachable ledger: PASS, scope ., 3 recorded finding(s), none new' and exited 0.",
+  "cost": "A suite whose runner is deleted or never written stops running its laws, and nothing turns red.",
+  "head": "b825a190a4bdf507c10403f9eb301a26689003f4",
+  "ticket": "921",
+  "pr": null
+}
