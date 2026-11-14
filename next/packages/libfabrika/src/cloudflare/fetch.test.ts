@@ -224,15 +224,28 @@ describe("P12 public Worker fetch", () => {
       fc.asyncProperty(arrivals, generated, async (order, { port, name }) => {
         const held: Array<() => void> = [];
         const w = world(port, name, (reply) => new Promise((answer) => held.push(() => answer(reply))));
-        const first = order.map(() => Effect.runPromise(fetch(w.request("/"), w.env, w.config)));
+        const answered: Array<number> = [];
+        const first = order.map(() =>
+          Effect.runPromise(fetch(w.request("/"), w.env, w.config)).then((response) => {
+            answered.push(response.status);
+            return response;
+          }),
+        );
         // With no read finished, every request has asked the Project for itself.
         await vi.waitFor(() => expect(held).toHaveLength(order.length));
 
-        // The reads finish in any order, and each request answers from its own.
-        for (const at of order) {
+        // The reads finish in any order. A held read is not tied to the request that started it,
+        // since requests reach their read in any order, so the law counts: each finished read
+        // answers exactly one more request, and none waits on a read another request started.
+        for (const [done, at] of order.entries()) {
           held[at]?.();
-          expect((await first[at])?.status).toBe(200);
+          await vi.waitFor(() => expect(answered).toHaveLength(done + 1));
+          await new Promise((settle) => setTimeout(settle, 0));
+          expect(answered).toHaveLength(done + 1);
         }
+
+        expect(answered).toEqual(order.map(() => 200));
+        await Promise.all(first);
 
         // A read has finished, so a later request asks nothing.
         expect((await Effect.runPromise(fetch(w.request("/"), w.env, w.config))).status).toBe(200);
