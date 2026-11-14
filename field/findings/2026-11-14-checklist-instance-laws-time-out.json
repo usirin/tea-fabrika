@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-checklist-instance-laws-time-out",
+  "date": "2026-11-14",
+  "by": "build",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/apps/fabrika/src/checklist-instance.laws.test.ts",
+    "line": 533
+  },
+  "says": "Two checklist instance laws, 'successive sends land...' (line 533) and 'each view.whole and view.patch...' (line 595), hit vitest's 5000 ms timeout when run under nice -n 19 with one worker, before and after this fix round's changes.",
+  "proof": "nice -n 19 pnpm exec vitest run --maxWorkers=1 src/checklist-instance.laws.test.ts in next/apps/fabrika printed 'Error: Test timed out in 5000ms' for both, 2 failed and 3 passed, at d25a7962556e5e400d3b95dec0eee17a5fae30d5 with the round's edits stashed and again with them applied.",
+  "cost": "A loaded laptop or CI box turns these laws red with no product change, so a lane can stall or a real red gets waved off as load.",
+  "head": "d25a7962556e5e400d3b95dec0eee17a5fae30d5",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1208"
+}
