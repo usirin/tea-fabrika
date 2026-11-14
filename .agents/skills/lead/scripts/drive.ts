@@ -59,6 +59,24 @@
 // before it is stopped and the step is stuck. A stuck line, row and state entry carry its `fault`,
 // `tool` or `work`, read from the stuck reason (`faultFrom`, decision 0076); the line also carries
 // the turn's list-price dollars, which the chain's backstop counts.
+//
+// Where a step starts: at --from; else at the newest pushed tip of the branch or of its -wip
+// backup, unless the lane's saved head (state/<lane>.json) has moved past it (lane.ts
+// `startHead`); else origin/main. So a lead commit pushed to -wip (a merge of main, a lockfile) is
+// where the next step starts. A plan reads the main checkout and takes no --from. A step in a box
+// gets the approved plan's text, whole, in its prompt, since its box reads nothing outside itself.
+// A tests, build or mutation step waits while `pgrep -x tsgo` finds one; where pgrep cannot list
+// processes, that wait and the agent cap are skipped with one line each (./pgrep.ts).
+//
+// What the outcome line's `reason` says. The step's word is its typed answer, or, for a report with
+// none, its one `answer:` line outside a code fence: none, two or more, or one that names no verb is
+// stuck:no_answer, and so is a review's done without a merge-ready first line, or with a
+// `changes: <n>` line, n above 0. A build's done with no commit needs a `laws: green <paths>` line,
+// and a tests step's needs plant records in its typed answer and no changed file; else it is
+// stuck:no_commit. When the commits check holds a step, the reason names each rule and commit, five
+// at most. A refused push or draft is stuck:push_failed. A mutation brief with no `RELATED=` line
+// is a usage error, and a container run that is stuck gives a reason that starts `mutbox:`. A kept
+// box ends the reason with `(box kept: ...)`, saying what is left in it.
 
 import { spawnSync } from "node:child_process";
 import {
