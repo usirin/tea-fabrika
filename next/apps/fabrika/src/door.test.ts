@@ -4958,7 +4958,7 @@ describe("P10 refusal records and checked writes", () => {
             (value) =>
               Effect.gen(function* () {
                 const w = yield* world();
-                let replace: Effect.Effect<void, LedgerError> | null = null;
+                let replace: Effect.Effect<void, GatewayError> | null = null;
                 const ledger = Layer.effect(
                   Ledger,
                   Effect.map(Ledger, (real) => ({
@@ -4973,7 +4973,11 @@ describe("P10 refusal records and checked writes", () => {
                           }
 
                           replace = null;
-                          return Stream.concat(Stream.fromEffect(before).pipe(Stream.drain), real.read(stream, after));
+                          // The interruption's gateway fault is no ledger fault: it fails the test as a defect.
+                          return Stream.concat(
+                            Stream.fromEffect(Effect.orDie(before)).pipe(Stream.drain),
+                            real.read(stream, after),
+                          );
                         }),
                       ),
                   })),
