@@ -4,17 +4,12 @@ import { DateTime, Effect, Exit, Option, Schema, type Scope } from "effect";
 import { Digest } from "effect/crypto";
 import { Hex } from "effect/encoding";
 import * as fc from "fast-check";
+import { property } from "../Testing.test-support.ts";
 import * as Declarations from "./Declarations.ts";
 import * as Snapshot from "./Snapshot.ts";
 import { Origin } from "./Sources.ts";
 
 export const options = { arbitrary: { seed: 119120, runs: 100 } };
-
-class PropertyFailure extends Schema.TaggedError<PropertyFailure>()("PropertyFailure", {
-  cause: Schema.Defect(),
-}) {}
-
-const propertyFailure = (cause: unknown) => new PropertyFailure({ cause });
 
 // Stateful walks use fast-check because the plan requires fc.array move recipes.
 export const law = <A>(
@@ -23,13 +18,9 @@ export const law = <A>(
   check: (value: A) => Effect.Effect<unknown, unknown, Scope.Scope | Digest.Digest>,
   examples?: Array<[A]>,
 ) => {
-  const scoped = (value: A) => Effect.scoped(check(value)).pipe(Effect.asVoid, Effect.provide(Digest.layerWebCrypto));
-  // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each generated Effect walk
-  const property = fc.asyncProperty(arbitrary, (value: A) => Effect.runPromise(scoped(value)));
-  const options = { seed: 119120, numRuns: 100, ...(examples === undefined ? {} : { examples }) };
+  const parameters = { numRuns: 100, ...(examples === undefined ? {} : { examples }) };
   it.effect(name, () =>
-    // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's asynchronous property runner enters Effect
-    Effect.tryPromise({ try: () => fc.assert(property, options), catch: propertyFailure }),
+    property(arbitrary, (value: A) => check(value).pipe(Effect.provide(Digest.layerWebCrypto)), parameters),
   );
 };
 

@@ -227,11 +227,13 @@ In build order. "Decide first" lists only what no decision answers yet.
 - Designed by: [0109](../../.decisions/0109-a-pipe-is-saved-program-mail.md),
   [0103](../../.decisions/0103-a-program-may-mail-another-by-name.md), program guidelines G6.
 - In code now: program mail (above). A program's `outputs` are declared
-  (`runtime/Program.ts:144`) and nothing reads them. Delivery reads the sender's whole outbox
-  (`processes/ProgramMailLedger.ts:50`), and the recovery save rereads every receipt
-  ([finding](../../field/findings/2026-11-11-recovery-save-rereads-every-receipt.json)): 0109 makes
-  fixing both a binding first step.
-- Not built: the two fixes; the inbox cap and its `full` answer; chunked sends from the writer; the
+  (`runtime/Program.ts:144`) and nothing reads them. The two fixes 0109 binds first are built
+  (ticket 936, https://github.com/kamp-us/tea-fabrika/pull/1203): delivery looks a letter up by
+  its ID and reads a stream's head by the ledger's index, so it reads the same rows whatever the
+  outbox and inbox hold, and the recovery save keeps the rows it last read or wrote, so a save
+  after a load reads one row
+  ([finding](../../field/findings/2026-11-11-recovery-save-rereads-every-receipt.json)).
+- Not built: the inbox cap and its `full` answer; chunked sends from the writer; the
   inbox cap and chunk size as settings (P38); the right for two programs on one line to mail each
   other, which today needs a host grant (`ProgramMailLedger.ts:172`).
 - Decide first: how a pipe carries one program's output to the next one's input (not decided in
