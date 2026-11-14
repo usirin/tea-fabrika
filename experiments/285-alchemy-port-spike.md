@@ -71,6 +71,7 @@ Two builds of one probe Worker, so each answer holds for the slice that needs it
 | `bundle.ts` | question 3 | Alchemy's bundler called directly, then the local runtime |
 | `storage.ts` | question 4 | both builds |
 | `timing.ts` | question 5 | both builds |
+| `provider.ts` | the follow-up: a Worker's `source` prop | the local runtime, under two stage names |
 
 `launch.mjs` starts a script in a temp home, `harness.ts` starts and stops the runtime, `stacks.ts`
 holds the two builds, and `turn.ts`, `brainlike.ts`, `own.ts`, `plugins.ts`, `build-input.ts`,
@@ -300,6 +301,106 @@ A call through the bridge costs about 64 microseconds more than a plain call, a 
 times as much. The two callers of the bridge cost the same, and so do the two builds. The laptop was
 busy (load average 15), so read the order and the size, not the digits.
 
+## The source provider route
+
+Added the same day, as a follow-up. The question: can our build plug into Alchemy the designed
+way, in place of `bundle: false` beside it?
+
+**The answer.** Yes, on the local runtime. A Worker's `source` prop names a module of ours.
+Alchemy imports it, and the module builds the Worker with Alchemy's own bundler and our two
+plugins. The plugins are made inside the module, so no function crosses Alchemy's local provider.
+The Worker answered with the table and with one Durable Object. With a fixed name inside the
+module, the bundle's bytes were the same under two stage names, in watch and in build, and across
+two launches. About 85% sure it carries the real brain on the local instance. A real deploy was
+not run.
+
+The contract is in `@alchemy.run/cloudflare/src/Workers/Source.ts`: `SourceProvider`,
+`WorkerSourceModule`, `loadSource` and `resolveSource`. The prop's type is `WorkerSourceDescriptor`
+in `Workers/Worker.ts`. The script is `provider.ts`, the provider `table-source.ts`, and the Worker
+it builds `sourced.ts`.
+
+```ts
+// provider.ts: the prop that worked. Every field is plain data.
+Cloudflare.Workers.Worker("Sourced285", {
+  source: {
+    provider: pathToFileURL(/* table-source.ts */).href, // required: a module specifier
+    devMode: "bundle", // required
+    options: { main, tables, objects: ["Tally"], fixed: { name: "fabrika", stage: "one-build" } },
+  },
+  compatibility: { date: "2026-10-12" },
+  dev: { host: "127.0.0.1" },
+  env: { Tally: Cloudflare.DurableObject("Tally") }, // Alchemy finds a hosted class at env[<class name>]
+});
+
+// table-source.ts: the module. Its default export has `make`.
+const make = (raw: unknown) =>
+  Effect.gen(function* () {
+    const options = yield* Schema.decodeUnknownEffect(Options)(raw).pipe(Effect.orDie);
+    const bundler = yield* WorkerBundle;
+    const bundled = (ctx) =>
+      bundler.build({
+        id: ctx.id,
+        main: options.main,
+        compatibility: ctx.compatibility,
+        entry: { kind: "effect", exports: /* one { kind: "durableObject" } a class in options.objects */ },
+        stack: options.fixed, // not ctx.stack: the instance's own name stays out of the bytes
+        extraOptions: {
+          input: { plugins: [compiler(seen), embed(tables)] },
+          output: { codeSplitting: false, sourcemap: false },
+        },
+      });
+    return {
+      ownsAssets: false,
+      build: (ctx) => bundled(ctx).pipe(Effect.map((bundle) => ({ bundle, assets: undefined, hash: { bundle: bundle.hash } }))),
+      hash: (ctx) => bundled(ctx).pipe(Effect.map((bundle) => ({ bundle: bundle.hash }))),
+      dev: (ctx) => Effect.sync(() => ({ mode: "bundle", bundles: /* one bundle now, one more a change */ })),
+    } satisfies SourceProvider;
+  });
+
+export default { make };
+```
+
+| # | Question | Ran, saw |
+|---|---|---|
+| 1 | Is a module of ours loaded from the `source` prop? | Yes. `make` was called once a start. `provider` and `devMode` are the two required fields; `options` is ours. `source` cannot sit beside `main`, `script` or `vite` (`resolveSource` refuses that), so the entry file goes in `options` |
+| 2 | Does the Worker answer, with the table module resolved? | Yes: 200, the real table's one program and one asset. The bundle is one file, 1,877,185 bytes |
+| 2 | Is `hash` called, and what must it return? | Not on the local runtime: Alchemy called only `make` and `dev` there. `hash` and `build` are what a deploy calls. Called directly, `hash` returned `{ bundle: <the bundle's hash> }`, the same hash `build` puts in its own `hash.bundle` |
+| 3 | One build for two instances? | Yes. Started as `local` and as `other`, `dev` made the same bundle. `build` called for `local` and for `cloud` gave the same bundle. The watch bundle and the build bundle were the same, since the provider calls `build` in both. Two launches from two temp folders gave the same bundle |
+| 4 | Which `devMode`, and does a rebuild reach the Worker? | `bundle`: the host runs workerd and takes each bundle the provider's stream gives. The table file was changed while the Worker ran: the Worker served the new program 1,778 ms later, with no restart by hand. `server` is for a source that runs its own dev server, which we do not |
+| 5 | One Durable Object class | Ran. `Tally` keeps a sum in its own SQLite. Two calls answered 2 and 4, under each stage name |
+
+**What a provider must do, read from the contract and held by the run:**
+
+- `make(options)` gets the prop's `options` as plain data and may use files, paths, child
+  processes and a scope. Anything else it builds itself.
+- `build` returns `{ bundle, assets, hash }`, where `bundle` is `{ files, hash }` as Alchemy's
+  bundler gives it.
+- `hash` returns the slots it uses, here `bundle` alone. It must be the same for the same bytes on
+  any machine. If it has to build, it shares that build with `build` through `Artifacts.cached`.
+  This provider builds twice; the real one should not.
+- `dev` in bundle mode returns a stream of `Start`, `Success` and `Error` events.
+
+**What it means for S8.** The stack would keep one Worker resource with `source` in place of
+`main` and `bundle: false`. Our build becomes the provider: it makes the table and bundles the
+brain in one place, Alchemy calls it, and `brain.ts` with its hand-written bridge lines can go.
+The build's hash is the bundle's hash, the same on both instances. This is a new design call for
+S8's plan, and it is not decided here.
+
+**What this cannot tell us:**
+
+- **A real deploy.** `build` and `hash` ran only when this script called them, with a context
+  written by hand. Whether Alchemy's deploy calls them as read, and whether the state store keeps
+  the prop as it is, was not run: it needs an account.
+- **The real brain.** One object class ran, not four, and not `Control` or the tail listener.
+- **An absolute path in the prop.** `provider`, `main` and `tables` were absolute paths of a temp
+  folder here. The prop is kept in state, so the real one should name a package and relative
+  paths. Not tried.
+- **The fixed name at run time.** Alchemy's bridge reads the stack's name and stage from the
+  bundle. Nothing in these probes used them. A piece of the brain that does would see the fixed
+  name, not the instance's.
+- **A rebuild when a source file changes.** The provider here watches only the table file.
+- **The types.** As above, no type check ran.
+
 ## Where the plan is wrong
 
 1. **"`Control` is its own Worker, which workerd never routes a public request to"** (Decided here).
@@ -326,8 +427,9 @@ busy (load average 15), so read the order and the size, not the digits.
   `bundle: false` stays as one marked edge. What the plan's S8 should now ask, as a new design call
   and not decided here: does our build call Alchemy's bundler once, as in step 5? That keeps one
   build for both instances, keeps both plugins, and lets `brain.ts` go. It ran for a Worker with no
-  objects. About 70% sure it carries the real brain; running it with the four object classes in
-  `exports` would settle it. The plugin drop is one bug we can show, with this run as its repro, so
+  objects. A follow-up then ran the designed plug point, a Worker's `source` prop, with one object
+  class: see [The source provider route](#the-source-provider-route), which is the better form of
+  the same idea. The plugin drop is one bug we can show, with this run as its repro, so
   it is worth one upstream issue. None was filed here.
 - **Every object slice, S1 to S4.** Expect about 64 microseconds more a call. Nothing here says it
   matters: a turn costs more than that.
@@ -367,7 +469,8 @@ busy (load average 15), so read the order and the size, not the digits.
 ```sh
 # One script a run; each starts and stops its own runtime. About 15 s each, `bundle` about 30 s.
 ( ulimit -u 2000; nice -n 19 volta run --node 26.13.0 \
-    node experiments/285-alchemy-port-spike/launch.mjs fetch )   # or control, bundle, storage, timing
+    node experiments/285-alchemy-port-spike/launch.mjs fetch )   # or control, bundle, storage, timing, provider
 ```
 
-Run `bundle` twice to compare bytes across two launches: the second reads the first's saved hashes.
+Run `bundle` or `provider` twice to compare bytes across two launches: the second reads the first's
+saved hashes.
