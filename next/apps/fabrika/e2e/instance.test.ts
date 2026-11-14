@@ -63,8 +63,7 @@ const start = async () => {
   const at = await Effect.runPromise(heldPort());
   ports.push(at.release);
   const url = `http://127.0.0.1:${at.port}`;
-  // Written out so the deletes below type: the spread alone keeps only the two keys named here.
-  const env: Record<string, string | undefined> = { ...process.env, FABRIKA_HOME: home, DO_NOT_TRACK: "1" };
+  const env: NodeJS.ProcessEnv = { ...process.env, FABRIKA_HOME: home, DO_NOT_TRACK: "1" };
   delete env.TYPESAFE_API_KEY;
   delete env.FABRIKA_FOREGROUND;
   delete env.CLOUDFLARE_API_TOKEN;

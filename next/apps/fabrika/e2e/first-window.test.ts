@@ -157,10 +157,8 @@ const loseFirstAnswers = () => {
       });
     }
 
-    // The global WebSocket carries both the DOM's and Node's send, so this one keeps both signatures.
-    override send(data: string | Blob | BufferSource): void;
-    override send(data: string | ArrayBuffer | ArrayBufferView): void;
-    override send(data: string | Blob | BufferSource | ArrayBufferView) {
+    // The DOM lib and the Workers types each declare `send`: this takes both overloads' data, and each branch below calls one.
+    override send(data: string | Blob | ArrayBuffer | ArrayBufferView) {
       if (typeof data === "string" && data !== "ping") {
         const frame = JSON.parse(data);
 
@@ -175,7 +173,6 @@ const loseFirstAnswers = () => {
         }
       }
 
-      // Each branch picks one overload of the merged DOM and Node WebSocket types; a union fits neither.
       if (data instanceof Blob) {
         super.send(data);
       } else {

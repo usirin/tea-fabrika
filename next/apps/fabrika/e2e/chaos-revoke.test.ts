@@ -71,7 +71,7 @@ const identity = Effect.fn("RevokeTest.identity")(function* () {
         space: "fabrika-client",
         sign: (bytes) =>
           Effect.tryPromise({
-            try: () => crypto.subtle.sign("Ed25519", pair.privateKey, Uint8Array.from(bytes)),
+            try: () => crypto.subtle.sign("Ed25519", pair.privateKey, new Uint8Array(bytes)),
             catch: (cause) => new WireFailure({ cause }),
           }).pipe(Effect.map((signed) => new Uint8Array(signed))),
       }),
@@ -88,7 +88,7 @@ const Frame = Schema.Struct({
 
 /** Masked client frame, RFC 6455 section 5.2; the payload is a complete small JSON request. */
 const encode = (value: unknown) => {
-  const payload = Buffer.from(JSON.stringify(value));
+  const payload = new TextEncoder().encode(JSON.stringify(value));
 
   if (payload.length > 65535) {
     throw new RangeError("test request exceeds the short frame limit");
@@ -103,7 +103,7 @@ const encode = (value: unknown) => {
     header.writeUInt16BE(payload.length, 2);
   }
 
-  return Buffer.concat([header, mask, payload.map((byte: number, n: number) => byte ^ (mask[n % 4] ?? 0))]);
+  return Buffer.concat([header, mask, payload.map((byte, n) => byte ^ (mask[n % 4] ?? 0))]);
 };
 
 /** The raw client keeps TCP's write half open and never acknowledges a WebSocket Close. */
@@ -113,7 +113,6 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
   tab: string,
 ) {
   const address = new URL(url);
-  const random = yield* SecureRandom.SecureRandom;
   const chunks = yield* Queue.unbounded<Buffer>();
   const closes: Array<number> = [];
   const socket = yield* Effect.acquireRelease(
@@ -214,8 +213,10 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
       }
     }
   });
+  // A JSON-RPC 2.0 id only has to be unique among this client's open requests.
+  let calls = 0;
   const call = Effect.fnUntraced(function* (method: string, params: unknown) {
-    const id = yield* random.uuidV4();
+    const id = `call-${++calls}`;
     socket.write(encode({ jsonrpc: "2.0", id, method, params }));
     return yield* next((value) => value.id === id);
   });
@@ -240,21 +241,24 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
     call,
     closes,
   };
-}, Effect.provide(SecureRandom.layerWebCrypto));
+});
+
+/** A local binding's calls, as the dev command sees them. */
+type Binding = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
 
 const invoke = Effect.fn("RevokeTest.control")(function* (
-  binding: Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>,
+  binding: Binding,
   method: string,
   args: ReadonlyArray<unknown>,
 ) {
-  const control = binding[method];
+  const target = binding[method];
 
-  if (control === undefined) {
-    return yield* new WireFailure({ cause: new Error(`the project binding has no ${method}`) });
+  if (target === undefined) {
+    return yield* new WireFailure({ cause: new Error(`the binding has no ${method} call`) });
   }
 
   return yield* Effect.tryPromise({
-    try: () => Reflect.apply(control, binding, args),
+    try: () => Reflect.apply(target, binding, args),
     catch: (cause) => new WireFailure({ cause }),
   });
 });
