@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-no-type-check-covers-next-fabrika-e2e",
+  "date": "2026-11-13",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "next/apps/fabrika/tsconfig.json",
+    "line": 11
+  },
+  "says": "No tsconfig includes next/apps/fabrika/e2e/, so pnpm typecheck never type-checks the app's end-to-end laws and their helpers.",
+  "proof": "next/apps/fabrika/tsconfig.json:11 includes only src and six root scripts; the root tsconfig.json:7 includes experiments and three fixtures; no tsconfig sits in e2e/. The agent fixing first-window L17 (pull request 1200) type-checked first-window.test.ts with a throwaway config and saw 7 errors on lines that pull request does not touch: WebSocket types at 122 and 159, and Schema decoder types at 204, 408 and 452.",
+  "cost": "A type error in an e2e law or helper lands on main unseen, and the laws in next (1) can drift from the code they drive while every check stays green.",
+  "head": "60a795c567bd24aac293dbe9ffd279b4bd4149df",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1200"
+}
