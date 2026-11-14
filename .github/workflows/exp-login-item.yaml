@@ -1,0 +1,57 @@
+name: exp-login-item
+
+# Experiment 284: can a build with no real code signature register itself as a macOS login item?
+# It starts Electron and registers a login item, so it runs on a hosted macOS runner and never on a
+# person's Mac. It runs on its own branch only, is no required check, and changes nothing in the
+# repo. No secret and no key.
+on:
+  push:
+    branches:
+      - fabrikalfa/exp-login-item
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  login-item:
+    if: github.ref == 'refs/heads/fabrikalfa/exp-login-item'
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # The pnpm version comes from `packageManager` in package.json.
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26.13.0
+          cache: pnpm
+
+      # Electron fetches its binary the first time it is asked for its path, into this folder.
+      - uses: actions/cache@v6
+        with:
+          path: ~/Library/Caches/electron
+          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: electron-${{ runner.os }}-${{ runner.arch }}-
+
+      - run: pnpm install --frozen-lockfile
+
+      # One step per shape, each run even when an earlier one failed.
+      - name: bare Electron binary
+        if: ${{ !cancelled() }}
+        run: node experiments/284-login-item-unsigned/run.mjs bare
+      - name: bundle, signature broken by our edits
+        if: ${{ !cancelled() }}
+        run: node experiments/284-login-item-unsigned/run.mjs bundle
+      - name: bundle, ad-hoc signature
+        if: ${{ !cancelled() }}
+        run: node experiments/284-login-item-unsigned/run.mjs adhoc
+      - name: bundle, signature removed
+        if: ${{ !cancelled() }}
+        run: node experiments/284-login-item-unsigned/run.mjs stripped
