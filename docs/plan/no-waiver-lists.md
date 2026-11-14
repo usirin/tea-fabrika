@@ -86,6 +86,14 @@ Not waivers, checked and left as they are:
 - **tsconfig `exclude`**: only `packages/fabrika` and `packages/pipeline` build configs leave tests
   out of the built package. The typecheck still reads them. `adapters/` has no `typecheck` script
   and no TypeScript.
+- **tsconfig `include`**: a scope too, and a list under 0524 when it leaves files out. The e2e
+  typecheck pull request closes `next/apps/fabrika`'s: its `e2e/` and `e2e.ts` were outside the type
+  check from 2026-11-06, hiding 19 errors. Three gaps stay, each a finding: `.agents/tsconfig.json`
+  lists files one by one (72 outside); the repo root's 16 TypeScript files, which no typecheck runs;
+  today's `apps/fabrika` (2 files), frozen by
+  [0525](../../.decisions/0525-todays-version-is-frozen.md). One error it hid: every run of P19's
+  L13 before that pull request sent `SIGTERM`, not `SIGKILL`, since the kill passed `signal`, a key
+  Effect's `KillOptions` does not have.
 - **vitest `exclude`**: skill fixtures, and `next/packages/tuval/src/browser/key.laws.test.ts`, which
   `next/apps/fabrika/e2e.ts` runs in headless Chromium; CI runs that runner. Not hidden.
 - **CI `--exclude` flags**: they route tests to jobs. `.github/ci/workflow-lint.ts` checks the
