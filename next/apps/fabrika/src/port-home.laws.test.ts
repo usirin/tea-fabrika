@@ -13,23 +13,31 @@
 //
 //   T502_PORT_HOME=write pnpm exec vitest run next/apps/fabrika/src/port-home.laws.test.ts
 //
-// Then read `strings` over every saved file before it is committed: a saved home is public.
+// A saved home is public, so the writer never saves one that names a machine path. It copies the
+// run's home into a staging folder, makes each Alchemy resource's `props.main` relative to the
+// build's out folder, writes `saved.json` there, and runs the guard in port-home.test-support.ts
+// over all of it, SQLite cells included, for the person's home folder, the temp folder (and its
+// real path) and the repo root. On any hit it fails with the hit list, and the fixture is left as
+// it was. Only then does the staging copy replace the fixture. Read the diff before it is committed.
 //
 // Not read yet: waits. A parked wait is a row in the Project object, seen only through a test
 // method on the Project class, so it joins with the slice that ports Project (S3).
 // Plant: bind the Connection class under another class name in the stack.
 import { generateKeyPairSync } from "node:crypto";
+import { homedir, tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Effect, FileSystem, Layer, Path, Predicate, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
+import { machinePaths } from "./port-home.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import { startupFixture } from "./record-wire.test-support.ts";
 
-const FIXTURE = resolve(import.meta.dirname, "../../../../fixtures/next/port-home");
+const ROOT = resolve(import.meta.dirname, "../../../..");
+const FIXTURE = resolve(ROOT, "fixtures/next/port-home");
 const NAME = "port-home";
 // The two programs every instance starts by itself, so a fresh home already holds their facts.
 const STREAMS = ["processes/counter:1", "processes/checklist:1"];
@@ -56,17 +64,20 @@ const call = <S extends Schema.Top>(method: string, answer: S, run: () => Promis
     Effect.flatMap(Schema.decodeUnknownEffect(answer)),
   );
 
-/** Starts this build on `home`, asks it `use`, and stops it by closing the scope. */
+/** Starts this build on `home`, asks it `use` with the build's out folder as given and as its real
+ *  path, and stops it by closing the scope. */
 const open = Effect.fnUntraced(function* <A, E, R>(
   home: string,
   founding: typeof Founding.Type,
-  use: (instance: any) => Effect.Effect<A, E, R>,
+  use: (instance: any, dists: ReadonlyArray<string>) => Effect.Effect<A, E, R>,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const out = yield* fs.makeTempDirectoryScoped({ prefix: "t502-b-" });
   const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
-  const built = yield* build({ out: path.join(out, "dist") });
+  const dist = path.join(out, "dist");
+  const built = yield* build({ out: dist });
+  const dists = [dist, yield* fs.realPath(dist)];
   const old = process.env.ALCHEMY_HOME;
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => {
@@ -78,7 +89,7 @@ const open = Effect.fnUntraced(function* <A, E, R>(
     }),
   );
   const instance = yield* localInstance(built, startupFixture({ home, name: NAME, ...founding, port: at.port }));
-  return yield* use(instance);
+  return yield* use(instance, dists);
 }, Effect.scoped);
 
 /** What the law compares: who runs under which process id, and each program's saved facts. */
@@ -124,7 +135,66 @@ const reopened = Effect.gen(function* () {
   }
 }).pipe(Effect.scoped);
 
-/** Starts a fresh home on this build and saves it, with what it answered, as the fixture. */
+/** One Alchemy resource file, read whole so writing it back keeps every field in its place. */
+const Resource = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown));
+
+/** Makes `props.main` in each Alchemy resource file under `home`'s `.alchemy/state/` relative to
+ *  the build's out folder, given as `dists` (as passed and as its real path), and changes no other
+ *  byte. */
+const relativeMain = Effect.fnUntraced(function* (home: string, dists: ReadonlyArray<string>) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const state = path.join(home, ".alchemy", "state");
+
+  if (!(yield* fs.exists(state))) {
+    return;
+  }
+
+  for (const file of yield* fs.readDirectory(state, { recursive: true })) {
+    const full = path.join(state, file);
+
+    if (!file.endsWith(".json") || (yield* fs.stat(full)).type !== "File") {
+      continue;
+    }
+
+    const text = yield* fs.readFileString(full);
+    const resource = yield* Schema.decodeUnknownEffect(Resource)(text);
+    const props = resource["props"];
+    const main = Predicate.isObject(props) && "main" in props ? props.main : undefined;
+
+    if (!Predicate.isObject(props) || typeof main !== "string") {
+      continue;
+    }
+
+    // Alchemy writes a resource as `JSON.stringify(state, null, 2)` (`alchemy@2.0.0-beta.85`,
+    // `src/State/LocalState.ts`). Writing it back the same way changes only `props.main`; a file
+    // in any other shape fails here rather than be rewritten.
+    expect(JSON.stringify(resource, null, 2), `${file} is not in Alchemy's own shape`).toBe(text);
+    const relative = dists.map((dist) => path.relative(dist, main)).find((one) => !one.startsWith(".."));
+    expect(relative, `${file}: props.main is outside the build's out folder`).toBeDefined();
+    // Why a relative path is safe: Alchemy's local provider diff reads only the new props and the
+    // saved attributes (`alchemy@2.0.0-beta.85`, `src/Local/LocalProvider.ts`, `diff`), and the
+    // engine's fallback compares the old props only to pick update or noop (`src/Plan.ts`, at the
+    // second `provider?.diff?.(` call). Each run builds into a new temp folder, so the old path and
+    // the relative one give the same answer. Removing `.alchemy/state` instead would lose the saved
+    // attributes, the Measurements bucket's `dev:` name among them, so the next open would make a
+    // new bucket and the home would no longer be what the run wrote.
+    yield* fs.writeFileString(
+      full,
+      JSON.stringify({ ...resource, props: { ...props, main: relative ?? main } }, null, 2),
+    );
+  }
+});
+
+/** Every folder a saved file must not name: the person's home folder, the temp folder and its real
+ *  path (on macOS `/var` is `/private/var`), and the repo root. */
+const machineRoots = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  return [...new Set([homedir(), tmpdir(), yield* fs.realPath(tmpdir()), ROOT])];
+});
+
+/** Starts a fresh home on this build and saves it, with what it answered, as the fixture, once the
+ *  guard finds no machine path in what would be saved. */
 const written = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -142,11 +212,20 @@ const written = Effect.gen(function* () {
     window: raw,
   };
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "t502-w-" });
-  const seen = yield* open(home, founding, observe);
+  const { seen, dists } = yield* open(home, founding, (instance, dists) =>
+    observe(instance).pipe(Effect.map((seen) => ({ seen, dists }))),
+  );
+  // Everything is staged and guarded first: no path below removes or writes FIXTURE before the
+  // guard has found nothing.
+  const staging = yield* fs.makeTempDirectoryScoped({ prefix: "t502-s-" });
+  yield* fs.copy(home, path.join(staging, "home"), { overwrite: true });
+  yield* relativeMain(path.join(staging, "home"), dists);
+  yield* fs.writeFileString(path.join(staging, "saved.json"), `${JSON.stringify({ founding, seen }, null, 2)}\n`);
+  const hits = yield* machinePaths(staging, yield* machineRoots);
+  expect(hits, "the home to be saved names a machine path, so nothing was saved").toEqual([]);
   yield* fs.remove(FIXTURE, { recursive: true, force: true });
-  yield* fs.makeDirectory(FIXTURE, { recursive: true });
-  yield* fs.copy(home, path.join(FIXTURE, "home"), { overwrite: true });
-  yield* fs.writeFileString(path.join(FIXTURE, "saved.json"), `${JSON.stringify({ founding, seen }, null, 2)}\n`);
+  yield* fs.makeDirectory(path.dirname(FIXTURE), { recursive: true });
+  yield* fs.copy(staging, FIXTURE, { overwrite: true });
 }).pipe(Effect.scoped);
 
 describe("T502 law 5, a saved home opens under this build, next/", () => {

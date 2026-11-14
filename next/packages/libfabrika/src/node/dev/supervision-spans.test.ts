@@ -208,8 +208,40 @@ const failure = fc
                 : kind === "object"
                   ? { message }
                   : message;
-    return { value, private: [message, ...(value instanceof Error ? [value.stack!] : [])] };
+    return { value, message, private: [message, ...(value instanceof Error ? [value.stack!] : [])] };
   });
+
+// One V8 stack line, "at name (location)" or "at location", read here without the sink's own code,
+// as laws S1 and S2 in telemetry/Sink.test.ts read theirs. `file` is the last path segment with its
+// line and column; a `node:` location is a module name, not a folder on a machine, and stays whole.
+const frames = (text: string) =>
+  text.split("\n").flatMap((line) => {
+    const frame = /^\s*at (?:(.+?) \((.*)\)|(.*?))(?: \{)?$/.exec(line);
+
+    if (frame === null) {
+      return [];
+    }
+
+    const location = frame[2] ?? frame[3] ?? "";
+    const folder = !location.startsWith("node:") && /[/\\]/.test(location);
+    const file = folder
+      ? location.slice(Math.max(location.lastIndexOf("/"), location.lastIndexOf("\\")) + 1)
+      : location;
+    return [{ frame: frame[1] === undefined ? file : `${frame[1]} (${file})`, folder }];
+  });
+
+/** The wanted frames from the first one that `stored` does not hold in order; empty when all are there. */
+const lostFrames = (stored: ReadonlyArray<string>, wanted: ReadonlyArray<string>) => {
+  let found = 0;
+
+  for (const one of stored) {
+    if (one === wanted[found]) {
+      found += 1;
+    }
+  }
+
+  return wanted.slice(found);
+};
 
 const generatedThrow = fc.oneof(
   failure,
@@ -221,7 +253,7 @@ const generatedThrow = fc.oneof(
       fc.constant(Symbol("made-up-throw")),
       fc.func(fc.jsonValue()),
     )
-    .map((value) => ({ value, private: [] as string[] })),
+    .map((value) => ({ value, message: null, private: [] as string[] })),
 );
 
 for (const adapter of ["node", "worker"] as const) {
@@ -244,11 +276,22 @@ for (const adapter of ["node", "worker"] as const) {
               const kept = contents.flatMap((c) => (Option.isSome(c) && c.value._tag === "kept" ? [c.value] : []));
               expect(kept.length).toBeGreaterThan(0);
 
-              for (const text of sample.private) {
-                expect(
-                  kept.some((c) => c.message.includes(text)),
-                  "original message and stack must reach P37",
-                ).toBe(true);
+              // A-Sink stores each frame with its folders cut, so the law asks for the frames, not the raw stack.
+              const thrown = sample.value instanceof Error ? frames(sample.value.stack ?? "") : [];
+              const lost = kept.map((c) => [
+                ...(sample.message === null || c.message.includes(sample.message) ? [] : [sample.message]),
+                ...lostFrames(
+                  frames(c.message).map((stored) => stored.frame),
+                  thrown.map((raw) => raw.frame),
+                ),
+              ]);
+              expect(
+                lost.some((none) => none.length === 0),
+                `original message and every stack frame (name, file, line, column) must reach P37; lost: ${JSON.stringify(lost)}`,
+              ).toBe(true);
+
+              for (const stored of kept.flatMap((c) => frames(c.message))) {
+                expect(stored.folder, `a stored frame names a folder: ${stored.frame}`).toBe(false);
               }
 
               const receipt = yield* RecoveryStore.use((s) => s.receipt(w.input.id)).pipe(
