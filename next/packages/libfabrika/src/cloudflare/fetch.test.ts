@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 // Builder contract: workers/fetch.ts exports fetch(request, env, config), returning an Effect.
 import { Cause, Effect, Exit } from "effect";
 import * as fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as StartsTest from "../settings/StartsTest.ts";
 import type { BrainOptions, Env } from "./runtime.ts";
 
@@ -47,7 +47,12 @@ const law = (
     );
   });
 
-const world = (port: number, name: string) => {
+// `settingsStart` answers the Project's good reply by default; a law may hold each answer back.
+const world = (
+  port: number,
+  name: string,
+  settingsStart: (reply: unknown) => Promise<unknown> = async (reply) => reply,
+) => {
   const calls: Array<{ to: string; method: string; args: unknown[] }> = [];
   const response = new Response("gateway", { status: 202 });
   const config = instanceFixture({
@@ -71,7 +76,7 @@ const world = (port: number, name: string) => {
     },
     PROJECT: {
       getByName: (to: string) => ({
-        settingsStart: async () => StartsTest.reply(config),
+        settingsStart: () => settingsStart(StartsTest.reply(config)),
         grant: async (body: unknown) => {
           calls.push({ to, method: "grant", args: [body] });
           return { granted: body };
@@ -205,6 +210,37 @@ describe("P12 public Worker fetch", () => {
       }
     },
   );
+  // The platform gives each request to a Worker its own I/O context and cancels as hung a request
+  // that waits on work another request started. So a request never waits on another's read.
+  it("requests that arrive before any read of the recorded start has finished each read for themselves, and a finished read serves the later ones", async () => {
+    const fetch = await load();
+    const arrivals = fc.integer({ min: 2, max: 8 }).chain((n) =>
+      fc.shuffledSubarray(
+        Array.from({ length: n }, (_, at) => at),
+        { minLength: n },
+      ),
+    );
+    await fc.assert(
+      fc.asyncProperty(arrivals, generated, async (order, { port, name }) => {
+        const held: Array<() => void> = [];
+        const w = world(port, name, (reply) => new Promise((answer) => held.push(() => answer(reply))));
+        const first = order.map(() => Effect.runPromise(fetch(w.request("/"), w.env, w.config)));
+        // With no read finished, every request has asked the Project for itself.
+        await vi.waitFor(() => expect(held).toHaveLength(order.length));
+
+        // The reads finish in any order, and each request answers from its own.
+        for (const at of order) {
+          held[at]?.();
+          expect((await first[at])?.status).toBe(200);
+        }
+
+        // A read has finished, so a later request asks nothing.
+        expect((await Effect.runPromise(fetch(w.request("/"), w.env, w.config))).status).toBe(200);
+        expect(held).toHaveLength(order.length);
+      }),
+      { seed: 119120, numRuns: 20 },
+    );
+  });
   law("unmatched routes and grant methods return the text response without RPC", async ({ port, name }, fetch) => {
     const w = world(port, name);
 

@@ -1,35 +1,39 @@
-import { Context, Effect } from "effect";
+import { Context, Effect, Layer } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { RecordedStart } from "../settings/RecordedStart.ts";
 import { GatewayClient, ProjectClient } from "./platform.ts";
-import { projectStub, recordedLayer, rpc, SettingsRuntime, type BrainOptions, type Env } from "./runtime.ts";
+import { projectStub, recordedLayer, rpc, type BrainOptions, type Env } from "./runtime.ts";
 
-// Worker bindings are immutable for an isolate. Requests never enter the shared context.
-const isolates = new WeakMap<Env, ReturnType<typeof httpRuntime>>();
-const httpRuntime = (env: Env) => SettingsRuntime.runtime(recordedLayer(env));
+// Worker bindings are immutable for an isolate, so a recorded start is kept by its `env` object. Only a
+// finished read is kept, never one still under way: the platform gives each request to a Worker its own
+// I/O context, and cancels as hung a request that waits on work another request started.
+const isolates = new WeakMap<Env, Context.Context<RecordedStart>>();
 
 /**
- * Returns the effect that gives the Worker's `RecordedStart` context, built on first use.
+ * Returns the effect that gives the Worker's `RecordedStart` context, read on first use.
  *
  * **Details**
  *
- * One runtime is kept per `env` object. The first use records the start, and later uses read the
- * same context. A failed build is not kept: the next use tries again.
+ * One context is kept per `env` object once a read has finished, and later uses get that same
+ * context with no call. A request that arrives before any read has finished reads for itself:
+ * recording the same start again answers the first receipt, so every such read gives the same
+ * start. A failed read is not kept: the next use tries again.
  *
  * @stability unstable
  * @category getters
  */
-export const httpContext = (env: Env) => {
-  const known = isolates.get(env);
+export const httpContext = (env: Env) =>
+  Effect.suspend(() => {
+    const known = isolates.get(env);
 
-  if (known !== undefined) {
-    return known.context;
-  }
-
-  const owner = httpRuntime(env);
-  isolates.set(env, owner);
-  return owner.context;
-};
+    return known !== undefined
+      ? Effect.succeed(known)
+      : // `RecordedStart` is a plain value with nothing to give back, so it outlives this scope.
+        Layer.build(recordedLayer(env)).pipe(
+          Effect.scoped,
+          Effect.tap((context) => Effect.sync(() => isolates.set(env, context))),
+        );
+  });
 
 /** The tab's page in the window table, answered at `/` (P14). */
 const PAGE = "/index.html";

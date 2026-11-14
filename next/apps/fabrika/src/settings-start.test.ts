@@ -261,33 +261,44 @@ const founding = () => {
 /** A port nobody else is given while the scope is open. */
 const held = Effect.acquireRelease(heldPort(), (h) => h.release);
 
+/**
+ * One real local instance in the test's scope. Its brain file is `entry`, bundled over the real build,
+ * which `entry` imports as `./original.mjs`. All settings and consumer code is the real bundle.
+ */
+const instrumented = Effect.fnUntraced(function* (
+  start: string,
+  entry: (facts: { readonly hash: string; readonly build: string }) => string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const home = yield* fs.makeTempDirectoryScoped({ prefix: "t753-worker-" });
+  const port = yield* held;
+  const key = founding();
+  const built = yield* build({ out: path.join(home, "dist") });
+  const input = {
+    ...(yield* StartsTest.input({ port: port.port, start, build: built.build, revision: null, origin: "flag" })),
+    founding: { person: "person_01m6v5270hf3c8x2q7w9z4k5mn", founder: key.line, window: key.raw },
+  };
+  yield* fs.copyFile(built.brain, path.join(home, "original.mjs"));
+  const source = path.join(home, "entry.mjs");
+  yield* fs.writeFileString(source, entry({ hash: input.settings.hash, build: built.build }));
+  const bundle = yield* Effect.acquireRelease(
+    Effect.promise(() => rolldown({ input: source, external: [/^cloudflare:/], platform: "neutral" })),
+    (owned) => Effect.promise(() => owned.close()),
+  );
+  const brain = path.join(home, "instrumented.mjs");
+  yield* Effect.promise(() => bundle.write({ file: brain, format: "esm" }));
+  return yield* localInstance({ ...built, brain }, { ...input, home });
+});
+
 it.live("scenario: T753 L13 real Worker retries the same HTTP owner, shares warm gates and reopens", () =>
   // scenario: Alchemy, workerd's object bridge and isolate lifetime require one real local instance.
   // Run only in the lead's isolated container. No socket or Docker allowance is requested by this law.
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const home = yield* fs.makeTempDirectoryScoped({ prefix: "t753-worker-" });
-    const port = yield* held;
-    const key = founding();
-    const built = yield* build({ out: path.join(home, "dist") });
-    const input = {
-      ...(yield* StartsTest.input({
-        port: port.port,
-        start: "instance-start-scenario",
-        build: built.build,
-        revision: null,
-        origin: "flag",
-      })),
-      founding: { person: "person_01m6v5270hf3c8x2q7w9z4k5mn", founder: key.line, window: key.raw },
-    };
-    const original = path.join(home, "original.mjs");
-    yield* fs.copyFile(built.brain, original);
-    const entry = path.join(home, "entry.mjs");
-    // The test changes platform answers and SQL failure cuts. All settings and consumer code is the real bundle.
-    yield* fs.writeFileString(
-      entry,
-      `
+    // The test changes platform answers and SQL failure cuts.
+    const instance = yield* instrumented(
+      "instance-start-scenario",
+      ({ hash, build }) => `
       import worker, { Project as OriginalProject, Process, Connection, RecordPart, Control } from "./original.mjs";
       export { Process, Connection, RecordPart, Control };
       export class Project extends OriginalProject {
@@ -324,7 +335,7 @@ it.live("scenario: T753 L13 real Worker retries the same HTTP owner, shares warm
           const exists = this.testStorage.sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='entries'").toArray().length > 0;
           const rows = exists ? this.testStorage.sql.exec("SELECT * FROM entries").toArray().filter(row => {
             const body = JSON.parse(row.body);
-            return body.settings?.hash === ${JSON.stringify(input.settings.hash)} && body.build === ${JSON.stringify(built.build)};
+            return body.settings?.hash === ${JSON.stringify(hash)} && body.build === ${JSON.stringify(build)};
           }) : [];
           return { calls: await this.testStorage.get("test-settings-phase") ?? 0, ...this.testCounts, rows };
         }
@@ -337,15 +348,6 @@ it.live("scenario: T753 L13 real Worker retries the same HTTP owner, shares warm
       } };
     `,
     );
-    const bundle = yield* Effect.acquireRelease(
-      Effect.promise(() => rolldown({ input: entry, external: [/^cloudflare:/], platform: "neutral" })),
-
-      (owned) => Effect.promise(() => owned.close()),
-    );
-    const brain = path.join(home, "instrumented.mjs");
-
-    yield* Effect.promise(() => bundle.write({ file: brain, format: "esm" }));
-    const instance = yield* localInstance({ ...built, brain }, { ...input, home });
     yield* HttpClient.get(`${instance.url}/__settings_arm`);
     const probe = Effect.gen(function* () {
       const response = yield* HttpClient.get(`${instance.url}/__settings_probe`);
@@ -434,6 +436,35 @@ it.live("scenario: T753 L13 real Worker retries the same HTTP owner, shares warm
     const reopened = yield* probe;
     expect(reopened.rows).toEqual(cold.rows);
     expect(reopened.calls).toBeGreaterThan(recordCold.calls);
+  }).pipe(
+    Effect.provide([NodeServices.layer, Digest.layerWebCrypto, SecureRandom.layerWebCrypto, FetchHttpClient.layer]),
+  ),
+);
+
+it.live("scenario: requests that reach a fresh Worker while its first read of the start is under way all answer", () =>
+  // scenario: one fixed shape on the real runtime, because only it gives each request to a Worker its
+  // own I/O context and cancels as hung a request that waits on work another request started. The
+  // Project answers each settings start 300 ms late, so every request arrives before any read ends.
+  Effect.gen(function* () {
+    const instance = yield* instrumented(
+      "instance-start-at-once",
+      () => `
+      import worker, { Project as OriginalProject, Process, Connection, RecordPart, Control } from "./original.mjs";
+      export { Process, Connection, RecordPart, Control };
+      export class Project extends OriginalProject {
+        async settingsStart(input) {
+          await new Promise(done => setTimeout(done, 300));
+          return super.settingsStart(input);
+        }
+      }
+      export default worker;
+    `,
+    );
+    const request = HttpClient.get(`${instance.url}/`);
+    const answers = yield* Effect.forEach(Array.from({ length: 24 }), () => request, { concurrency: "unbounded" });
+    expect(answers.map((response) => response.status)).toEqual(answers.map(() => 200));
+    // A read has finished, so a later request answers from it.
+    expect((yield* request).status).toBe(200);
   }).pipe(
     Effect.provide([NodeServices.layer, Digest.layerWebCrypto, SecureRandom.layerWebCrypto, FetchHttpClient.layer]),
   ),
