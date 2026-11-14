@@ -1,7 +1,8 @@
 // A rule that joins with findings already in the tree blocks every new one, and the findings it met
 // on its first day are named in a ledger, which only shrinks. `lint.ts` waives a finding a ledger
 // names, writes back only the entries a finding still matched, and CI fails until that pruned file is
-// committed. Nothing here adds an entry; that is the owner's call.
+// committed. Nothing here adds an entry, and no pull request may: CI's ratchet
+// (`next/apps/fabrika/src/exam/ratchet.ts`) refuses an added row (0524).
 //
 // Two ledgers, each for one folder. `agents-ledger.json` holds what `.agents/` broke the day it was
 // held to next/'s rules (0033). `next-ledger.json` holds what `next/` broke the day a rule joined it:

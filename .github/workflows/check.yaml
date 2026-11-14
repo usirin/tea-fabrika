@@ -139,6 +139,12 @@ jobs:
       # The same for `next/`: what a rule met the day it joined, which only shrinks (ledger.ts).
       - name: next ledger committed
         run: git diff --exit-code -- next-ledger.json
+      # 0524: a list file only shrinks until it is deleted. Each list's rows at the head, against the
+      # base, keyed as its reader matches them (ratchet.ts). Pruning and deleting pass.
+      - name: lists only shrink
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}
+        run: node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"
       # Experiment 117: each formal check is tied to the code it covers (promises/).
       # It fails when covered code changed and its record was not confirmed again, when
       # a check is red at this head, or when a planted break is not caught. A change to a
