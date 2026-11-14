@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0041 and 0042; the owner answered its open question on 2026-11-13; the lead amended its files table on 2026-11-13; body fc3527031a7b
+Approved by the lead agent, builds 0041 and 0042; the owner answered its open question on 2026-11-13; the lead amended its files table on 2026-11-13, twice; body 7919f6dde83c
 Plancheck-Version: 3
 
 # Ticket 502: the rest of the Alchemy port
@@ -434,6 +434,8 @@ write-up to main; its code stays on its branch
 | `next/apps/fabrika/src/instance-records.test.ts` | tests | S1, S2, S3, S7 | tests | the exam entry for the slice's object, ported first; laws 2 and 4 |
 | `next/apps/fabrika/src/instance-wire.test.ts` | tests | S1, S7 | tests | law 2, unchanged cases; law 12 |
 | `next/apps/fabrika/src/port-home.laws.test.ts` `fixtures/next/port-home` | tests | S1, then S2, S3, S5, S8 | tests | new: law 5 and its saved home |
+| `next/apps/fabrika/src/port-home.test-support.ts` `next/apps/fabrika/src/port-home-guard.test.ts` | tests | S1 | tests | new: the writer of law 5's home refuses a home that holds an absolute path under the person's home folder, the temp folder or the repo root, sqlite cells included, and its law (the lead's amendment of 2026-11-13) |
+| `next/packages/libfabrika/src/telemetry/Sink.test.ts` | tests | S1 | tests | [0186](../../.decisions/0186-stored-stack-frames-name-no-folder.md)'s law: no stored frame names a folder, and nothing else is lost (the lead's amendment of 2026-11-13; the same laws as pull request 1012) |
 | `next/packages/libfabrika/src/cloudflare/ObjectService.test.ts` | tests | S1 | tests | new: law 3 |
 | `next/packages/libfabrika/src/cloudflare/connection.test.ts` | tests | S1, S6 | tests | its fake state follows the service in S6 |
 | `next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts` `next/apps/fabrika/src/scheduled-job-alarm.test.ts` `next/apps/fabrika/src/worker-supervision.test.ts` | tests | S2, S5 | tests | law 10 on the real `Process` |
@@ -457,6 +459,7 @@ write-up to main; its code stays on its branch
 | `next/packages/libfabrika/src/cloudflare/platform.ts` | build | S1 to S6 | 60 | clients lose their edges, then go; deleted in S6 |
 | `next/packages/libfabrika/src/cloudflare/reach.ts` | build | S1 | 2 | `reach` is `Effect.fnUntraced`, so a call through it opens no span that keeps a letter's text (the lead's amendment of 2026-11-13); S2 then drops its `Effect.withTracerEnabled(false)` around its own calls |
 | `next/packages/libfabrika/package.json` | build | S1, S2, S3 | 3 | one `./workers/<Name>Object` export for each object's Layer (the lead's amendment of 2026-11-13) |
+| `next/packages/libfabrika/src/telemetry/Sink.ts` | build | S1 | 20 | stored error content cuts the folder out of each stack frame, as 0186 decides; main had no cut, so law 5's saved home kept a worktree path (the lead's amendment of 2026-11-13; the same lines as pull request 1012) |
 | `next/packages/libfabrika/src/cloudflare/bindings.ts` | build | S4 | 10 | the Promise binding types go; the reply unions stay |
 | `next/packages/libfabrika/src/cloudflare/runtime.ts` `next/packages/libfabrika/src/cloudflare/connection.ts` `next/packages/libfabrika/src/cloudflare/fetch.ts` `next/packages/libfabrika/src/cloudflare/control.ts` `next/packages/libfabrika/src/cloudflare/mail.ts` `next/packages/libfabrika/src/cloudflare/tail.ts` | build | S4, S5, S6, S7 | 260 | 33 client uses take a sibling from init; storage and sockets through Alchemy; `fetch` reads Alchemy's request |
 | `next/packages/libfabrika/src/Sql.ts` `next/packages/libfabrika/src/cloudflare/CloudflareSql.ts` `next/packages/libfabrika/src/ledger/NodeSqlite.ts` `next/packages/libfabrika/src/cloudflare/record.ts` | build | S5 | 60 | the turn returns an Effect, on both drivers; `RecordPartObject.layer` |
