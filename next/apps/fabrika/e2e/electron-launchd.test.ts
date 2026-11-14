@@ -41,7 +41,12 @@ it("pinned: L13 bundles keep native dependencies resolvable outside root node_mo
           const linked = yield* Host.bundle(`export * from ${JSON.stringify(entry)};`, compiled, root);
           expect(yield* fs.exists(compiled)).toBe(true);
           // The app's "sideEffects": false once emptied the helper's bundle, and its mains with it.
-          expect(yield* fs.readFileString(compiled)).toContain(name === "controller" ? "p19:guard" : "localInstance");
+          // The helper's bundle is also the brain launchd starts, so its brain main must survive too.
+          const text = yield* fs.readFileString(compiled);
+
+          for (const main of name === "controller" ? ["p19:guard", "p19:controller", "p19:brain"] : ["localInstance"]) {
+            expect(text).toContain(main);
+          }
 
           for (const file of linked) {
             expect(yield* fs.exists(file)).toBe(true);

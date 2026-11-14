@@ -71,7 +71,7 @@ const identity = Effect.fn("RevokeTest.identity")(function* () {
         space: "fabrika-client",
         sign: (bytes) =>
           Effect.tryPromise({
-            try: () => crypto.subtle.sign("Ed25519", pair.privateKey, bytes),
+            try: () => crypto.subtle.sign("Ed25519", pair.privateKey, Uint8Array.from(bytes)),
             catch: (cause) => new WireFailure({ cause }),
           }).pipe(Effect.map((signed) => new Uint8Array(signed))),
       }),
@@ -103,7 +103,7 @@ const encode = (value: unknown) => {
     header.writeUInt16BE(payload.length, 2);
   }
 
-  return Buffer.concat([header, mask, payload.map((byte, n) => byte ^ (mask[n % 4] ?? 0))]);
+  return Buffer.concat([header, mask, payload.map((byte: number, n: number) => byte ^ (mask[n % 4] ?? 0))]);
 };
 
 /** The raw client keeps TCP's write half open and never acknowledges a WebSocket Close. */
@@ -113,6 +113,7 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
   tab: string,
 ) {
   const address = new URL(url);
+  const random = yield* SecureRandom.SecureRandom;
   const chunks = yield* Queue.unbounded<Buffer>();
   const closes: Array<number> = [];
   const socket = yield* Effect.acquireRelease(
@@ -214,7 +215,7 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
     }
   });
   const call = Effect.fnUntraced(function* (method: string, params: unknown) {
-    const id = crypto.randomUUID();
+    const id = yield* random.uuidV4();
     socket.write(encode({ jsonrpc: "2.0", id, method, params }));
     return yield* next((value) => value.id === id);
   });
@@ -239,15 +240,21 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
     call,
     closes,
   };
-});
+}, Effect.provide(SecureRandom.layerWebCrypto));
 
 const invoke = Effect.fn("RevokeTest.control")(function* (
-  binding: object,
+  binding: Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>,
   method: string,
   args: ReadonlyArray<unknown>,
 ) {
+  const control = binding[method];
+
+  if (control === undefined) {
+    return yield* new WireFailure({ cause: new Error(`the project binding has no ${method}`) });
+  }
+
   return yield* Effect.tryPromise({
-    try: () => Reflect.apply(Reflect.get(binding, method), binding, args),
+    try: () => Reflect.apply(control, binding, args),
     catch: (cause) => new WireFailure({ cause }),
   });
 });
@@ -380,7 +387,14 @@ it.live(
         const { instance, old: oldKey, other: otherKey, root, pid } = fixture;
         const project = instance.project(RevokeTest.PROJECT);
         // The private Alchemy binding already implements the project's public ledger-call protocol.
-        const ledger = LedgerRemote.layer(project as LedgerCalls, { reader: "p17b-revoke-audit" });
+        const { append, read, wait } = project;
+
+        if (append === undefined || read === undefined || wait === undefined) {
+          return yield* Effect.die(new Error("the project binding has no ledger calls"));
+        }
+
+        const calls: LedgerCalls = { append, read, wait };
+        const ledger = LedgerRemote.layer(calls, { reader: "p17b-revoke-audit" });
         const rows = (stream: string) =>
           Ledger.use((service) => Stream.runCollect(service.read(stream, 0))).pipe(Effect.provide(ledger));
         const old = yield* RevokeTest.connect(instance.url, oldKey, "old");

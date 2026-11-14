@@ -157,7 +157,10 @@ const loseFirstAnswers = () => {
       });
     }
 
-    override send(data: Parameters<WebSocket["send"]>[0]) {
+    // The global WebSocket carries both the DOM's and Node's send, so this one keeps both signatures.
+    override send(data: string | Blob | BufferSource): void;
+    override send(data: string | ArrayBuffer | ArrayBufferView): void;
+    override send(data: string | Blob | BufferSource | ArrayBufferView) {
       if (typeof data === "string" && data !== "ping") {
         const frame = JSON.parse(data);
 
@@ -172,7 +175,11 @@ const loseFirstAnswers = () => {
         }
       }
 
-      super.send(data);
+      if (data instanceof Blob) {
+        super.send(data);
+      } else {
+        super.send(data);
+      }
     }
   };
 };
@@ -186,7 +193,7 @@ const Resends = Schema.Struct({
           params: Schema.Struct({
             pid: Schema.String,
             letter: Schema.String,
-            m: checklistMachine.msg,
+            m: checklist.msg,
             sentAt: Schema.String,
             seen: Schema.Int,
             traceId: Schema.optionalKey(Schema.String),
@@ -450,7 +457,7 @@ describe("L15: use in two tabs (W2)", () => {
 
               for (const entry of inbox.filter((entry) => !letters.has(entry.id))) {
                 expect(entry._tag, "inbox entries are mailbox sends").toBe("send");
-                const { m } = Schema.decodeUnknownSync(Schema.Struct({ m: checklistMachine.msg }))(entry.body);
+                const { m } = Schema.decodeUnknownSync(Schema.Struct({ m: checklist.msg }))(entry.body);
                 expect(m.type, "every remaining inbox entry is a runner timer").toBe("timer");
                 expect(entry.id, "the runner timer has its own revision-scoped id").toMatch(/\/due\/\d+\/\d+$/);
               }

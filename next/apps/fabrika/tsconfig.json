@@ -8,5 +8,15 @@
     // The package commands use plain Node, which strips types without transforming them.
     "erasableSyntaxOnly": true
   },
-  "include": ["src", "dev.ts", "build.ts", "grant.ts", "alchemy.run.ts", "cli.ts", "settings-generate.ts"]
+  "include": [
+    "src",
+    "e2e",
+    "e2e.ts",
+    "dev.ts",
+    "build.ts",
+    "grant.ts",
+    "alchemy.run.ts",
+    "cli.ts",
+    "settings-generate.ts"
+  ]
 }

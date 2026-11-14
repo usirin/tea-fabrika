@@ -16,6 +16,7 @@ import * as Native from "@kampus/libfabrika/node/launchd/BrainControlLaunchd";
 import * as ServiceLaunchd from "@kampus/libfabrika/node/launchd/BrainServiceLaunchd";
 import * as LaunchdStatus from "@kampus/libfabrika/node/launchd/LaunchdStatus";
 import * as ProcessGroups from "@kampus/libfabrika/node/launchd/ProcessGroups.test-support";
+import { BuiltProgram } from "@kampus/libfabrika/runtime/Built";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as Snapshot from "@kampus/libfabrika/settings/Snapshot";
 import * as Sources from "@kampus/libfabrika/settings/Sources";
@@ -34,11 +35,13 @@ import {
   Schema,
   Stream,
 } from "effect";
-import { Digest } from "effect/crypto";
+import { Digest, SecureRandom } from "effect/crypto";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { ChildProcess } from "effect/process";
 import { rolldown, type PreRenderedChunk } from "rolldown";
 import { build } from "../../src/build.ts";
+import { localInstance } from "../../src/local-instance.ts";
+import { Settings } from "../../src/settings.ts";
 
 class HostError extends Schema.TaggedError<HostError>()("HostError", {
   reason: Schema.String,
@@ -233,7 +236,7 @@ export const bundle = Effect.fn("P19Host.bundle")(function* (source: string, out
           cwd: root,
           platform: "node",
           external: [/^node:/],
-          // The app's package.json says "sideEffects": false, which drops this helper's guard and controller mains.
+          // The app's package.json says "sideEffects": false, which drops this helper's guard, controller and brain mains.
           treeshake: { moduleSideEffects: [{ test: /P19Launchd\.test-support\.ts$/, sideEffects: true }] },
           plugins: [
             {
@@ -388,8 +391,47 @@ const controller = Effect.fn("P19Host.controller")(function* (specFile: string, 
   yield* fs.writeFileString(`${spec.home}/controller.ready`, "ready");
 
   if (!process.argv.includes("--release")) {
-    yield* Effect.never;
+    return yield* Effect.never;
   }
+});
+
+/**
+ * What `check` hands the brain launchd starts: the built file and the start, given as `dev.ts`
+ * gives them, with the host check's own settings snapshot, so its port and rate limit are the ones
+ * the launchd job was compiled from.
+ */
+const BrainInput = Schema.Struct({
+  built: Schema.Struct({
+    build: Schema.String,
+    brain: Schema.String,
+    programs: Schema.Record(Schema.String, BuiltProgram),
+  }),
+  start: Schema.Struct({
+    name: Settings.fields.name,
+    founding: Settings.fields.founding,
+    settings: Settings.fields.settings,
+    repo: Settings.fields.repo,
+    home: Schema.String,
+  }),
+});
+
+/** The brain launchd starts: the real local instance, then its ready file, then it waits to be stopped. */
+const brain = Effect.fn("P19Host.brain")(function* (file: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const input = yield* fs
+    .readFileString(file)
+    .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(BrainInput))));
+  yield* localInstance(input.built, input.start);
+  yield* fs.writeFileString(
+    `${input.start.home}/ready.json`,
+    JSON.stringify({
+      pid: process.pid,
+      build: input.built.build,
+      node: process.versions.node,
+      electron: process.versions.electron,
+    }),
+  );
+  return yield* Effect.never;
 });
 
 export const check = Effect.fn("P19Host.check")(function* () {
@@ -418,18 +460,30 @@ export const check = Effect.fn("P19Host.check")(function* () {
   const runtime = `${home}/brain.mjs`,
     controllerFile = `${home}/controller.mjs`,
     guardFile = `${home}/guard.mjs`;
-  const boot = `import { NodeRuntime, NodeServices } from "@effect/platform-node"; import { Effect } from "effect"; import { Digest, SecureRandom } from "effect/crypto";`;
-  yield* bundle(
-    `${boot} import { localInstance } from ${JSON.stringify(path.join(app, "src/local-instance.ts"))}; import { FileSystem } from "effect"; NodeRuntime.runMain(Effect.scoped(Effect.gen(function*(){ const fs=yield* FileSystem.FileSystem; yield* localInstance(${JSON.stringify(built)}, { name:"p19-isolated", person:"person_01m6v5270hf3c8x2q7w9z4k5mn", founder:"public-host-test", window:null, rateLimit:{limit:${Number(settings.values["gateway.limit"])},window:${Number(settings.values["gateway.window"])}}, port:${chosen}, home:${JSON.stringify(home)} }); yield* fs.writeFileString(${JSON.stringify(`${home}/ready.json`)}, JSON.stringify({pid:process.pid,build:${JSON.stringify(built.build)},node:process.versions.node,electron:process.versions.electron})); yield* Effect.never; })).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto, SecureRandom.layerWebCrypto])));`,
-    runtime,
-    root,
+  const brainFile = `${home}/brain.json`;
+  yield* fs.writeFileString(
+    brainFile,
+    JSON.stringify(
+      yield* Schema.encodeEffect(BrainInput)({
+        built: { build: built.build, brain: built.brain, programs: built.programs },
+        start: {
+          name: "p19-isolated",
+          founding: { person: "person_01m6v5270hf3c8x2q7w9z4k5mn", founder: "public-host-test", window: null },
+          settings,
+          repo: null,
+          home,
+        },
+      }),
+    ),
   );
+  yield* bundle(`import ${JSON.stringify(helper)};`, runtime, root);
   yield* bundle(`import ${JSON.stringify(helper)};`, controllerFile, root);
   yield* bundle(`import ${JSON.stringify(helper)};`, guardFile, root);
   const spec = yield* Schema.decodeUnknownEffect(BrainSpec)({
     home,
     executable,
-    args: [runtime, "spaces & <angles> 雪"],
+    // The brain's mode and input go first; the last argument checks that launchd keeps argv as given.
+    args: [runtime, "p19:brain", brainFile, "spaces & <angles> 雪"],
     url,
     build: built.build,
   });
@@ -524,7 +578,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
     yield* acknowledgedGroups;
     const first = yield* status(config.target);
     yield* checked(first._tag === "loaded" && first.pid !== null, "no-running-brain");
-    yield* client.kill({ signal: "SIGKILL" });
+    yield* client.kill({ killSignal: "SIGKILL" });
     yield* checked(
       JSON.stringify(yield* status(config.target)) === JSON.stringify(first) && (yield* listening(url)),
       "controller-death-stopped-brain",
@@ -639,6 +693,14 @@ if (process.argv[2] === "p19:controller") {
   NodeRuntime.runMain(
     Effect.scoped(controller(process.argv[3] ?? "", process.argv[4] ?? "")).pipe(
       Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
+    ),
+  );
+}
+
+if (process.argv[2] === "p19:brain") {
+  NodeRuntime.runMain(
+    Effect.scoped(brain(process.argv[3] ?? "")).pipe(
+      Effect.provide([NodeServices.layer, Digest.layerWebCrypto, SecureRandom.layerWebCrypto]),
     ),
   );
 }
