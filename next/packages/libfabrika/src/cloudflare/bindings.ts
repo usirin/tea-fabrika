@@ -12,6 +12,7 @@ import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import type { Incoming } from "../runtime/Entry.ts";
 import type * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import type { Descriptor, ProgramRunner } from "../runtime/Runner.ts";
+import type { Publication } from "../runtime/WatcherManager.ts";
 import type { RecordCalls } from "../telemetry/Records.ts";
 import type { checkHello } from "../transport/Hello.ts";
 import type { Answer } from "../transport/Wire.ts";
@@ -160,7 +161,7 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
         trace?: { traceId: string; spanId: string },
       ) => Effect.Effect<Appended>
     >;
-    publish: RemoteCall<(client: string, update: unknown) => Effect.Effect<void>>;
+    publish: RemoteCall<(client: string, update: unknown) => Effect.Effect<typeof Publication.Type>>;
     brain: RemoteCall<(event: typeof BrainEvent.Type) => Effect.Effect<Appended>>;
     /** The registered name whose Process object holds this process ID's storage. */
     processObject: RemoteCall<(pid: string) => Effect.Effect<string>>;

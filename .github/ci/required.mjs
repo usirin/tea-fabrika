@@ -1,6 +1,6 @@
 // Today's CI for both versions. The `ci-required` job's verdict: did every job in check.yaml pass,
-// or skip only where changes.mjs said it may? GitHub's ruleset for main requires this one check
-// beside `commits`. No installed dependencies and no type stripping, like changes.mjs, so the job
+// or skip only where changes.mjs said it may? GitHub's ruleset for main requires this one check.
+// No installed dependencies and no type stripping, like changes.mjs, so the job
 // runs on the runner's own Node with no setup or install.
 //
 // The same shape as phoenix's ci-required (packages/fabrika-cli/src/ci/required.ts there): a pure

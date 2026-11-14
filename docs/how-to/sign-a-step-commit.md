@@ -112,16 +112,9 @@ A pull request that touches no `next/**` and no exam path is "not in scope" and 
 
 ## The merge reads one run
 
-The lead never reads a check by its name, since any workflow can name a job `commits`. It reads the
-run of the file `commits.yaml` on the event's head sha:
-
-```sh
-gh run list --workflow commits.yaml --commit <head sha> --json conclusion,event
-```
-
-There must be exactly one `pull_request_target` run, with conclusion `success`. None, two, or any
-other conclusion is red. The lead also checks that the ticket the check printed is the pull request's
-tracker ticket. No row per merge records it yet: that measure is proposed
+Not today. The `commits` workflow is gone and the merge reads no such run, since no step signs a
+commit by hand ([0161](../../.decisions/0161-no-step-signing-by-hand.md)). `pnpm commits check`
+still runs by hand. A row per merge is proposed
 ([autonomy is measured trust](../direction/autonomy-is-measured-trust.md), M1).
 
 ## After the merge
@@ -137,8 +130,8 @@ head merged onto `main` gives the squash's tree
 
 ## The pull request that added the check
 
-The workflow runs `main`'s copy, and `main` had none, so that pull request was checked once by hand,
-reading the keys file and the exam list from its own head, a flag the workflow never passes:
+The workflow ran `main`'s copy, and `main` had none, so that pull request was checked once by hand,
+reading the keys file and the exam list from its own head, a flag the workflow never passed:
 
 ```sh
 pnpm commits check --base origin/main --head HEAD --keys-from head

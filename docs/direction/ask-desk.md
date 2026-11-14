@@ -655,7 +655,7 @@ Small fixes offered, not filed. Sizes in lines and agent hours.
   groups by kind inside it.
 - **[One ask, one meter](./one-ask-and-one-meter.md)** (proposed) has `answered {pick, note}`. This
   note makes it `answer` (a union) plus `took`, and adds `rec` on `asked`.
-- **[AGENTS.md](../../AGENTS.md#running-the-machine-on-a-real-ticket):** "no agent answers a question
+- **[AGENTS.md](../../AGENTS.md#how-a-change-lands):** "no agent answers a question
   the machine put to a person". A rule does not break it: the person makes the rule, as a person's
   fact, and once it holds the machine does not put that question to a person. `auto` is code's fact
   and never looks like a person's. It does move judgments to code, which

@@ -81,7 +81,7 @@ What is already settled, and how this fits:
   gives us, not between model steps. A room line taken at a turn's edge fits it.
 - [0071](0071-risk-tier-decides-who-looks.md): an agent's approval never counts as a person's look.
   This record keeps that for rooms.
-- [AGENTS.md](../AGENTS.md#running-the-machine-on-a-real-ticket): "No agent approves a pull request,
+- [AGENTS.md](../AGENTS.md#how-a-change-lands): "No agent approves a pull request,
   and no agent answers a question the machine put to a person." This record keeps it: the answer is
   a person's line, written by the person's own session.
 

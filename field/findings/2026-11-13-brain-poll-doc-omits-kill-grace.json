@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-brain-poll-doc-omits-kill-grace",
+  "date": "2026-11-13",
+  "by": "review",
+  "model": "claude-fable-5-2",
+  "rule": "doc_drift",
+  "location": {
+    "path": "next/packages/libfabrika/src/settings/Declarations.ts",
+    "line": 94
+  },
+  "says": "In next/, the person-facing text of desktop.brain-poll says only that it is the interval between readiness and shutdown checks, but the same value is also how long an interrupted native command gets after SIGTERM before it is killed, so the generated reference and schema hide half of what the setting does.",
+  "proof": "Two lines disagree. Declarations.ts:86 (doc comment): 'A native command that is interrupted gets the same interval to exit before it is killed.' Declarations.ts:94 (doc): 'The interval in milliseconds between brain readiness and shutdown checks.' The second is what docs/settings-reference.md:50 and next/apps/fabrika/person.json:12 print. BrainControlLaunchd.ts:85 passes the value as forceKillAfter.",
+  "cost": "A person who raises the poll interval also makes a stuck launchctl or plutil hold the operation lock that much longer, with nothing in the reference to say so.",
+  "head": "306ac1ceb0781d0e93894481a252f56bf85046cb",
+  "ticket": "kamp-us/tea-fabrika#881",
+  "pr": "kamp-us/tea-fabrika#1079"
+}

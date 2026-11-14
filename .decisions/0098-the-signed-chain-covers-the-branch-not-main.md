@@ -1,7 +1,7 @@
 ---
 id: 0098
 title: The signed chain covers a branch's own change, from where it left main to its head, and a branch behind main is never refused for that
-status: amended-in-part by [0110](0110-merge-queue-is-fabrika-programs.md)
+status: amended-in-part by [0110](0110-merge-queue-is-fabrika-programs.md), [0161](0161-no-step-signing-by-hand.md)
 date: 2026-11-11
 tags: [commits, signing, chain, merge, behind, main, release]
 ---

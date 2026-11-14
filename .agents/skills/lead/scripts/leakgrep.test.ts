@@ -198,6 +198,40 @@ describe("T325 K6 leakgrep, today's tooling", () => {
     );
   });
 
+  // Plant: allow only one of the two addresses, or allow any repo under the same owner.
+  it("allows this repository's old and new address, and no other repository of the same owner", () => {
+    fc.assert(
+      fc.property(fc.stringMatching(/^[a-z]{4,12}$/), (suffix) => {
+        const dir = mkdtempSync(join(tmpdir(), "lg-moved-"));
+
+        try {
+          const repo = join(dir, "repo");
+          mkdirSync(repo);
+          expect(spawnSync("git", ["init", "-q", repo]).status).toBe(0);
+          const words = join(dir, "words");
+          writeFileSync(words, "usirin\nkamp-us\ntea-fabrika\n");
+          const run = (input: string) =>
+            spawnSync("sh", [script], {
+              cwd: repo,
+              input,
+              encoding: "utf8",
+              env: { ...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined },
+            });
+
+          for (const owner of ["usirin", "kamp-us"]) {
+            const url = `https://github.com/${owner}/tea-fabrika`;
+            expect(run(`+See ${url}/pull/532 and <${url}>.\n`).status, url).toBe(0);
+            expect(run(`+See https://github.com/${owner}/${suffix}\n`).status, owner).toBe(1);
+            expect(run(`+${url}-${suffix}\n`).status, owner).toBe(1);
+          }
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      }),
+      options,
+    );
+  });
+
   // Plant: accept a repo-local word list.
   it("checks whole drafts, uses a private default, and refuses repo-linked word files", () => {
     fc.assert(

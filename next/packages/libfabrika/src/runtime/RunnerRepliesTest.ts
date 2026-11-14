@@ -51,6 +51,7 @@ const KNOWN = new Set([
   "process_letters",
   "process_activity",
   "process_recovery",
+  "process_watchers",
   "process_receipts",
   "process_connections",
   "unsent",

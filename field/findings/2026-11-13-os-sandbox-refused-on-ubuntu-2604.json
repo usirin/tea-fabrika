@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-os-sandbox-refused-on-ubuntu-2604",
+  "date": "2026-11-13",
+  "by": "ci-fix",
+  "model": "claude-fable-5-2",
+  "rule": "bug",
+  "location": {
+    "path": "packages/fabrika/src/sandbox/os.ts",
+    "line": 76
+  },
+  "says": "In today's version, the os sandbox starts no program on a stock Ubuntu 26.04: the image's own AppArmor profile for bwrap denies the capability sandbox-runtime 0.0.81's seccomp helper needs, and nothing in the product says so or works around it. CI now unloads the profile; a person's own 26.04 machine would still hit it.",
+  "proof": "Run 43493167395, job test (1), on image ubuntu-26.04 20261111.196.1, with kernel.apparmor_restrict_unprivileged_userns already 0. `node <sandbox-runtime>/dist/cli.js --settings srt.json -- sh -c 'echo inside the box'` printed `apply-seccomp: write /proc/self/setgroups (nested userns is capability-restricted; caller must provide CAP_SYS_ADMIN): Permission denied` and exited 1. dmesg: `apparmor=\"DENIED\" operation=\"capable\" class=\"cap\" profile=\"unpriv_bwrap\" comm=\"apply-seccomp\" capability=21 capname=\"sys_admin\"`. After `sudo apparmor_parser -R /etc/apparmor.d/bwrap-userns-restrict` the same command printed `inside the box` and exited 0. sandbox-runtime's README names only the sysctl for Ubuntu 24.04 and later.",
+  "cost": "Every box on Ubuntu 26.04 ends with exit 1 before its program starts, so each step that runs in the os sandbox is stuck there, and the upstream package's setup note does not cover it.",
+  "head": "244277a5968c13d7fec4b1606d6659ef87e33947",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1120"
+}

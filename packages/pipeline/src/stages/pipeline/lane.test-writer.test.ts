@@ -421,6 +421,8 @@ describe("a test writer whose run on the base fails", () => {
       .filter((body) => body.startsWith("test_writer is stuck."));
     expect(stuck, said).not.toEqual([]);
     expect(stuck[0]).toContain("no_report");
+    // What the box last said on stderr: without it, a box that ends at once reads as a silent exit 1.
+    expect(stuck[0]).toContain(`The box's last lines on stderr: ${NO_REPORT.tail}`);
     expect(stuck[0]).toContain(SECOND.when);
     expect(stuck[0]).toContain(NEVER);
   });

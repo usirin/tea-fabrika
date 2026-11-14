@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterAll, beforeEach, describe, expect, it, vi } from "@effect/vitest";
+import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Layer, Result, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -30,8 +30,24 @@ beforeEach(async () => {
 });
 
 const checks = { seed: 119120, numRuns: 35 };
-const folder = mkdtempSync(join(tmpdir(), "p17-auth-"));
-afterAll(() => rmSync(folder, { recursive: true, force: true }));
+
+// Every world is a node:sqlite file in its own temp folder. The scope of one property run closes
+// the connection, then removes the folder (0061).
+const folder = Effect.acquireRelease(
+  Effect.sync(() => mkdtempSync(join(tmpdir(), "p17-auth-"))),
+  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+);
+
+const open = (path: string) =>
+  Effect.acquireRelease(
+    Effect.sync(() => new DatabaseSync(path)),
+    (db) =>
+      Effect.sync(() => {
+        if (db.isOpen) {
+          db.close();
+        }
+      }),
+  );
 
 const root = "person-public-key",
   old = "old-client-public-key",
@@ -100,8 +116,6 @@ const grant = () =>
 const line = (body: string): Line =>
   lineFor({ ...from, by: "SHA256:old" }, Schema.TaggedStruct("saved", { text: Schema.String }).make({ text: body }));
 
-let homes = 0;
-
 type Observed = {
   turn: number;
   op: "read" | "append";
@@ -110,9 +124,8 @@ type Observed = {
   inside: boolean;
 };
 
-const world = (path = join(folder, `${++homes}.db`), fail = false) => {
-  const db = new DatabaseSync(path),
-    base = nodeSql(db);
+const worldOn = (db: DatabaseSync, path: string, fail: boolean) => {
+  const base = nodeSql(db);
   const sql: Sql = {
     ...base,
     exec: (query, ...args) => {
@@ -158,6 +171,13 @@ const world = (path = join(folder, `${++homes}.db`), fail = false) => {
   return { db, sql, path, observations, layer };
 };
 
+/** A world on a fresh file, or on `path` opened again after a test closed it by hand. */
+const world = (path?: string, fail = false) =>
+  Effect.gen(function* () {
+    const file = path ?? join(yield* folder, "home.db");
+    return worldOn(yield* open(file), file, fail);
+  });
+
 const read = (stream: string) => Ledger.use((l) => Stream.runCollect(l.read(stream, 0)));
 
 const boot = ClientManager.use((clients) => clients.members).pipe(
@@ -176,11 +196,9 @@ describe("P17a, appendAdmitted", () => {
         fc.integer({ min: 0, max: 1000 }),
         fc.string({ maxLength: 30 }),
         fc.constantFrom(0, 1, 257),
-        async (before, after, at, body, history) => {
-          const w = world();
-
-          try {
-            await Effect.runPromise(
+        (before, after, at, body, history) =>
+          Effect.runPromise(
+            Effect.flatMap(world(), (w) =>
               Effect.gen(function* () {
                 yield* TestClock.setTime(at);
                 yield* boot;
@@ -233,11 +251,8 @@ describe("P17a, appendAdmitted", () => {
                   ]);
                 }
               }).pipe(Effect.provide(w.layer), Effect.provide(TestClock.layer())),
-            );
-          } finally {
-            w.db.close();
-          }
-        },
+            ).pipe(Effect.scoped),
+          ),
       ),
       checks,
     );
@@ -248,64 +263,51 @@ describe("P17a, appendAdmitted", () => {
         fc.boolean(),
         fc.integer({ min: 0, max: 500 }),
         fc.string({ maxLength: 20 }),
-        async (reopen, at, body) => {
-          const w = world();
+        (reopen, at, body) =>
+          Effect.runPromise(
+            Effect.gen(function* () {
+              const w = yield* world();
+              yield* boot.pipe(Effect.provide(w.layer));
 
-          try {
-            await Effect.runPromise(boot.pipe(Effect.provide(w.layer)));
-
-            if (reopen) {
-              w.db.close();
-            }
-
-            const fresh = reopen ? world(w.path) : w;
-
-            try {
-              await Effect.runPromise(
-                Effect.gen(function* () {
-                  yield* TestClock.setTime(at);
-                  const real = yield* LedgerTransaction,
-                    entered = yield* Deferred.make<void>(),
-                    release = yield* Deferred.make<void>();
-                  const paused: typeof LedgerTransaction.Service = {
-                    transact: (step) =>
-                      Deferred.succeed(entered, undefined).pipe(
-                        Effect.andThen(Deferred.await(release)),
-                        Effect.andThen(real.transact(step)),
-                      ),
-                  };
-                  const pending = yield* Effect.forkChild(
-                    Effect.result(
-                      appendAdmitted(old, { stream: "notes", id: "late", line: line(body) }).pipe(
-                        Effect.provideService(LedgerTransaction, paused),
-                      ),
-                    ),
-                  );
-                  yield* Deferred.await(entered);
-                  yield* remove();
-                  yield* Deferred.succeed(release, undefined);
-                  const result = yield* Fiber.join(pending);
-                  expect(Result.isFailure(result)).toBe(true);
-
-                  if (Result.isSuccess(result)) {
-                    return yield* Effect.die(new Error("late append passed revoke"));
-                  }
-
-                  expect(result.failure).toMatchObject({ _tag: "NotGranted" });
-                  expect(yield* read("notes")).toEqual([]);
-                }).pipe(Effect.provide(fresh.layer), Effect.provide(TestClock.layer())),
-              );
-            } finally {
-              if (fresh.db.isOpen) {
-                fresh.db.close();
+              if (reopen) {
+                w.db.close();
               }
-            }
-          } finally {
-            if (w.db.isOpen) {
-              w.db.close();
-            }
-          }
-        },
+
+              const fresh = reopen ? yield* world(w.path) : w;
+              yield* Effect.gen(function* () {
+                yield* TestClock.setTime(at);
+                const real = yield* LedgerTransaction,
+                  entered = yield* Deferred.make<void>(),
+                  release = yield* Deferred.make<void>();
+                const paused: typeof LedgerTransaction.Service = {
+                  transact: (step) =>
+                    Deferred.succeed(entered, undefined).pipe(
+                      Effect.andThen(Deferred.await(release)),
+                      Effect.andThen(real.transact(step)),
+                    ),
+                };
+                const pending = yield* Effect.forkChild(
+                  Effect.result(
+                    appendAdmitted(old, { stream: "notes", id: "late", line: line(body) }).pipe(
+                      Effect.provideService(LedgerTransaction, paused),
+                    ),
+                  ),
+                );
+                yield* Deferred.await(entered);
+                yield* remove();
+                yield* Deferred.succeed(release, undefined);
+                const result = yield* Fiber.join(pending);
+                expect(Result.isFailure(result)).toBe(true);
+
+                if (Result.isSuccess(result)) {
+                  return yield* Effect.die(new Error("late append passed revoke"));
+                }
+
+                expect(result.failure).toMatchObject({ _tag: "NotGranted" });
+                expect(yield* read("notes")).toEqual([]);
+              }).pipe(Effect.provide(fresh.layer), Effect.provide(TestClock.layer()));
+            }).pipe(Effect.scoped),
+          ),
       ),
       { ...checks, numRuns: 20 },
     );
@@ -316,72 +318,51 @@ describe("P17a, appendAdmitted", () => {
         fc.constantFrom("json", "known_fact", "row"),
         fc.boolean(),
         fc.string({ maxLength: 30 }),
-        async (damage, reopen, body) => {
-          const w = world();
+        (damage, reopen, body) =>
+          Effect.runPromise(
+            Effect.gen(function* () {
+              const w = yield* world();
+              yield* boot.pipe(Effect.provide(w.layer));
 
-          try {
-            await Effect.runPromise(boot.pipe(Effect.provide(w.layer)));
-
-            if (damage === "json") {
-              w.db.exec("UPDATE entries SET body='not JSON' WHERE stream='gateway/access' AND id='founded'");
-            } else if (damage === "known_fact") {
-              w.db.exec("UPDATE entries SET body='{}' WHERE stream='gateway/access' AND id='founded'");
-            } else {
-              w.db.exec("UPDATE entries SET seen=-1 WHERE stream='gateway/access' AND id='founded'");
-            }
-
-            if (reopen) {
-              w.db.close();
-            }
-
-            const fresh = reopen ? world(w.path) : w;
-
-            try {
-              await Effect.runPromise(
-                Effect.gen(function* () {
-                  expect(
-                    yield* Effect.flip(appendAdmitted(old, { stream: "notes", id: "bad-history", line: line(body) })),
-                  ).toMatchObject({ _tag: "LedgerError", reason: "bad_row" });
-                  expect(yield* read("notes")).toEqual([]);
-                }).pipe(Effect.provide(fresh.layer)),
-              );
-            } finally {
-              if (fresh.db.isOpen) {
-                fresh.db.close();
+              if (damage === "json") {
+                w.db.exec("UPDATE entries SET body='not JSON' WHERE stream='gateway/access' AND id='founded'");
+              } else if (damage === "known_fact") {
+                w.db.exec("UPDATE entries SET body='{}' WHERE stream='gateway/access' AND id='founded'");
+              } else {
+                w.db.exec("UPDATE entries SET seen=-1 WHERE stream='gateway/access' AND id='founded'");
               }
-            }
-          } finally {
-            if (w.db.isOpen) {
-              w.db.close();
-            }
-          }
-        },
+
+              if (reopen) {
+                w.db.close();
+              }
+
+              const fresh = reopen ? yield* world(w.path) : w;
+              yield* Effect.gen(function* () {
+                expect(
+                  yield* Effect.flip(appendAdmitted(old, { stream: "notes", id: "bad-history", line: line(body) })),
+                ).toMatchObject({ _tag: "LedgerError", reason: "bad_row" });
+                expect(yield* read("notes")).toEqual([]);
+              }).pipe(Effect.provide(fresh.layer));
+            }).pipe(Effect.scoped),
+          ),
       ),
       checks,
     );
   });
   it("reopened storage keeps revocation and the earlier accepted letter", async () => {
     await fc.assert(
-      fc.asyncProperty(fc.string({ maxLength: 30 }), fc.integer({ min: 1, max: 5 }), async (body, attempts) => {
-        const w = world();
-
-        try {
-          await Effect.runPromise(
-            boot.pipe(
+      fc.asyncProperty(fc.string({ maxLength: 30 }), fc.integer({ min: 1, max: 5 }), (body, attempts) =>
+        Effect.runPromise(
+          Effect.gen(function* () {
+            const w = yield* world();
+            yield* boot.pipe(
               Effect.andThen(appendAdmitted(old, { stream: "notes", id: "accepted", line: line(body) })),
               Effect.andThen(remove()),
               Effect.provide(w.layer),
-            ),
-          );
-        } finally {
-          w.db.close();
-        }
-
-        const fresh = world(w.path);
-
-        try {
-          await Effect.runPromise(
-            Effect.gen(function* () {
+            );
+            w.db.close();
+            const fresh = yield* world(w.path);
+            yield* Effect.gen(function* () {
               for (let n = 0; n < attempts; n++) {
                 expect(
                   yield* Effect.flip(
@@ -402,12 +383,10 @@ describe("P17a, appendAdmitted", () => {
                 }))._tag,
               ).toBe("placed");
               expect((yield* read("notes")).map((row) => row.id)).toEqual(["accepted", "still-live"]);
-            }).pipe(Effect.provide(fresh.layer)),
-          );
-        } finally {
-          fresh.db.close();
-        }
-      }),
+            }).pipe(Effect.provide(fresh.layer));
+          }).pipe(Effect.scoped),
+        ),
+      ),
       { ...checks, numRuns: 20 },
     );
   });
@@ -417,13 +396,11 @@ describe("P17a, appendAdmitted", () => {
         fc.constantFrom("placed", "not_granted", "bad_row", "storage"),
         fc.uuid(),
         fc.string({ minLength: 1, maxLength: 25 }),
-        async (outcome, id, text) => {
-          const w = world(undefined, outcome === "storage"),
-            marker = `p17-private-body-${text}`;
-
-          try {
-            await Effect.runPromise(
-              Effect.gen(function* () {
+        (outcome, id, text) =>
+          Effect.runPromise(
+            Effect.flatMap(world(undefined, outcome === "storage"), (w) => {
+              const marker = `p17-private-body-${text}`;
+              return Effect.gen(function* () {
                 yield* boot;
                 yield* SpanSink.use((sink) => sink.flush);
 
@@ -460,12 +437,9 @@ describe("P17a, appendAdmitted", () => {
                   expect(tags).not.toContain(marker);
                   expect(tags).not.toContain("planted storage error");
                 }
-              }).pipe(Effect.provide(w.layer)),
-            );
-          } finally {
-            w.db.close();
-          }
-        },
+              }).pipe(Effect.provide(w.layer));
+            }).pipe(Effect.scoped),
+          ),
       ),
       { ...checks, numRuns: 24 },
     );

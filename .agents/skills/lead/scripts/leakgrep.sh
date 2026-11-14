@@ -53,9 +53,10 @@ try:
 except (OSError, UnicodeError):
     refuse('cannot read check input')
 
-# Only this repository's exact GitHub URL may contain a private account or repo name.
-repo_url = 'https://github.com/usirin/tea-fabrika'
-own_url = re.compile(re.escape(repo_url) + r'(?:\.git)?(?=$|[\s/#?)>]|\.(?=$|[\s)>]))')
+# Only this repository's exact GitHub URL may contain a private account or repo name. The repo moved
+# to the kamp-us org; old docs and history keep the old address, so both pass.
+repo_urls = ['https://github.com/kamp-us/tea-fabrika', 'https://github.com/usirin/tea-fabrika']
+own_url = re.compile('(?:' + '|'.join(map(re.escape, repo_urls)) + ')' + r'(?:\.git)?(?=$|[\s/#?)>]|\.(?=$|[\s)>]))')
 # Provider lengths from https://github.com/gitleaks/gitleaks/blob/master/config/gitleaks.toml
 # npm/GitHub: 36; fine-grained GitHub: 82; OpenAI: 48 legacy, 124 project/service/admin.
 # Keep the provider alphabets and minimum lengths, without relying on embedded brand markers.

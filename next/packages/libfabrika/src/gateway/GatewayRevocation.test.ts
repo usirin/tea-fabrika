@@ -10,7 +10,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterAll, beforeEach, describe, expect, it, vi } from "@effect/vitest";
+import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Layer, Result, Schema, Stream } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
@@ -44,18 +44,30 @@ beforeEach(async () => {
 });
 
 const checks = { seed: 119120, numRuns: 25 };
-const folder = mkdtempSync(join(tmpdir(), "p17-revoke-"));
-const opened: DatabaseSync[] = [];
 
-afterAll(() => {
-  for (const db of opened) {
-    if (db.isOpen) {
-      db.close();
-    }
-  }
+// Each world keeps its ledger file in its own temp folder. The law's scope closes every connection
+// the world opened, then removes the folder (0061).
+const folder = Effect.acquireRelease(
+  Effect.sync(() => mkdtempSync(join(tmpdir(), "p17-revoke-"))),
+  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+);
 
-  rmSync(folder, { recursive: true, force: true });
-});
+const openDb = (path: string) =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const db = new DatabaseSync(path);
+      // A test process never loses power, so it skips the sync and keeps the rollback journal in memory,
+      // as Process.test-support does. Every byte a law reads stays in the file and survives reopen.
+      db.exec("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF");
+      return db;
+    }),
+    (db) =>
+      Effect.sync(() => {
+        if (db.isOpen) {
+          db.close();
+        }
+      }),
+  );
 
 const url = "https://fabrika.test/entry/p17",
   sentAt = "2026-11-08T04:00:00.000Z";
@@ -138,13 +150,11 @@ const key = Effect.fnUntraced(function* () {
   };
 });
 
-let homes = 0;
-
 const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown> = Input) {
   const root = yield* key(),
     old = yield* key(),
     other = yield* key();
-  const path = join(folder, `${++homes}.db`);
+  const path = join(yield* folder, "ledger.db");
   const founder = {
     name: "P17",
     person,
@@ -160,12 +170,8 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
     open: (_process: string, _client: string): Effect.Effect<Schema.Json> => Effect.succeed(null),
     deliver: (_: Incoming): Effect.Effect<void | Sent, LedgerError | NotGranted | ProcessError> => Effect.void,
   };
-  const storage = () => {
-    const db = new DatabaseSync(path);
-    opened.push(db);
-    return { db, sql: nodeSql(db) };
-  };
-  const first = storage();
+  const storage = () => openDb(path).pipe(Effect.map((db) => ({ db, sql: nodeSql(db) })));
+  const first = yield* storage();
   const layers = (saved = first, beforeWrite: Effect.Effect<void> = Effect.void) => {
     const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
     const ledger = Layer.effect(
@@ -363,7 +369,7 @@ describe("P12, door laws retained after the library move", () => {
             expect(opened).toEqual([]);
             expect(yield* open(processes.counter)).toEqual({ _tag: "ok", result: { count } });
             expect(opened).toEqual([{ pid: processes.counter, client: String(client) }]);
-          }),
+          }).pipe(Effect.scoped),
         ),
     );
   it("view.open refuses any bad pid before invoking the program, and opens a valid pid", async () => {
@@ -405,7 +411,7 @@ describe("P12, door laws retained after the library move", () => {
             expect(yield* target(w.old.fingerprint, code)).toBeNull();
             expect(yield* target(w.other.fingerprint, `${code}${suffix}`)).toBeNull();
             expect(yield* target(w.old.fingerprint, `${code}${suffix}`)).toBeNull();
-          }),
+          }).pipe(Effect.scoped),
         ),
     );
   it("a grant target matches both the waiting fingerprint and its code", async () => {
@@ -474,7 +480,7 @@ describe("P17a, revoke stops writes at the final door", () => {
               });
               expect(w.first.sql.exec("SELECT * FROM entries ORDER BY rev")).toEqual(before);
               expect(w.deliveries).toHaveLength(1);
-            }).pipe(Effect.provide(TestClock.layer())),
+            }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
           );
         },
       ),
@@ -529,7 +535,7 @@ describe("P17a, revoke stops writes at the final door", () => {
               hellos: revokeFirst ? 0 : 1,
               afterRevoke: 0,
             });
-          }).pipe(Effect.provide(TestClock.layer())),
+          }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
         );
       }),
       {
@@ -573,7 +579,7 @@ describe("P17a, revoke stops writes at the final door", () => {
             const inbox = yield* rows(w, `${processes.counter}/inbox`);
             expect(inbox).toHaveLength(1);
             expect(inbox[0]?.body).toEqual({ m: { _tag: "add", n } });
-          }).pipe(Effect.provide(TestClock.layer())),
+          }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
         );
       }),
       {
@@ -636,7 +642,7 @@ describe("P17a, revoke stops writes at the final door", () => {
               } finally {
                 spy.mockRestore();
               }
-            }).pipe(Effect.provide(TestClock.layer())),
+            }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
           );
         },
       ),
@@ -730,7 +736,7 @@ describe("P17a, revoke stops writes at the final door", () => {
               } finally {
                 spy.mockRestore();
               }
-            }).pipe(Effect.provide(TestClock.layer())),
+            }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
           );
         },
       ),
@@ -822,7 +828,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                 JSON.stringify(binding),
               );
               w.first.db.close();
-              const saved = w.storage();
+              const saved = yield* w.storage();
               const door = yield* Gateway.pipe(Effect.provide(w.layers(saved).layer));
               const client = yield* hello(door, w.old, "after-upgrade");
               expect(client.result._tag).toBe("online");
@@ -844,7 +850,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                   deliveries: [],
                 });
               }
-            }).pipe(Effect.provide(TestClock.layer())),
+            }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
           );
         },
       ),
@@ -889,7 +895,7 @@ describe("P17a, revoke stops writes at the final door", () => {
               );
               expect((yield* send(d.b, d.other, w, target, "other-live", text))._tag).toBe("ok");
               expect((yield* d.b.accept(last(w)))._tag).toBe("placed");
-            }).pipe(Effect.provide(TestClock.layer())),
+            }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
           );
         },
       ),
@@ -924,7 +930,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                 w.first.db.close();
               }
 
-              const door = reopen ? yield* Gateway.pipe(Effect.provide(w.layers(w.storage()).layer)) : d.a;
+              const door = reopen ? yield* Gateway.pipe(Effect.provide(w.layers(yield* w.storage()).layer)) : d.a;
               const result = yield* Effect.result(door.accept(incoming));
               expect(Result.isFailure(result)).toBe(revokeFirst);
 
@@ -936,12 +942,12 @@ describe("P17a, revoke stops writes at the final door", () => {
                 expect(result.success._tag).toBe("placed");
               }
 
-              const saved = reopen ? w.storage() : w.first;
+              const saved = reopen ? yield* w.storage() : w.first;
               const stored = yield* Ledger.use((l) => Stream.runCollect(l.read(`${processes[target]}/inbox`, 0))).pipe(
                 Effect.provide(w.layers(saved).env),
               );
               expect(stored).toHaveLength(duplicate || !revokeFirst ? 1 : 0);
-            }).pipe(Effect.provide(TestClock.layer())),
+            }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
           );
         },
       ),
@@ -970,7 +976,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                 w.first.db.close();
               }
 
-              const saved = reopen ? w.storage() : w.first;
+              const saved = reopen ? yield* w.storage() : w.first;
               const door = reopen ? yield* Gateway.pipe(Effect.provide(w.layers(saved).layer)) : d.a;
               const remover = reopen ? yield* Gateway.pipe(Effect.provide(w.layers(saved).layer)) : d.b;
               const entered = yield* Deferred.make<void>(),
@@ -1028,7 +1034,7 @@ describe("P17a, revoke stops writes at the final door", () => {
               } finally {
                 spy.mockRestore();
               }
-            }).pipe(Effect.provide(TestClock.layer())),
+            }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
           );
         },
       ),
@@ -1090,7 +1096,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                 "refused",
               );
               expect(yield* rows(w, `${processes[target]}/inbox`)).toHaveLength(attempts);
-            }).pipe(Effect.provide(TestClock.layer())),
+            }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
           );
         },
       ),
@@ -1139,7 +1145,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 
             expect(yield* rows(w, `${processes[target]}/inbox`)).toEqual([]);
             expect((yield* d.a.accept(incoming))._tag).toBe("placed");
-          }).pipe(Effect.provide(TestClock.layer())),
+          }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
         );
       }),
       checks,

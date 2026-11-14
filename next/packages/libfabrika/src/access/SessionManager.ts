@@ -1,7 +1,7 @@
 import { Context, Effect, Layer, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { type InputId } from "../ledger/Log.ts";
-import { inRunnerSpace, inSignalSpace } from "../processes/Process.ts";
+import { inNoticeSpace, inRunnerSpace, inSignalSpace } from "../processes/Process.ts";
 import { ProcessId } from "../ProcessId.ts";
 import { ParentText } from "../Rev.ts";
 import { type Sql } from "../Sql.ts";
@@ -127,9 +127,9 @@ export class SessionManager extends Context.Service<
         const signer = Effect.fn("session.signer")(function* (parent: string, process: string, kind: string) {
           const request = yield* SignRequest;
 
-          // A signal id is the brain's alone: the signer refuses it before it reads or writes,
+          // A signal, runner or notice id is the brain's alone: refuse it before reading or writing,
           // so no receipt binds one and the delivery's one receipt stays free.
-          if (inSignalSpace(request.id) || inRunnerSpace(request.id)) {
+          if (inSignalSpace(request.id) || inRunnerSpace(request.id) || inNoticeSpace(request.id)) {
             return yield* new SigningRefused({ reason: "signal" });
           }
 

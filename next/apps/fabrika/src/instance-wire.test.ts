@@ -259,6 +259,8 @@ class Client {
   // Node's WebSocket fires `error` on a failed upgrade (the proxy's 502 while workerd
   // restarts) but can stay CONNECTING with no `close`, so `error` counts as closed.
   private closed = false;
+  // A caller waits on the socket's own events (open, frame, error, close), never on a timer.
+  private readonly waiting: Array<() => void> = [];
   private readonly ws: WebSocket;
   private readonly base: string;
   private readonly key: ReturnType<typeof identity>;
@@ -270,15 +272,30 @@ class Client {
     this.tab = tab;
     this.ws = new WebSocket(`${base.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
     sockets.push(this.ws);
+    this.ws.addEventListener("open", () => this.wake());
     this.ws.addEventListener("error", () => {
       this.closed = true;
+      this.wake();
     });
     this.ws.addEventListener("close", () => {
       this.closed = true;
+      this.wake();
     });
     this.ws.addEventListener("message", ({ data }) => {
       this.frames.push(data === "pong" ? "pong" : JSON.parse(String(data)));
+      this.wake();
     });
+  }
+
+  private wake() {
+    for (const done of this.waiting.splice(0)) {
+      done();
+    }
+  }
+
+  /** The socket's next event: it opened, a frame arrived, or it closed. */
+  private changed() {
+    return new Promise<void>((done) => this.waiting.push(done));
   }
 
   async next(test: (f: Frame | string) => boolean): Promise<any> {
@@ -293,7 +310,7 @@ class Client {
         throw new Error("wire closed before answer");
       }
 
-      await pause();
+      await this.changed();
     }
   }
 
@@ -332,7 +349,7 @@ class Client {
         throw new Error("wire closed before open");
       }
 
-      await pause();
+      await this.changed();
     }
 
     this.ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
@@ -373,6 +390,53 @@ const counter = async (c: Client) => {
 
 const send = (c: Client, pid: string, letter: string, m: unknown = { type: "inc" }, seen = 0) =>
   c.call("process.send", { pid, letter, m, sentAt: SENT, seen, traceId: TRACE });
+
+const ratePolicy = { limit: 4, window: 1000 };
+type Call = { sent: number; replied: number; reply: Frame };
+
+const timed = Effect.fnUntraced(function* (c: Client, pid: string, letter: string) {
+  const sent = yield* Clock.currentTimeMillis;
+  const reply = yield* Effect.promise(() => send(c, pid, letter));
+  return { sent, replied: yield* Clock.currentTimeMillis, reply };
+});
+
+const spent = Effect.fnUntraced(function* (c: Client, pid: string, letter: string) {
+  const allowed: Array<Call> = [];
+
+  for (let n = 0; n < 10 * ratePolicy.limit; n += ratePolicy.limit + 1) {
+    const sent = yield* Clock.currentTimeMillis;
+    // The socket is already open. Send the whole batch before waiting for any reply.
+    const pending = yield* Effect.sync(() =>
+      Array.from({ length: Math.min(ratePolicy.limit + 1, 10 * ratePolicy.limit - n) }, () => send(c, pid, letter)),
+    );
+    const calls = yield* Effect.forEach(
+      pending,
+      (reply) =>
+        Effect.gen(function* () {
+          const answer = yield* Effect.promise(() => reply);
+          return { sent, replied: yield* Clock.currentTimeMillis, reply: answer };
+        }),
+      { concurrency: "unbounded" },
+    );
+    // Drain every reply: calls after the first refusal can still spend a later window's budget.
+    allowed.push(...calls.filter((call) => !call.reply.error));
+    const refused = calls.find((call) => call.reply.error);
+
+    if (refused) {
+      const last = calls.reduce((last, call) => (call.replied > last.replied ? call : last), refused);
+      return { allowed, refused, last };
+    }
+  }
+
+  return yield* Effect.die(new Error(`no refusal in ${10 * ratePolicy.limit} sends`));
+});
+
+const retryAfter = (call: Call) => {
+  const delay = call.reply.error?.data?.retryAfter;
+  expect(delay).toBeGreaterThan(0);
+  expect(delay).toBeLessThanOrEqual(ratePolicy.window);
+  return delay!;
+};
 
 const placing = (r: Frame) => {
   expect(r.error).toBeUndefined();
@@ -421,39 +485,78 @@ it.live.each(["flags", "env", "file"] as const)(
   (source) =>
     Effect.gen(function* () {
       const held: Held = { children: [], homes: [], ports: [] };
-      const policy = { limit: 4, window: 1000 };
       const s = yield* Effect.acquireRelease(
-        Effect.promise(() => launch(held, undefined, policy, source)),
+        Effect.promise(() => launch(held, undefined, ratePolicy, source)),
         () => Effect.promise(() => giveBack(held)),
       );
       const c = yield* client(s, "budget-one");
-      const remaining = policy.window - ((yield* Clock.currentTimeMillis) % policy.window);
-
-      if (remaining < (3 * policy.window) / 4) {
-        yield* Effect.sleep(remaining + 5);
-      }
-
       const pid = yield* Effect.promise(() => counter(c));
       const letter = `t843-${source}`;
-      const accepted = yield* Effect.promise(() => send(c, pid, letter));
-      expect(accepted.error).toBeUndefined();
+      const settled = yield* spent(c, pid, letter);
+      expect(settled.allowed.length).toBeGreaterThan(0);
+      const accepted = settled.allowed[0]!.reply;
+      placing(accepted);
+      expect(settled.refused.reply.error?.data?.reason).toBe("rate_limited");
+      yield* Effect.sleep(retryAfter(settled.refused) + 5);
+      let previous = settled.last;
+      const rounds: Array<string> = [];
+      const times = ({ sent, replied, reply }: Call) => ({ sent, replied, retryAfter: reply.error?.data?.retryAfter });
+      const round = yield* Effect.gen(function* () {
+        for (;;) {
+          const { allowed, refused } = yield* spent(c, pid, letter);
+          const delay = retryAfter(refused);
+          const second = yield* client(s, "budget-two");
+          const again = yield* timed(second, pid, letter);
+          rounds.push(
+            JSON.stringify({
+              previous: times(previous),
+              allowed: allowed.map(times),
+              refused: times(refused),
+              again: times(again),
+            }),
+          );
+          expect(allowed.length).toBeGreaterThan(0);
 
-      for (let n = 2; n < policy.limit; n++) {
-        expect((yield* Effect.promise(() => send(c, pid, letter))).result).toEqual(accepted.result);
+          // These bounds use the refusal's window, including the time spent waiting for each reply.
+          // The last earlier call must precede its start: a discarded round's second socket can spend the next budget.
+          if (
+            previous.replied < refused.sent + delay - ratePolicy.window &&
+            allowed[0]!.sent >= refused.replied + delay - ratePolicy.window &&
+            again.replied < refused.sent + delay
+          ) {
+            return { allowed, refused, second, again };
+          }
+
+          previous = again;
+          const last = again.reply.error?.data?.reason === "rate_limited" ? again : refused;
+          const until = last.replied + retryAfter(last);
+          yield* Effect.sleep(Math.max(0, until - (yield* Clock.currentTimeMillis)) + 5);
+          second.close();
+        }
+      }).pipe(
+        Effect.timeoutOrElse({
+          duration: WAIT,
+          orElse: () => Effect.die(new Error(`no single-window round in ${WAIT} ms; rounds: [${rounds.join(",")}]`)),
+        }),
+      );
+      expect(round.allowed).toHaveLength(ratePolicy.limit);
+
+      for (const call of round.allowed) {
+        expect(call.reply.error).toBeUndefined();
+        expect(call.reply.result).toEqual(accepted.result);
       }
 
-      const denied = yield* Effect.promise(() => send(c, pid, letter));
-      expect(denied.error?.data?.reason).toBe("rate_limited");
-      const delay = denied.error?.data?.retryAfter;
-      expect(delay).toBeGreaterThan(0);
-      expect(delay).toBeLessThanOrEqual(policy.window);
-      const again = yield* client(s, "budget-two");
-      expect((yield* Effect.promise(() => send(again, pid, letter))).error?.data?.reason).toBe("rate_limited");
-      yield* Effect.sleep(delay! + 5);
-      const recovered = yield* Effect.promise(() => send(again, pid, letter));
+      for (const refused of [round.refused, round.again]) {
+        expect(refused.reply.error?.data?.reason).toBe("rate_limited");
+        retryAfter(refused);
+      }
+
+      yield* Effect.logInfo(`T843 ${source}: ${rounds.length} rounds`, { rounds });
+      yield* Effect.sleep(retryAfter(round.again) + 5);
+      const recovered = yield* Effect.promise(() => send(round.second, pid, letter));
       expect(recovered.error).toBeUndefined();
       expect(recovered.result).toEqual(accepted.result);
-      const inbox = yield* Effect.promise(() => read(again, "counter:1/inbox"));
+      const inbox = yield* Effect.promise(() => read(round.second, "counter:1/inbox"));
       expect(inbox).toHaveLength(1);
     }),
 );
@@ -629,7 +732,14 @@ describe("P12 real dev.ts wire", () => {
     expect(accepted.every((a, n) => n === 0 || a.rev > accepted[n - 1]!.rev)).toBe(true);
     // Gateway input events occupy the intervening global revisions.
     expect(accepted.some((a, n) => n > 0 && a.rev > accepted[n - 1]!.rev + 1)).toBe(true);
-  });
+    // The limit, from measured times. The time is the law's own work: a second page needs PAGE + 3 real
+    // sends, and the gateway answers one socket's sends one at a time (sent all at once they took as long).
+    // On main's CI, in 22 runs from 43365290308 to 43529835092, all while the client still polled for its
+    // replies, this took 32.2 s at its fastest (43365290308) and 50.1 s at the median (43470989655), and was
+    // cut at 60 s in 43489825701 and 43529835092. In the last of these the scenario before it took 13.9 s
+    // against 6.6 s in 43528965610, 2.1 times, which puts this one near 112 s there. 180 s is 1.6 times
+    // that, and what the real-workerd scenarios beside it have.
+  }, 180_000);
   it("scenario: a parked wire wait receives the next append and a ready wait answers now", async () => {
     const s = await instance(),
       c = await connected(s),

@@ -1,6 +1,10 @@
-// The built-in start_child and exit commands, next/ (P42 slice 1): a program asks the host to start
-// a program under a name, as a process asks its supervisor, and ends its own life with `normal`.
-// Their only operands are these; the runner binds the requester, the hash and the life that exits.
+/**
+ * The built-in start_child and exit commands: a program asks the host to start a program under a
+ * name, as a process asks its supervisor, and ends its own life with `normal`. Their only operands
+ * are these; the runner binds the requester, the hash and the life that exits.
+ *
+ * @stability unstable
+ */
 import { Cmd } from "@demlik/tea/effect";
 import { Schema } from "effect";
 import { Started } from "../processes/Children.ts";

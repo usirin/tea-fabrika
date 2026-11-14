@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterAll, describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Effect, Layer, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
@@ -28,25 +28,27 @@ const unboundedJson = Arbitrary.schema(
 );
 
 const PROCESS = Effect.runSync(processId);
-const folder = mkdtempSync(join(tmpdir(), "p11-store-"));
-const opened: DatabaseSync[] = [];
 
-afterAll(() => {
-  for (const db of opened) {
-    if (db.isOpen) {
-      db.close();
-    }
-  }
+// Every store is a fresh node:sqlite file in its own temp folder. The test's scope closes the
+// connection, then removes the folder (0061).
+const folder = Effect.acquireRelease(
+  Effect.sync(() => mkdtempSync(join(tmpdir(), "p11-store-"))),
+  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+);
 
-  rmSync(folder, { recursive: true, force: true });
-});
+const openDb = (path: string) =>
+  Effect.acquireRelease(
+    Effect.sync(() => new DatabaseSync(path)),
+    (db) =>
+      Effect.sync(() => {
+        if (db.isOpen) {
+          db.close();
+        }
+      }),
+  );
 
-let files = 0;
-
-const database = () => {
-  const path = join(folder, `${++files}.db`);
-  let db = new DatabaseSync(path);
-  opened.push(db);
+const handle = (path: string, first: DatabaseSync) => {
+  let db = first;
   let backend = nodeSql(db);
   let fail = false;
   const sql: Sql = {
@@ -69,14 +71,24 @@ const database = () => {
     arm: (on: boolean) => {
       fail = on;
     },
-    reopen: () => {
+    reopen: Effect.suspend(() => {
       db.close();
-      db = new DatabaseSync(path);
-      opened.push(db);
-      backend = nodeSql(db);
-    },
+      return openDb(path);
+    }).pipe(
+      Effect.flatMap((again) =>
+        Effect.sync(() => {
+          db = again;
+          backend = nodeSql(again);
+        }),
+      ),
+    ),
   };
 };
+
+const database = folder.pipe(
+  Effect.map((path) => join(path, "store.db")),
+  Effect.flatMap((path) => openDb(path).pipe(Effect.map((first) => handle(path, first)))),
+);
 
 const data = (sql: Sql) =>
   LedgerSql.layer(sql, { reader: "p11-store" }).pipe(
@@ -157,25 +169,27 @@ describe("P11 process storage", () => {
   it.effect.prop(
     "malformed checkpoints fail as bad_row without replacing the saved state",
     [checkpointArb],
-    examples([[checkpoint]], (checkpoint: typeof CheckpointSchema.Type) => {
-      const disk = database();
-      return Effect.gen(function* () {
-        const store = yield* ProcessStore;
-        yield* store.save(checkpoint);
-        expect(
-          yield* Effect.flip(store.save({ ...checkpoint, saved: { ...checkpoint.saved, v: "bad" } })),
-        ).toMatchObject({ _tag: "LedgerError", reason: "bad_row" });
-        expect(yield* store.load).toEqual(checkpoint);
-        disk
-          .db()
-          .prepare("UPDATE process_state SET checkpoint=? WHERE process=?")
-          .run(JSON.stringify({ ...checkpoint, saved: { ...checkpoint.saved, v: "bad" } }), PROCESS);
-        expect(yield* Effect.flip(store.load)).toMatchObject({
-          _tag: "LedgerError",
-          reason: "bad_row",
-        });
-      }).pipe(Effect.provide(ProcessStore.layer(disk.sql, { process: PROCESS }).pipe(Layer.provide(data(disk.sql)))));
-    }),
+    examples([[checkpoint]], (checkpoint: typeof CheckpointSchema.Type) =>
+      Effect.gen(function* () {
+        const disk = yield* database;
+        yield* Effect.gen(function* () {
+          const store = yield* ProcessStore;
+          yield* store.save(checkpoint);
+          expect(
+            yield* Effect.flip(store.save({ ...checkpoint, saved: { ...checkpoint.saved, v: "bad" } })),
+          ).toMatchObject({ _tag: "LedgerError", reason: "bad_row" });
+          expect(yield* store.load).toEqual(checkpoint);
+          disk
+            .db()
+            .prepare("UPDATE process_state SET checkpoint=? WHERE process=?")
+            .run(JSON.stringify({ ...checkpoint, saved: { ...checkpoint.saved, v: "bad" } }), PROCESS);
+          expect(yield* Effect.flip(store.load)).toMatchObject({
+            _tag: "LedgerError",
+            reason: "bad_row",
+          });
+        }).pipe(Effect.provide(ProcessStore.layer(disk.sql, { process: PROCESS }).pipe(Layer.provide(data(disk.sql)))));
+      }),
+    ),
     options,
   );
   it.effect.prop(
@@ -199,7 +213,13 @@ describe("P11 process storage", () => {
           reason: "storage",
         });
         expect(calls).toBeGreaterThan(0);
-      }).pipe(Effect.provide(ProcessStore.layer(sql, { process }).pipe(Layer.provide(data(database().sql)))));
+      }).pipe(
+        Effect.provide(
+          ProcessStore.layer(sql, { process }).pipe(
+            Layer.provide(Layer.unwrap(database.pipe(Effect.map((disk) => data(disk.sql))))),
+          ),
+        ),
+      );
     }),
     options,
   );
@@ -208,7 +228,7 @@ describe("P11 process storage", () => {
     [checkpointArb],
     examples([[checkpoint]], (checkpoint: typeof CheckpointSchema.Type) =>
       Effect.gen(function* () {
-        const disk = database();
+        const disk = yield* database;
         const pending = {
           ...checkpoint,
           turn: {
@@ -229,7 +249,7 @@ describe("P11 process storage", () => {
           expect(yield* store.load).toBeNull();
           yield* store.save(pending);
         }).pipe(Effect.provide(ProcessStore.layer(disk.sql, { process: PROCESS }).pipe(Layer.provide(data(disk.sql)))));
-        disk.reopen();
+        yield* disk.reopen;
         yield* Effect.gen(function* () {
           const store: Store = yield* ProcessStore;
           expect(yield* store.load).toEqual(pending);
@@ -241,24 +261,26 @@ describe("P11 process storage", () => {
   it.effect.prop(
     "plant, save partial checkpoint: a failed transaction retains all original state",
     [checkpointArb],
-    examples([[checkpoint]], (checkpoint: typeof CheckpointSchema.Type) => {
-      const disk = database();
-      return Effect.gen(function* () {
-        const store: Store = yield* ProcessStore;
-        yield* store.save(checkpoint);
-        disk.arm(true);
-        expect(
-          yield* Effect.flip(
-            store.save({
-              ...checkpoint,
-              saved: { ...checkpoint.saved, after: 9, model: { count: 9 } },
-            }),
-          ),
-        ).toMatchObject({ reason: "storage" });
-        disk.arm(false);
-        expect(yield* store.load).toEqual(checkpoint);
-      }).pipe(Effect.provide(ProcessStore.layer(disk.sql, { process: PROCESS }).pipe(Layer.provide(data(disk.sql)))));
-    }),
+    examples([[checkpoint]], (checkpoint: typeof CheckpointSchema.Type) =>
+      Effect.gen(function* () {
+        const disk = yield* database;
+        yield* Effect.gen(function* () {
+          const store: Store = yield* ProcessStore;
+          yield* store.save(checkpoint);
+          disk.arm(true);
+          expect(
+            yield* Effect.flip(
+              store.save({
+                ...checkpoint,
+                saved: { ...checkpoint.saved, after: 9, model: { count: 9 } },
+              }),
+            ),
+          ).toMatchObject({ reason: "storage" });
+          disk.arm(false);
+          expect(yield* store.load).toEqual(checkpoint);
+        }).pipe(Effect.provide(ProcessStore.layer(disk.sql, { process: PROCESS }).pipe(Layer.provide(data(disk.sql)))));
+      }),
+    ),
     options,
   );
   it.prop(
@@ -306,25 +328,27 @@ describe("P11 process storage", () => {
       nat(RuntimeRecord.cases.stepped.fields.pos),
       RuntimeRecord.cases.stepped.fields.build.check(Schema.isPattern(/^[\x20-\x7e]+$/), Schema.isMaxLength(12)),
     ],
-    examples([["letter-a", 1, "build-a"]], (input: string, pos: number, build: string) => {
-      const disk = database();
-      return Effect.gen(function* () {
-        const store: Store = yield* ProcessStore;
-        const ledger = yield* Ledger;
-        const event = { _tag: "stepped", input, pos, build };
-        const placed = yield* store.record("step:letter-a", event, { ...from, build });
-        expect(yield* store.record("step:letter-a", event, { ...from, build })).toEqual(placed);
-        const rows = yield* Stream.runCollect(ledger.read(PROCESS, 0));
-        expect(rows).toHaveLength(1);
-        expect(rows[0]).toMatchObject({
-          _tag: "stepped",
-          body: { input, pos },
-          build,
-        });
-      }).pipe(
-        Effect.provide(ProcessStore.layer(disk.sql, { process: PROCESS }).pipe(Layer.provideMerge(data(disk.sql)))),
-      );
-    }),
+    examples([["letter-a", 1, "build-a"]], (input: string, pos: number, build: string) =>
+      Effect.gen(function* () {
+        const disk = yield* database;
+        yield* Effect.gen(function* () {
+          const store: Store = yield* ProcessStore;
+          const ledger = yield* Ledger;
+          const event = { _tag: "stepped", input, pos, build };
+          const placed = yield* store.record("step:letter-a", event, { ...from, build });
+          expect(yield* store.record("step:letter-a", event, { ...from, build })).toEqual(placed);
+          const rows = yield* Stream.runCollect(ledger.read(PROCESS, 0));
+          expect(rows).toHaveLength(1);
+          expect(rows[0]).toMatchObject({
+            _tag: "stepped",
+            body: { input, pos },
+            build,
+          });
+        }).pipe(
+          Effect.provide(ProcessStore.layer(disk.sql, { process: PROCESS }).pipe(Layer.provideMerge(data(disk.sql)))),
+        );
+      }),
+    ),
     options,
   );
   it.effect.prop(
@@ -351,7 +375,6 @@ describe("P11 process storage", () => {
       ).pipe(Arbitrary.filter((value) => value.process !== PROCESS)),
     ],
     ([value, placed, activity]) => {
-      const disk = database();
       const values = new Map<string, unknown>();
       const storage = {
         get: (key: string) => Effect.sync(() => values.get(key)),
@@ -362,35 +385,40 @@ describe("P11 process storage", () => {
         sync: () => Effect.void,
       };
       return Effect.gen(function* () {
-        const store = yield* ProcessStore;
-        const selected = yield* store.select(activity.process);
-        expect(selected).toBeDefined();
-        expect(yield* Effect.exit(selected.load)).toMatchObject({ _tag: "Success", value: null });
-        expect(yield* Effect.exit(selected.placed(placed.id))).toMatchObject({
-          _tag: "Success",
-          value: null,
-        });
-        expect(yield* selected.placedByAny(placed.id)).toBeNull();
-        expect((yield* Effect.exit(store.save(value, [placed])))._tag).toBe("Success");
-        expect(yield* store.placed(placed.id)).toEqual(placed);
-        expect(yield* store.placedByAny(placed.id)).toEqual(placed);
-        expect(yield* selected.load).toBeNull();
-        expect(yield* selected.placed(placed.id)).toBeNull();
-        expect(yield* selected.placedByAny(placed.id)).toEqual(placed);
-        yield* selected.save({ ...value, turn: { selected: true } });
-        expect(yield* selected.load).toEqual({ ...value, turn: { selected: true } });
-        expect(yield* store.load).toEqual(value);
-        expect(yield* selected.readActivity).toBeUndefined();
-        yield* selected.activity(activity);
-        expect(yield* selected.readActivity).toEqual(activity);
-        values.set("activity", { _tag: "stepping", process: "bad" });
-        expect(yield* Effect.exit(Effect.flip(selected.readActivity))).toMatchObject({
-          _tag: "Success",
-          value: { _tag: "LedgerError", reason: "bad_row" },
-        });
-      }).pipe(
-        Effect.provide(ProcessStore.layer(disk.sql, { process: PROCESS, storage }).pipe(Layer.provide(data(disk.sql)))),
-      );
+        const disk = yield* database;
+        yield* Effect.gen(function* () {
+          const store = yield* ProcessStore;
+          const selected = yield* store.select(activity.process);
+          expect(selected).toBeDefined();
+          expect(yield* Effect.exit(selected.load)).toMatchObject({ _tag: "Success", value: null });
+          expect(yield* Effect.exit(selected.placed(placed.id))).toMatchObject({
+            _tag: "Success",
+            value: null,
+          });
+          expect(yield* selected.placedByAny(placed.id)).toBeNull();
+          expect((yield* Effect.exit(store.save(value, [placed])))._tag).toBe("Success");
+          expect(yield* store.placed(placed.id)).toEqual(placed);
+          expect(yield* store.placedByAny(placed.id)).toEqual(placed);
+          expect(yield* selected.load).toBeNull();
+          expect(yield* selected.placed(placed.id)).toBeNull();
+          expect(yield* selected.placedByAny(placed.id)).toEqual(placed);
+          yield* selected.save({ ...value, turn: { selected: true } });
+          expect(yield* selected.load).toEqual({ ...value, turn: { selected: true } });
+          expect(yield* store.load).toEqual(value);
+          expect(yield* selected.readActivity).toBeUndefined();
+          yield* selected.activity(activity);
+          expect(yield* selected.readActivity).toEqual(activity);
+          values.set("activity", { _tag: "stepping", process: "bad" });
+          expect(yield* Effect.exit(Effect.flip(selected.readActivity))).toMatchObject({
+            _tag: "Success",
+            value: { _tag: "LedgerError", reason: "bad_row" },
+          });
+        }).pipe(
+          Effect.provide(
+            ProcessStore.layer(disk.sql, { process: PROCESS, storage }).pipe(Layer.provide(data(disk.sql))),
+          ),
+        );
+      });
     },
     options,
   );

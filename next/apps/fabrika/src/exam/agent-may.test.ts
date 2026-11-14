@@ -418,7 +418,22 @@ const METHODS = [
   "gateway.deny",
 ] as const;
 
-const allowed = new Set(["view.open", "ledger.read", "process.send:notes:save", "process.send:notes:list"]);
+const allowed = new Set([
+  "view.open",
+  "ledger.read",
+  "process.send:checklist:check",
+  "process.send:checklist:uncheck",
+  "process.send:checklist:left",
+  "process.send:checklist:items",
+]);
+
+const personInputs = ["add", "rename", "remove"] as const;
+
+const personRefusal = (call: (input: string) => Answer) => {
+  for (const input of personInputs) {
+    methodAnswer(`process.send:checklist:${input}`, call(input));
+  }
+};
 
 const methodAnswer = (method: string, actual: { _tag: string; reason?: string }) => {
   expect(actual._tag).toBeTypeOf("string");
@@ -441,7 +456,7 @@ type PolicyDoor = {
   // This installs into the real dispatch table, before its agent policy check.
   readonly install: (method: string, handler: () => Effect.Effect<Schema.Json>) => Effect.Effect<void>;
   readonly personCall: (method: string) => Effect.Effect<Answer>;
-  readonly notesInputs: (
+  readonly checklistInputs: (
     inputs: ReadonlyArray<{ name: string; readOnly: boolean; personOnly: boolean }>,
   ) => Effect.Effect<void>;
   readonly parkedWait: Effect.Effect<Answer>;
@@ -454,7 +469,9 @@ type PolicyDoor = {
 };
 
 const bindPolicy = (_w: World): PolicyDoor => {
-  throw new Error("P25 agent policy started: bind trusted process records and declared notes inputs before its build");
+  throw new Error(
+    "P25 agent policy started: bind trusted process records and declared checklist inputs before its build",
+  );
 };
 
 const paths = [
@@ -472,7 +489,7 @@ const presence = (files: ReadonlySet<string>, load: () => PolicyDoor): PolicyDoo
 
   const p = load();
 
-  for (const name of ["call", "install", "personCall", "notesInputs", "knock"] as const) {
+  for (const name of ["call", "install", "personCall", "checklistInputs", "knock"] as const) {
     if (typeof p[name] !== "function") {
       throw new Error(`missing policy binding: ${name}`);
     }
@@ -541,17 +558,19 @@ it.effect.prop(
         knockAnswer(yield* policy.knock(as), as);
       }
 
-      yield* policy.notesInputs([
-        { name: "save", readOnly: false, personOnly: false },
-        { name: "list", readOnly: true, personOnly: false },
-        { name: "person", readOnly: false, personOnly: true },
+      yield* policy.checklistInputs([
+        { name: "check", readOnly: false, personOnly: false },
+        { name: "uncheck", readOnly: false, personOnly: false },
+        { name: "left", readOnly: true, personOnly: false },
+        { name: "items", readOnly: true, personOnly: false },
+        ...personInputs.map((name) => ({ name, readOnly: false, personOnly: true })),
       ]);
       yield* installedRefusal(policy, `planted.${c.unknown}`, c.body);
 
       for (const method of [...METHODS, `unknown.${c.unknown}`]) {
         if (method === "process.send") {
-          for (const target of ["notes", "counter", "chaos", "window", "unknown", `notes-looking-${c.name}`]) {
-            for (const input of ["save", "list", "person", "undeclared"]) {
+          for (const target of ["checklist", "counter", "chaos", "window", "unknown", `checklist-looking-${c.name}`]) {
+            for (const input of ["check", "uncheck", "left", "items", ...personInputs, "undeclared"]) {
               methodAnswer(`${method}:${target}:${input}`, yield* policy.call(method, target, input, c.body));
             }
           }
@@ -578,10 +597,11 @@ it.prop(
       );
     }
 
-    for (const input of ["save", "list"]) {
-      methodAnswer(`process.send:notes:${input}`, { _tag: "ok" });
+    for (const input of ["check", "uncheck", "left", "items"]) {
+      methodAnswer(`process.send:checklist:${input}`, { _tag: "ok" });
     }
 
+    personRefusal(() => ({ _tag: "refused", reason: "not_for_agents" }));
     methodAnswer("ledger.wait:parked", { _tag: "parked" });
 
     for (const as of ["window", "agent"]) {
@@ -609,12 +629,15 @@ it.prop(
       "planted.newHandler",
       `unknown.${unknown}`,
       "process.send:counter",
-      "process.send:notes-looking-label",
-      "process.send:notes:person",
-      "process.send:notes:undeclared",
+      "process.send:checklist-looking-label",
+      "process.send:checklist:add",
+      "process.send:checklist:undeclared",
     ]) {
       expect(() => methodAnswer(method, { _tag: "ok" })).toThrow();
     }
+
+    personRefusal(() => ({ _tag: "refused", reason: "not_for_agents" }));
+    expect(() => personRefusal(() => ({ _tag: "ok" }))).toThrow();
 
     for (const reason of ["person_only", "not_allowed", "unknown_method"]) {
       expect(() => methodAnswer("spans.read", { _tag: "refused", reason })).toThrow();
@@ -658,10 +681,15 @@ it.effect.prop(
           }),
         personCall: dispatch,
         call: () => Effect.succeed({ _tag: "refused", reason: "not_for_agents" }),
-        notesInputs: () => Effect.void,
+        checklistInputs: () => Effect.void,
         parkedWait: Effect.succeed({ _tag: "parked" }),
         knock: () => Effect.die("control only"),
       };
+
+      for (const input of personInputs) {
+        methodAnswer(`process.send:checklist:${input}`, yield* clean.call("process.send", "checklist", input));
+      }
+
       yield* installedRefusal(clean, `planted.${name}`, body);
       expect(
         Exit.isFailure(yield* Effect.exit(installedRefusal({ ...clean, call: dispatch }, `planted.${name}`, body))),
@@ -689,11 +717,13 @@ it.prop(
       expect(() => presence(new Set([p]), failed)).toThrow("failed import");
     }
 
+    personRefusal(() => ({ _tag: "refused", reason: "not_for_agents" }));
+    expect(() => personRefusal(() => ({ _tag: "ok" }))).toThrow();
     const clean: PolicyDoor = {
       install: () => Effect.void,
       personCall: () => Effect.succeed({ _tag: "ok" }),
       call: () => Effect.succeed({ _tag: "ok" }),
-      notesInputs: () => Effect.void,
+      checklistInputs: () => Effect.void,
       parkedWait: Effect.succeed({ _tag: "parked" }),
       knock: () => Effect.die("control only"),
     };
