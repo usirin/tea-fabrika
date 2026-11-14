@@ -123,6 +123,19 @@ The oldest fabrika this repo works with. It is read before every other setting.
 | Reload | restart |
 | Since | 0.0.0 |
 
+### `gateway.draft-limit`
+
+The most draft frames one signed\-in key may send in one gateway window.
+
+| Field | Value |
+|---|---|
+| Scope | person |
+| Environment | `FABRIKA_GATEWAY_DRAFT_LIMIT` |
+| Flag | `--gateway.draft-limit` |
+| Default | `1200` |
+| Reload | restart |
+| Since | 0.0.0 |
+
 ### `gateway.limit`
 
 The most routed attempts one signed\-in key may make in one gateway window.

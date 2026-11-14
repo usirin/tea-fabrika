@@ -1,6 +1,7 @@
 /**
- * The settings fabrika itself declares: `instance.port`, `fabrika-version`, `gateway.limit`, `gateway.window`, the
- * four local brain settings under `desktop.brain-*`, `desktop.link-ttl`, and `all`, the group of the nine.
+ * The settings fabrika itself declares: `instance.port`, `fabrika-version`, `gateway.limit`, `gateway.window`,
+ * `gateway.draft-limit`, the four local brain settings under `desktop.brain-*`, `desktop.link-ttl`, and `all`, the group
+ * of the ten.
  *
  * **Details**
  *
@@ -193,7 +194,7 @@ export const brainStopTimeout = Setting.make("desktop.brain-stop-timeout", {
  *
  * **Details**
  *
- * Holds `port`, `version`, `gatewayLimit`, `gatewayWindow`, the four local brain settings
+ * Holds `port`, `version`, `gatewayLimit`, `gatewayWindow`, `gatewayDraftLimit`, the four local brain settings
  * (`brainThrottle`, `brainPoll`, `brainStartTimeout` and `brainStopTimeout`) and `desktopLinkTtl`.
  * Making the group checked their paths, environment names and defaults together.
  *
@@ -205,6 +206,7 @@ export const all = Setting.group({
   version,
   gatewayLimit,
   gatewayWindow,
+  gatewayDraftLimit,
   brainThrottle,
   brainPoll,
   brainStartTimeout,

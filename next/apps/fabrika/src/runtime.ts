@@ -1,7 +1,6 @@
 import { RecordedStart } from "@kampus/libfabrika";
 import * as RateLimiterSql from "@kampus/libfabrika/gateway/RateLimiterSql";
 import { LedgerError } from "@kampus/libfabrika/ledger/Ledger";
-import { gatewayDraftLimit } from "@kampus/libfabrika/settings/Declarations";
 import { connectionRuntime as connection } from "@kampus/libfabrika/workers/gateway";
 import {
   projectRuntime as project,
@@ -38,8 +37,11 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
     bootstrap: [
       { name: "counter:1", id: "counter:1", program: "fabrika/counter" },
       { name: "checklist:1", id: "checklist:1", program: "fabrika/checklist" },
-      // The seam until the desk starts fabsh as a new tile's default process (0275).
-      { name: "fabsh:1", id: "fabsh:1", program: "fabrika/fabsh" },
+      // The seam until the desk starts fabsh as a new tile's default process (0275). Booted only when
+      // this build carries the program, so a build of fewer programs boots what it has.
+      ...(Object.hasOwn(programs, "fabrika/fabsh")
+        ? [{ name: "fabsh:1", id: "fabsh:1", program: "fabrika/fabsh" }]
+        : []),
     ],
     door: (options) =>
       Effect.gen(function* () {
@@ -48,6 +50,7 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
           ...checked.input,
           port: checked.values.port,
           rateLimit: { limit: checked.values.gatewayLimit, window: checked.values.gatewayWindow },
+          draftLimit: { limit: checked.values.gatewayDraftLimit, window: checked.values.gatewayWindow },
         };
         return yield* Gateway.pipe(
           Effect.provide(
@@ -64,8 +67,8 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
               inputCap: 1_000_000,
               spentCap: 100_000,
               rateLimit: config.rateLimit,
-              // Its own budget; `gateway.draft-limit` joins the read settings group with its tests.
-              draftLimit: { limit: gatewayDraftLimit.default, window: config.rateLimit.window },
+              // Drafts spend their own budget, `gateway.draft-limit`, never `gateway.limit`.
+              draftLimit: config.draftLimit,
               deliver: (pid, _envelope, _span, incoming) => options.deliver(pid, incoming),
               inputs: {
                 schema: Schema.Json,
