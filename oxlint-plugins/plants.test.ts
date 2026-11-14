@@ -369,6 +369,7 @@ describe("each rule refuses what it is there to refuse", () => {
       "outside-input-constructor",
       // T737's rule reads only libfabrika's src, so service-id.test.ts plants it there.
       "service-id",
+      "service-contract", // P19 plants the three desktop contracts and a native import below.
       // T518's retired module is planted in one-id-module.test.ts.
       "one-id-module",
       // Generated files and their fix in padding-line-between-statements.test.ts.
@@ -714,6 +715,106 @@ it("pinned: L6 a second machine is planted and lint.ts exits 1", async () => {
   });
   expect(out.stdout).toContain("fabrika(one-machine-per-file)");
   expect(out.status).toBe(1);
+});
+
+// format: the contract's forbidden Layer import is a lint input, including its static implementation.
+it("format: P21 L12 a PersonCheck contract cannot carry a Layer implementation", async () => {
+  const file = "next/packages/libfabrika/src/desktop/PersonCheck.ts";
+  const result = await lintCopies({
+    [file]: [
+      'import { Context, Effect, Layer, Schema } from "effect";',
+      'export const Answer = Schema.TaggedUnion({ checked: { check: Schema.Literals(["touch", "click"]) }, declined: {} });',
+      'export class PersonCheck extends Context.Service<PersonCheck, { readonly ask: (reason: string) => Effect.Effect<typeof Answer.Type> }>()("@kampus/libfabrika/desktop/PersonCheck") {',
+      '  static readonly layer = Layer.succeed(PersonCheck, { ask: () => Effect.succeed({ _tag: "checked", check: "touch" }) });',
+      "}",
+    ].join("\n"),
+  });
+  expect(result("eslint(no-restricted-imports)", file)).toContain(1);
+});
+
+// format: the second exported machine is an input to the existing one-machine lint rule.
+it("format: P21 L12 Menu exports only one tea machine", async () => {
+  const file = "next/packages/libfabrika/src/desktop/Menu.ts";
+  const result = await lintCopies({
+    [file]: [
+      'import { Machine } from "@demlik/tea/effect";',
+      'import { Schema } from "effect";',
+      "const Model = Schema.TaggedUnion({ idle: {} });",
+      'const Msg = Schema.Struct({ type: Schema.Literal("enter") });',
+      'export const machine = Machine.make({ model: Model, msg: Msg, cmds: [], init: () => [{ _tag: "idle" }, []], update: { enter: (s) => [s, []] } });',
+      'export const second = Machine.make({ model: Model, msg: Msg, cmds: [], init: () => [{ _tag: "idle" }, []], update: { enter: (s) => [s, []] } });',
+    ].join("\n"),
+  });
+  expect(result("fabrika(one-machine-per-file)", file)).toContain(6);
+});
+
+// format: these are compile-time platform names; lint must catch them even when imports erase.
+it("format: P21 L11 desktop public types cannot name Electron, Node or the DOM", async () => {
+  const imported = "next/packages/libfabrika/src/desktop/Menu.ts";
+  const globals = "next/packages/libfabrika/src/desktop/PersonCheck.ts";
+  const result = await lintCopies({
+    [imported]: 'import type { BrowserWindow } from "electron";\nexport type Handle = BrowserWindow;\n',
+    [globals]: [
+      "export type DomWindow = Window;",
+      "export type DomDocument = Document;",
+      "export type NodeTimer = NodeJS.Timeout;",
+      "export type ElectronWindow = Electron.BrowserWindow;",
+    ].join("\n"),
+  });
+  expect.soft(result("eslint(no-restricted-imports)", imported)).toContain(1);
+  expect.soft(result("typescript(no-restricted-types)", globals)).toEqual([1, 2, 3, 4]);
+});
+
+// format: these module paths include erased imports because platform types count too.
+it("format: P21 L12 desktop refuses gateway and platform imports while admitting access", async () => {
+  const file = "next/packages/libfabrika/src/desktop/Menu.ts";
+  const result = await lintCopies({
+    [file]: [
+      'import type { Grant } from "../access/Access.ts";',
+      'import type { Gateway } from "../gateway/Gateway.ts";',
+      'import type { Load } from "../node/settings/Load.ts";',
+      'import type { Extra } from "../electron/Extra.ts";',
+      'import type { Brain } from "../cloudflare/objects.ts";',
+      'import type { Stats } from "node:fs";',
+      'import type { Document } from "@types/web";',
+    ].join("\n"),
+  });
+  expect(result("eslint(no-restricted-imports)", file)).toEqual([2, 3, 4, 5, 6, 7]);
+});
+
+// format: module admission and PascalCase apply to desktop's new front files too.
+it("format: P21 desktop is admitted as a module and keeps the front-file naming rule", async () => {
+  const front = "next/packages/libfabrika/src/desktop/Menu.ts";
+  const bad = "next/packages/libfabrika/src/desktop/bad.ts";
+  const contract = "next/packages/libfabrika/src/desktop/PersonCheck.ts";
+  const layer = "next/packages/libfabrika/src/desktop/PersonCheckTest.ts";
+  const result = await lintCopies({
+    [front]: "export const view = () => [];\n",
+    [bad]: "export const view = () => [];\n",
+    [contract]: 'import { Context, Schema } from "effect";\nexport const Answer = Schema.String;\n',
+    [layer]: 'import { Layer } from "effect";\nexport const layer = Layer.empty;\n',
+  });
+  expect(result("fabrika(modules)", front)).toEqual([]);
+  expect(result("unicorn(filename-case)", front)).toEqual([]);
+  expect(result("unicorn(filename-case)", bad)).toEqual([1]);
+  expect(result("eslint(no-restricted-imports)", contract)).toEqual([]);
+  expect(result("eslint(no-restricted-imports)", layer)).toEqual([]);
+});
+
+// L12 kept lint inputs. These copies exercise the actual desktop config.
+it("scenario: P19 a Layer on the service class is refused", async () => {
+  const path = "next/packages/libfabrika/src/desktop/BrainService.ts";
+  const result = await lintCopies({
+    [path]:
+      'import {Context, Layer} from "effect";\nexport class BrainService extends Context.Service<BrainService, {}>()("@kampus/libfabrika/desktop/BrainService") { static layer = Layer.empty; }\n',
+  });
+  expect(result("fabrika(service-contract)", path)).toEqual([2]);
+});
+
+it("scenario: P19 desktop-core refuses a native import through the real config", async () => {
+  const path = "next/packages/libfabrika/src/desktop/BrainServiceManaged.ts";
+  const result = await lintCopies({ [path]: 'import { readFile } from "node:fs";\nexport const read = readFile;\n' });
+  expect(result("fabrika(service-contract)", path)).toEqual([1]);
 });
 
 // scenario: L12 checks the real config at the new module's paths, including both filename rules.

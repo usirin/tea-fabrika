@@ -18,6 +18,7 @@
 // selected spec, the hashes that failed, the live processes) to pick the next move and its
 // parameters: an install generated from the current source, one of the five failures made from it,
 // a repeat, a new process, or a Project restart.
+import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
@@ -45,6 +46,7 @@ import { CodeEvent } from "../runtime/Code.ts";
 import { ProgramLoader } from "../runtime/Entry.ts";
 import { Program } from "../runtime/Program.ts";
 import type { Descriptor } from "../runtime/Runner.ts";
+import * as StartsTest from "../settings/StartsTest.ts";
 import type { GatewayCalls, ProcessBinding } from "./bindings.ts";
 import { control } from "./control.ts";
 import { type Env, type ProjectDoorOptions, ProjectService, projectLayer } from "./runtime.ts";
@@ -55,6 +57,21 @@ const SEED = 119120;
 const PROGRAM = "fabrika/counter";
 const BRAIN_BUILD = "brain-build-test";
 const TOKEN = "control-token-test";
+
+// Main's T753: the Project reads its start from the INSTANCE binding and records it in its own ledger.
+const START = StartsTest.fixture(
+  {
+    name: "project-test",
+    person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+    // A public key line made from 32 fixed bytes: no private key exists for it.
+    founder: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH",
+    window: null,
+    port: 18787,
+    build: BRAIN_BUILD,
+  },
+  (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+);
+
 /** Cloudflare's SQLite row limit, from the plan: a source over it is refused as too large. */
 const MOST = 2 * 1024 * 1024;
 
@@ -176,6 +193,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
   const run = <A, E>(work: Effect.Effect<A, E, ProjectService>) => Effect.suspend(() => Effect.provide(work, context));
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
+    INSTANCE: JSON.stringify(START),
     PROJECT: {
       getByName: () => ({
         codeInstall: (install: unknown) =>
@@ -316,18 +334,8 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
     scope = yield* Scope.fork(parent);
     context = yield* Layer.build(
       projectLayer(ctx, env, {
-        config: {
-          name: "project-test",
-          person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
-          founder: // A public key line made from 32 fixed bytes: no private key exists for it.
-            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH",
-          window: null,
-          port: 18787,
-          rateLimit: { limit: 100_000, window: 60_000 },
-          build: BRAIN_BUILD,
-        },
         programs: { [PROGRAM]: bundled, ...otherPrograms },
-        bootstrap: { name: "counter:1", id: "counter:1", program: PROGRAM },
+        bootstrap: [{ name: "counter:1", id: "counter:1", program: PROGRAM }],
         door: (options) => {
           doorPolicy = options.policy;
           return Effect.succeed(door as never);

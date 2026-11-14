@@ -11,13 +11,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
-import { Deferred, Effect, Fiber, Layer, Result, Schema, Stream } from "effect";
+import { Deferred, Effect, Fiber, Layer, Redacted, Result, Schema, Stream } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
 import { NotGranted, SignRequest, Writer } from "../access/SessionManager.ts";
 import { grantText, revokeText } from "../access/Text.ts";
+import { Jobs } from "../jobs/Jobs.ts";
 import { Doorbell, Ledger, type LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
@@ -27,6 +28,7 @@ import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { ProcessError } from "../processes/Process.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 import { ProcessId } from "../ProcessId.ts";
+import * as Audit from "../runtime/Audit.ts";
 import type { Incoming } from "../runtime/Entry.ts";
 import { Sent } from "../runtime/Runner.ts";
 import { Archive } from "../telemetry/Archive.ts";
@@ -54,7 +56,13 @@ const folder = Effect.acquireRelease(
 
 const openDb = (path: string) =>
   Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(path)),
+    Effect.sync(() => {
+      const db = new DatabaseSync(path);
+      // A test process never loses power, so it skips the sync and keeps the rollback journal in memory,
+      // as Process.test-support does. Every byte a law reads stays in the file and survives reopen.
+      db.exec("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF");
+      return db;
+    }),
     (db) =>
       Effect.sync(() => {
         if (db.isOpen) {
@@ -193,6 +201,14 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
       SpanSink.layer(saved.sql, { object: processes.counter }),
       RecordManager.memory(4 * 1024 * 1024),
       Archive.memory,
+      Layer.succeed(Jobs, {
+        request: () => Effect.die("unexpected job request in legacy gateway law"),
+        take: () => Effect.die("unexpected job take in legacy gateway law"),
+        started: () => Effect.die("unexpected job start in legacy gateway law"),
+        finish: () => Effect.die("unexpected job finish in legacy gateway law"),
+        read: () => Effect.die("unexpected job read in legacy gateway law"),
+        forProcess: () => Stream.die("unexpected job lookup in legacy gateway law"),
+      }),
       ProcessIdGenerator.layer,
       Id.Generator.layer,
       RateLimiter.layer.pipe(
@@ -224,7 +240,13 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
         Effect.sync(() => {
           notices.push({ client, news });
         }),
-      inputs: { schema: input, personOnly: [], raw: [], log: Schema.toCodecJson(input) },
+      inputs: { schema: input, personOnly: [], raw: [] },
+      audit: (_process, message) =>
+        Schema.encodeUnknownEffect(Schema.toCodecJson(input))(message).pipe(
+          Effect.mapError(
+            (cause) => new Audit.AuditError({ reason: new Audit.Output({ cause: Redacted.make(cause) }) }),
+          ),
+        ),
       events: { personOnly: [] },
     }).pipe(Layer.provideMerge(env));
     return { layer, env };

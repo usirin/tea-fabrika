@@ -1,5 +1,6 @@
 // next/. The driver owns SQLite; runtime's suite owns the laws (0062).
 // edge: node:sqlite is the driver under test, with synchronous transactions
+import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { NodeServices } from "@effect/platform-node";
@@ -27,12 +28,14 @@ import { ExitReason } from "../processes/ExitReason.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
 import { Owner, Recipient, Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
+import * as Audit from "../runtime/Audit.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "../runtime/Entry.ts";
 import { nodeExecution } from "../runtime/Execution.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import * as IsolateUsageTest from "../runtime/IsolateUsageTest.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
 import { ProgramRunner } from "../runtime/Runner.ts";
+import * as StartsTest from "../settings/StartsTest.ts";
 import type { Sql } from "../Sql.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager, Written } from "../telemetry/Records.ts";
@@ -56,6 +59,21 @@ const FROM = {
   traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
   build: CODE.hash,
 };
+
+// T753: each object reads its start from INSTANCE and confirms it with its Project.
+const START = StartsTest.fixture(
+  {
+    name: "project-test",
+    person: FROM.for,
+    founder: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    window: null,
+    port: 18787,
+    build: CODE.hash,
+  },
+  (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+);
+
+const settingsStart = () => Promise.resolve(StartsTest.reply(START));
 
 const OWNER = Writer.cases.person.make({ key: FROM.by, for: FROM.for });
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
@@ -172,6 +190,17 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
         }),
       init: (saved: unknown) => Effect.runPromise(execution.init(saved)),
       step: (model: unknown, msg: unknown) => Effect.runPromise(execution.step(model, msg)),
+      fresh: (model: unknown, msg: unknown) => Effect.runPromise(execution.fresh(model, msg)),
+      update: (model: unknown, msg: unknown) => Effect.runPromise(execution.update(model, msg)),
+      audit: (msg: unknown) =>
+        Effect.runPromise(
+          execution.audit(msg).pipe(
+            Effect.match({
+              onSuccess: (value: Schema.Json) => Audit.Answer.cases.ok.make({ value }),
+              onFailure: Audit.failure,
+            }),
+          ),
+        ),
       fold: (model: unknown, msg: unknown) => Effect.runPromise(execution.fold(model, msg)),
       upgrade: (saved: unknown) => Effect.runPromise(execution.upgrade(saved)),
       reply: (cmd: unknown, outcome: unknown) => Effect.runPromise(execution.reply(cmd, outcome)),
@@ -321,7 +350,8 @@ for (const accepted of [true, false]) {
           } as unknown as Parameters<typeof processRuntime>[0];
           // oxlint-disable-next-line fabrika/no-type-assertions -- record RPC is captured at the platform edge; program execution must remain unopened
           const env = {
-            PROJECT: { getByName: () => ({}) },
+            INSTANCE: JSON.stringify(START),
+            PROJECT: { getByName: () => ({ settingsStart }) },
             RECORD: {
               getByName: () => ({
                 write: (_chain: unknown, _part: number, sent: ReadonlyArray<{ span: SpanRow }>) => {
@@ -471,6 +501,7 @@ it.effect(
               processExit: (...args: Parameters<typeof manager.exit>) => ok(manager.exit(...args)),
               processIsLive: (...args: Parameters<typeof manager.isLive>) => rpc(manager.isLive(...args)),
               publish: () => Promise.resolve(),
+              settingsStart,
             };
             const saved = { id: PID, name: NAME, program: "test/usage-fixture", build: CODE.hash, owner: OWNER };
             const values = new Map<string, unknown>([["descriptor", saved]]);
@@ -509,6 +540,7 @@ it.effect(
             } as unknown as Parameters<typeof processRuntime>[0];
             // oxlint-disable-next-line fabrika/no-type-assertions -- native RPC handles and loader transport only; ledger, manager, runner and bindings stay real
             const env = {
+              INSTANCE: JSON.stringify(START),
               PROJECT: { getByName: () => project },
               RECORD: { getByName: () => ({ write: () => Promise.resolve(Written.cases.written.make({})) }) },
               LOADER: {
@@ -602,17 +634,8 @@ it.effect(
               Effect.die("Project door not initialized");
             const beforeProject = seen.length;
             const projectOptions: ProjectOptions = {
-              config: {
-                name: "project-test",
-                person: FROM.for,
-                founder: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-                window: null,
-                port: 18787,
-                build: CODE.hash,
-                rateLimit: { limit: 100_000, window: 60_000 },
-              },
               programs: { "test/usage-fixture": CODE },
-              bootstrap: { name: "bootstrap:1", id: "bootstrap", program: "test/usage-fixture" },
+              bootstrap: [{ name: "bootstrap:1", id: "bootstrap", program: "test/usage-fixture" }],
               door: (options) =>
                 Effect.sync(() => {
                   policy = options.policy;

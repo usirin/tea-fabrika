@@ -3,6 +3,7 @@ import { Schema } from "effect";
 export const Hello = Schema.Struct({
   versions: Schema.Array(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
   has: Schema.Array(Schema.String),
+  build: Schema.optionalKey(Schema.NonEmptyString),
   ping: Schema.String,
   key: Schema.String,
   tab: Schema.String,
@@ -16,7 +17,7 @@ export const Hello = Schema.Struct({
 export const Who = Schema.Struct({
   key: Schema.String,
   person: Schema.String,
-  as: Schema.Literals(["window", "agent"]),
+  as: Schema.Literals(["window", "agent", "hands"]),
 });
 
 export const Admission = Schema.TaggedUnion({
@@ -72,5 +73,7 @@ export const Attached = Schema.TaggedUnion({
     waits: Schema.Array(Wait),
     watching: Schema.Boolean,
     busy: Schema.Boolean,
+    has: Schema.optionalKey(Hello.fields.has),
+    build: Schema.optionalKey(Schema.NonEmptyString),
   },
 });

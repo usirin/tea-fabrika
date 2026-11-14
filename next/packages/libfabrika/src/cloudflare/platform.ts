@@ -75,6 +75,12 @@ export class ProjectClient extends Context.Service<
       codeFailed: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Project failure RPC enters Effect
         Effect.tryPromise({ try: () => stub.codeFailed(...args), catch: unreachable }),
+      settingsStart: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: trusted settings RPC enters Effect
+        Effect.tryPromise({ try: () => stub.settingsStart(...args), catch: unreachable }),
+      settingsRead: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: trusted settings RPC enters Effect
+        Effect.tryPromise({ try: () => stub.settingsRead(...args), catch: unreachable }),
       clientConnect: () =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Project clientConnect RPC enters Effect
         Effect.tryPromise({ try: () => stub.clientConnect(), catch: unreachable }),

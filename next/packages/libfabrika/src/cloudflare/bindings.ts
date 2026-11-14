@@ -15,6 +15,7 @@ import type { Incoming } from "../runtime/Entry.ts";
 import type * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import type { Descriptor, ProgramRunner } from "../runtime/Runner.ts";
 import type { Publication } from "../runtime/WatcherManager.ts";
+import type * as SettingsStart from "../settings/Start.ts";
 import type { RecordCalls } from "../telemetry/Records.ts";
 import type { checkHello } from "../transport/Hello.ts";
 import type { Answer } from "../transport/Wire.ts";
@@ -102,7 +103,7 @@ export interface GatewayCalls {
   ) => Effect.Effect<typeof Answer.Type, unknown>;
   readonly knock: (
     client: ConnectionId,
-    input: { readonly label: string; readonly pass?: string | null },
+    input: { readonly label: string; readonly pass?: string | null; readonly as?: "window" | "agent" | "hands" },
   ) => Effect.Effect<typeof Answer.Type, unknown>;
   readonly grant: (input: unknown) => Effect.Effect<typeof GrantReply.Type, unknown>;
   readonly disconnect: (client: ConnectionId) => Effect.Effect<void, unknown>;
@@ -138,6 +139,8 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
     code: RemoteCall<(hash: string) => Effect.Effect<BuiltProgram | null>>;
     codeInstall: RemoteCall<(input: Install) => Effect.Effect<Installed>>;
     codeFailed: RemoteCall<(input: (typeof CodeEvent.cases)["code.failed"]["Type"]) => Effect.Effect<void>>;
+    settingsStart: RemoteCall<(input: SettingsStart.Input) => Effect.Effect<typeof SettingsStart.Reply.Type>>;
+    settingsRead: RemoteCall<(start: string) => Effect.Effect<typeof SettingsStart.Reply.Type>>;
     clientConnect: RemoteCall<DoorService["connect"]>;
     register: RemoteCall<(client: string, gateway: string, session: string) => Effect.Effect<void>>;
     join: RemoteCall<Gateways["join"]>;

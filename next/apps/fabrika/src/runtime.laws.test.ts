@@ -9,16 +9,20 @@ import type { Descriptor, Incoming, Sent } from "@kampus/libfabrika";
 import { SigningRefused } from "@kampus/libfabrika/access/SessionManager";
 import { revokeText } from "@kampus/libfabrika/access/Text";
 import { BrainEvent } from "@kampus/libfabrika/brain-event";
+import { Child, type StartGrant } from "@kampus/libfabrika/processes/Children";
 import { type From } from "@kampus/libfabrika/processes/Mailbox";
-import { Start } from "@kampus/libfabrika/processes/Process";
+import { Recipient, Start } from "@kampus/libfabrika/processes/Process";
+import * as Audit from "@kampus/libfabrika/runtime/Audit";
+import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
-import { Cause, Deferred, Effect, Exit, Layer, ManagedRuntime, Option, Schedule, Schema, Tracer } from "effect";
+import { Cause, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Tracer } from "effect";
 import * as fc from "fast-check";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, settings, type Env } from "./runtime.ts";
 import { Settings } from "./settings.ts";
 
@@ -30,11 +34,12 @@ vi.mock("virtual:fabrika-built", () => ({ ...table, assets: {} }));
 
 vi.mock("effect", async (importOriginal) => {
   const actual = await importOriginal<typeof import("effect")>();
-  return { ...actual, ManagedRuntime: { ...actual.ManagedRuntime } };
+  return { ...actual, Layer: { ...actual.Layer } };
 });
 
 const built = (source: string) => ({ hash: createHash("sha256").update(source).digest("hex"), source });
 const counterCode = built("counter");
+const checklistCode = built("checklist");
 const approvalCode = built("approvals");
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -159,9 +164,15 @@ const settled = (db: DatabaseSync) =>
  *  `status` (amendment A2). It gives up after this, so a build that waits on it still ends. */
 const CALLBACK_GIVES_UP = "6 seconds";
 
-const world = async (trace = TRACE, build = "counter-b", options: { readonly callback?: boolean } = {}) => {
+const world = async (
+  trace = TRACE,
+  build = "counter-b",
+  options: { readonly callback?: boolean; readonly starts?: ReadonlyArray<typeof StartGrant.Type> } = {},
+) => {
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
   table.programs["fabrika/counter"] = counterCode;
+  // P14 slice 2: the app boots `checklist:1` after `counter:1`, so the table holds its program too.
+  table.programs["fabrika/checklist"] = checklistCode;
   table.programs["p12/approvals"] = approvalCode;
   const home = mkdtempSync(join(tmpdir(), "p12-r-")),
     key = identity();
@@ -184,15 +195,17 @@ const world = async (trace = TRACE, build = "counter-b", options: { readonly cal
   let onRing: () => Promise<void> = async () => {};
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
-    INSTANCE: JSON.stringify({
-      name: "project-test",
-      person: PERSON,
-      founder: key.line,
-      window: key.raw,
-      port: 18787,
-      rateLimit: { limit: 100_000, window: 60_000 },
-      build: "brain-test",
-    }),
+    INSTANCE: JSON.stringify(
+      RecordWireTest.settingsFixture({
+        name: "project-test",
+        person: PERSON,
+        founder: key.line,
+        window: key.raw,
+        port: 18787,
+        build: "brain-test",
+        ...(options.starts === undefined ? {} : { starts: options.starts }),
+      }),
+    ),
     PROCESS: {
       // Ticket 402 keys a Process object by its registered name, so the stub key may be a
       // name: descriptors are keyed by their own process ID, and delivery names that ID.
@@ -238,6 +251,10 @@ const world = async (trace = TRACE, build = "counter-b", options: { readonly cal
     LOADER: {
       get: (id: string) => ({
         getEntrypoint: () => ({
+          audit: async (message: unknown) =>
+            Audit.Answer.cases.ok.make({
+              value: Schema.decodeUnknownSync(Schema.Struct({ type: Schema.String }))(message),
+            }),
           describe: async () =>
             id.startsWith(`${approvalCode.hash}/`)
               ? {
@@ -262,27 +279,26 @@ const world = async (trace = TRACE, build = "counter-b", options: { readonly cal
     },
   } as unknown as Env;
   const span = Tracer.externalSpan({ traceId: trace, spanId: "00f067aa0ba902b7" });
-  const make = ManagedRuntime.make;
-  // ManagedRuntime builds its layer before the requested Effect runs, in a separate fiber.
-  // Put the caller's span on that real layer so it is current during bootstrap.
+  const buildLayer = Layer.buildWithMemoMap;
+  // The shared holder builds consumers on first entry, after the outer runtime starts.
   const startup = vi
-    .spyOn(ManagedRuntime, "make")
-    .mockImplementationOnce((layer, options) => make(layer.pipe(Layer.withParentSpan(span)), options));
-  let runtime: ReturnType<typeof projectRuntime>;
-
-  try {
-    runtime = projectRuntime(ctx, env);
-  } finally {
-    startup.mockRestore();
-  }
-
+    .spyOn(Layer, "buildWithMemoMap")
+    .mockImplementation((layer, memo, scope) => buildLayer(layer.pipe(Layer.withParentSpan(span)), memo, scope));
+  let runtime = projectRuntime(ctx, env);
   const run = <A, E>(work: Effect.Effect<A, E, ProjectService>) => runtime.runPromise(work);
   closers.push(async () => {
     await runtime.dispose();
     db.close();
     rmSync(home, { recursive: true, force: true });
   });
-  const p = await run(ProjectService);
+  let p: ProjectService["Service"];
+
+  try {
+    p = await run(ProjectService);
+  } finally {
+    startup.mockRestore();
+  }
+
   await settled(db);
   const from: From = {
     by: key.fingerprint,
@@ -318,6 +334,7 @@ const world = async (trace = TRACE, build = "counter-b", options: { readonly cal
   return {
     p,
     run,
+    settingsRead: (start: string) => runtime.settingsRead(start),
     span,
     key,
     env,
@@ -378,12 +395,81 @@ const world = async (trace = TRACE, build = "counter-b", options: { readonly cal
 };
 
 // The L4/L8 world is a scoped resource: its release closes what `world()` opened (0061).
-const opened = Effect.acquireRelease(
-  Effect.promise(() => world()),
-  () =>
-    Effect.promise(async () => {
-      for (const close of closers.splice(0).reverse()) {
-        await close();
+const openWorld = (starts?: ReadonlyArray<typeof StartGrant.Type>) =>
+  Effect.acquireRelease(
+    Effect.promise(() => world(TRACE, "counter-b", starts === undefined ? {} : { starts })),
+    () =>
+      Effect.promise(async () => {
+        for (const close of closers.splice(0).reverse()) {
+          await close();
+        }
+      }),
+  );
+
+const opened = openWorld();
+
+StartsTest.law(
+  "L4 child grants pass through the recorded start to ChildrenLedger without entering ledger entries or receipts",
+  fc.tuple(fc.uuid(), fc.array(fc.nat(), { minLength: 8, maxLength: 25 })),
+  ([word, choices]) =>
+    Effect.gen(function* () {
+      const grants = [
+        { source: "fabrika/counter", to: "p12/approvals" },
+        { source: `unused-${word}`, to: `unused-target-${word}` },
+      ];
+      const w = yield* openWorld(grants);
+      let project = w.p;
+      const [boot] = yield* Effect.promise(() => w.run(project.info));
+      expect(boot).toBeDefined();
+      const requester = Recipient.cases.process.make({ process: boot!.process });
+      const saved: Array<Child> = [];
+      const start = (child: Child) => Effect.promise(() => w.run(project.processChild(child, w.from)));
+      const checkSaved = Effect.fnUntraced(function* () {
+        const rows = w.db.prepare("SELECT * FROM entries").all();
+        expect(rows.some((row) => row._tag === "instance_started")).toBe(true);
+
+        for (const row of rows) {
+          const body = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(row.body);
+          expect(body).not.toHaveProperty("starts");
+          expect(JSON.stringify(row)).not.toContain(`unused-${word}`);
+          expect(JSON.stringify(row)).not.toContain(`unused-target-${word}`);
+        }
+
+        const input = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Settings))(w.env.INSTANCE);
+        const receipt = yield* w.settingsRead(input.start);
+        expect(receipt).toMatchObject({ _tag: "ok" });
+        expect(receipt).not.toHaveProperty("value.starts");
+        expect(JSON.stringify(receipt)).not.toContain(`unused-${word}`);
+      });
+
+      for (const [index, choice] of choices.entries()) {
+        const moves = saved.length === 0 ? ["start"] : ["start", "repeat", "refuse", "reopen"];
+        const move = moves[choice % moves.length];
+
+        if (move === "reopen") {
+          project = yield* Effect.promise(() => w.reopen());
+        } else if (move === "repeat") {
+          expect(yield* start(saved[choice % saved.length]!)).toMatchObject({ _tag: "ok", value: { _tag: "started" } });
+        } else {
+          const child = Child.make({
+            id: `child-${word}-${index}`,
+            name: `child:${index}`,
+            code: { program: move === "refuse" ? `ungranted-${word}` : "p12/approvals", hash: approvalCode.hash },
+            requester,
+          });
+          const before = w.db.prepare("SELECT count(*) AS total FROM entries").get();
+          const reply = yield* start(child);
+
+          if (move === "refuse") {
+            expect(reply).toMatchObject({ _tag: "ChildrenError", reason: "forbidden" });
+            expect(w.db.prepare("SELECT count(*) AS total FROM entries").get()).toEqual(before);
+          } else {
+            expect(reply).toMatchObject({ _tag: "ok", value: { _tag: "started", name: child.name } });
+            saved.push(child);
+          }
+        }
+
+        yield* checkSaved();
       }
     }),
 );
@@ -400,9 +486,15 @@ const bends: ReadonlyArray<(name: string) => string> = [
 // registered name, or tries a current name bent into a slashed one, which is refused.
 const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<number>) => {
   const names = ["counter:1"];
+  // P14 slice 2: the boot's second entry. The walk starts only the counter's code, so this stays
+  // the one process of another program, under its own name.
+  const other = { name: "checklist:1", program: "fabrika/checklist" };
+  const others = (list: ReadonlyArray<{ readonly name: string; readonly program: string }>) =>
+    list.filter((p) => p.program !== "fabrika/counter").map((p) => ({ name: p.name, program: p.program }));
   let refused = 0;
   expect(w.configured.map((d) => ({ name: d.name, program: d.program }))).toEqual([
     { name: "counter:1", program: "fabrika/counter" },
+    other,
   ]);
   const [started] = await w.run(w.p.read("processes/counter:1", 0, "audit"));
   expect(JSON.stringify(started)).toContain('"fabrika/counter"');
@@ -424,9 +516,10 @@ const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<nu
     }
 
     const info = await w.run(w.p.info);
-    expect(info.map((p) => p.name).sort()).toEqual([...names].sort());
-    expect(info.every((p) => p.program === "fabrika/counter")).toBe(true);
-    expect(w.configured.every((d) => d.program === "fabrika/counter" && !d.name.includes("/"))).toBe(true);
+    expect(info.map((p) => p.name).sort()).toEqual([...names, other.name].sort());
+    expect(others(info)).toEqual([other]);
+    expect(others(w.configured)).toEqual([other]);
+    expect(w.configured.every((d) => !d.name.includes("/"))).toBe(true);
   }
 
   expect(refused).toBeGreaterThan(0);
@@ -611,8 +704,10 @@ describe("P12 Project authority", () => {
     const w = await building;
     expect(Option.isSome(built), "the Project's build waited on its own bootstrap's configure").toBe(true);
     expect(w.configured.filter((d) => d.id === w.p.boot.process)).toHaveLength(1);
-    expect(w.statuses, "the bootstrap's configure saw the Project answer its status").toMatchObject([
-      { _tag: "ok", value: { state: { process: w.p.boot.process } } },
+    // P14 slice 2: the boot is a list, so each entry's configure calls back once, in the list's order.
+    expect(w.statuses, "each boot entry's configure saw the Project answer its status").toMatchObject([
+      { _tag: "ok", value: { name: "counter:1", state: { process: w.p.boot.process } } },
+      { _tag: "ok", value: { name: "checklist:1" } },
     ]);
   }, 15_000);
 
@@ -813,7 +908,11 @@ describe("P12 Connection recording", () => {
       } as unknown as DurableObjectState;
       // oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand
       const project = {
-        getByName: () => ({ leave: async () => {}, disconnect: async () => {} }),
+        getByName: () => ({
+          settingsStart: async () => StartsTest.reply(await Effect.runPromise(settings(w.env))),
+          leave: async () => {},
+          disconnect: async () => {},
+        }),
       } as unknown as Env["PROJECT"];
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node socket double implements attachment, send and close without workerd's socket brand
       const socket = ws as unknown as WebSocket;
@@ -888,6 +987,7 @@ describe("P12 Connection recording", () => {
     // oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand
     const project = {
       getByName: () => ({
+        settingsStart: async () => StartsTest.reply(await Effect.runPromise(settings(w.env))),
         route: async () => {
           throw fault;
         },

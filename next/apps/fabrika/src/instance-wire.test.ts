@@ -10,10 +10,13 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { it } from "@effect/vitest";
+import { checklistView } from "@kampus/checklist";
 import { Id } from "@kampus/libfabrika";
 import { Entry, PAGE } from "@kampus/libfabrika/ledger/Log";
+import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { Clock, Deferred, Effect, Fiber, Schema } from "effect";
 import { afterEach, describe, expect } from "vitest";
+import { devServer, home, reader, suite } from "../e2e/p14.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
 
@@ -23,6 +26,52 @@ const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const SENT = "2026-11-08T04:00:00.000Z";
 // A bound on one wait for an observable fact after a kill, as worker-supervision's WAIT is.
 const WAIT = 25_000;
+
+it(
+  "pinned: checklist stays reachable after its first add on the real dev.ts, including a later subscriber",
+  { timeout: 240_000 },
+  (context) =>
+    suite(
+      Effect.gen(function* () {
+        const h = yield* home;
+        const dev = yield* devServer(h);
+        const first = yield* reader(h, dev);
+        const name = "checklist:1";
+        const pid = resolveName(
+          yield* first.read(`processes/${name}`),
+          name,
+          (by) => by === "brain" || by.startsWith("brain:"),
+        );
+        expect(pid).not.toBeNull();
+        const View = Schema.Struct({ result: Schema.Struct({ rev: Schema.Int, view: checklistView }) });
+        yield* first.call("view.open", { pid });
+
+        for (const [n, item] of ["milk", "bread"].entries()) {
+          expect(
+            yield* first.call("process.send", {
+              pid,
+              letter: `progress_${n}`,
+              m: { type: "add", name: item },
+              sentAt: SENT,
+              seen: 0,
+            }),
+            `send ${n + 1} to the original process`,
+          ).toMatchObject({ result: { _tag: "accepted" } });
+          yield* Effect.sleep("100 millis");
+          const second = yield* reader(h, dev);
+          const opened = Schema.decodeUnknownSync(View)(yield* second.call("view.open", { pid }));
+          expect(opened.result.view.items.map((row) => row.name)).toEqual(["milk", "bread"].slice(0, n + 1));
+        }
+
+        const inbox = yield* first.read(`${name}/inbox`);
+        expect(inbox.filter((row) => row.id.startsWith("progress_")).map((row) => row.id)).toEqual([
+          "progress_0",
+          "progress_1",
+        ]);
+      }),
+      context,
+    ),
+);
 
 const field = (a: string | Buffer) => {
   const bytes = typeof a === "string" ? Buffer.from(a) : a;
@@ -259,6 +308,8 @@ class Client {
   // Node's WebSocket fires `error` on a failed upgrade (the proxy's 502 while workerd
   // restarts) but can stay CONNECTING with no `close`, so `error` counts as closed.
   private closed = false;
+  // A caller waits on the socket's own events (open, frame, error, close), never on a timer.
+  private readonly waiting: Array<() => void> = [];
   private readonly ws: WebSocket;
   private readonly base: string;
   private readonly key: ReturnType<typeof identity>;
@@ -270,15 +321,30 @@ class Client {
     this.tab = tab;
     this.ws = new WebSocket(`${base.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
     sockets.push(this.ws);
+    this.ws.addEventListener("open", () => this.wake());
     this.ws.addEventListener("error", () => {
       this.closed = true;
+      this.wake();
     });
     this.ws.addEventListener("close", () => {
       this.closed = true;
+      this.wake();
     });
     this.ws.addEventListener("message", ({ data }) => {
       this.frames.push(data === "pong" ? "pong" : JSON.parse(String(data)));
+      this.wake();
     });
+  }
+
+  private wake() {
+    for (const done of this.waiting.splice(0)) {
+      done();
+    }
+  }
+
+  /** The socket's next event: it opened, a frame arrived, or it closed. */
+  private changed() {
+    return new Promise<void>((done) => this.waiting.push(done));
   }
 
   async next(test: (f: Frame | string) => boolean): Promise<any> {
@@ -293,7 +359,7 @@ class Client {
         throw new Error("wire closed before answer");
       }
 
-      await pause();
+      await this.changed();
     }
   }
 
@@ -332,7 +398,7 @@ class Client {
         throw new Error("wire closed before open");
       }
 
-      await pause();
+      await this.changed();
     }
 
     this.ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
@@ -717,7 +783,14 @@ describe("P12 real dev.ts wire", () => {
     expect(accepted.every((a, n) => n === 0 || a.rev > accepted[n - 1]!.rev)).toBe(true);
     // Gateway input events occupy the intervening global revisions.
     expect(accepted.some((a, n) => n > 0 && a.rev > accepted[n - 1]!.rev + 1)).toBe(true);
-  });
+    // The limit, from measured times. The time is the law's own work: a second page needs PAGE + 3 real
+    // sends, and the gateway answers one socket's sends one at a time (sent all at once they took as long).
+    // On main's CI, in 22 runs from 43365290308 to 43529835092, all while the client still polled for its
+    // replies, this took 32.2 s at its fastest (43365290308) and 50.1 s at the median (43470989655), and was
+    // cut at 60 s in 43489825701 and 43529835092. In the last of these the scenario before it took 13.9 s
+    // against 6.6 s in 43528965610, 2.1 times, which puts this one near 112 s there. 180 s is 1.6 times
+    // that, and what the real-workerd scenarios beside it have.
+  }, 180_000);
   it("scenario: a parked wire wait receives the next append and a ready wait answers now", async () => {
     const s = await instance(),
       c = await connected(s),
@@ -876,8 +949,23 @@ describe("P12 real dev.ts wire", () => {
       await pause();
     }
 
-    // Only POST /grant and GET /grant/client/KEY reach the grant routes; the rest get the page.
-    expect(await (await fetch(s.url)).text()).toBe("fabrika");
+    // Only POST /grant and GET /grant/client/KEY reach the grant routes. P14 slice 2 (ticket 828): the
+    // app's build carries its tab, so `/` is the built page and `/window.js` the script it loads, each
+    // with its type and its ETag over the real wire; a write elsewhere still gets the plain answer.
+    const root = await fetch(s.url);
+    expect(root.status).toBe(200);
+    expect(root.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    const page = await root.text();
+    expect(page, "/ is the tab's page").toContain('<script type="module" src="/window.js"></script>');
+    expect(root.headers.get("etag")).toBe(`"${createHash("sha256").update(page).digest("hex")}"`);
+    const script = await fetch(`${s.url}/window.js`);
+    expect(script.status).toBe(200);
+    expect(script.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+    const scriptBody = await script.text();
+    expect(script.headers.get("etag")).toBe(`"${createHash("sha256").update(scriptBody).digest("hex")}"`);
+    expect(page, "the page names the script it loads by its build").toContain(
+      `<meta name="fabrika-build" content="${createHash("sha256").update(scriptBody).digest("hex")}">`,
+    );
     const posted = await fetch(`${s.url}/elsewhere`, { method: "POST", body: "{}" });
     expect(await posted.text()).toBe("fabrika");
     const home = mkdtempSync(join(tmpdir(), "p12-w-"));

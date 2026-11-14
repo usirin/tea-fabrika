@@ -2,8 +2,8 @@
 // chain.ts keeps (./flow/Beat.ts, ticket 685). Today's lead tooling, run on our own laptop; it is
 // not product. It only reads: no lane, box or process is touched.
 //
-//   node lanes.ts                 every lane with a chain record that has not landed
-//   node lanes.ts --all           the landed ones too
+//   node lanes.ts                 every lane with a chain record that is not queued or landed
+//   node lanes.ts --all           the queued and landed ones too
 //   node lanes.ts t843 mq1        only these lanes
 //
 //   {"lane":"t843","state":"running","step":"tests","box":"t843-tests8","phase":"agent",
@@ -19,6 +19,9 @@
 //
 // The states, first match wins (`verdict`):
 //   landed    the record says when it landed, or no process holds the lane and it ended `done`
+//             with no queue time (a lane from before the merge queue)
+//   queued    the record says when the chain added its pull request to GitHub's merge queue.
+//             GitHub merges it later; `land.ts merged <pr>` reads whether it has
 //   waits     no process holds the lane and its last outcome is `ask` or `stuck`: it stopped and
 //             waits on the lead, with the outcome's reason and since when. Never running or stuck.
 //   running   `Beat.says` finds the beat fresh; or a step is open, with no beat, for less than the
@@ -39,6 +42,7 @@
 //   - a record that does not read (half-written, or not a record): `unknown`, and the other lanes
 //     still print
 //   - a lane that finished and landed: `landed`, left out unless named or `--all`
+//   - a lane whose pull request is in the merge queue: `queued`, left out the same way
 //   - two lanes: two lines, in name order
 //   - a last outcome of `ask` beside an open step and an old beat: `waits`
 //   - a lane started again after an `ask`: the lock is held, so the fresh beat decides
@@ -66,6 +70,7 @@ const Step = Schema.Struct({
 /** The part of the chain record (chain.ts's `ChainRecord`) this reader needs. */
 export const Record = Schema.Struct({
   landed: Schema.NullOr(Schema.String),
+  queued: Schema.optionalKey(Schema.String),
   steps: Schema.Array(Step),
   beat: Schema.optionalKey(Beat.Beat),
 });
@@ -106,7 +111,7 @@ export type Seen = {
 
 // ---------------------------------------------------------------- what is said
 
-export const STATES = ["running", "waits", "stuck", "landed", "unknown"] as const;
+export const STATES = ["running", "waits", "stuck", "queued", "landed", "unknown"] as const;
 
 /** One lane's line. */
 export const Line = Schema.Struct({
@@ -167,6 +172,11 @@ export const verdict = (seen: Seen, now: Date, quiet = Beat.QUIET): Line => {
 
   if (record.landed !== null) {
     return { ...lane, state: "landed", since: record.landed, text: "landed" };
+  }
+
+  // A lane started again holds its lock, so its fresh beat decides, as after an `ask`.
+  if (record.queued !== undefined && !seen.held) {
+    return { ...lane, state: "queued", since: record.queued, text: "in GitHub's merge queue" };
   }
 
   if (!seen.held && seen.end !== null) {
@@ -259,7 +269,9 @@ export const read = Effect.fn("lanes.read")(function* (
     (lane) => Effect.map(see(boxes, lane, standingBoxes), (seen) => verdict(seen, now)),
     { concurrency: 1 },
   );
-  return options.named.length > 0 || options.all ? lines : lines.filter((line) => line.state !== "landed");
+  return options.named.length > 0 || options.all
+    ? lines
+    : lines.filter((line) => line.state !== "landed" && line.state !== "queued");
 });
 
 // ---------------------------------------------------------------- the command

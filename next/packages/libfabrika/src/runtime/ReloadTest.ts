@@ -343,6 +343,20 @@ const loader = (code: Code) => ({
         ),
       );
       const { execution } = loaded;
+      /** Holds a letter's step open while a law's gate is set, and says so on `held`. */
+      const gated = Effect.gen(function* () {
+        const gate = code.stepGate;
+
+        if (gate !== null) {
+          code.stepGate = null;
+
+          if (code.held !== null) {
+            yield* Deferred.succeed(code.held, undefined);
+          }
+
+          yield* Deferred.await(gate);
+        }
+      });
       return {
         stepper: loaded.stepper,
         declaration: loaded.declaration,
@@ -354,22 +368,9 @@ const loader = (code: Code) => ({
               code.calls.inits.push(build);
               return execution.init(saved);
             }),
-          step: (model: unknown, m: unknown) =>
-            Effect.gen(function* () {
-              const gate = code.stepGate;
-
-              if (gate !== null) {
-                code.stepGate = null;
-
-                if (code.held !== null) {
-                  yield* Deferred.succeed(code.held, undefined);
-                }
-
-                yield* Deferred.await(gate);
-              }
-
-              return yield* execution.step(model, m);
-            }),
+          step: (model: unknown, m: unknown) => Effect.andThen(gated, execution.step(model, m)),
+          // Main's runner steps an admitted letter through `update`, so the same gate holds it.
+          update: (model: unknown, m: unknown) => Effect.andThen(gated, execution.update(model, m)),
         },
       };
     }),

@@ -149,6 +149,8 @@ const emitted = (graph: Observed) => [joined(graph), ...graph.chunks.map((c) => 
 const isProgram = (graph: Observed) => graph.input === "fabrika:program";
 // P14 slice 1: a tab's own call, the one whose input is exactly the tab entry the build was given.
 const tabCall = (entry: string | undefined) => (graph: Observed) => entry !== undefined && graph.input === entry;
+// P14 slice 2: the entry the app's own build.ts passes as its tab.
+const APP_TAB = new URL("../entry/browser.tsx", import.meta.url).pathname;
 // The two routes a tab's call makes: its script, and the page it emits as an asset.
 const TAB_ROUTES: ReadonlyArray<string> = ["/window.js", "/index.html"];
 
@@ -209,11 +211,15 @@ it.effect(
       const folder = yield* fs.makeTempDirectoryScoped({ prefix: "p8-bytes-" });
       const start = observations.builds.length;
       const built = yield* build({ out: path.join(folder, "out") });
+      // P14 slice 2 (ticket 828): the app's build selects its tab, `src/entry/browser.tsx`, so its build
+      // carries the page and the tab's script, each from the tab's own observed call.
       const observed = observations.builds.slice(start),
-        brain = checkBuild(observed, built);
-      // P14 slice 1: the app selects no tab until slice 6, so its build carries no page and no tab script.
-      expect(Object.keys(built.assets)).not.toContain("/index.html");
-      expect(Object.keys(built.assets)).not.toContain("/window.js");
+        brain = checkBuild(observed, built, APP_TAB);
+      expect(Object.keys(built.assets)).toContain("/index.html");
+      expect(Object.keys(built.assets)).toContain("/window.js");
+      process.stdout.write(
+        `P14 tab: page ${new TextEncoder().encode(built.assets["/index.html"]?.body ?? "").byteLength} bytes; script ${new TextEncoder().encode(built.assets["/window.js"]?.body ?? "").byteLength} bytes\n`,
+      );
       expect(observed.filter(isProgram)).toHaveLength(Object.keys(built.programs).length);
       const bytes = yield* fs.readFileString(built.brain);
       expect(bytes).toBe(joined(brain));

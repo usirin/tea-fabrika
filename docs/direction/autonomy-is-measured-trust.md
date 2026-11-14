@@ -59,8 +59,8 @@ const failRate = (merges: readonly MergeRow[], broke: readonly BrokeRow[]) => br
 - **M1. A row per merge, written when it merges** (90% sure). The `MergeRow` above, in
   `field/`. What it checked is a fact that exists only at merge time. Write it now, or it is
   gone (record wide). Not built: no code writes it and `field/README.md` gives it no file or
-  fields. At the merge today, `catchup.sh` only comments on each ticket it closes with the pull
-  request and its merge commit (`.agents/skills/lead/scripts/catchup.sh:86`).
+  fields. After the merge today, `land.ts merged` only comments on each ticket it closes with the pull
+  request and its merge commit (`.agents/skills/lead/scripts/pr/Queue.ts`).
 - **M2. A row per break, written when it is found** (85% sure). The `BrokeRow` above. The
   `missed` field is what makes a break useful. It is the step to fix.
 - **M3. Change failure rate, by step, derived** (80% sure). Never stored, rebuilt from the

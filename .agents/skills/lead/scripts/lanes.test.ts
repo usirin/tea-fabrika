@@ -169,6 +169,21 @@ describe("Lanes.verdict", () => {
     expect(line).toMatchObject({ state: "landed", since: iso(-MIN), text: "PR 7 landed", box: null });
   });
 
+  // Plants: call a queued lane landed; call it queued while a new process holds the lane.
+  it("scenario: a record that says when it was queued is queued, never landed, until a process holds the lane again or it lands", () => {
+    const queued = record({ queued: iso(-2 * MIN), steps: [closed("review", "t1-review2")] });
+    const end = { outcome: "done", reason: "PR 7 queued", at: iso(-MIN) } as const;
+    expect(Lanes.verdict(seen({ end, record: queued }), at(0))).toMatchObject({
+      state: "queued",
+      since: iso(-2 * MIN),
+      text: "in GitHub's merge queue",
+    });
+    const again = seen({ held: true, end, record: { ...queued, beat: beat("agent", -MIN, -MIN) } });
+    expect(Lanes.verdict(again, at(0)).state).toBe("running");
+    const landed = seen({ end, record: { ...queued, landed: iso(-MIN) } });
+    expect(Lanes.verdict(landed, at(0)).state).toBe("landed");
+  });
+
   it("scenario: with no record, an unreadable record, or nothing to go on, the state is unknown and says why", () => {
     const missing = Lanes.verdict(seen({ found: Lanes.Found.cases.missing.make({}) }), at(0));
     const unreadable = Lanes.verdict(seen({ found: Lanes.Found.cases.unreadable.make({}) }), at(0));
@@ -448,6 +463,12 @@ describe("Lanes.read", () => {
           ["t2", "landed"],
         ]);
         expect(states(yield* linesAt(files, { named: ["t2"] }))).toEqual([["t2", "landed"]]);
+        const queued = {
+          "state/t3-chain.json": chain(record({ queued: iso(-MIN) })),
+          "t3-chain.out": ended("done", "PR 11 queued"),
+        };
+        expect(states(yield* linesAt(queued))).toEqual([]);
+        expect(states(yield* linesAt(queued, { all: true }))).toEqual([["t3", "queued"]]);
       }),
     ));
 });
