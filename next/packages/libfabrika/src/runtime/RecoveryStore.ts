@@ -7,8 +7,7 @@
 import { Context, Effect, Layer, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { type Sql } from "../Sql.ts";
-import { changes } from "./internal/receipts.ts";
-import { Receipt } from "./internal/recovery.ts";
+import { changes, Receipt } from "./internal/recovery.ts";
 
 /** What the store reads of a saved journal: whose it is, and the receipts it keeps apart. */
 const Kept = Schema.Struct({ name: Schema.String, receipts: Schema.Array(Receipt) });
