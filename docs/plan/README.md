@@ -67,8 +67,9 @@ not written yet.*
 *2026-11-13, later:* the Alchemy port ([0041](../../.decisions/0041-object-classes-are-effect-objects.md),
 ticket 502) is part of this plan and keeps a slot beside the four primitives
 ([0181](../../.decisions/0181-the-alchemy-port-keeps-a-slot.md)). One of its objects, `RecordPart`,
-landed on 2026-11-11; `Project`, `Process`, `Connection` and `Control` are still plain classes. The
-plan for what is left is being written.
+landed on 2026-11-11, and `Connection` follows in slice S1 of
+[its plan](./ticket-502-alchemy-port.md); `Project`, `Process` and `Control` are still plain
+classes. *It said: the plan for what is left is being written.*
 
 *2026-11-13, approved by the owner:* in that section, 30 of Tier 1's 44 rows are marked needed, 2
 help and 12 wait. The build order is the merge line, the window, a person starting a program and

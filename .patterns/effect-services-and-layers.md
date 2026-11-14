@@ -117,7 +117,13 @@ Rules:
 - **The object class stays thin.** Every method is one `this.runtime.runPromise(...)` under an edge
   comment (`next/apps/fabrika/src/brain.ts:30-33`,
   [an object class stays thin](../docs/direction/object-classes-stay-thin.md)). A bare
-  `Effect.runPromise` there gets none of the runtime's Layers, tracer included.
+  `Effect.runPromise` there gets none of the runtime's Layers, tracer included. An object already
+  on Alchemy's Effect form has no method of its own: its class is one bridge line
+  (`export class Connection extends Bridge("Connection") {}` in `next/apps/fabrika/src/brain.ts`),
+  and its Layer is a sibling file read through its module, as `ConnectionObject.layer(...)`
+  (`next/packages/libfabrika/src/cloudflare/ConnectionObject.ts`). That Layer builds its service
+  with `ObjectService.make`, which builds on the first call and tries a failed build again, and
+  returns an Effect for each slot and call of the contract in `cloudflare/objects.ts`.
 
 ## Where it applies
 

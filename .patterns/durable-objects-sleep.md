@@ -59,7 +59,10 @@ The Process alarm saves `wake` before setting the platform alarm and reads it in
 (`next/packages/libfabrika/src/cloudflare/runtime.ts:1043`, `:1104`). No interval is needed for that
 wait. The Connection accepts hibernatable sockets, installs an automatic ping response, and keeps
 identity in attachments (`next/packages/libfabrika/src/cloudflare/connection.ts:247`). The socket
-cache is rebuilt by decoding those attachments (`connection.ts:45`).
+cache is rebuilt by decoding those attachments (`connection.ts:45`). Alchemy wraps the platform's
+socket anew for each event, so the Connection's Layer hands the service the platform socket inside
+the wrapper, the one the cache is keyed by (`cloudflare/ConnectionObject.ts`). That Layer starts
+no timer and no fiber, and builds the service only when a slot or call arrives.
 
 The existing Process alarm handler still propagates a failed due call without catch-and-re-arm
 (`cloudflare/runtime.ts:1104`). This watcher change does not repair that separate finding.
