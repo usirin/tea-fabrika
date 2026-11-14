@@ -86,6 +86,8 @@ type Script = {
   open: boolean;
   send: boolean;
   waiting?: boolean;
+  /** The person the door admits; `person_test` when left out. */
+  person?: string;
   /** The malformed frames L12 sends once the page is online, in order. */
   junk: ReadonlyArray<(ids: ReadonlyMap<string, number | string>) => string>;
 };
@@ -168,7 +170,11 @@ const peer = (script: Script, pong: () => void = () => {}, nonce = (n: number) =
       }
 
       // The door's admission as it answers `initialize`: the version, the beat and the checked identity.
-      result({ version: 1, ping: 5_000, identity: { key: "SHA256:test", person: "person_test", as: "window" } });
+      result({
+        version: 1,
+        ping: 5_000,
+        identity: { key: "SHA256:test", person: script.person ?? "person_test", as: "window" },
+      });
 
       for (const junk of script.junk) {
         open!.receive(junk(ids));
@@ -1257,5 +1263,55 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
         ).toBe(1);
       }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
     { arbitrary: { seed: SEED, runs: 100 } },
+  );
+});
+
+// Desk S2a, next/ (the desk program fabrika/tezgah, ticket named by its title): law L10's start half.
+// `start` takes `tezgah: {workspace}` (plan amendment after S2a's first review: never `desk`) and
+// hands it to the window parent as its ctx, so a window with it, once the door admits its hello, reads the admitted person's tezgah,
+// `processes/tezgah:<person>`, and reads none of the given tiles. How a person's id is spelled in
+// a process name is the build's; the law asks only that two people never share one tezgah.
+describe("Desk S2a L10: a start with the tezgah option", () => {
+  const byStream = new Map<string, string>();
+  it.effect.prop(
+    "L10: a start given the tezgah option reads the admitted person's tezgah once online, and none of the given tiles",
+    {
+      person: Schema.String.check(Schema.isPattern(/^person_[0-7][0-9a-hjkmnp-tv-z]{25}$/)),
+      workspace: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 9 })),
+    },
+    ({ person, workspace }) =>
+      Effect.gen(function* () {
+        const door = peer({ pong: true, open: true, send: true, junk: [], person });
+        const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void));
+        const booting = yield* start({
+          tiles,
+          window,
+          build: BUILD,
+          origin: ORIGIN,
+          client: BROWSER,
+          tezgah: { workspace },
+        }).pipe(Effect.provide(services(door.socket, [])), Scope.provide(scope));
+        const run = yield* booting.ready;
+
+        for (let n = 0; n < 40 && run.getState().link._tag !== "online"; n++) {
+          yield* door.tick(500);
+        }
+
+        yield* door.tick(500);
+        expect(run.getState().link._tag, "the window went online").toBe("online");
+        const streams = door.sent
+          .flatMap((text) => Option.toArray(decodeFrame(text)))
+          .filter((frame) => frame.method === "ledger.read")
+          .map((frame) => String(Reflect.get(Object(frame.params), "stream")));
+        expect(streams[0], "L10: the first read is the person's tezgah").toMatch(/^processes\/tezgah:/);
+        expect(streams, "L10: a window with the tezgah option reads none of the given tiles").not.toContain(
+          "processes/checklist:1",
+        );
+        const owner = byStream.get(streams[0] ?? "");
+        expect(owner ?? person, `L10: ${streams[0]} is one person's tezgah`).toBe(person);
+        byStream.set(streams[0] ?? "", person);
+        yield* Scope.close(scope, Exit.void);
+      }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+    { arbitrary: { seed: SEED, runs: 30 } },
   );
 });

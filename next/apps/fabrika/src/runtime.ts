@@ -1,6 +1,7 @@
 import { RecordedStart } from "@kampus/libfabrika";
 import * as RateLimiterSql from "@kampus/libfabrika/gateway/RateLimiterSql";
 import { LedgerError } from "@kampus/libfabrika/ledger/Ledger";
+import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
 import * as ConnectionObject from "@kampus/libfabrika/workers/ConnectionObject";
 import {
   projectRuntime as project,
@@ -33,10 +34,12 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
   project(ctx, env, {
     input: checkedSettings(env),
     programs,
-    // The program is the core pack's `fabrika/counter`; its registered name stays `counter:1`.
-    bootstrap: [
+    // The program is the core pack's `fabrika/counter`; its registered name stays `counter:1`. Each
+    // person has one tezgah, named after them; the boot starts the founder's.
+    bootstrap: (person) => [
       { name: "counter:1", id: "counter:1", program: "fabrika/counter" },
       { name: "checklist:1", id: "checklist:1", program: "fabrika/checklist" },
+      { name: tezgahName(person), id: tezgahName(person), program: "fabrika/tezgah" },
     ],
     door: (options) =>
       Effect.gen(function* () {

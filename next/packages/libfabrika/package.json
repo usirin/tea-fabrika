@@ -12,6 +12,8 @@
     "./transport/internal/*": null,
     "./client/*": "./src/client/*.ts",
     "./client/internal/*": null,
+    "./tezgah/*": "./src/tezgah/*.ts",
+    "./tezgah/internal/*": null,
     "./telemetry/*": "./src/telemetry/*.ts",
     "./telemetry/internal/*": null,
     "./ledger/*": "./src/ledger/*.ts",

@@ -39,7 +39,14 @@ import { type Appended, type Entry, fromHere, lineFor, type Waited } from "../le
 import { Referee } from "../ledger/Referee.ts";
 import * as RefereeSql from "../ledger/RefereeSql.ts";
 import { Connections } from "../presence/Connections.ts";
-import { type Child, Children, ChildrenError, type StartGrant, type Started } from "../processes/Children.ts";
+import {
+  type Child,
+  Children,
+  ChildrenError,
+  type ChildStop,
+  type StartGrant,
+  type Started,
+} from "../processes/Children.ts";
 import * as ChildrenLedger from "../processes/ChildrenLedger.ts";
 import { decodeExitReason, type ExitReason } from "../processes/ExitReason.ts";
 import { Mailbox, type From, type Letter } from "../processes/Mailbox.ts";
@@ -84,6 +91,7 @@ import { SinkError } from "../telemetry/Trace.ts";
 import { Answer, RateCountFailure } from "../transport/Wire.ts";
 import {
   ChildReplies,
+  StopReplies,
   CommitReply,
   MailReplies,
   type MailReply,
@@ -288,13 +296,16 @@ export interface ProjectDoorOptions {
 }
 
 type Boot = { readonly name: string; readonly id: string; readonly program: string };
+type Boots = readonly [Boot, ...ReadonlyArray<Boot>];
 
 export interface ProjectOptions {
   readonly input?: Effect.Effect<Effect.Success<ReturnType<typeof settings>>, LedgerError>;
   readonly mail?: { readonly grants: Grants };
   readonly config?: BrainOptions;
   readonly programs: Readonly<Record<string, ProgramSource>>;
-  readonly bootstrap: readonly [Boot, ...ReadonlyArray<Boot>];
+  /** What the instance boots with: a list, or a list made for the founder, so a program each person
+   *  has one of, as tezgah, boots under the founder's own name. */
+  readonly bootstrap: Boots | ((person: string) => Boots);
   /** Which program may start which (P42), a host right. None when absent. */
   readonly starts?: ReadonlyArray<typeof StartGrant.Type>;
   readonly door: (
@@ -397,6 +408,17 @@ const childReply = (work: Effect.Effect<Started, unknown>): Effect.Effect<typeof
     Effect.catch((error): Effect.Effect<typeof ChildReplies.Type, LedgerError> =>
       error instanceof ChildrenError && error.reason !== "storage"
         ? Effect.succeed(ChildReplies.cases.ChildrenError.make({ reason: error.reason }))
+        : Effect.fail(new LedgerError({ reason: "storage" })),
+    ),
+  );
+
+/** A stop's checked refusals are replies, as a start's are; storage remains a retryable rejection. */
+const stopReply = (work: Effect.Effect<void, unknown>): Effect.Effect<typeof StopReplies.Type, LedgerError> =>
+  work.pipe(
+    Effect.as(StopReplies.cases.ok.make({})),
+    Effect.catch((error): Effect.Effect<typeof StopReplies.Type, LedgerError> =>
+      error instanceof ChildrenError && error.reason !== "storage"
+        ? Effect.succeed(StopReplies.cases.ChildrenError.make({ reason: error.reason }))
         : Effect.fail(new LedgerError({ reason: "storage" })),
     ),
   );
@@ -635,7 +657,8 @@ const projectLogic = Effect.fn("project.init")(function* (
 ) {
   const checked = yield* RecordedStart;
   const config = { ...checked.input, ...checked.input.founding, port: checked.values.port };
-  const { programs, bootstrap } = options;
+  const { programs } = options;
+  const bootstrap = typeof options.bootstrap === "function" ? options.bootstrap(config.person) : options.bootstrap;
   const name = ctx.id.name ?? config.name;
   const { sql, turn, write, ledgerLayer } = local;
   const by = `brain:${name}`;
@@ -969,6 +992,18 @@ const projectLogic = Effect.fn("project.init")(function* (
       yield* door.retire(pid);
     }).pipe(write);
   });
+  /** A child stop, OTP's terminate_child: one write turn ends the requester's own child with
+   *  `shutdown`, and its session can no longer sign, as an exit's cannot. */
+  const stopChild = Effect.fnUntraced(function* (input: ChildStop, origin: From) {
+    yield* Effect.gen(function* () {
+      const child = (yield* processes.info).find((row) => row.name === input.name);
+      yield* children.stop(input, origin);
+
+      if (child !== undefined) {
+        yield* door.retire(child.process);
+      }
+    }).pipe(write);
+  });
   const Bootstrap = Schema.Struct({ process: Schema.String });
   const boots = yield* Effect.forEach(
     loaded,
@@ -1180,6 +1215,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     processReceive: (pid: string, after: number) =>
       wrapped(processReply(Stream.runCollect(processes.receive(pid, after)))),
     processChild: (input: Child, origin: From) => wrapped(childReply(child(input, origin))),
+    processStop: (input: ChildStop, origin: From) => wrapped(stopReply(stopChild(input, origin))),
     boot,
   };
 }, projectStorage);
@@ -1303,6 +1339,7 @@ export class ProjectService extends Context.Service<
     ) => Effect.Effect<ProcessReply<void>, ProjectFailure>;
     readonly processReceive: (pid: string, after: number) => Effect.Effect<ProcessReply<Array<Letter>>, ProjectFailure>;
     readonly processChild: (input: Child, origin: From) => Effect.Effect<typeof ChildReplies.Type, ProjectFailure>;
+    readonly processStop: (input: ChildStop, origin: From) => Effect.Effect<typeof StopReplies.Type, ProjectFailure>;
     /** The bootstrap process and the rev of its start. */
     readonly boot: StartAnswer;
   }
@@ -1461,6 +1498,15 @@ const processLogic = Effect.fnUntraced(function* (
         Effect.mapError((cause) => new ChildrenError({ reason: "storage", cause })),
         Effect.flatMap((reply) =>
           reply._tag === "ok" ? Effect.succeed(reply.value) : Effect.fail(new ChildrenError({ reason: reply.reason })),
+        ),
+      ),
+    // A stop is decided in the project too, so the stopped child's object learns it from the table.
+    stop: (input, from) =>
+      asked(rpc(p.processStop(input, from))).pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(StopReplies)),
+        Effect.mapError((cause) => new ChildrenError({ reason: "storage", cause })),
+        Effect.flatMap((reply) =>
+          reply._tag === "ok" ? Effect.void : Effect.fail(new ChildrenError({ reason: reply.reason })),
         ),
       ),
   });

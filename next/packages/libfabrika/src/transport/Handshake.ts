@@ -35,8 +35,9 @@ const doorWord = (said: string): string => (Schema.is(Reason)(said) ? said : "ot
  * started a new hello; a dial whose opening time never came is timed from the door's first
  * notice. `ms` is how long the dial took to reach an outcome. `sent` counts the
  * request ids named on the dial, and `id` is the live one. `waiting` keeps the door's code until
- * `until`. `failed` keeps the class of the key's failure, never its text. `refused` keeps the door's
- * reason for refusing the hello when it is one of the door's words, else `other`.
+ * `until`. `admitted` keeps the person the door admitted. `failed` keeps the class of the key's
+ * failure, never its text. `refused` keeps the door's reason for refusing the hello when it is one
+ * of the door's words, else `other`.
  *
  * @stability unstable
  * @category models
@@ -50,8 +51,8 @@ export const Handshake = Schema.TaggedUnion({
   knocking: { dial: Dial, since: Ms, sent: Count, id: Schema.String },
   /** The door shows `code` until `until`; only a grant moves on. */
   waiting: { dial: Dial, since: Ms, sent: Count, code: Schema.String, until: Schema.Number, ms: Ms },
-  /** The door admitted the hello. `ping` is its interval in ms. */
-  admitted: { dial: Dial, since: Ms, ping: Schema.Number, ms: Ms },
+  /** The door admitted the hello. `ping` is its interval in ms; `person` is who the door admitted. */
+  admitted: { dial: Dial, since: Ms, ping: Schema.Number, ms: Ms, person: Schema.String },
   /** The key could not sign the hello. */
   failed: { dial: Dial, error: ErrorClass },
   /** The door refused the hello for `reason`, its own word or `other`, `ms` after the dial began. */
@@ -246,6 +247,7 @@ export const handshakeMachine = Machine.make({
               since: s.since,
               ping: a.ping,
               ms: elapsed(m.at, s.since),
+              person: a.identity.person,
             }),
             [],
           ],

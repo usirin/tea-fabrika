@@ -126,6 +126,12 @@ const ChecklistTurn = Schema.Struct({
   model: Schema.Struct({ items: Schema.Array(Schema.Unknown) }),
 });
 
+/** Desk S2a: tezgah's first init, before any window attaches: no workspace, no tile. */
+const TezgahTurn = Schema.Struct({
+  _tag: Schema.Literal("stepped"),
+  model: Schema.Struct({ workspaces: Schema.Array(Schema.Unknown), tiles: Schema.Array(Schema.Unknown) }),
+});
+
 const turn = async <A>(
   schema: Schema.Codec<A, unknown>,
   program: Loaded,
@@ -688,6 +694,13 @@ describe("P16 copied-file real instance, serial", () => {
                             if (name === "fabrika/checklist") {
                               const listed = await turn(ChecklistTurn, program, "init", [null]);
                               expect(listed.model).toEqual({ items: [] });
+                              continue;
+                            }
+
+                            // Desk S2a: the table's third core program, tezgah. It is no planted one either.
+                            if (name === "fabrika/tezgah") {
+                              const desk = await turn(TezgahTurn, program, "init", [null]);
+                              expect(desk.model).toMatchObject({ workspaces: [], tiles: [] });
                               continue;
                             }
 

@@ -205,6 +205,15 @@ In build order. "Decide first" lists only what no decision answers yet.
   [0267](../../.decisions/0267-commands-and-one-mode-field.md), 0279 as 0159 amends it, and P42's row.
 - In code now: `start_child` and the one-pair start right (above). No desk program, no prefix and no
   focus code.
+- *2026-11-14: the desk lane's slice S1 is built on branch `fabrikalfa/cloud-desk-tezgah`, not yet
+  merged: a start a member's letter caused is checked against that member with `mayStart`, which
+  lets any member start any program (0170), and `stop_child`, OTP's `terminate_child` with
+  `shutdown`. The Worker's process side does not wire `stop_child` yet.*
+- *2026-11-14: the desk lane's slice S2a is built on the same branch, not yet merged:
+  `fabrika/tezgah` runs in the brain, one process per person, booted for the founder; it splits
+  and closes tiles, a split's tile entering the layout only once its process started, and a close
+  stopping a process tezgah started. A headless window started with a desk follows tezgah's view
+  in place of a fixed tile list, and the Worker's process side now wires `stop_child`.*
 - Not built: P42 past slice 1; `fabrika/tezgah` with split, close and the prefix key, its layout
   and focus as a process in the brain (0274); each window running the prefix itself (0278).
 - Decide first: whether focus is the window's own or the desk process's, where 0279 and 0274 read

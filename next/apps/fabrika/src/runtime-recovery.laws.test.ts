@@ -19,6 +19,7 @@ import { send } from "@kampus/libfabrika/runtime/Send";
 import * as SettingsStart from "@kampus/libfabrika/settings/Start";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
 import {
   commitReply,
   configureProcess,
@@ -461,6 +462,8 @@ const world = (
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
   table.programs["fabrika/counter"] = { hash: "counter-a", source: "counter" };
   table.programs["fabrika/checklist"] = { hash: "checklist-a", source: "checklist" };
+  // Desk S2a: the founder's tezgah boots from the boot list, so the table holds its program too.
+  table.programs["fabrika/tezgah"] = { hash: "tezgah-a", source: "tezgah" };
   table.programs.approvals = { hash: "approvals-a", source: "approvals" };
   table.programs.poison = { hash: "poison-a", source: "poison" };
   table.programs[requestProgram.name] = { hash: "requester-a", source: "requester" };
@@ -1060,6 +1063,13 @@ StartsTest.law(
       });
       // No first turn before the gate: a refused configure never runs the program's init, a passed one runs it once.
       expect(w.inits()).toBe(refusedStart ? 0 : 1);
+      // Desk S2a: the boot list's later entries, the checklist and the founder's tezgah, configure on
+      // their own time and each pays its own first gate. Wait until all three were asked for and every
+      // delivery has settled, so no other process's first gate lands inside a move counted below.
+      yield* Effect.promise(() =>
+        vi.waitFor(() => expect(w.attempts.length).toBeGreaterThanOrEqual(3), { timeout: 5_000 }),
+      );
+      yield* Effect.promise(() => w.delivered());
       let pid = first!.process;
       const client = yield* Effect.promise(() => w.admit());
       // A passed configure left the object's services built. A refused one left nothing built.
@@ -1196,6 +1206,7 @@ describe("P12 Project configure recovery", () => {
       expect(await w.reopen()).toMatchObject([
         { process: descriptor.id, name: "counter:1", program: "fabrika/counter" },
         { process: expect.any(String), name: "checklist:1", program: "fabrika/checklist" },
+        { process: expect.any(String), name: tezgahName(PERSON), program: "fabrika/tezgah" },
       ]);
       // The next reopen delivers the same descriptor once and clears pending.
       await vi.waitFor(() => expect(Number(row().pending)).toBe(0), { timeout: 2_000 });

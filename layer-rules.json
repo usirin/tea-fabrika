@@ -82,6 +82,11 @@
       "paths": ["next/packages/libfabrika/src/access"]
     },
     {
+      "name": "next-tezgah",
+      "layer": 4,
+      "paths": ["next/packages/libfabrika/src/tezgah"]
+    },
+    {
       "name": "next-processes",
       "layer": 3,
       "paths": ["next/packages/libfabrika/src/processes"]

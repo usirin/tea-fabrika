@@ -1,7 +1,7 @@
 import { makeDurableObjectBridge, makeWorkerBridge } from "@alchemy.run/cloudflare/Bridge";
 import type { SettingsStart } from "@kampus/libfabrika";
 import { type Descriptor, type Incoming } from "@kampus/libfabrika";
-import type { Child } from "@kampus/libfabrika/processes/Children";
+import type { Child, ChildStop } from "@kampus/libfabrika/processes/Children";
 import type { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import type { Activity, Start } from "@kampus/libfabrika/processes/Process";
@@ -177,6 +177,11 @@ export class Project extends DurableObject<Env> {
   processChild(child: Child, from: From) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.processChild(child, from)));
+  }
+
+  processStop(stop: ChildStop, from: From) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.processStop(stop, from)));
   }
 
   processExit(pid: string, reason: ExitReason, from: From) {

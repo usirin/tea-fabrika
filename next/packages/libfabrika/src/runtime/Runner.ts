@@ -24,6 +24,7 @@ import {
   Tracer,
 } from "effect";
 import { type SessionManagerError } from "../access/SessionManager.ts";
+import { mayStart } from "../access/StartRule.ts";
 import {
   Activity,
   DeadInput,
@@ -83,7 +84,7 @@ import { recoveryStore, RecoveryStoreError } from "./RecoveryStore.ts";
 import { Replies, type RepliesError } from "./Replies.ts";
 import * as RepliesSql from "./RepliesSql.ts";
 import { Queued, SendInput } from "./Send.ts";
-import { ExitInput, StartChildInput } from "./StartChild.ts";
+import { ExitInput, StartChildInput, StopChildInput } from "./StartChild.ts";
 import { StepFault } from "./StepFault.ts";
 import type { WatchersError } from "./Watchers.ts";
 import { Watchers } from "./Watchers.ts";
@@ -191,12 +192,13 @@ const SEND = "send";
 const decodeSendInput = Schema.decodeUnknownResult(SendInput);
 const isRefusal = Schema.is(MailRefusal);
 
-/** The Cmds a program asks its supervisor for: a child by name, and the end of its own life. */
+/** The Cmds a program asks its supervisor for: a child by name, a child's end, and its own. */
 const START_CHILD = "start_child";
+const STOP_CHILD = "stop_child";
 const EXIT = "exit";
 
 /** The Cmds the runner performs as the host: each is owed by this life until it is answered. */
-const HOST = new Set([SEND, START_CHILD, EXIT]);
+const HOST = new Set([SEND, START_CHILD, STOP_CHILD, EXIT]);
 
 /**
  * A Cmd's operands, without the `type` its maker adds, when its input schema names every one. The
@@ -213,8 +215,10 @@ const operands = (cmd: unknown, fields: object): Option.Option<Record<string, un
 
 const strictStartChild = Schema.decodeUnknownOption(StartChildInput, { onExcessProperty: "error" });
 const strictExit = Schema.decodeUnknownOption(ExitInput, { onExcessProperty: "error" });
+const strictStopChild = Schema.decodeUnknownOption(StopChildInput, { onExcessProperty: "error" });
 const decodeStartChild = (cmd: unknown) => Option.flatMap(operands(cmd, StartChildInput.fields), strictStartChild);
 const decodeExit = (cmd: unknown) => Option.flatMap(operands(cmd, ExitInput.fields), strictExit);
+const decodeStopChild = (cmd: unknown) => Option.flatMap(operands(cmd, StopChildInput.fields), strictStopChild);
 const isName = Schema.is(ProcessName);
 const encoder = new TextEncoder();
 
@@ -1311,11 +1315,16 @@ export class ProgramRunner extends Context.Service<
         // --- Cmds ---------------------------------------------------------------------------
 
         const at = Clock.currentTimeMillis;
-        /** The Cmd an answer echoes. A start_child's `ok` drops its input; a start_child's or exit's
-         *  `err` keeps only its type, since a refused operand may hold anything its program put there. */
+        /** The Cmd an answer echoes. A start_child's `ok` drops its input; a start_child's, stop_child's
+         *  or exit's `err` keeps only its type, since a refused operand may hold anything its program
+         *  put there. */
         const echo = (job: Dispatched, outcome: "ok" | "err"): unknown => {
           const type = cmdType(job);
-          return type !== START_CHILD && type !== EXIT ? job.cmd : outcome === "err" ? { type } : withoutInput(job.cmd);
+          return type !== START_CHILD && type !== STOP_CHILD && type !== EXIT
+            ? job.cmd
+            : outcome === "err"
+              ? { type }
+              : withoutInput(job.cmd);
         };
         const ok = Effect.fnUntraced(function* (job: Dispatched, value: unknown) {
           return yield* Effect.map(at, (time) => ({
@@ -1467,6 +1476,38 @@ export class ProgramRunner extends Context.Service<
           });
         });
 
+        /**
+         * 0170: a start is checked against the member whose letter caused it, never the program that
+         * asked. The sender is read as a write's signer is, under this Cmd's own id and a kind of its
+         * own, so each start of one letter has its own receipt. A sender that is no member is
+         * refused; with no letter of this life behind the start, or no signer, it answers nothing and
+         * the host's grants decide. A storage failure is not an answer, so the Cmd stays dispatched.
+         */
+        const permission = Effect.fnUntraced(function* (job: Dispatched, program: string) {
+          if (job.parent === null || (checked.sign === undefined && Option.isNone(sessions))) {
+            return undefined;
+          }
+
+          const kind = `${START_CHILD}:${job.id}`;
+          return yield* (
+            checked.sign !== undefined
+              ? checked.sign(job.id, job.parent, kind)
+              : Option.getOrThrow(sessions)
+                  .signer(job.parent, process.id, kind)
+                  .pipe(Effect.provideService(SignRequest, { id: job.id }))
+          ).pipe(
+            Effect.map((session): boolean | undefined => {
+              const { by } = session;
+              // An agent is checked as itself, never as the person it works for (0170, 0261).
+              return mayStart(by._tag === "person" ? by.for : by.key, program);
+            }),
+            Effect.catchIf(
+              (e): e is SigningRefused | NotGranted => e instanceof SigningRefused || e instanceof NotGranted,
+              (e) => Effect.succeed(e instanceof NotGranted ? false : undefined),
+            ),
+          );
+        });
+
         /** The built-in start_child: the loader names the program and its hash, this life is the
          *  requester and this Cmd's id is the start's. A refusal is its answer; storage is not, so the
          *  Cmd stays dispatched, and its failure carries the reason only. */
@@ -1506,6 +1547,7 @@ export class ProgramRunner extends Context.Service<
           // The Worker's loader names its build's hash; the Node loader runs this runner's build.
           const hash =
             "hash" in code.success && typeof code.success.hash === "string" ? code.success.hash : process.build;
+          const permitted = yield* permission(job, program.value);
           const started = yield* children.value
             .start(
               {
@@ -1514,6 +1556,7 @@ export class ProgramRunner extends Context.Service<
                 code: { program: program.value, hash },
                 requester: Recipient.cases.process.make({ process: process.id }),
                 ...(first === undefined ? {} : { input: first }),
+                ...(permitted === undefined ? {} : { permitted }),
               },
               yield* from(job.parent, job.traceId),
             )
@@ -1524,6 +1567,31 @@ export class ProgramRunner extends Context.Service<
           }
 
           const { reason } = started.failure;
+          return reason === "storage" ? yield* new LedgerError({ reason: "storage" }) : yield* err(job, reason);
+        });
+
+        /** The built-in stop_child, OTP's terminate_child: this life is the requester, and only a child
+         *  its name started ends, with `shutdown`. A refusal is its answer; storage is not, so the Cmd
+         *  stays dispatched. */
+        const stopChild = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
+          const input = decodeStopChild(job.cmd);
+
+          if (!state.loaded.declaration.cmds.includes(STOP_CHILD) || Option.isNone(children) || Option.isNone(input)) {
+            return yield* err(job, "bad_cmd");
+          }
+
+          const stopped = yield* children.value
+            .stop(
+              { name: input.value.name, requester: Recipient.cases.process.make({ process: process.id }) },
+              yield* from(job.parent, job.traceId),
+            )
+            .pipe(Effect.result);
+
+          if (Result.isSuccess(stopped)) {
+            return yield* ok(job, null);
+          }
+
+          const { reason } = stopped.failure;
           return reason === "storage" ? yield* new LedgerError({ reason: "storage" }) : yield* err(job, reason);
         });
 
@@ -1622,9 +1690,11 @@ export class ProgramRunner extends Context.Service<
               ? cmdSpan(job, mail(state, job))
               : type === START_CHILD
                 ? cmdSpan(job, startChild(state, job))
-                : type === EXIT
-                  ? cmdSpan(job, stop(state, job))
-                  : handle(state, job);
+                : type === STOP_CHILD
+                  ? cmdSpan(job, stopChild(state, job))
+                  : type === EXIT
+                    ? cmdSpan(job, stop(state, job))
+                    : handle(state, job);
 
           if (m === null) {
             // The life ended: what it still owed, the Cmds listed after its exit included, never runs.

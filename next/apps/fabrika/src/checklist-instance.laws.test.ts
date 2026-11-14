@@ -25,6 +25,7 @@ import { windowMachineFor } from "@kampus/libfabrika/client/WindowMachine";
 import { fcExitReason } from "@kampus/libfabrika/processes/Process.test-support";
 import * as SettingsStart from "@kampus/libfabrika/settings/Start";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
 import {
   configureProcess,
   processDescriptor,
@@ -34,6 +35,7 @@ import {
   signingReply,
   commitReply,
 } from "@kampus/libfabrika/workers/runtime";
+import { tezgah } from "@kampus/tezgah";
 import { Cause, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { programs as built } from "virtual:fabrika-built";
@@ -50,7 +52,9 @@ const SEED = 119120;
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-11T04:00:00.000Z";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
-const BOOT = ["counter:1", "checklist:1"] as const;
+// Desk S2a: the founder's tezgah boots third, from the boot list like every other entry (plan
+// amendment after S2a's first review), named by libfabrika's one name function.
+const BOOT = ["counter:1", "checklist:1", tezgahName(PERSON)] as const;
 
 // L20 is checked by CI's typecheck, beside the app that may import both Tuval and a program.
 // The program type links the decoder and child's press without adding a program to saved state.
@@ -193,6 +197,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
       Object.assign(table.programs, {
         "fabrika/counter": { hash: "counter-a", source: "counter" },
         "fabrika/checklist": { hash: "checklist-a", source: "checklist" },
+        "fabrika/tezgah": { hash: "tezgah-a", source: "tezgah" },
       });
 
       if (options.lacks !== undefined) {
@@ -338,7 +343,10 @@ const world = (options: { readonly lacks?: string } = {}) =>
         LOADER: {
           get: (id: string) => ({
             getEntrypoint: () => {
-              const Box = programBox(id.startsWith("checklist") ? checklist : counter, id);
+              const Box = programBox(
+                id.startsWith("checklist") ? checklist : id.startsWith("tezgah") ? tezgah : counter,
+                id,
+              );
               return Reflect.construct(Box, []);
             },
           }),
@@ -453,7 +461,7 @@ describe("L21: the boot list", () => {
                   "the boot list started once each, in order",
                 ).toEqual([...BOOT]);
                 const first = yield* placings(w);
-                expect(first.map((p) => p.length)).toEqual([1, 1]);
+                expect(first.map((p) => p.length)).toEqual([1, 1, 1]);
                 const live = new Set(first.flat());
                 const client = yield* admit(w);
 
@@ -503,20 +511,23 @@ describe("L21: the boot list", () => {
     expect(seen.input).toBeGreaterThan(0);
   });
 
-  it("scenario: an entry whose program the table lacks stops the boot with a typed error and starts no entry", async () => {
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const w = yield* world({ lacks: "fabrika/checklist" });
-          const exit = yield* Effect.promise(() => w.project.exit());
-          expect(Exit.isFailure(exit), "a boot without the checklist's program succeeded").toBe(true);
-          const failure = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : null;
-          expect(failure?._tag, "the failure is a typed error, not a defect").toBe("Some");
-          expect(w.configured, "a half-started boot list").toEqual([]);
-        }),
-      ),
-    );
-  });
+  // Desk S2a: tezgah is a boot entry like the checklist, so a table without it fails the boot too.
+  for (const lacks of ["fabrika/checklist", "fabrika/tezgah"]) {
+    it(`scenario: an entry whose program the table lacks (${lacks}) stops the boot with a typed error and starts no entry`, async () => {
+      await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const w = yield* world({ lacks });
+            const exit = yield* Effect.promise(() => w.project.exit());
+            expect(Exit.isFailure(exit), `a boot without ${lacks} succeeded`).toBe(true);
+            const failure = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : null;
+            expect(failure?._tag, "the failure is a typed error, not a defect").toBe("Some");
+            expect(w.configured, "a half-started boot list").toEqual([]);
+          }),
+        ),
+      );
+    });
+  }
 });
 
 const Notice = Schema.Struct({
@@ -539,7 +550,7 @@ describe("L13: notices name their process", () => {
               const w = yield* world();
               expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit()))).toBe(true);
               const [, [pid]] = Schema.decodeUnknownSync(
-                Schema.Tuple([Schema.Array(Schema.String), Schema.Array(Schema.String)]),
+                Schema.Tuple([Schema.Array(Schema.String), Schema.Array(Schema.String), Schema.Array(Schema.String)]),
               )(yield* placings(w));
               const client = yield* admit(w);
               yield* call(w, (p) => p.route(client, "view.open", { pid }));
@@ -607,7 +618,7 @@ describe("L13: notices name their process", () => {
                 const w = yield* world();
                 expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit()))).toBe(true);
                 const [, [pid]] = Schema.decodeUnknownSync(
-                  Schema.Tuple([Schema.Array(Schema.String), Schema.Array(Schema.String)]),
+                  Schema.Tuple([Schema.Array(Schema.String), Schema.Array(Schema.String), Schema.Array(Schema.String)]),
                 )(yield* placings(w));
                 const client = yield* admit(w);
                 const opened = yield* call(w, (p) => p.route(client, "view.open", { pid }));
