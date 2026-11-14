@@ -1,0 +1,20 @@
+{
+  "id": "2026-11-13-t930-two-lint-lanes-rewrote-one-law",
+  "date": "2026-11-13",
+  "lanes": [
+    "kamp-us/tea-fabrika#1199",
+    "kamp-us/tea-fabrika#1186"
+  ],
+  "stage": "harness",
+  "kind": "friction",
+  "what": "Lint tooling for both versions. Ticket 930's slice 1 and the rule batch in 1186 each changed which rules lint.ts counts as advice, and each rewrote the same decode-guards law: one made a bare JSON.parse block, the other a wrong service ID. When 1186 landed, 1199 conflicted in four exam files and could not enter the merge queue. The lead merged main in by hand, kept both blocking in one law, and the same reviewer rechecked the merge before it landed. It cost one merge and one recheck, about 20 minutes.",
+  "cause": "Two lanes that change lint.ts's advice set ran in parallel with no shared owner for that set, so each wrote its own expectation into the same law.",
+  "person": false,
+  "primitive": "Gather",
+  "fix": "A Gather at lane start that lists the open pull requests touching oxlint-plugins/lint.ts or the same test file, so the lead can stack or order the lanes before both rewrite one law.",
+  "test": "Property: for any set of open pull requests and their changed paths, the Gather names exactly the ones that share a path with the new lane's files table.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1199",
+    "https://github.com/kamp-us/tea-fabrika/pull/1186"
+  ]
+}
