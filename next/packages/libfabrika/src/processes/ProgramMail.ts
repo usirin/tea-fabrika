@@ -1,6 +1,10 @@
-// Program mail, next/ (Tier 1, P41 slice 1): one program's letter to another registered name. This
-// file is the contract only (0095); `ProgramMailLedger.layer(...)` delivers it. A receipt means the
-// letter is saved in the target's inbox, never that the target took or answered the request.
+/**
+ * Program mail: one program's letter to another registered name. A receipt means the letter is
+ * saved in the target's inbox, never that the target took or answered the request. This file holds
+ * the contract only (0095); `ProgramMailLedger.layer(...)` delivers it.
+ *
+ * @stability unstable
+ */
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";
 import type { From } from "./Mailbox.ts";
@@ -12,6 +16,24 @@ export type Grants = Readonly<Record<string, ReadonlyArray<string>>>;
 /** Why a delivery is refused for good. Other clients decode these by name. */
 export const MailRefusal = Schema.Literals(["no_name", "forbidden", "stale_sender", "bad_message", "id_reused"]);
 
+/**
+ * Error for a letter between programs that was refused or could not be saved.
+ *
+ * **Details**
+ *
+ * A refusal is final for that delivery, and nothing was written:
+ *
+ * - `no_name`: the target name was not found.
+ * - `forbidden`: no grant lets the source reach the target.
+ * - `stale_sender`: the sending process is no longer its name's live process.
+ * - `bad_message`: the message is not JSON, or the ledger refused its line.
+ * - `id_reused`: the command already sent a different letter.
+ *
+ * `storage` means the ledger failed, and the same delivery may be tried again.
+ *
+ * @stability unstable
+ * @category errors
+ */
 export class ProgramMailError extends Schema.TaggedError<ProgramMailError>()("ProgramMailError", {
   /** A refusal, or `storage`: the ledger failed, and the same delivery may be tried again. */
   reason: Schema.Union([MailRefusal, Schema.Literal("storage")]),
@@ -46,6 +68,23 @@ export type Receipt = {
   readonly pos: number;
 };
 
+/**
+ * Service that delivers one program's letter to another registered name.
+ *
+ * **Details**
+ *
+ * `deliver` answers a `Receipt` once the letter is saved in the target's inbox. A repeat of the
+ * same delivery answers the first receipt and saves nothing more, so a sender that heard no answer
+ * can send again.
+ *
+ * **Gotchas**
+ *
+ * A receipt means saved, never that the target took or answered the letter. A send never registers
+ * or starts a name.
+ *
+ * @stability unstable
+ * @category services
+ */
 export class ProgramMail extends Context.Service<
   ProgramMail,
   { readonly deliver: (delivery: Delivery) => Effect.Effect<Receipt, ProgramMailError> }

@@ -1,6 +1,10 @@
-// A process's own storage, next/: its saved model, its unfinished turn and its Cmds' dispatch
-// state, kept in the process object's SQLite (Tier 1, P11). It also appends the runtime's two
-// records to the process's stream, and nothing else. Tables come with the first call.
+/**
+ * A process's own storage: its saved model, its unfinished turn and its Cmds' dispatch state, kept
+ * in the process object's SQLite. It also appends the runtime's own records to the process's
+ * stream, and nothing else. Tables come with the first call.
+ *
+ * @stability unstable
+ */
 import { Context, Effect, Layer, Result, Schema } from "effect";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { lineFor } from "../ledger/Log.ts";
@@ -22,14 +26,32 @@ export const Checkpoint = Schema.Struct({
   turn: Schema.NullOr(Schema.Json),
   cmds: Schema.Array(Schema.Json),
 });
+/**
+ * What a process saves between turns, as `Checkpoint` decodes it.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Checkpoint = typeof Checkpoint.Type;
 
 /** Where an accepted letter sits in its inbox, kept so a resend finds its first placing. */
 export const Placed = Schema.Struct({ id: Schema.String, rev: Rev, pos: Rev });
+/**
+ * Where an accepted letter sits in its inbox, as `Placed` decodes it.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Placed = typeof Placed.Type;
 
-/** The only events the runtime writes to a process's stream: a step it installed, and an upgrade it
- *  ran on saved state. A program never writes either. */
+/**
+ * Schema for the only events the runtime writes to a process's stream: a step it installed, a
+ * Cmd's answer it saved there, and an upgrade it ran on saved state. A program never writes any of
+ * them.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const RuntimeRecord = Schema.TaggedUnion({
   "cmd.answered": { m: Schema.Json, cmd: Schema.NonEmptyString, build: Schema.NonEmptyString },
   stepped: { input: Schema.NonEmptyString, pos: Rev, build: Schema.NonEmptyString },
@@ -41,6 +63,12 @@ export const RuntimeRecord = Schema.TaggedUnion({
     build: Schema.NonEmptyString,
   },
 });
+/**
+ * One event the runtime wrote to a process's stream, as `RuntimeRecord` decodes it.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type RuntimeRecord = typeof RuntimeRecord.Type;
 
 const TABLES = [
@@ -59,7 +87,9 @@ const decodeRecord = Schema.decodeUnknownResult(RuntimeRecord);
 const encodeRecord = Schema.encodeSync(RuntimeRecord);
 
 type ProcessStorage = {
+  /** The same store for another process id, over the same SQL and ledger. */
   readonly select: (process: string) => Effect.Effect<ProcessStorage>;
+  /** The saved activity marker, or undefined when none was written. */
   readonly readActivity: Effect.Effect<typeof Activity.Type | undefined, LedgerError>;
   /** Makes the activity marker durable before the runner starts or finishes a step. */
   readonly activity: (value: typeof Activity.Type) => Effect.Effect<void, LedgerError>;
@@ -79,13 +109,27 @@ type ProcessStorage = {
   /**
    * A letter's first placing by any life in this store, or null. One object's store holds one
    * registered name, so this is every life of that name: a successor keeps its predecessors'
-   * accepted history without copying their rows (P34).
+   * accepted history without copying their rows.
    */
   readonly placedByAny: (id: string) => Effect.Effect<Placed | null, LedgerError>;
   /** Appends one RuntimeRecord to the process's stream. A retry answers its first placing. */
   readonly record: (id: string, event: unknown, from: From) => Effect.Effect<unknown, LedgerError>;
 };
 
+/**
+ * Service that keeps one process's own state in its object's SQLite: its checkpoint, the index of
+ * the letters it accepted, and its activity marker.
+ *
+ * **Details**
+ *
+ * A checkpoint and the letters placed with it are saved in one transaction, so a crash keeps both
+ * or neither. `record` appends one `RuntimeRecord` to the process's stream, and refuses anything
+ * else. Every failure is a `LedgerError`: `bad_row` for a row that does not decode, `refused` for
+ * a record the ledger or the schema turns down, `storage` for the rest.
+ *
+ * @stability unstable
+ * @category services
+ */
 export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>()(
   "@kampus/libfabrika/runtime/ProcessStore",
 ) {

@@ -15,8 +15,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterAll, describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Fiber, Layer } from "effect";
+import { describe, expect, it } from "@effect/vitest";
+import { Deferred, Effect, Fiber, Layer, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError } from "./Ledger.ts";
@@ -26,29 +26,27 @@ import { nodeSql } from "./NodeSqlite.ts";
 import { Referee } from "./Referee.ts";
 import * as RefereeSql from "./RefereeSql.ts";
 
-// Every ledger is a fresh node:sqlite file in one temp folder, removed after.
-const folder = mkdtempSync(join(tmpdir(), "p6-rings-"));
-const opened: Array<DatabaseSync> = [];
-let files = 0;
-const freshPath = (): string => join(folder, `ledger-${++files}.db`);
+// Every ledger is a fresh node:sqlite file in its own temp folder. The test's scope closes the
+// connection, then removes the folder (0061).
+const folder = Effect.acquireRelease(
+  Effect.sync(() => mkdtempSync(join(tmpdir(), "p6-rings-"))),
+  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+);
 
-const openDb = (path: string): DatabaseSync => {
-  const db = new DatabaseSync(path);
-  opened.push(db);
-  return db;
-};
+const freshPath = folder.pipe(Effect.map((path) => join(path, "ledger.db")));
 
-const fresh = (): Sql => nodeSql(openDb(freshPath()));
+const openDb = (path: string) =>
+  Effect.acquireRelease(
+    Effect.sync(() => new DatabaseSync(path)),
+    (db) =>
+      Effect.sync(() => {
+        if (db.isOpen) {
+          db.close();
+        }
+      }),
+  );
 
-afterAll(() => {
-  for (const db of opened.splice(0)) {
-    if (db.isOpen) {
-      db.close();
-    }
-  }
-
-  rmSync(folder, { recursive: true, force: true });
-});
+const fresh = () => freshPath.pipe(Effect.flatMap(openDb), Effect.map(nodeSql));
 
 type Rung = { readonly to: string; readonly stream: string; readonly rev: number };
 
@@ -66,10 +64,14 @@ const bell = (fails: ReadonlyArray<string> = []) => {
   return { rang, layer };
 };
 
-const onReferee = (sql: Sql, doorbell: Layer.Layer<Doorbell>) => RefereeSql.layer(sql).pipe(Layer.provide(doorbell));
+// Each takes the store as a scoped Effect, so the layer's own scope holds the open file.
+type Store = Effect.Effect<Sql, never, Scope.Scope>;
 
-const onLedger = (sql: Sql, doorbell: Layer.Layer<Doorbell>, reader: string) =>
-  LedgerSql.layer(sql, { reader }).pipe(Layer.provide(doorbell));
+const onReferee = (sql: Store, doorbell: Layer.Layer<Doorbell>) =>
+  Layer.unwrap(sql.pipe(Effect.map((sql) => RefereeSql.layer(sql).pipe(Layer.provide(doorbell)))));
+
+const onLedger = (sql: Store, doorbell: Layer.Layer<Doorbell>, reader: string) =>
+  Layer.unwrap(sql.pipe(Effect.map((sql) => LedgerSql.layer(sql, { reader }).pipe(Layer.provide(doorbell)))));
 
 const line = (over: Partial<Line> = {}): Line => ({
   by: "SHA256:writer-a",
@@ -231,21 +233,21 @@ describe("p94, a parked wait is a row, rung once", () => {
 
   it.effect("a ring survives the file closed and opened again, and rings once there", () =>
     Effect.gen(function* () {
-      const path = freshPath();
-      const first = openDb(path);
+      const path = yield* freshPath;
+      const first = yield* openDb(path);
       const before = bell();
       yield* Effect.gen(function* () {
         const ledger = yield* Ledger;
         yield* ledger.append("a", "w-1", line());
         expect(yield* ledger.wait("a", 1)).toEqual(parked);
-      }).pipe(Effect.provide(onLedger(nodeSql(first), before.layer, T1)));
+      }).pipe(Effect.provide(onLedger(Effect.succeed(nodeSql(first)), before.layer, T1)));
       first.close();
       const after = bell();
       yield* Effect.gen(function* () {
         const ledger = yield* Ledger;
         expect(yield* ledger.append("a", "w-2", line())).toEqual(placed(2, 2));
         yield* ledger.append("a", "w-3", line());
-      }).pipe(Effect.provide(onLedger(nodeSql(openDb(path)), after.layer, T2)));
+      }).pipe(Effect.provide(onLedger(openDb(path).pipe(Effect.map(nodeSql)), after.layer, T2)));
       expect(before.rang).toEqual([]);
       expect(after.rang).toEqual([{ to: T1, stream: "a", rev: 2 }]);
     }),

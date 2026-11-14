@@ -4,10 +4,10 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-/** @typedef {{check: boolean, typecheck: boolean, test: boolean, next: boolean, e2e: boolean, field: boolean}} Flags */
+/** @typedef {{check: boolean, typecheck: boolean, test: boolean, next: boolean, e2e: boolean, field: boolean, today: boolean}} Flags */
 /** @typedef {(args: string[]) => {status: number | null, stdout: string}} Runner */
-const all = { check: true, typecheck: true, test: true, next: true, e2e: true, field: true };
-const today = ["apps/", "programs/", "packs/", "wip/", "legacy/", "packages/"];
+const all = { check: true, typecheck: true, test: true, next: true, e2e: true, field: true, today: true };
+const trees = ["apps/", "programs/", "packs/", "wip/", "legacy/", "packages/"];
 const helper = "next/apps/fabrika/src/exam/plant.ts";
 const commits = "next/apps/fabrika/src/exam/commits.ts";
 /**
@@ -47,27 +47,50 @@ const markdown = (path) => path.endsWith(".md") && !reads(path) && !skillTrees.s
 const safe = (path) => rows(path) || markdown(path);
 
 /** @param {string} path */
-const old = (path) => today.some((tree) => path.startsWith(tree)) && !path.startsWith("packages/fabrika-design/");
+const old = (path) => trees.some((tree) => path.startsWith(tree)) && !path.startsWith("packages/fabrika-design/");
+
+/** Paths no heavy job reads: field rows, plain Markdown and skill prose. @param {string} path */
+const quiet = (path) => safe(path) || prose(path);
 
 /**
- * A PR skips a job only when every path is explicitly safe for that job.
+ * A file of today's version: its trees, the design package today's app imports, and the toy
+ * projects its tests read. Only these start today's own checks (0175): its tests, e2e and build.
+ * A file that reruns every test, such as the lockfile or a root config, is not one.
+ * @param {string} path
+ */
+const todays = (path) => (trees.some((tree) => path.startsWith(tree)) || path.startsWith("fixtures/")) && !quiet(path);
+
+/**
+ * An event whose jobs follow its changed paths, because it can read them: a pull request, a merge
+ * queue's group (0174) and a push to main, whose paths are what that push brought (0175). Any
+ * other event runs every job.
+ * @param {string} event
+ */
+const scoped = (event) => event === "pull_request" || event === "merge_group" || event === "push";
+
+/**
+ * A scoped event skips a job only when every path is explicitly safe for that job.
  * Amendment 3: field's runner starts on every event; this flag gates its install
  * and row check, so Markdown in field/ alone does not install Effect.
+ * `today` and `e2e` are true only when a path is one of today's version's files.
+ * `test` starts the test job, which runs today's tests when `today` is true and only the tooling
+ * tests when it is false. History that cannot be read, no path at all, or an event that is not
+ * scoped runs everything.
  * @param {readonly string[] | null} paths
  * @param {string} event
  * @returns {Flags}
  */
 export const classify = (paths, event) => {
-  if (event !== "pull_request" || paths === null || paths.length === 0) {
+  if (!scoped(event) || paths === null || paths.length === 0) {
     return { ...all };
   }
 
+  const touched = paths.some(todays);
+
   if (paths.some(reads)) {
-    return { ...all, field: paths.some(rows) };
+    return { ...all, today: touched, e2e: touched, field: paths.some(rows) };
   }
 
-  /** @param {string} path */
-  const quiet = (path) => safe(path) || prose(path);
   // The typecheck is its own job so it answers at once, beside lint and build; it reads the same
   // paths as check, so it runs where check runs.
   const check = !paths.every(quiet);
@@ -76,8 +99,9 @@ export const classify = (paths, event) => {
     typecheck: check,
     test: !paths.every((path) => quiet(path) || (path.startsWith("next/") && path !== helper && path !== commits)),
     next: !paths.every((path) => quiet(path) || script(path) || old(path)),
-    e2e: !paths.every((path) => quiet(path) || script(path) || path.startsWith("next/")),
+    e2e: touched,
     field: paths.some(rows),
+    today: touched,
   };
 };
 
@@ -85,10 +109,10 @@ export const classify = (paths, event) => {
 
 /**
  * What one event runs: classify's flags, plus `build`, the slow half of check (its promises gate
- * and `pnpm build`). A draft pull request runs only the fast jobs: changes, field, typecheck and
+ * and `pnpm build`), which belongs to today's version and so follows `today`. A draft pull request runs only the fast jobs: changes, field, typecheck and
  * check's lint (owner, 2026-11-11, 0134's amendment). Marking it ready starts a run with
  * `draft` false, so the full set runs on that head before it can merge. Only a pull request can
- * be a draft; on any other event the flag is ignored.
+ * be a draft; on any other event, a merge queue's group and a push included, the flag is ignored.
  * @param {readonly string[] | null} paths
  * @param {string} event
  * @param {boolean} draft
@@ -101,7 +125,7 @@ export const jobs = (paths, event, draft) => {
     return { ...flags, test: false, next: false, e2e: false, build: false };
   }
 
-  return { ...flags, build: flags.check };
+  return { ...flags, build: flags.today };
 };
 
 /** @param {string} sha */
@@ -110,7 +134,8 @@ export const validSha = (sha) => /^[a-f0-9]{40}$/.test(sha) && !/^0+$/.test(sha)
 const git = (args) => spawnSync("git", args, { encoding: "utf8", maxBuffer: 2 ** 28 });
 
 /**
- * No shell interpolation. PR paths start at the merge base; pushes use before.
+ * No shell interpolation. PR paths start at the merge base; pushes use before, and a merge
+ * queue's group uses its own base, the commit it was built on, so the diff is the group's change.
  * A rename is a deletion and an addition. NUL preserves all legal Git names.
  * @param {string} base
  * @param {string} head

@@ -1,7 +1,7 @@
 ---
 id: 0161
 title: Today's hand-run tooling makes plain commits, with no step signature and no bot, and the rule that nobody writes their own exam stays as practice until next/'s own pipeline holds it
-status: amended-in-part by [0164](0164-the-bot-stays-without-signing.md)
+status: amended-in-part by [0164](0164-the-bot-stays-without-signing.md), [0177](0177-fix-round-is-one-agent.md)
 date: 2026-11-13
 tags: [signing, commits, bot, push, lead, hand-run, exam, merge, friction]
 ---
@@ -95,6 +95,7 @@ login. No step key signs it and no bot pushes it.
 - Owed, each as its own pull request:
   - CI: the `commits` workflow and the exam's commit check come out, or stop gating. They are exam
     paths, so the owner reads that pull request.
+    Done 2026-11-13: the workflow came out in https://github.com/kamp-us/tea-fabrika/pull/1134.
   - Main's ruleset: `commits` leaves the required checks. That is the owner's click.
   - The lead scripts that sign or push as the bot become plain: `stepcommit.sh`,
     `box.sh fetch --sign`, `botpush.mjs`, `publish.ts`, `land.ts` and `catchup.sh`.

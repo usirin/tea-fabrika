@@ -1,5 +1,9 @@
-// A program's window and what a client records, next/ (Tier 1, P14): the typed contract a program's
-// window meets, the Msg a key command sends, and the checked rows a client keeps and sends.
+/**
+ * A program's window and what a client records: the typed contract a program's window meets, the
+ * Msg a key command sends, and the checked rows a client keeps and sends.
+ *
+ * @stability unstable
+ */
 import { Schema } from "effect";
 import type { Program } from "./Program.ts";
 
@@ -64,6 +68,12 @@ export const ErrorClass = Schema.Literals([
   "UnknownError",
   "other",
 ]);
+/**
+ * The class of a failure as one fixed word, as `ErrorClass` decodes it.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type ErrorClass = typeof ErrorClass.Type;
 const isErrorClass = Schema.is(ErrorClass);
 
@@ -96,7 +106,7 @@ export const ClientRecord = Schema.TaggedUnion({
     attempts: Count,
     ms: Ms,
   },
-  /** A view's start and end (plan A8): a `whole` view installed, an `asked` for one, and one `patch`
+  /** A view's start and end: a `whole` view installed, an `asked` for one, and one `patch`
    *  row for a run of installed patches when it ends, never one per patch. */
   view: {
     pid: Schema.String,
@@ -111,6 +121,12 @@ export const ClientRecord = Schema.TaggedUnion({
     error: ErrorClass,
   },
 });
+/**
+ * One checked observation a client made, as `ClientRecord` decodes it.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type ClientRecord = typeof ClientRecord.Type;
 
 /** A record as a client keeps and sends it: a stable row id, the tab, the build and its own time. */
@@ -121,6 +137,12 @@ export const ClientRow = Schema.Struct({
   sentAt: Schema.String,
   record: ClientRecord,
 });
+/**
+ * One record as a client keeps and sends it, as `ClientRow` decodes it.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type ClientRow = typeof ClientRow.Type;
 
 const named = (u: unknown): string | null => {

@@ -6,29 +6,14 @@
 			"code": "afterEach(async () => {"
 		},
 		{
-			"file": "next/apps/fabrika/grant.ts",
-			"rule": "fabrika(no-wall-clock)",
-			"code": "sentAt: new Date().toISOString(),"
-		},
-		{
 			"file": "next/apps/fabrika/src/brain-life.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterEach(async () => {"
 		},
 		{
-			"file": "next/apps/fabrika/src/build-command.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterEach(() => {"
-		},
-		{
 			"file": "next/apps/fabrika/src/build.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterEach(() => {"
-		},
-		{
-			"file": "next/apps/fabrika/src/door-recovery.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
@@ -41,26 +26,6 @@
 			"code": "afterAll(() => rmSync(TOP, { recursive: true, force: true }));"
 		},
 		{
-			"file": "next/apps/fabrika/src/exam/deps.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
-		},
-		{
-			"file": "next/apps/fabrika/src/exam/edges.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => rmSync(repo, { recursive: true, force: true }));"
-		},
-		{
-			"file": "next/apps/fabrika/src/exam/laws-scan.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => rmSync(root, { recursive: true, force: true }));"
-		},
-		{
-			"file": "next/apps/fabrika/src/exam/layers.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
-		},
-		{
 			"file": "next/apps/fabrika/src/instance-one-file.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterEach(() => {"
@@ -69,11 +34,6 @@
 			"file": "next/apps/fabrika/src/instance-wire.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterEach(async () => {"
-		},
-		{
-			"file": "next/apps/fabrika/src/local-instance.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterEach(() => {"
 		},
 		{
 			"file": "next/apps/fabrika/src/runtime-recovery.laws.test.ts",
@@ -94,11 +54,6 @@
 			"file": "next/packages/libfabrika/src/access/AccessSpans.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { nodeSql } from \"../ledger/NodeSqlite.ts\";"
-		},
-		{
-			"file": "next/packages/libfabrika/src/access/AccessSpans.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
 		},
 		{
 			"file": "next/packages/libfabrika/src/access/AccessSpans.test.ts",
@@ -129,11 +84,6 @@
 			"file": "next/packages/libfabrika/src/access/Authorization.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { nodeSql } from \"../ledger/NodeSqlite.ts\";"
-		},
-		{
-			"file": "next/packages/libfabrika/src/access/Authorization.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => rmSync(folder, { recursive: true, force: true }));"
 		},
 		{
 			"file": "next/packages/libfabrika/src/access/Authorization.test.ts",
@@ -169,11 +119,6 @@
 			"file": "next/packages/libfabrika/src/access/ClientManager.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { nodeSql } from \"../ledger/NodeSqlite.ts\";"
-		},
-		{
-			"file": "next/packages/libfabrika/src/access/ClientManager.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
 		},
 		{
 			"file": "next/packages/libfabrika/src/access/ClientManager.test.ts",
@@ -214,11 +159,6 @@
 			"file": "next/packages/libfabrika/src/access/SessionManager.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { nodeSql } from \"../ledger/NodeSqlite.ts\";"
-		},
-		{
-			"file": "next/packages/libfabrika/src/access/SessionManager.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
 		},
 		{
 			"file": "next/packages/libfabrika/src/access/SessionManager.ts",
@@ -272,11 +212,6 @@
 		},
 		{
 			"file": "next/packages/libfabrika/src/gateway/GatewayRevocation.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/gateway/GatewayRevocation.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import * as LedgerSql from \"../ledger/LedgerSql.ts\";"
 		},
@@ -289,36 +224,6 @@
 			"file": "next/packages/libfabrika/src/gateway/GatewayStore.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { LedgerError } from \"../ledger/Ledger.ts\";"
-		},
-		{
-			"file": "next/packages/libfabrika/src/ledger/Ledger.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/ledger/LedgerSpans.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/ledger/LedgerTransaction.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterEach(() => {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/ledger/Log.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/ledger/Rings.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/ledger/TraceId.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
 		},
 		{
 			"file": "next/packages/libfabrika/src/node/build/build-assets.test.ts",
@@ -334,26 +239,6 @@
 			"file": "next/packages/libfabrika/src/node/build/css.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterEach(() => {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/node/dev/local-dev.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterEach(() => {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/node/dev/local-dev.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterEach(() => {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/processes/Mailbox.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/processes/MailboxHistory.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
 		},
 		{
 			"file": "next/packages/libfabrika/src/processes/Process.test-support.ts",
@@ -432,11 +317,6 @@
 		},
 		{
 			"file": "next/packages/libfabrika/src/runtime/ProcessStore.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/runtime/ProcessStore.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import * as LedgerSql from \"../ledger/LedgerSql.ts\";"
 		},
@@ -484,16 +364,6 @@
 			"file": "next/packages/libfabrika/src/runtime/Runner.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { nodeSql } from \"../ledger/NodeSqlite.ts\";"
-		},
-		{
-			"file": "next/packages/libfabrika/src/runtime/Runner.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => rmSync(folder, { recursive: true, force: true }));"
-		},
-		{
-			"file": "next/packages/libfabrika/src/runtime/Runner.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterEach(() => {"
 		},
 		{
 			"file": "next/packages/libfabrika/src/runtime/Runner.test.ts",
@@ -549,31 +419,6 @@
 			"file": "next/packages/libfabrika/src/runtime/internal/recovery.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { lineFor, valueFor } from \"../../ledger/Log.ts\";"
-		},
-		{
-			"file": "next/packages/libfabrika/src/telemetry/Records.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/telemetry/Sink.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/telemetry/internal/measurements.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/transport/Sshsig.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => rmSync(home, { recursive: true, force: true }));"
-		},
-		{
-			"file": "next/programs/counter/src/runner.laws.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => {"
 		}
 	]
 }

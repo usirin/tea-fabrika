@@ -1,8 +1,12 @@
-// The program runner, next/: one process's turns (Tier 1, P11). Under one permit a turn catches
-// the process up on its inbox, finds a resend, steps the fresh input purely, saves that it is
-// about to append, appends through the door's checked writer, folds what landed and installs it.
-// Only then do its Cmds run, each saved as dispatched first, each answer saved as a letter before
-// the program sees it. A wake folds saved letters and runs none of their Cmds.
+/**
+ * The program runner: one process's turns. Under one permit a turn catches the process up on its
+ * inbox, finds a resend, steps the fresh input purely, saves that it is about to append, appends
+ * through the gateway's checked writer, folds what landed and installs it. Only then do its Cmds
+ * run, each saved as dispatched first, each answer saved as a letter before the program sees it. A
+ * wake folds saved letters and runs none of their Cmds.
+ *
+ * @stability unstable
+ */
 import { applyCell, type Outcome } from "@demlik/tea";
 import {
   Cause,
@@ -91,6 +95,12 @@ export const Sent = Schema.TaggedUnion({
   accepted: { rev: Schema.Int, pos: Schema.Int },
   refused: Refusal.fields,
 });
+/**
+ * What `msg` answers, as `Sent` decodes it.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Sent = typeof Sent.Type;
 
 /** What `open` answers: the inbox position the view was made at, and the view. */
@@ -118,8 +128,8 @@ const Dispatched = Schema.Struct({
   /** A host Cmd this life owes until it is answered, kept under its first name from when only Send
    *  was one; a replayed letter's was the life before's. */
   mail: Schema.optionalKey(Schema.Literal(true)),
-  /** A start_child or exit whose operands can never fit a row, saved without them so its row fits
-   *  (A6): the one refusal it can get, after the loader for a program it kept. */
+  /** A start_child or exit whose operands can never fit a row, saved without them so its row
+   *  fits: the one refusal it can get, after the loader for a program it kept. */
   oversize: Schema.optionalKey(Schema.Literals(["bad_cmd", "no_program", "bad_name", "bad_input"])),
 });
 type Dispatched = typeof Dispatched.Type;
@@ -140,12 +150,12 @@ const WRITE = "write";
 const WriteCmd = Schema.Struct({ stream: Schema.NonEmptyString, write: Write });
 const decodeWriteCmd = Schema.decodeUnknownResult(WriteCmd);
 
-/** The Cmd the runner mails itself, as the sender the host bound (P41). */
+/** The Cmd the runner mails itself, as the sender the host bound. */
 const SEND = "send";
 const decodeSendInput = Schema.decodeUnknownResult(SendInput);
 const isRefusal = Schema.is(MailRefusal);
 
-/** The Cmds a program asks its supervisor for (P42): a child by name, and the end of its own life. */
+/** The Cmds a program asks its supervisor for: a child by name, and the end of its own life. */
 const START_CHILD = "start_child";
 const EXIT = "exit";
 
@@ -188,7 +198,8 @@ const bytes = (value: unknown): number => encoder.encode(JSON.stringify(value) ?
 const decodeKept = Schema.decodeUnknownOption(Schema.Struct({ program: Schema.String }));
 
 /** Keeps oversized invalid operands out of the checkpoint and answer. A valid first letter stays
- *  whole in the split checkpoint and reaches the ledger's row check. Refusals follow L6's order. */
+ *  whole in the split checkpoint and reaches the ledger's row check. Refusals keep a start's own
+ *  order: `no_program`, then `bad_name`, then `bad_input`. */
 const oversized = (cmd: unknown): Option.Option<Pick<Dispatched, "cmd" | "oversize">> => {
   const type = Option.getOrUndefined(Option.map(decodeTyped(cmd), (c) => c.type));
 
@@ -252,19 +263,58 @@ type Live = {
 /** A failed Cmd's settled Msg error: its case is its reason. */
 const failure = (reason: string) => Schema.TaggedStruct(reason, {}).make({});
 
+/**
+ * What the wiring gives a runner beside its services: the restart policy, where recovery is kept,
+ * and a hook that cuts a recovery short.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type RunnerOptions = {
   /** The trusted wiring's policy. Without `maxDeliveries`, a letter is tried 3 times. */
   readonly policy?: Omit<Policy, "maxDeliveries"> & { readonly maxDeliveries?: number };
+  /**
+   * The object's SQL for the recovery journal, the terminal replies and the watchers, the
+   * registered name the journal is kept under, and the most bytes that database may hold.
+   */
   readonly recovery: { readonly sql: Sql; readonly name: string; readonly capacity: number };
+  /**
+   * Called at each named cut point in recovery, right after a step is saved. A failure it returns
+   * stops the turn there, which is how a test cuts a recovery short. Left out, nothing is called.
+   */
   readonly fault?: (cut: string) => Effect.Effect<void, LedgerError>;
 };
 
+/**
+ * Service that runs one process: it takes each input in turn, steps the program, saves what
+ * happened, and only then runs the Cmds the step asked for.
+ *
+ * **Details**
+ *
+ * One call is one turn, and turns never overlap. A turn catches the process up on its inbox, finds
+ * a resend, steps the fresh input purely, saves that it is about to append, appends through the
+ * gateway's checked writer, folds what landed and installs it. A Cmd is saved as dispatched before
+ * it runs, and its answer is saved as a letter before the program sees it. The order is the point:
+ * nothing runs before the fact it rests on is saved, and a resend of an accepted input answers its
+ * first placing.
+ *
+ * **Gotchas**
+ *
+ * A wake folds saved letters and runs none of their Cmds again. The process's ended spans are
+ * flushed after every call, on success and on failure.
+ *
+ * @stability unstable
+ * @category services
+ */
 export class ProgramRunner extends Context.Service<
   ProgramRunner,
   {
     /** Registers a watcher and answers the current view. */
     readonly open: (client: string) => Effect.Effect<Opened, RunnerFailure>;
-    /** Takes one delivered input: P10's internal delivery, never a public request. */
+    /**
+     * Takes one delivered input: the gateway's internal delivery, never a public request. Answers
+     * `accepted` with the input's place in the inbox, or `refused` with the reason.
+     */
     readonly msg: (input: unknown) => Effect.Effect<Sent, RunnerFailure>;
     /** Save the one alarm for newly arrived mail, without running or starting the recipient. */
     readonly mailed: Effect.Effect<void, RunnerFailure>;
@@ -273,6 +323,11 @@ export class ProgramRunner extends Context.Service<
     /** The new process's first turn, OTP's init/1: loads the program and arms its alarm. Safe to
      *  call again: a live runner only catches up. */
     readonly init: () => Effect.Effect<void, RunnerFailure>;
+    /**
+     * Restarts the process on request, outside a crash: a live process is ended and a new one
+     * starts under the same name, on `build`. A request `id` already taken answers again without a
+     * second restart; the same `id` with another `build` fails with `bad_input`.
+     */
     readonly restart: (request: { readonly id: string; readonly build: string }) => Effect.Effect<void, RunnerFailure>;
   }
 >()("@kampus/libfabrika/ProgramRunner") {
@@ -617,7 +672,7 @@ export class ProgramRunner extends Context.Service<
           if (thrown !== undefined && thrown.failure._tag !== "interrupted") {
             const { failure } = thrown;
             yield* Effect.exit(
-              // The original failure text belongs only in P37's deletable content.
+              // The original failure text belongs only in the span's deletable content.
               Effect.fail(thrown.content).pipe(
                 Effect.withSpan("runner.throw", {
                   attributes: {
@@ -1194,7 +1249,7 @@ export class ProgramRunner extends Context.Service<
         // --- Cmds ---------------------------------------------------------------------------
 
         const at = Clock.currentTimeMillis;
-        /** The Cmd an answer echoes. A start_child's `ok` drops its input (A6); a start_child's or exit's
+        /** The Cmd an answer echoes. A start_child's `ok` drops its input; a start_child's or exit's
          *  `err` keeps only its type, since a refused operand may hold anything its program put there. */
         const echo = (job: Dispatched, outcome: "ok" | "err"): unknown => {
           const type = cmdType(job);
@@ -1350,7 +1405,7 @@ export class ProgramRunner extends Context.Service<
           });
         });
 
-        /** The built-in start_child (P42): the loader names the program and its hash, this life is the
+        /** The built-in start_child: the loader names the program and its hash, this life is the
          *  requester and this Cmd's id is the start's. A refusal is its answer; storage is not, so the
          *  Cmd stays dispatched, and its failure carries the reason only. */
         const startChild = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
@@ -1379,7 +1434,7 @@ export class ProgramRunner extends Context.Service<
               : yield* new LedgerError({ reason: "unreachable" });
           }
 
-          // Operands over the row limit were never saved: L6's order goes on without Children.start.
+          // Operands over the row limit were never saved: the refusal order goes on without Children.start.
           if (Option.isNone(input)) {
             return yield* err(job, job.oversize ?? "bad_cmd");
           }
@@ -1410,7 +1465,7 @@ export class ProgramRunner extends Context.Service<
           return reason === "storage" ? yield* new LedgerError({ reason: "storage" }) : yield* err(job, reason);
         });
 
-        /** The built-in exit (P42): this life ends with `normal`, as OTP's `{stop, normal, State}`, and
+        /** The built-in exit: this life ends with `normal`, as OTP's `{stop, normal, State}`, and
          *  answers nothing. `null` is the ended life; a malformed exit is answered `bad_cmd`. */
         const stop = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
           if (!exits(state, job)) {
@@ -1465,7 +1520,7 @@ export class ProgramRunner extends Context.Service<
           }
 
           const outcome: Outcome<unknown, unknown> = exit.value;
-          // The box checks the declared tag and encodes the answer (main's P11 encoding); an Err
+          // The box checks the declared tag and encodes the answer; an Err
           // also carries its tag as `reason`, as the runner's own errors do.
           return yield* state.loaded.execution.reply(job.cmd, { ...outcome, at: yield* at }).pipe(
             Effect.map((m) => {
@@ -1861,7 +1916,7 @@ export class ProgramRunner extends Context.Service<
 
             const m = stamp(input.envelope.input, input.envelope.id);
 
-            // The port's schema runs inside the box; Schemas do not cross its RPC (P12).
+            // The port's schema runs inside the box; Schemas do not cross its RPC.
             if (!(yield* state.loaded.execution.admit(m))) {
               return { answer: Sent.cases.refused.make({ reason: "bad_msg" }), jobs: [] };
             }
@@ -1980,7 +2035,17 @@ export class ProgramRunner extends Context.Service<
     );
 }
 
-/** A delivery that does not have P10's shape. */
+/**
+ * Error for a call the runner refuses before the program sees it.
+ *
+ * **Details**
+ *
+ * `bad_input` is a delivery that does not decode, or a restart request that reuses an `id` with
+ * another build. `bad_client` is a watcher's client id that is empty or over 256 characters.
+ *
+ * @stability unstable
+ * @category errors
+ */
 export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError", {
   reason: Schema.Literals(["bad_input", "bad_client"]),
   /** The failure this error translates, kept in memory for diagnosis. */

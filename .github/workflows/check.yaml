@@ -12,8 +12,9 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   # GitHub's merge queue tests each group on a temporary branch and takes a required check only from
-  # this event. It runs every job, as a push to main does: changes.mjs reads any event but
-  # `pull_request` as "run all". The group's own base and head replace `before` (see BASE below).
+  # this event. It picks its jobs from the group's changed paths, as a ready pull request does
+  # (0174), and so does a push to main, from what that push brought (0175). The group's own base and head give those paths
+  # (see BASE below).
   merge_group:
     types: [checks_requested]
 
@@ -32,7 +33,10 @@ concurrency:
 # workflow-lint.ts fails a job without one.
 jobs:
   # Today's CI, both versions. One no-install classifier holds every path rule.
-  # Safe Markdown and direct field JSONL skip the heavy jobs; unknown paths and main run all.
+  # Safe Markdown and direct field JSONL skip the heavy jobs, on a pull request, in the merge queue
+  # and on a push to main; unknown paths run the rest. History that cannot be read runs everything.
+  # Today's own checks (its tests, e2e, the promises gate and the build) start only when a file of
+  # today's version changed, on every event: the `today`, `e2e` and `build` outputs (0175).
   # These small checks still run when pnpm setup and the heavy jobs skip.
   changes:
     runs-on: ubuntu-latest
@@ -45,6 +49,7 @@ jobs:
       e2e: ${{ steps.diff.outputs.e2e }}
       field: ${{ steps.diff.outputs.field }}
       build: ${{ steps.diff.outputs.build }}
+      today: ${{ steps.diff.outputs.today }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -61,7 +66,7 @@ jobs:
       - run: node oxlint-plugins/gitignore.mjs
         if: ${{ !cancelled() }}
 
-  # Start beside changes and commits. No workspace setup for Markdown alone.
+  # Start beside changes. No workspace setup for Markdown alone.
   # Filtered install uses the root lockfile and all workspace supply-chain rules.
   # The proof PR measures this path's cold install and cache cost.
   field:
@@ -183,7 +188,8 @@ jobs:
   # The app end to end (apps/fabrika/e2e.ts): Playwright drives the real built app in Electron.
   # It checks macOS's window rules (the close button keeps the app running, the dock icon brings
   # the window back), so it runs on a macOS runner; on Linux those rules are not there to check.
-  # Every pull request and every push to main runs it: off CI, main went red and nobody saw.
+  # It runs when a file of today's version changed, on a pull request, in the merge queue and on a
+  # push to main (0175).
   # No secret and no key: the API keys are never set here. The one download beyond what the other
   # jobs fetch is Electron's own binary, from its GitHub release, kept in the cache after once.
   e2e:
@@ -313,15 +319,20 @@ jobs:
           fi
 
       - run: pnpm install --frozen-lockfile
-      # Main runs every test. A pull request runs the tests that import what it
+      # Today's tests run only when a file of today's version changed (changes' `today` flag, 0175);
+      # otherwise the last test step runs the tooling tests alone.
+      # BASE is the commit the run's change starts from: a pull request's base, a merge queue group's
+      # base, or what main held before a push. It is empty when there is none (a first push, whose
+      # `before` is all zeros, or a run started by hand), and then every test runs.
+      # With a BASE, a run runs the tests that import what it
       # changed (vitest's `--changed`, its config's `forceRerunTriggers` for files
       # tests read without importing), then, on the first machine, the tests that
       # read the whole repo themselves, which an import walk never picks: the
-      # app's bundles, and the law that every machine has laws. Main's run catches
-      # what a pull request's run could not see, one merge late.
+      # app's bundles, and the law that every machine has laws.
       - name: lane tests, one file at a time
+        if: ${{ needs.changes.outputs.today != 'false' }}
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}
           SHARD: ${{ matrix.shard }}/6
         run: |
           if [ -n "$BASE" ]; then
@@ -330,9 +341,9 @@ jobs:
             pnpm exec vitest run packages/pipeline/src/stages/pipeline/lane. --shard "$SHARD" --passWithNoTests --maxWorkers=1 --exclude 'next/**' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/lanes.json"
           fi
       - name: test
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && needs.changes.outputs.today != 'false' }}
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}
           SHARD: ${{ matrix.shard }}/6
         run: |
           if [ -n "$BASE" ]; then
@@ -343,9 +354,24 @@ jobs:
           else
             pnpm exec vitest run --shard "$SHARD" --exclude 'next/**' --exclude 'packages/pipeline/src/stages/pipeline/lane.*.test.ts' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/rest.json"
           fi
+      # The tests that belong to neither version's product code: CI's own (.github/ci), the lint
+      # plugins, the root scripts and the skill scripts. With no file of today's version changed
+      # they run alone: every test vitest.config.ts includes, less the three trees of today's tests
+      # and next/. With a BASE the ones that reach the change run; with none, all of them.
+      - name: tooling tests
+        if: ${{ !cancelled() && needs.changes.outputs.today == 'false' }}
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}
+          SHARD: ${{ matrix.shard }}/6
+        run: |
+          if [ -n "$BASE" ]; then
+            pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests --exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"
+          else
+            pnpm exec vitest run --shard "$SHARD" --passWithNoTests --exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"
+          fi
       - name: shard times
         if: ${{ !cancelled() }}
-        run: node .github/ci/shard-times.ts "$RUNNER_TEMP/lanes.json" "$RUNNER_TEMP/rest.json" "$RUNNER_TEMP/forced.json"
+        run: node .github/ci/shard-times.ts "$RUNNER_TEMP/lanes.json" "$RUNNER_TEMP/rest.json" "$RUNNER_TEMP/forced.json" "$RUNNER_TEMP/tooling.json"
 
   # next/, the new version (docs/plan/tier-1.md). Every test under next/ runs when affected:
   # the exam's tests read files and the later ones start a brain, so `--changed` in the test job,
@@ -413,8 +439,7 @@ jobs:
   # and decisions 0061, 0092 and 0404). It needs every other job here, and runs even when one failed
   # or the run was canceled: a skipped required check counts as passed on GitHub, so this job never
   # skips. required.mjs passes a job's skip only when changes said that job need not run, from the
-  # same output its `if:` reads. `commits` is commits.yaml's own job, from `pull_request_target`, and
-  # stays required beside this one: folding it in here would judge it from the pull request's copy.
+  # same output its `if:` reads.
   # No install and no setup: the runner's own Node runs required.mjs, as it runs changes.mjs.
   # On a draft it is named `ci-required (draft)`: GitHub makes a job's check run only when its needs
   # end, so for the whole ready run the draft's green `ci-required` on the same head would be the
