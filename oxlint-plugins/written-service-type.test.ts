@@ -121,6 +121,41 @@ const forms: ReadonlyArray<(d: Drawn) => Form> = [
     type: `Shape${n}`,
     fires: effects,
   }),
+  // Case 4: an interface's `extends` list is read as the body is.
+  ({ n }) => ({
+    above: [`interface Shape${n} extends ReturnType<typeof make${n}> {}`],
+    type: `Shape${n}`,
+    fires: true,
+  }),
+  ({ n, success, effects }) => ({
+    imports: [`import type { Made${n} } from "./made.ts";`],
+    above: [`interface Shape${n} extends ${success}<Made${n}> { readonly extra: number }`],
+    type: `Shape${n}`,
+    fires: effects,
+  }),
+  ({ n }) => ({
+    above: [`type Base${n} = ReturnType<typeof make${n}>;`, `interface Shape${n} extends Written${n}, Base${n} {}`],
+    below: [`interface Written${n} { readonly size: number }`],
+    type: `{ readonly a: Shape${n} }`,
+    fires: true,
+  }),
+  ({ n }) => ({
+    imports: [`import type { Made${n} } from "./made.ts";`],
+    above: [`interface Shape${n} extends Made${n}<typeof Row${n}.Type> {}`],
+    type: `Shape${n}`,
+    fires: true,
+  }),
+  ({ n }) => ({
+    above: [`interface Base${n} { readonly size: number }`, `interface Shape${n} extends Base${n} {}`],
+    type: `Shape${n}`,
+    fires: false,
+  }),
+  ({ n }) => ({
+    imports: [`import type { Made${n} } from "./made.ts";`, `import type * as Shapes${n} from "./shape.ts";`],
+    above: [`interface Shape${n} extends Made${n}, Shapes${n}.Inferred<number> { readonly size: number }`],
+    type: `Shape${n}`,
+    fires: false,
+  }),
   // Case 6: `typeof X.Type` fires as the whole type or as a spread, in the type or behind an alias.
   ({ n }) => ({ type: `typeof Row${n}.Type`, fires: true }),
   ({ n }) => ({ type: `Readonly<typeof Row${n}.Type>`, fires: true }),
@@ -331,12 +366,16 @@ it("fires exactly on a read service whose type holds ReturnType, Effect.Success 
   const planted = fired[0]!;
   const off = [
     "next/packages/libfabrika/src/unit/Unit.test.ts",
+    "next/apps/fabrika/src/unit/Unit.test.tsx",
     "next/packages/libfabrika/src/unit/UnitTest.ts",
     "next/packages/libfabrika/src/unit/Unit.test-support.ts",
     "packages/fabrika/src/unit/Unit.ts",
   ];
-  const linted = await plant(Object.fromEntries([product, ...off].map((path) => [path, planted.text])));
+  const tsx = "next/apps/fabrika/src/unit/Unit.tsx";
+  const linted = await plant(Object.fromEntries([product, tsx, ...off].map((path) => [path, planted.text])));
   expect(linted(CODE, product)).toEqual(planted.fires);
+  // The same text as a `.tsx` product file fires, so the `.test.tsx` path below is quiet by the config.
+  expect(linted(CODE, tsx)).toEqual(planted.fires);
 
   for (const path of off) {
     expect(linted(CODE, path), path).toEqual([]);

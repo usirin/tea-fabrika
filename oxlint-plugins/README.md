@@ -641,8 +641,8 @@ request, so it starts at zero with no list file
 It reads the last type argument of Effect's `Context.Service`, in the class form
 `Context.Service<Self, Type>()("id")` and the direct form `Context.Service<Type>("id")`. It fires
 when that type holds, at any depth, `ReturnType<...>`, `Effect.Success<...>` or a `typeof` query.
-A type alias or an interface declared in the same file is read through, so the break cannot hide
-one line up. One `typeof` passes: `typeof X.Type`, the type of a schema's value, inside a member of
+A type alias or an interface declared in the same file is read through, an interface's `extends`
+list included, so the break cannot hide one line up. One `typeof` passes: `typeof X.Type`, the type of a schema's value, inside a member of
 a written object type. As the whole type, or joined to one with `&`, it fires. A name imported from
 another file passes, since the rule reads one file. A `Context.Reference` is not read. The rule's
 head comment lists the import forms it resolves and what it misses.
@@ -655,7 +655,7 @@ alias.
 Tests are left out by `*.test.ts`, `*.test.tsx`, `*Test.ts` and `*.test-support.ts` under `next/`:
 a test's stand-in service is not a contract file.
 
-First replay, 2026-11-13, over `next/` with the repo's config: 50 lines in 39 product files write
+First replay, 2026-11-13, over `next/` with the repo's config: 50 lines in 38 product files write
 `Context.Service<`, and the rule fires on **4**. Each fire was read, and none is a false alarm.
 
 | Site | The type it holds | In the plan's count |

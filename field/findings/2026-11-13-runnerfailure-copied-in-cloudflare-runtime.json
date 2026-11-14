@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-runnerfailure-copied-in-cloudflare-runtime",
+  "date": "2026-11-13",
+  "by": "review",
+  "model": "claude-fable-5-2",
+  "rule": "duplicate",
+  "location": {
+    "path": "next/packages/libfabrika/src/cloudflare/runtime.ts",
+    "line": 1250
+  },
+  "says": "ProcessService's RunnerFailure is a hand copy of the unexported RunnerFailure union in runtime/Runner.ts.",
+  "proof": "cloudflare/runtime.ts:1250-1258 and runtime/Runner.ts:2055-2063 declare the same eight-member union under the same name; neither imports the other.",
+  "cost": "If Runner's union loses a member, the copy stays wider and the type check stays green, so ProcessService's contract silently drifts.",
+  "head": "03faa1161212d42f26c2a99558475c148d61ea66",
+  "ticket": "kamp-us/tea-fabrika#908",
+  "pr": null
+}

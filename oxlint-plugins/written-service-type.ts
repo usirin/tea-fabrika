@@ -17,12 +17,14 @@
 // - a `typeof` query. One kind passes: `typeof X.Type`, the type of a schema's value, when it sits
 //   inside a member of a written object type. As the whole type, or joined to one with `&`, it fires.
 // A type alias or an interface declared in the same file is read through, wherever the type names
-// it, so the break cannot hide one line up. A name imported from another file passes: the rule
+// it, an interface's `extends` list included, so the break cannot hide one line up. A name imported from another file passes: the rule
 // reads one file.
 //
 // One report per service, on its type argument. Misses: a service reached through a local alias
-// (`const S = Context.Service`), a type in another file, and `(typeof X)["Type"]`, which fires
-// though it means the same as `typeof X.Type`.
+// (`const S = Context.Service`), a type in another file, a hand-written `infer` that takes the
+// implementation's type apart, and an indexed access into another type (`Other["member"]`), which
+// says nothing of how `Other` was made. `(typeof X)["Type"]` fires though it means the same as
+// `typeof X.Type`.
 //
 // `.oxlintrc.json` turns it on for `next/` and off for tests: a test's stand-in is not a contract.
 import type { CreateRule, ESTree, Scope, Variable } from "@oxlint/plugins";
@@ -64,15 +66,10 @@ const memberName = (node: ESTree.MemberExpression): string | null => {
     : null;
 };
 
-/** The body of a type the file declares itself: an alias's type, or an interface's members. */
+/** A type the file declares itself, an alias or an interface, or `null` for any other name. */
 const declared = (variable: Variable | undefined): Node | null => {
   const node: Node | undefined = variable?.defs[0]?.node;
-
-  if (node?.type === "TSTypeAliasDeclaration") {
-    return node.typeAnnotation;
-  }
-
-  return node?.type === "TSInterfaceDeclaration" ? node.body : null;
+  return node?.type === "TSTypeAliasDeclaration" || node?.type === "TSInterfaceDeclaration" ? node : null;
 };
 
 /** The nodes directly under one. */
@@ -149,14 +146,61 @@ export const writtenServiceType: CreateRule = {
       return at !== null && at.from === "effect/Context" && at.name === "Service";
     };
 
-    /** Whether a type's name is Effect's `Effect.Success`. */
+    /** Whether a type's name is Effect's `Effect.Success`. An interface's `extends` writes it as a member. */
     const isSuccess = (name: Node): boolean => {
       if (name.type === "TSQualifiedName") {
         return name.right.name === "Success" && isModule(name.left, "Effect");
       }
 
+      if (name.type === "MemberExpression") {
+        return memberName(name) === "Success" && isModule(name.object, "Effect");
+      }
+
       const at = imported(resolve(name));
       return at !== null && at.from === "effect/Effect" && at.name === "Success";
+    };
+
+    /**
+     * What a type's name alone gives away: the built-in `ReturnType`, Effect's `Success`, or a type
+     * this file declares that holds an inferring form. An interface is read through its `extends`
+     * list too, each entry as a whole type, then through its members.
+     */
+    const named = (name: Node, inMember: boolean, seen: Set<Node>): string | null => {
+      const local = resolve(name);
+
+      if (name.type === "Identifier" && name.name === "ReturnType" && local === undefined) {
+        return "ReturnType";
+      }
+
+      if (isSuccess(name)) {
+        return "Effect.Success";
+      }
+
+      const declaration = declared(local);
+
+      // `seen` holds the declarations being read now, so a type that names itself ends.
+      if (declaration === null || seen.has(declaration)) {
+        return null;
+      }
+
+      seen.add(declaration);
+      let found: string | null = null;
+
+      if (declaration.type === "TSTypeAliasDeclaration") {
+        found = inferred(declaration.typeAnnotation, inMember, seen);
+      }
+
+      if (declaration.type === "TSInterfaceDeclaration") {
+        for (const parent of declaration.extends) {
+          found ??= named(parent.expression, false, seen);
+          found ??= parent.typeArguments === null ? null : inferred(parent.typeArguments, false, seen);
+        }
+
+        found ??= inferred(declaration.body, inMember, seen);
+      }
+
+      seen.delete(declaration);
+      return found;
     };
 
     /** The first inferring form a type holds, or `null` for a written one. */
@@ -171,27 +215,10 @@ export const writtenServiceType: CreateRule = {
       }
 
       if (type.type === "TSTypeReference") {
-        const local = resolve(type.typeName);
+        const found = named(type.typeName, inMember, seen);
 
-        if (type.typeName.type === "Identifier" && type.typeName.name === "ReturnType" && local === undefined) {
-          return "ReturnType";
-        }
-
-        if (isSuccess(type.typeName)) {
-          return "Effect.Success";
-        }
-
-        const body = declared(local);
-
-        // `seen` holds the declarations being read now, so a type that names itself ends.
-        if (body !== null && !seen.has(body)) {
-          seen.add(body);
-          const found = inferred(body, inMember, seen);
-          seen.delete(body);
-
-          if (found !== null) {
-            return found;
-          }
+        if (found !== null) {
+          return found;
         }
       }
 
