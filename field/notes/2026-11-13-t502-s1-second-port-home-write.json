@@ -1,0 +1,19 @@
+{
+  "id": "2026-11-13-t502-s1-second-port-home-write",
+  "date": "2026-11-13",
+  "lanes": [
+    "kamp-us/tea-fabrika#1188"
+  ],
+  "stage": "tests",
+  "kind": "worked",
+  "what": "next/ version. Law 5's writer ran a second time on the owner's Mac, with his yes, after three fixes on T502 S1: the sink cuts each stored stack frame's folder (0186, the same lines as pull request 1012), the writer makes Alchemy's props.main relative to the build's out folder, and the writer refuses to save a home that holds a path under the home folder, the temp folder or the repo root, SQLite cells included. It ran once in a throwaway worktree on the product code before S1's build, took 14 s and saved a home of 43 files. No workerd ran before or after it. Every text file passed leakgrep.sh --text, and a dump of every table of all 13 SQLite files, read with its WAL, passed too. The stored ControlError span now reads 'at brain.flush (dev.ts:178:24)'. Law 5 then passed locally on S1's build.",
+  "cause": "The first run saved machine paths because main had no folder cut in the sink (0186's cut was only on an open pull request) and the writer copied the home whole with no check.",
+  "person": true,
+  "primitive": "Check",
+  "fix": "The writer's guard is the Check, with its own property law in next/apps/fabrika/src/port-home-guard.test.ts. The leak check's blind spot for SQLite is finding 2026-11-13-leakgrep-cannot-see-text-inside-sqlite.",
+  "test": "Property: for any generated home with or without one planted root, in plain, JSON-escaped or file URL form, in a text file, a JSON value, a short or overflowing SQLite cell or a blob, the guard reports exactly the plant, or nothing.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1188",
+    "https://github.com/kamp-us/tea-fabrika/pull/1012"
+  ]
+}
