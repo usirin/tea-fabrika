@@ -198,6 +198,10 @@ it.live("scenario: L11 actual dev selects the default commit, saves trust, and r
       expect(reports(reopened, commit, "awaiting_trust")).toEqual([]);
       expect((yield* entries(home)).filter((row) => row._tag === "decision")).toHaveLength(1);
       expect(yield* fs.exists(marker)).toBe(false);
+      // T753: each of the three dev starts records itself once, naming the commit its repo settings were read at.
+      const named = { repo: { revision: commit } };
+      const starts = (yield* entries(home)).filter((row) => row._tag === "instance_started");
+      expect(starts.map((row) => row.body)).toMatchObject([named, named, named]);
 
       for (const output of [pending, reopened]) {
         expect(output).not.toContain(root);

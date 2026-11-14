@@ -1,7 +1,39 @@
-import { Effect } from "effect";
+import { Context, Effect, Layer } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
+import { RecordedStart } from "../settings/RecordedStart.ts";
 import { GatewayClient, ProjectClient } from "./platform.ts";
-import { projectStub, rpc, type BrainOptions, type Env } from "./runtime.ts";
+import { projectStub, recordedLayer, rpc, type BrainOptions, type Env } from "./runtime.ts";
+
+// Worker bindings are immutable for an isolate, so a recorded start is kept by its `env` object. Only a
+// finished read is kept, never one still under way: the platform gives each request to a Worker its own
+// I/O context, and cancels as hung a request that waits on work another request started.
+const isolates = new WeakMap<Env, Context.Context<RecordedStart>>();
+
+/**
+ * Returns the effect that gives the Worker's `RecordedStart` context, read on first use.
+ *
+ * **Details**
+ *
+ * One context is kept per `env` object once a read has finished, and later uses get that same
+ * context with no call. A request that arrives before any read has finished reads for itself:
+ * recording the same start again answers the first receipt, so every such read gives the same
+ * start. A failed read is not kept: the next use tries again.
+ *
+ * @stability unstable
+ * @category getters
+ */
+export const httpContext = (env: Env) =>
+  Effect.suspend(() => {
+    const known = isolates.get(env);
+
+    return known !== undefined
+      ? Effect.succeed(known)
+      : // `RecordedStart` is a plain value with nothing to give back, so it outlives this scope.
+        Layer.build(recordedLayer(env)).pipe(
+          Effect.scoped,
+          Effect.tap((context) => Effect.sync(() => isolates.set(env, context))),
+        );
+  });
 
 /** The tab's page in the window table, answered at `/` (P14). */
 const PAGE = "/index.html";
@@ -39,9 +71,11 @@ export const serveAsset = Effect.fn("brain.asset")(function* (
 export const fetch = Effect.fn("workers.fetch")(function* (
   request: Request,
   env: Env,
-  config: BrainOptions,
+  _config?: BrainOptions,
   assets?: Readonly<Record<string, Served>>,
 ) {
+  const start = Context.get(yield* httpContext(env), RecordedStart);
+  const config = { ...start.input, port: start.values.port };
   const url = new URL(request.url),
     origin = `http://127.0.0.1:${config.port}`;
 

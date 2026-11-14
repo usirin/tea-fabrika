@@ -22,6 +22,7 @@ const BUILD = "build-a";
 const owner = Writer.cases.person.make({ key: "SHA256:fixture", for: from().for });
 const Model = Schema.Struct({ count: Schema.Int });
 const Msg = Schema.Struct({ type: Schema.Literal("add"), n: Schema.Int });
+
 type Move = "rpc" | "decode" | "throw";
 
 const thrown = fc.oneof(
@@ -118,6 +119,19 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
             ? loaded.execution
             : workerExecution({
                 init: (s) => box.init(s),
+                fresh: async (s, m) => {
+                  if (move === "rpc") {
+                    return Effect.runPromise(Effect.fail(new Error("transport failed before checking")));
+                  }
+
+                  if (move === "decode") {
+                    return { unrecognized: true };
+                  }
+
+                  return box.fresh(s, m);
+                },
+                update: (s, m) => box.update(s, m),
+                audit: (m) => box.audit(m),
                 step: async (s, m) => {
                   if (move === "rpc") {
                     return Effect.runPromise(Effect.fail(new Error("transport failed before the program")));
@@ -612,12 +626,17 @@ for (const source of ["rpc", "decode"] as const) {
               }
 
               const receipt = yield* w.receipt(input.id);
+
               // First assert the durable record, even when the caller was also given a false dead answer.
-              expect(receipt).toMatchObject({
-                tries: crashes,
-                errors: Array.from({ length: crashes }, () => "TypeError"),
-                result: crashes === sample.limit ? { _tag: "refused", reason: "dead" } : null,
-              });
+              if (crashes === 0) {
+                expect(receipt, "transport failure during checking has no admitted input").toBeNull();
+              } else {
+                expect(receipt).toMatchObject({
+                  tries: crashes,
+                  errors: Array.from({ length: crashes }, () => "TypeError"),
+                  result: crashes === sample.limit ? { _tag: "refused", reason: "dead" } : null,
+                });
+              }
 
               if (move !== "throw") {
                 expect(w.calls()).toBe(beforeCalls);

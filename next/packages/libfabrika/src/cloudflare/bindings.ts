@@ -13,6 +13,7 @@ import type { Incoming } from "../runtime/Entry.ts";
 import type * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import type { Descriptor, ProgramRunner } from "../runtime/Runner.ts";
 import type { Publication } from "../runtime/WatcherManager.ts";
+import type * as SettingsStart from "../settings/Start.ts";
 import type { RecordCalls } from "../telemetry/Records.ts";
 import type { checkHello } from "../transport/Hello.ts";
 import type { Answer } from "../transport/Wire.ts";
@@ -100,7 +101,7 @@ export interface GatewayCalls {
   ) => Effect.Effect<typeof Answer.Type, unknown>;
   readonly knock: (
     client: ConnectionId,
-    input: { readonly label: string; readonly pass?: string | null },
+    input: { readonly label: string; readonly pass?: string | null; readonly as?: "window" | "agent" | "hands" },
   ) => Effect.Effect<typeof Answer.Type, unknown>;
   readonly grant: (input: unknown) => Effect.Effect<typeof GrantReply.Type, unknown>;
   readonly disconnect: (client: ConnectionId) => Effect.Effect<void, unknown>;
@@ -133,6 +134,8 @@ type ProcessCall<F> = F extends (...args: infer A) => Effect.Effect<infer B, unk
 export type ProjectBinding = Rpc.DurableObjectBranded &
   LedgerCalls &
   Remote<Pick<DoorService, "target" | "challenge" | "initialize" | "route" | "knock" | "grant" | "disconnect">> & {
+    settingsStart: RemoteCall<(input: SettingsStart.Input) => Effect.Effect<typeof SettingsStart.Reply.Type>>;
+    settingsRead: RemoteCall<(start: string) => Effect.Effect<typeof SettingsStart.Reply.Type>>;
     clientConnect: RemoteCall<DoorService["connect"]>;
     register: RemoteCall<(client: string, gateway: string, session: string) => Effect.Effect<void>>;
     join: RemoteCall<Gateways["join"]>;

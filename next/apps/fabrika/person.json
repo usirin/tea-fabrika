@@ -32,6 +32,13 @@
           "maximum": 9007199254740991,
           "description": "The delay in whole seconds between crash restarts of the local brain.",
           "default": 2
+        },
+        "link-ttl": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "How long a one-time browser link lives in milliseconds.",
+          "default": 60000
         }
       },
       "additionalProperties": false

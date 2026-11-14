@@ -1,7 +1,15 @@
+/**
+ * The gateway: the door a client connects to. It proves who a client is, admits it, and routes the
+ * calls it sends to the project.
+ *
+ * @stability unstable
+ */
 import { applyCell } from "@demlik/tea";
 import { Context, Duration, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream, Tracer } from "effect";
+import * as Cause from "effect/Cause";
 import { Base64, Base64Url } from "effect/encoding";
 import { RateLimiter } from "effect/persistence/RateLimiter";
+import * as Redacted from "effect/Redacted";
 import { admitted, MemberEvent, Saw } from "../access/Access.ts";
 import { foldAccess } from "../access/AccessFold.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
@@ -18,6 +26,7 @@ import {
 import { Change, enrollmentText } from "../access/Text.ts";
 import * as Id from "../Id.ts";
 import { InputId } from "../Id.ts";
+import { Jobs } from "../jobs/Jobs.ts";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { fromHere, Line, lineFor, PAGE, valueFor } from "../ledger/Log.ts";
@@ -25,6 +34,7 @@ import { type From } from "../processes/Mailbox.ts";
 import { type ProcessError, brainOnly } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { ProcessId } from "../ProcessId.ts";
+import * as Audit from "../runtime/Audit.ts";
 import { Incoming } from "../runtime/Entry.ts";
 import { type ProgramDown } from "../runtime/Program.ts";
 import { type RepliesError } from "../runtime/Replies.ts";
@@ -41,9 +51,17 @@ import { Admission, Answer, Attached, Hello, RateCountFailure, RateRefusal } fro
 import { gatewayNonce } from "./GatewayNonce.ts";
 import { gatewayStore } from "./GatewayStore.ts";
 import * as Waiting from "./internal/waiting.ts";
+import * as JobRoutes from "./Jobs.ts";
 import { Policy as RatePolicy } from "./RateLimit.ts";
 
 const ConnectionId = Schema.NonEmptyString.pipe(Schema.brand("ConnectionId"));
+/**
+ * The id of one connection to the gateway, a non-empty string the gateway makes when the connection
+ * opens. It names a connection, not a client key.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type ConnectionId = typeof ConnectionId.Type;
 
 const quiet = Tracer.make({ span: (options) => new Tracer.NativeSpan(options) });
@@ -51,8 +69,6 @@ const quiet = Tracer.make({ span: (options) => new Tracer.NativeSpan(options) })
 const silent = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E, R>) {
   return yield* effect.pipe(Effect.withTracer(quiet));
 });
-
-const json = Schema.decodeUnknownResult(Schema.Json);
 
 const rawObject = (a: unknown): Record<string, unknown> | null =>
   typeof a === "object" && a !== null && !Array.isArray(a) ? (a as Record<string, unknown>) : null;
@@ -107,7 +123,13 @@ const Binding = Schema.Struct({
   span: Link,
   sentAt: Schema.String,
   state: EnvelopeState,
-});
+}).check(
+  Schema.makeFilter((binding) =>
+    !Schema.is(InputId)(binding.id) || (binding.door !== undefined && binding.n !== undefined)
+      ? true
+      : "a current input binding keeps its door and sequence",
+  ),
+);
 type Binding = typeof Binding.Type;
 const encodeBinding = Schema.encodeSync(Schema.fromJsonString(Binding));
 const decodeBinding = Schema.decodeUnknownResult(Schema.fromJsonString(Binding));
@@ -275,11 +297,11 @@ type Options<A, RNext, RDeliver, RNotify> = {
     RDeliver
   >;
   readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError, RNotify>;
+  readonly audit?: (process: string, message: unknown) => Effect.Effect<Schema.Json, Audit.AuditError, RDeliver>;
   readonly inputs: {
     readonly schema: Schema.Codec<A, unknown>;
     readonly personOnly: ReadonlyArray<string>;
     readonly raw: ReadonlyArray<string>;
-    readonly log: Schema.Encoder<unknown>;
     readonly name?: (input: A) => string | undefined;
   };
   readonly events: { readonly personOnly: ReadonlyArray<string> };
@@ -289,6 +311,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   const [initialWaiting] = Waiting.machine.init(null, options.waiting);
   const context = yield* Effect.context<RNext | RDeliver | RNotify>();
   const ledger = yield* Ledger;
+  const jobs = yield* Jobs;
   const transaction = yield* LedgerTransaction;
   const ids = yield* Id.Generator;
   const appendChecked = Effect.fnUntraced(function* (key: string, write: Parameters<typeof appendAdmitted>[1]) {
@@ -339,7 +362,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     const members = yield* clients.members;
     const identity = admitted(members, raw);
 
-    if ("reason" in identity) {
+    if ("reason" in identity || identity.as === "hands") {
       return yield* new NotGranted({});
     }
 
@@ -390,7 +413,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return store.get(`client/${client}`, Attached);
     });
   });
-  const online = Effect.fnUntraced(function* (client: ConnectionId) {
+  const authenticated = Effect.fnUntraced(function* (client: ConnectionId) {
     const attached = yield* attachment(client);
 
     if (attached?._tag !== "online") {
@@ -403,9 +426,18 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return yield* new NotGranted({});
     }
 
+    const identity = admitted(yield* clients.members, raw);
+
+    if ("reason" in identity) {
+      return yield* new NotGranted({});
+    }
+
     // initialize saved this fingerprint only after checking the signed hello against the raw key.
-    const by = yield* membership(raw, attached.identity.key);
-    return { attached, raw, by };
+    return { attached: { ...attached, identity: { ...identity, key: attached.identity.key } }, raw };
+  });
+  const online = Effect.fnUntraced(function* (client: ConnectionId) {
+    const checked = yield* authenticated(client);
+    return { ...checked, by: yield* membership(checked.raw, checked.attached.identity.key) };
   });
   const connect = Effect.fnUntraced(function* () {
     return yield* Effect.sync(() => ConnectionId.make(random()));
@@ -565,6 +597,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         version: result.version,
         location: options.location,
         build: options.build,
+        ...(result.hello.build === undefined ? {} : { clientBuild: result.hello.build }),
       });
       const placed = yield* appendChecked(result.hello.key, {
         stream: "gateway/hellos",
@@ -589,6 +622,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
             waits: [],
             watching: false,
             busy: false,
+            has: result.hello.has,
+            ...(result.hello.build === undefined ? {} : { build: result.hello.build }),
           }),
         );
       });
@@ -613,7 +648,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   };
   const knock = Effect.fnUntraced(function* (
     client: ConnectionId,
-    params: { readonly label: string; readonly pass?: string | null },
+    params: { readonly label: string; readonly pass?: string | null; readonly as?: "window" | "agent" | "hands" },
   ) {
     const attached = yield* attachment(client);
 
@@ -630,7 +665,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         label: params.label,
         location: options.location,
         has: attached.hello.has,
-        as: "window",
+        as: params.as ?? "window",
         code: String(crypto.getRandomValues(new Uint32Array(1))[0] ?? 0)
           .slice(-6)
           .padStart(6, "0"),
@@ -1032,17 +1067,18 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     params: unknown,
     reader = String(client),
   ) {
-    const checked = yield* silent(Effect.result(online(client)));
+    const checked = yield* silent(Effect.result(authenticated(client)));
 
     if (Result.isFailure(checked)) {
       return no("not_granted");
     }
 
-    const { by, raw } = checked.success;
+    const { attached, raw } = checked.success;
 
+    // One budget per authenticated key, hands included, before a window or agent becomes a Writer.
     const budget = yield* Effect.result(
       limiter.consume({
-        key: by.key,
+        key: attached.identity.key,
         ...ratePolicy,
         algorithm: "fixed-window",
         onExceeded: "fail",
@@ -1072,6 +1108,26 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     if (reserved(params) || (method === "process.send" && reserved(rawObject(params)?.m))) {
       return yield* refuse("reserved");
     }
+
+    if (method.startsWith("jobs.")) {
+      const answer = yield* Effect.gen(function* () {
+        const fresh = yield* silent(Effect.result(authenticated(client)));
+
+        if (Result.isFailure(fresh)) {
+          return no("not_granted");
+        }
+
+        return yield* JobRoutes.route(jobs, fresh.success.attached, method, params);
+      }).pipe(write);
+      yield* flush;
+      return answer;
+    }
+
+    if (attached.identity.as === "hands") {
+      return no("not_allowed");
+    }
+
+    const by = yield* membership(raw, attached.identity.key);
 
     let refusal: string | null = methods.has(method) ? null : "unknown_method";
 
@@ -1234,18 +1290,67 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         return null;
       }
 
+      // Once its input row exists, a binding keeps that metadata across selector changes.
+      // A binding this call allocated carries a new ID, so no row can hold it and nothing is read.
+      const priorRecord =
+        binding.id === inputId
+          ? Option.none()
+          : yield* Stream.runHead(
+              ledger.read("gateway/inputs", 0).pipe(Stream.filter((entry) => entry.id === binding.id)),
+            );
+
+      if (Option.isSome(priorRecord)) {
+        yield* Schema.decodeUnknownEffect(Schema.is(InputId)(binding.id) ? InputEvent : LegacyInputEvent)(
+          valueFor(priorRecord.value),
+        ).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
+      }
+
+      const recorded = Option.isSome(priorRecord);
+
+      if (!recorded && binding.state._tag !== "allocated") {
+        return yield* new LedgerError({ reason: "bad_row" });
+      }
+
+      if (recorded) {
+        const kept =
+          binding.state._tag === "allocated" ? { ...binding, state: EnvelopeState.cases.recorded.make({}) } : binding;
+
+        if (letter !== null && kept !== binding) {
+          yield* store.atomic(() => saveBinding(kept));
+        }
+
+        return { binding: kept, held };
+      }
+
       let safe: typeof Schema.Json.Type | undefined;
 
       if (refusal === null && message !== null && typeof name === "string" && !options.inputs.raw.includes(name)) {
-        const encoded = Schema.encodeUnknownResult(options.inputs.log)(message);
-
-        if (Result.isSuccess(encoded)) {
-          const value = json(encoded.success);
-
-          if (Result.isSuccess(value)) {
-            safe = value.success;
-          }
-        }
+        const audit = options.audit;
+        // Audit decodes the same trusted parent that the runner stamps before checking the message.
+        const stamped = typeof message === "object" ? { ...message, parent: binding.id } : message;
+        const selected =
+          audit === undefined
+            ? Effect.succeed<Schema.Json>({ type: name })
+            : Effect.suspend(() => audit(binding.process, stamped)).pipe(
+                Effect.provideContext(context),
+                Effect.catchCause((cause) => {
+                  const error = Cause.findError(cause);
+                  return Effect.fail(
+                    Result.isSuccess(error) && Schema.is(Audit.AuditError)(error.success)
+                      ? error.success
+                      : new Audit.AuditError({ reason: new Audit.Selection({ cause: Redacted.make(cause) }) }),
+                  );
+                }),
+              );
+        safe = yield* selected.pipe(
+          Effect.flatMap((value) =>
+            Schema.decodeUnknownEffect(Schema.Json)(value).pipe(
+              Effect.mapError(
+                (cause) => new Audit.AuditError({ reason: new Audit.Output({ cause: Redacted.make(cause) }) }),
+              ),
+            ),
+          ),
+        );
       }
 
       const fields = {
@@ -1320,6 +1425,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         }
 
         if (method === "process.send" && message !== null && request !== null && Result.isSuccess(request)) {
+          yield* membership(binding.client);
+
           if (binding.state._tag === "settled") {
             return deliveryAnswer(binding.state.result);
           }
@@ -1690,6 +1797,26 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   };
 });
 
+/**
+ * Service that admits clients and routes their calls. `Gateway.layer(options)` builds it from the
+ * project's Sql, its ledger and access services, a rate-limit budget and the callbacks that deliver
+ * an input to a process.
+ *
+ * **Details**
+ *
+ * A client connects, answers a signed challenge and is admitted, or knocks and waits for a person
+ * to grant it. `route` checks that the client is still admitted, spends the sender's rate-limit
+ * budget and then handles one named call. A call that sends an input to a process is saved as a
+ * binding. `accept` appends a delivered input to the process inbox only when it matches that
+ * binding, else it refuses with `NotGranted`. It fails with a `bad_row` ledger error when the input
+ * does not decode. `checkDelivery` refuses with `not_delivered` when an input does not match its
+ * saved binding. `sign`, `signer` and `append` serve a process answering an input it was delivered.
+ * They refuse with `SigningRefused`: `not_delivered` when the process is not live or no delivery is
+ * saved, and `spent`, `ended`, `person_only` or `signal` in the other cases.
+ *
+ * @stability unstable
+ * @category services
+ */
 export class Gateway extends Context.Service<Gateway, Effect.Success<ReturnType<typeof make>>>()(
   "@kampus/libfabrika/gateway/Gateway",
 ) {
@@ -1704,6 +1831,7 @@ const HelloEvent = Schema.TaggedStruct("initialized", {
   version: Schema.Int,
   location: Schema.String,
   build: Schema.String,
+  clientBuild: Schema.optionalKey(Schema.NonEmptyString),
 });
 
 const random = () => Base64Url.encode(crypto.getRandomValues(new Uint8Array(24)));

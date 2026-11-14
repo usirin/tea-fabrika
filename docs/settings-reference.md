@@ -97,6 +97,19 @@ The delay in whole seconds between crash restarts of the local brain.
 | Reload | restart |
 | Since | 0.0.0 |
 
+### `desktop.link-ttl`
+
+How long a one\-time browser link lives in milliseconds.
+
+| Field | Value |
+|---|---|
+| Scope | person |
+| Environment | `FABRIKA_DESKTOP_LINK_TTL` |
+| Flag | `--desktop.link-ttl` |
+| Default | `60000` |
+| Reload | restart |
+| Since | 0.0.0 |
+
 ### `fabrika-version`
 
 The oldest fabrika this repo works with. It is read before every other setting.

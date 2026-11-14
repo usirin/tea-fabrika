@@ -34,7 +34,12 @@ type Msg =
   | { readonly type: "remove"; readonly name: string }
   | { readonly type: "check"; readonly name: string; readonly note?: string }
   | { readonly type: "uncheck"; readonly name: string }
-  | { readonly type: "timer"; readonly at: number };
+  | { readonly type: "timer"; readonly at: number; readonly arrivedAt: number };
+
+expectTypeOf<Model>().toEqualTypeOf<ChecklistMachine["model"]["Type"]>();
+expectTypeOf<Item>().toEqualTypeOf<ChecklistMachine["model"]["Type"]["items"][number]>();
+expectTypeOf<State>().toEqualTypeOf<ChecklistMachine["model"]["Type"]["items"][number]["state"]>();
+expectTypeOf<Msg>().toEqualTypeOf<ChecklistMachine["msg"]["Type"]>();
 
 type Fresh = Exclude<Msg, { readonly type: "timer" }>;
 
@@ -69,7 +74,14 @@ const Gap = fc.oneof(
   { arbitrary: fc.integer({ min: 0, max: 3 * DAY }), weight: 1 },
 );
 
-const Move = fc.record({ kind: fc.nat({ max: 10 }), pick: fc.nat(), other: fc.nat(), gap: Gap, note: Note });
+const Move = fc.record({
+  kind: fc.nat({ max: 10 }),
+  pick: fc.nat(),
+  other: fc.nat(),
+  gap: Gap,
+  onTime: fc.boolean(),
+  note: Note,
+});
 type Move = typeof Move extends fc.Arbitrary<infer A> ? A : never;
 
 const at = <A>(items: ReadonlyArray<A>, i: number): A | undefined => items[i % Math.max(items.length, 1)];
@@ -80,7 +92,13 @@ const choose = (m: Model, names: ReadonlyArray<string>, move: Move, clock: numbe
   const free = names.filter((n) => !here.includes(n));
   const unchecked = m.items.filter((i) => i.state._tag !== "checked").map((i) => i.name);
   const checked = m.items.filter((i) => i.state._tag === "checked").map((i) => i.name);
-  const timer: Msg = { type: "timer", at: clock + move.gap };
+  const wakes = m.items.flatMap((i) => (i.state._tag === "open" ? [i.state.since + DAY] : []));
+  const wake = m.items.some((i) => i.state._tag === "new") ? 0 : wakes.length > 0 ? Math.min(...wakes) : clock;
+  const timer: Msg = {
+    type: "timer",
+    at: wake,
+    arrivedAt: move.onTime ? Math.max(wake, clock + move.gap) : clock + move.gap,
+  };
   const name = at(here, move.pick);
   const fresh = at(free, move.other);
   const check = (one: string | undefined): Msg =>
@@ -129,7 +147,7 @@ const walked = (machine: ChecklistMachine, minLength = 0) =>
 
       for (const move of moves) {
         const msg = choose(model, names, move, clock);
-        clock = msg.type === "timer" ? msg.at : clock;
+        clock = msg.type === "timer" ? msg.arrivedAt : clock;
         msgs.push(msg);
         [model] = applyCell(machine, model, msg);
       }
@@ -159,8 +177,8 @@ const expected = (prev: Model, msg: Msg): ReadonlyArray<Item> => {
     case "timer":
       return prev.items.map((i) =>
         i.state._tag === "new"
-          ? { name: i.name, state: { _tag: "open", since: msg.at } }
-          : i.state._tag === "open" && msg.at >= i.state.since + DAY
+          ? { name: i.name, state: { _tag: "open", since: msg.arrivedAt } }
+          : i.state._tag === "open" && msg.arrivedAt >= i.state.since + DAY
             ? { name: i.name, state: { _tag: "late", since: i.state.since } }
             : i,
       );
@@ -346,20 +364,24 @@ describe("ticket 806 the checklist's laws", () => {
     );
   });
 
-  it("L6: a timer makes an open item late exactly when at >= since + LATE, and stamps every new item", async () => {
+  it("L6: a timer makes an open item late exactly when arrivedAt >= since + LATE, and stamps every new item from arrivedAt", async () => {
     const { checklistMachine } = await load();
     const Timed = walked(checklistMachine, 4).chain((w) =>
       fc
-        .record({ pick: fc.nat(), offset: fc.oneof(fc.integer({ min: -3, max: 3 }), fc.integer()) })
-        .map(({ pick, offset }) => {
+        .record({
+          pick: fc.nat(),
+          offset: fc.oneof(fc.integer({ min: -3, max: 3 }), fc.integer()),
+          asked: fc.integer(),
+        })
+        .map(({ pick, offset, asked }) => {
           const open = w.model.items.flatMap((i) => (i.state._tag === "open" ? [i.state.since] : []));
           const since = at(open, pick) ?? w.clock;
-          return { model: w.model, at: since + DAY + offset };
+          return { model: w.model, arrivedAt: since + DAY + offset, asked };
         }),
     );
     fc.assert(
-      fc.property(Timed, ({ model, at: time }) => {
-        const [next] = applyCell(checklistMachine, model, { type: "timer", at: time });
+      fc.property(Timed, ({ model, arrivedAt: time, asked }) => {
+        const [next] = applyCell(checklistMachine, model, { type: "timer", at: asked, arrivedAt: time });
 
         for (const [n, item] of model.items.entries()) {
           const now = next.items.find((i) => i.name === item.name)?.state;
