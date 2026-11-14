@@ -1,8 +1,8 @@
-import { Cause, Clock, Context, Effect, Layer, ManagedRuntime, Result, Schema } from "effect";
+import { Cause, Clock, Context, Effect, Layer, ManagedRuntime, Option, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
-import { errorClass, REFUSED, SinkError } from "../telemetry/Trace.ts";
+import { causeClass, REFUSED, SinkError } from "../telemetry/Trace.ts";
 import { connection } from "../transport/Connection.ts";
 import { Answer, Attached, Hello, RateCountFailure } from "../transport/Wire.ts";
 import type { ConnectionId } from "./bindings.ts";
@@ -147,15 +147,15 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
         // the span fails with the typed error, so stored content keeps its tag and reason, never the
         // thrown text, which may hold a bearer or a raw frame.
         Effect.catchCause((cause) => {
-          const failure = Cause.squash(cause);
-
-          if (Schema.is(RateCountFailure)(failure)) {
+          if (Option.exists(Cause.findErrorOption(cause), Schema.is(RateCountFailure))) {
             return Effect.failCause(cause);
           }
 
           return Effect.exit(
-            Effect.fail(failure).pipe(
-              Effect.withSpan("gateway.refused", { attributes: { "error.type": errorClass(rejected(failure)) } }),
+            Effect.failCause(cause).pipe(
+              Effect.withSpan("gateway.refused", {
+                attributes: { "error.type": causeClass(Cause.map(cause, rejected)) },
+              }),
             ),
           ).pipe(Effect.as(Answer.cases.refused.make({ reason: "unreachable" })));
         }),

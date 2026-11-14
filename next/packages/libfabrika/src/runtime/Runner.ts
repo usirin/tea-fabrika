@@ -841,25 +841,35 @@ export class ProgramRunner extends Context.Service<
               return yield* Effect.failCause(result.cause);
             }
 
-            const wrapped = Cause.squash(result.cause);
+            const typed = Cause.findErrorOption(result.cause);
 
-            if (wrapped instanceof ProgramDown && wrapped.source !== undefined) {
+            if (Option.isSome(typed) && typed.value.source !== undefined) {
               yield* send({ type: "finished", seq: attempt.seq });
               yield* store.activity(Activity.cases.idle.make({ process: process.id })).pipe(Effect.ignore);
-              return yield* wrapped;
+              return yield* typed.value;
             }
 
-            const original =
-              wrapped instanceof ProgramDown && Object.hasOwn(wrapped, "cause") ? wrapped.cause : wrapped;
-            const error =
-              wrapped instanceof ProgramDown
-                ? wrapped.errorClass
-                : original instanceof Error
-                  ? original.constructor.name
-                  : original === null
-                    ? "null"
-                    : typeof original;
-            const down = wrapped instanceof ProgramDown ? wrapped : new ProgramDown({ reason, cause: original });
+            // A step fails with its typed ProgramDown, or it threw and the thrown value becomes one.
+            const { down, original, error } = Option.match(typed, {
+              onSome: (down) => ({
+                down,
+                original: Object.hasOwn(down, "cause") ? down.cause : down,
+                error: down.errorClass,
+              }),
+              onNone: () => {
+                const original = Result.getOrUndefined(Cause.findDefect(result.cause));
+                return {
+                  down: new ProgramDown({ reason, cause: original }),
+                  original,
+                  error:
+                    original instanceof Error
+                      ? original.constructor.name
+                      : original === null
+                        ? "null"
+                        : typeof original,
+                };
+              },
+            });
             const failure = (reason === "step" ? Failure.cases.fresh : Failure.cases.saved).make({ ...attempt, error });
             // The step's own failure is the answer; a later recovery write's failure never replaces it.
             yield* observed(
@@ -1820,7 +1830,7 @@ export class ProgramRunner extends Context.Service<
                 // A storage failure while draining leaves the alarm that tries it again.
                 Effect.onExit((exit) =>
                   exit._tag === "Failure" &&
-                  Cause.squash(exit.cause) instanceof LedgerError &&
+                  Option.exists(Cause.findErrorOption(exit.cause), Schema.is(LedgerError)) &&
                   !Cause.hasInterrupts(exit.cause)
                     ? retryLater
                     : Effect.void,

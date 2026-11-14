@@ -4,7 +4,7 @@
 // A row keeps OTLP's span field names, so a later export to any OTLP backend is a map, not a
 // rewrite. A tag holds a name, an id, a number or a boolean; a failed span's message is never a
 // tag, only its record part's `content`, the one part a person may delete.
-import { Schema } from "effect";
+import { Cause, Schema } from "effect";
 import { ProcessId } from "../ProcessId.ts";
 
 /** Where a span's record lives: its process's JobRecord, or `spans` for every span outside one. */
@@ -140,6 +140,12 @@ export const sinkError = (error: unknown): SinkError =>
 
 /** The class of a thrown or failed value, for `error.type`. */
 export const errorClass = (error: unknown): string => (error instanceof Error ? error.name : typeof error);
+
+/** The class of whatever ended a failed span, for `error.type`: its first typed failure, or else the
+ *  first value that was thrown. The one place a cause is squashed, since a thrown value counts too. */
+export const causeClass = (cause: Cause.Cause<unknown>): string =>
+  // oxlint-disable-next-line fabrika/no-cause-squash -- edge: error.type names a thrown value as it names a typed failure
+  errorClass(Cause.squash(cause));
 
 /** The most characters a span tag holds (p95, p99). Text past it is cut, its length kept beside. */
 const MOST_CHARS = 128;

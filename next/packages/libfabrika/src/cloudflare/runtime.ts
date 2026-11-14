@@ -1,6 +1,5 @@
 import { makeRpcStub } from "@alchemy.run/cloudflare/Bridge";
 import {
-  Cause,
   Clock,
   Context,
   Effect,
@@ -343,7 +342,7 @@ export const complete = Effect.fn(function* <A, E, R>(
   return yield* work.pipe(
     Effect.exit,
     Effect.flatMap((exit) => {
-      if (Exit.isFailure(exit) && Schema.is(RateCountFailure)(Cause.squash(exit.cause))) {
+      if (Option.exists(Exit.findErrorOption(exit), Schema.is(RateCountFailure))) {
         return exit;
       }
 
