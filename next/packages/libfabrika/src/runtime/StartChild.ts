@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The built-in start_child and exit commands: a program asks the host to start a program under a
  * name, as a process asks its supervisor, and ends its own life with `normal`. Their only operands
  * are these; the runner binds the requester, the hash and the life that exits.
@@ -29,6 +40,9 @@ export const StartChildInput = Schema.Struct({
  *
  * @stability unstable
  * @category schemas
+ */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
  */
 export const StartRefusal = Schema.Literals([
   "no_program",

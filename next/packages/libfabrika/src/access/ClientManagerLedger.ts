@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The `ClientManager` kept on the ledger stream `gateway/access`.
  *
  * **Details**
@@ -23,6 +34,9 @@ import { ClientManager, Written, type Founder } from "./ClientManager.ts";
 
 const MEMBERS = "gateway/access";
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const tag = (word: string): string => `fab.access.${word}`;
 
 const known: ReadonlySet<string> = new Set(Object.keys(MemberEvent.cases));
@@ -40,7 +54,7 @@ type Replayed = {
   readonly head: Rev;
 };
 
-const row = Effect.fnUntraced(function* (entry: Entry) {
+const row = Effect.fnUntraced(function* (entry: Entry) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   if (!known.has(entry._tag)) {
     return { entry, event: null } satisfies Row;
   }

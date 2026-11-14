@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * Why a process ended, as data: the exit reason, when two reasons are the same exit, and the
  * decoder for a reason that comes from outside.
  *
@@ -30,6 +41,9 @@ export const ExitReason = Schema.TaggedUnion({
  *
  * @stability unstable
  * @category models
+ */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
  */
 export type ExitReason = typeof ExitReason.Type;
 

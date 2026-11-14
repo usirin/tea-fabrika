@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The local brain driver's span recording on Node: a durable span queue in its own SQLite file.
  *
  * @stability unstable
@@ -7,6 +18,9 @@ import { DatabaseSync } from "node:sqlite"; // edge: Effect SQL has no synchrono
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import { Archive } from "../../telemetry/Archive.ts";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 import { RecordManager } from "../../telemetry/Records.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
 
@@ -32,7 +46,7 @@ export const devRecording = Effect.fn("brain.devRecording")(function* <E>(
     method: string,
     args: ReadonlyArray<unknown>,
   ) => Effect.Effect<unknown, E>,
-) {
+) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
   yield* fs.makeDirectory(home, { recursive: true });

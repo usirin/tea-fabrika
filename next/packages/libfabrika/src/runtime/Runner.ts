@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The program runner: one process's turns. Under one permit a turn catches the process up on its
  * inbox, finds a resend, steps the fresh input purely, saves that it is about to append, appends
  * through the gateway's checked writer, folds what landed and installs it. Only then do its Cmds
@@ -186,6 +197,9 @@ const WriteCmd = Schema.Struct({ stream: Schema.NonEmptyString, write: Write });
 const decodeWriteCmd = Schema.decodeUnknownResult(WriteCmd);
 
 /** The Cmd the runner mails itself, as the sender the host bound. */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const SEND = "send";
 const decodeSendInput = Schema.decodeUnknownResult(SendInput);
 const isRefusal = Schema.is(MailRefusal);
@@ -201,7 +215,7 @@ const HOST = new Set([SEND, START_CHILD, EXIT]);
  * A Cmd's operands, without the `type` its maker adds, when its input schema names every one. The
  * names are checked before the strict decode, since an empty struct takes any field.
  */
-const operands = (cmd: unknown, fields: object): Option.Option<Record<string, unknown>> => {
+const operands = (cmd: unknown, fields: object): Option.Option<Record<string, unknown>> => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   if (typeof cmd !== "object" || cmd === null || Array.isArray(cmd)) {
     return Option.none();
   }

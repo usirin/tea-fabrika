@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // P12, next/. Read the real stack and the installed provider registrations.
 // This exam fails closed on syntax it cannot follow. It does not keep a second resource list.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
@@ -6,9 +17,12 @@ import { parseSync, type ModuleExportName } from "oxc-parser";
 
 type Tree = any;
 type Program = ReturnType<typeof parseSync>["program"];
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 type Finding = { file: string; line: number; reason: string };
 
-const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, string>) => {
+const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, string>) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const { dirname, join, resolve } = path;
   const text = (file: string) => {
     const body = sources.get(file);

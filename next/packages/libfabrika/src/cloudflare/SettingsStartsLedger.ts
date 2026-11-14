@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * Instance starts kept in the ledger, one entry per start.
  *
  * @stability unstable
@@ -11,6 +22,9 @@ import { Referee } from "../ledger/Referee.ts";
 import * as RefereeSql from "../ledger/RefereeSql.ts";
 import * as Start from "../settings/Start.ts";
 import { Decode, Missing, MissingTarget, Refused, Starts, StartsError, Storage } from "../settings/Starts.ts";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 import type { Sql } from "../Sql.ts";
 import * as SettingsInput from "./SettingsInput.ts";
 
@@ -19,7 +33,7 @@ const decode = (cause: unknown) => new StartsError({ reason: new Decode({ cause 
 const event = Schema.TaggedStruct("instance_started", Start.Body.fields);
 const stream = (start: string) => `settings/instance/${start}`;
 
-const saved = Effect.fnUntraced(function* (entry: Entry, start: string) {
+const saved = Effect.fnUntraced(function* (entry: Entry, start: string) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const body = yield* Schema.decodeUnknownEffect(Start.Body)(entry.body, { onExcessProperty: "error" }).pipe(
     Effect.mapError(decode),
   );

@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * Menu bar extra state and items. Checks and signatures are commands, never I/O here.
  *
  * @stability unstable
@@ -98,6 +109,9 @@ const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("quit") }),
 ]);
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const check = Cmd.make("check", {
   input: Schema.toType(Schema.Struct({ cmd: Id.Cmd, reason: Schema.String })),
   ok: Schema.Null,
@@ -144,7 +158,7 @@ export const Item = Schema.TaggedUnion({
 const safe = (text: string) => text.replace(/[\uD800-\uDFFF]/gu, "\uFFFD").replace(/[\p{Cc}\p{Cf}]/gu, "");
 
 // The brain-line text cap is 256 UTF-16 units. Keep a pair whole at its boundary.
-const label = (text: string) => {
+const label = (text: string) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const cut = safe(text).slice(0, 256);
   return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
 };

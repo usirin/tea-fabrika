@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // P13 slice 2, next/. Project audit laws take scoped storage and RPC handles from their driver (0062).
 import { createHash, generateKeyPairSync, sign } from "node:crypto"; // edge: Effect has no SSH Ed25519 key export or signing API
 import { Machine } from "@demlik/tea/effect";
@@ -15,6 +26,9 @@ import { nth } from "../runtime/RepliesTest.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import type { Sql } from "../Sql.ts";
 import { KeyLine, writeSshsig } from "../transport/Sshsig.ts";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 import { programBox } from "./box.ts";
 import { ProjectService, projectLayer, type ProjectOptions } from "./runtime.ts";
 import { Props, receive } from "./tail.ts";
@@ -65,7 +79,7 @@ const projectWalk = Effect.fnUntraced(function* (
   reached: Set<string>,
   selector: Selector = "plain",
   usage: boolean = false,
-) {
+) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const sql = yield* harness.open;
   const ledger = yield* Ledger.pipe(
     Effect.provide(

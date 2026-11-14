@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // Ticket 762, amendment A2, next/. A process's first turn is the runner's `init`, OTP's init/1:
 // a start alone, or a restart alone, loads the program and arms the object's one alarm.
 // Real runner, manager and ledger; only the alarm is a recording double. The driver's module runs
@@ -15,6 +26,9 @@ import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherM
 import { Program } from "./Program.ts";
 import { ProgramRunner } from "./Runner.ts";
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const SEED = 119120;
 const NAME = "counter:1";
 const BUILD = "build-a";
@@ -41,7 +55,7 @@ export type Database = { readonly sql: Sql; readonly reopen: () => void };
 /** The same init laws on the real database driver supplied by its owning module (0062). */
 export const suite = (
   files: Effect.Effect<(name: string) => Effect.Effect<Database, never, Scope.Scope>, never, Scope.Scope>,
-) => {
+) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   /** One process name's world. Each build's `init` gives its own first wake and no Cmd: init's Cmds
    *  are ticket 292's (0253, amendment A3). */
   const world = Effect.fnUntraced(function* (wakes: Readonly<Record<string, number | null>>) {

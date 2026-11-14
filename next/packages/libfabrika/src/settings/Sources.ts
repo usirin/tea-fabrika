@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The four sources of a setting in their order: flag, env, repo, person, with each declaration's default last (0086).
  *
  * **Details**
@@ -38,6 +49,9 @@ export type Origin = typeof Origin.Type;
  *
  * @stability unstable
  * @category models
+ */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
  */
 export interface Source {
   readonly provider: ConfigProvider.ConfigProvider;
@@ -80,7 +94,7 @@ export interface Resolved<A> {
  * @category constructors
  */
 export const flags = (record: Readonly<Record<string, string>>): Source => ({
-  provider: ConfigProvider.make((path) => {
+  provider: ConfigProvider.make((path) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
     const value = record[path.join(".")];
     return Effect.succeed(value === undefined ? undefined : ConfigProvider.makeValue(value));
   }),

@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // P13 slice 1, next/. The runner's terminal-reply laws, a suite that the module owning a real
 // SQLite driver runs (0062): `RunnerRepliesTest.suite(harness)`. A small drafts program keeps one
 // version per note and refuses a save on any other base. Each walk picks its next move from the
@@ -44,6 +55,9 @@ export type Harness = {
 
 /** The tables main's runner, inbox and process table write. Any other table a runner writes here
  *  holds terminal replies. */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const KNOWN = new Set([
   "entries",
   "rings",
@@ -99,7 +113,7 @@ const program = {
   state: { v: 1, schema: Model, upgrades: [] },
   msg: Save,
   view: { data: Model, select: (s: Model) => s },
-  refuse: (s: Model, m: typeof Save.Type) => {
+  refuse: (s: Model, m: typeof Save.Type) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
     const now = s.notes[m.note] ?? 0;
     return m.base === now ? null : { reason: "changed_elsewhere", now };
   },

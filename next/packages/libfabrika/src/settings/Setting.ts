@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * Declares a setting once, and the declaration is the Config that reads it (0086).
  *
  * **Details**
@@ -82,6 +93,9 @@ export interface Setting<
  * @stability unstable
  * @category constructors
  */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 export const make = <C extends Schema.Codec<any, unknown>, const S extends Scope>(
   path: string,
   options: {
@@ -93,7 +107,7 @@ export const make = <C extends Schema.Codec<any, unknown>, const S extends Scope
     readonly reload: Reload;
     readonly since: string;
   },
-): Setting<C["Type"], S, C> => {
+): Setting<C["Type"], S, C> => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   // Effect reads a string path as one key, so the dotted path is split here.
   const segments = path.split(".");
   const env = ["FABRIKA", ...segments.map(Str.configCase)].join("_");

@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 import { readlinkSync, symlinkSync } from "node:fs"; // edge: Effect's FileSystem takes and gives a link's target as text, and a target that is not valid UTF-8 needs bytes
 // P19 next/. Scoped real disk, controlled process edge. This never executes launchctl or plutil.
 import { NodeServices } from "@effect/platform-node";
@@ -19,6 +30,9 @@ import type { ChildProcess } from "effect/process";
 import { ChildProcessSpawner } from "effect/process";
 import { BrainControl } from "../../desktop/BrainControl.ts";
 import * as BrainFilesTest from "../../desktop/BrainFilesTest.ts";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 import * as ServiceTest from "../../desktop/BrainServiceTest.ts";
 import { BrainSpec } from "../../desktop/BrainSpec.ts";
 import * as Launchd from "./BrainControlLaunchd.ts";
@@ -53,7 +67,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
   directoryName = "",
   replacement?: BrainFilesTest.Replacement,
   flags: Record<string, string> = {},
-) {
+) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
   const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "p19-unit-" });

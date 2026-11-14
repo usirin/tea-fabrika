@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * Audit selection and its errors. `select` reduces a program's message to the audit data the
  * program declares. The errors keep their cause in memory, redacted, and `Answer` carries a failure
  * across the audit RPC with no field for that cause.
@@ -44,6 +55,9 @@ export class Transport extends Schema.TaggedError<Transport>()("Transport", Caus
  *
  * @stability unstable
  * @category errors
+ */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
  */
 export class Reply extends Schema.TaggedError<Reply>()("Reply", Cause) {}
 
@@ -108,7 +122,7 @@ type Declaration = {
  * @stability unstable
  * @category combinators
  */
-export const select = (program: Declaration, raw: unknown): Result.Result<Schema.Json, AuditError> => {
+export const select = (program: Declaration, raw: unknown): Result.Result<Schema.Json, AuditError> => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const decoded = Result.try({
     try: () => Schema.decodeUnknownResult(program.msg)(raw),
     catch: (cause) => new AuditError({ reason: new Input({ cause: Redacted.make(cause) }) }),

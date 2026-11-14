@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // The commit check for `next/` (Tier 1, P32; docs/direction/a-unit-of-work-is-a-commit.md, experiment
 // 221). Each step that commits signs a link, its step, ticket, version and the trees before and after,
 // with its own role's key, into a git note on `refs/notes/fabrika`. CI decides from the signature, never
@@ -113,7 +124,7 @@ const KEY_LINE = /^(\S+) namespaces="(fabrika-step|git)" ssh-ed25519 (AAAAC3NzaC
  * p87 and p87b: each step at least once in `fabrika-step`, and distinct literal `person:<id>`
  * principals in `git`. Ed25519 only, no key twice and no other option. No file is refused.
  */
-export const keysProblem = (text: string | null): string | null => {
+export const keysProblem = (text: string | null): string | null => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   if (text === null) {
     return "no allowed_signers on the base";
   }
@@ -236,6 +247,9 @@ export interface PullRequest {
   readonly notes: ReadonlyArray<Signed>;
 }
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const verified = (s: Signed | null): s is Signed => s !== null && s.signer === s.note.step;
 
 /**

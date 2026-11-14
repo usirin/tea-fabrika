@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // The typed half of no-promises. Oxlint's JS plugins have no type checker. This lint
 // command uses the installed TypeScript 7.0.2 API, without emitting code or type diagnostics.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
@@ -13,6 +24,9 @@ import {
   type Type,
 } from "typescript/unstable/sync";
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 interface PromiseFinding {
   readonly file: string;
   readonly line: number;
@@ -23,7 +37,7 @@ export const checkPromiseTypes = (
   project: Project,
   root: string,
   pathService: Path.Path,
-): readonly PromiseFinding[] => {
+): readonly PromiseFinding[] => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const { checker, program } = project;
   const found = new Map<string, PromiseFinding>();
   const memo = new Map<number, boolean>();

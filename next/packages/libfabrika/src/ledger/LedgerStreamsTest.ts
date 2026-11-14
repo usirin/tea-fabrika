@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // T714, next/. A5 uses the real ledger and discovery layer, with the driver's scope owned above us.
 // Page, wildcard-prefix and error-cause plant trials are recorded in the tests-step report.
 import { expect, it } from "@effect/vitest";
@@ -5,13 +16,16 @@ import { Arbitrary, Effect, Layer, Schema, type Scope, Stream } from "effect";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger } from "./Ledger.ts";
 import * as LedgerSql from "./LedgerSql.ts";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 import { LedgerStreams, LedgerStreamsError, Storage } from "./LedgerStreams.ts";
 import * as LedgerStreamsSql from "./LedgerStreamsSql.ts";
 import { Line, lineFor, PAGE } from "./Log.ts";
 
 export type Store = { readonly sql: Sql; readonly reopen: Effect.Effect<void> };
 
-export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
+export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   it.effect(
     "A5: discovery pages distinct names in order and treats SQL wildcard prefixes literally",
     () =>

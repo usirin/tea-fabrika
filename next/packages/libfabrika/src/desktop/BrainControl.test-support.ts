@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // P19 next/. Only outside facts live here. Every policy decision stays in BrainServiceManaged.
 import { applyCell } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
@@ -16,6 +27,9 @@ export const spec = Schema.decodeUnknownSync(BrainSpec)({
 
 export const absent = Status.cases.absent.make({});
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 export const loaded = (value: BrainSpec = spec, pid: number | null = 81) =>
   Status.cases.loaded.make({
     executable: value.executable,
@@ -52,7 +66,7 @@ type Call = {
   readonly fail: (secret: string) => Effect.Effect<void>;
 };
 
-export const make = Effect.fn("BrainControlTest.make")(function* (initial: Partial<World> = {}) {
+export const make = Effect.fn("BrainControlTest.make")(function* (initial: Partial<World> = {}) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   let [world] = facts.init(null, {});
   const observe = (next: Partial<World>) =>
     Effect.sync(() => {

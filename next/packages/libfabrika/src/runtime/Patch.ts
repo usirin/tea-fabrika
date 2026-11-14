@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * View patches: the RFC 6902 operations that turn one JSON view into the next. A watcher gets the
  * whole view once, then a patch per step. Pure, and it never changes its inputs.
  *
@@ -25,7 +36,7 @@ type Plain = { [key: string]: unknown };
 const isPlain = (u: unknown): u is Plain => typeof u === "object" && u !== null && !Array.isArray(u);
 
 /** Same JSON value: `Object.is` for leaves, so `0` and `-0` differ as they do to a watcher. */
-const same = (a: unknown, b: unknown): boolean => {
+const same = (a: unknown, b: unknown): boolean => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   if (Array.isArray(a) && Array.isArray(b)) {
     return a.length === b.length && a.every((one, i) => same(one, b[i]));
   }
@@ -89,6 +100,9 @@ const walk = (path: string, before: unknown, after: unknown, out: Array<Patch>):
  *
  * @stability unstable
  * @category combinators
+ */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
  */
 export const diff = (before: unknown, after: unknown): ReadonlyArray<Patch> => {
   const out: Array<Patch> = [];

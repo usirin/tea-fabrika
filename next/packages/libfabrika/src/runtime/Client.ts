@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * A program client's own rules. One tea machine, made by one factory (decision 0046 and its
  * 2026-11-10 amendments): its Model is `Client`, its Msgs are plain data, and it does no input or
  * output. It is the same in a browser tab, in Electron and in a headless client. It imports no
@@ -135,7 +146,7 @@ export type ClientChecks = { readonly decode?: (pid: string) => (view: unknown) 
 type Step = readonly [Client, ReadonlyArray<ReturnType<typeof ask>>];
 
 /** Reserves the next slot for a press on `pid`, with what this client showed and had read. */
-const press = (c: Client, input: { readonly pid: string; readonly m: unknown }): Client => {
+const press = (c: Client, input: { readonly pid: string; readonly m: unknown }): Client => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const m = Schema.decodeUnknownResult(Schema.Json)(input.m);
   const slot = Pending.cases.dating.make({
     n: c.written,
@@ -149,6 +160,9 @@ const press = (c: Client, input: { readonly pid: string; readonly m: unknown }):
 
 /** Fills slot `n` with its letter id and time. A missing slot or one already dated is unchanged: a
  *  second answer never rewrites a letter. */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const dated = (
   c: Client,
   n: number,

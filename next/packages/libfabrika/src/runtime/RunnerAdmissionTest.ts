@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 import { applyCell } from "@demlik/tea";
 // P13 slice 2, next/. Runtime laws take real stores from the module that owns their driver (0062).
 import { Machine } from "@demlik/tea/effect";
@@ -18,6 +29,9 @@ import { Input, ProgramDown } from "./Program.ts";
 import { recoveryStore } from "./RecoveryStore.ts";
 import { capture, nth } from "./RepliesTest.ts";
 import { ProgramRunner, Sent } from "./Runner.ts";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 import { BRAIN, type Harness } from "./RunnerRepliesTest.ts";
 
 const NAME = "admission:1";
@@ -85,7 +99,7 @@ const WRITE = /^\s*(INSERT|UPDATE|REPLACE|DELETE)\b/i;
 const decodeText = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Json));
 
 // SQL columns and span fields can hold another JSON document.
-const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
+const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   if (typeof value === "string") {
     const prior = cache.get(value);
 

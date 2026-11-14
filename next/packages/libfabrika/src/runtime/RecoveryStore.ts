@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * Where one registered name's recovery journal is kept: the journal row, and its receipts in rows
  * of their own, in the object's SQLite.
  *
@@ -19,6 +30,9 @@ type Journal<S extends Kept> = Schema.Codec<S, unknown> & {
   readonly fields: { readonly [x: PropertyKey]: Schema.ConstraintCodec<unknown, unknown> };
 };
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 type Store<S extends Kept> = {
   /** The saved journal with every receipt merged back in, or null before the first save. */
   readonly load: Effect.Effect<S | null, LedgerError>;
@@ -33,7 +47,7 @@ type Store<S extends Kept> = {
 const decodeReceipt = Schema.decodeUnknownSync(Schema.fromJsonString(Receipt));
 const encodeReceipt = Schema.encodeSync(Schema.fromJsonString(Receipt));
 
-const receiptFor = (value: unknown, letter: unknown) => {
+const receiptFor = (value: unknown, letter: unknown) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const saved = decodeReceipt(value);
 
   if (saved.letter !== letter) {

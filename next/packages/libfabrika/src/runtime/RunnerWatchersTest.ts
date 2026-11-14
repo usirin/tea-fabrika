@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // next/, W2/W6. No driver imports: Node supplies the scoped database and lower services (0062).
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
@@ -12,6 +23,9 @@ import { ProcessStore } from "./ProcessStore.ts";
 import { Input } from "./Program.ts";
 import { nth } from "./RepliesTest.ts";
 import { ProgramRunner, Sent } from "./Runner.ts";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 import { BRAIN, type Harness } from "./RunnerRepliesTest.ts";
 import { Gone, Unreachable, WatcherManagerError } from "./WatcherManager.ts";
 
@@ -59,7 +73,7 @@ const meta = {
 
 type Step = typeof Step extends Arbitrary.Arbitrary<infer A> ? A : never;
 
-const walk = Effect.fnUntraced(function* (harness: Harness, steps: ReadonlyArray<Step>, gaps: boolean) {
+const walk = Effect.fnUntraced(function* (harness: Harness, steps: ReadonlyArray<Step>, gaps: boolean) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const files = yield* harness.files;
   let scope = yield* Effect.acquireRelease(Scope.make(), (s) => Scope.close(s, Exit.void));
   // Scope.make is itself a handle: every replacement is also acquired in the enclosing scope.

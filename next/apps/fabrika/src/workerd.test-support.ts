@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // next/, test support. Kills the one workerd under a parent process, for the real-workerd crash laws
 // (instance-wire's cases A and C, worker-supervision's case B), and reads where the kill landed.
 // Read through its module, as port.test-support is.
@@ -10,7 +21,10 @@ import { Activity } from "@kampus/libfabrika/processes/Process";
 import { Effect, FileSystem, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
-const processes = Effect.gen(function* () {
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
+const processes = Effect.gen(function* () {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const ps = yield* ChildProcess.make("ps", ["-axo", "pid=,ppid=,command="]);
   return yield* ps.stdout.pipe(Stream.decodeText(), Stream.mkString);
 }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));

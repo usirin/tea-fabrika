@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The `Children` layer that starts a child on the ledger.
  *
  * The answer is a function of the start id's state and the process table, read in one ledger turn:
@@ -20,6 +31,9 @@ import { ProcessManager } from "./ProcessManager.ts";
 
 const tag = (word: string): string => `fab.children.${word}`;
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const decodeChild = Schema.decodeUnknownResult(Child);
 const isName = Schema.is(ProcessName);
 const decodeLetter = Schema.decodeUnknownOption(Schema.Struct({ m: Schema.Json }));
@@ -33,7 +47,7 @@ const letterId = (id: string): string => JSON.stringify(["start", id]);
 const encoder = new TextEncoder();
 
 /** Whether the first letter's row fits, counted as the ledger counts it, so it is judged at decode. */
-const fits = (child: Child, from: From, m: Schema.Json): boolean => {
+const fits = (child: Child, from: From, m: Schema.Json): boolean => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const line = letterLine(from, m);
   const texts = [inbox(child.name), letterId(child.id), line.by, line.for, line.sentAt, line.parent];
   return (

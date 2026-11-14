@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // P42 slice 1, next/ (ticket 770): the start piece's laws L1 to L6, L11 and L13 on a real store
 // (0062). A runner in the module that owns a driver calls `ChildrenTest.suite(open)`; `open` acquires
 // one store in a scope and gives it back when that scope closes (0061).
@@ -55,7 +66,7 @@ const PIDS: ReadonlyArray<string> = Array.from(
   (_, n) => `process_0000000000e00800${String(n).padStart(10, "0")}`,
 );
 
-const ids = (...values: ReadonlyArray<string>) => {
+const ids = (...values: ReadonlyArray<string>) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   let calls = 0;
   return {
     next: Effect.sync(() => {
@@ -161,6 +172,9 @@ const headIn = (turn: LedgerTurn, names: Iterable<string>) =>
   Math.max(0, ...streamsFor(names).flatMap((stream) => [...turn.read(stream, 0)].map((e) => e.rev)));
 
 /** Every row of every table, so "nothing was written" covers whatever table a start might use. */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const snapshot = (sql: Sql): Record<string, ReadonlyArray<Record<string, SqlValue>>> => {
   const tables = sql
     .exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")

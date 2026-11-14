@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * Source folders for an opened repository: a path from a settings file, resolved to the commit or
  * to disk.
  *
@@ -14,6 +25,9 @@ import {
   type Source,
 } from "../../repositories/Repositories.ts";
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 type Entry = { readonly mode: string; readonly type: string; readonly id: string };
 
 const failed = (cause: unknown) =>
@@ -49,7 +63,7 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
   readonly commit: typeof ObjectId.Type;
   readonly entry: (file: string) => Effect.Effect<Entry | null, RepositoriesError>;
   readonly read: (file: string) => Effect.Effect<Uint8Array | null, RepositoriesError>;
-}) {
+}) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
   const contains = (base: string, location: string) => {

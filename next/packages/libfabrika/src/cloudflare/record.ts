@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 import { DurableObjectState as ObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Context, Effect, Layer, Schema } from "effect";
@@ -8,6 +19,9 @@ import { type Chain } from "../telemetry/Trace.ts";
 import { cloudflareSql } from "./CloudflareSql.ts";
 import { RecordPart, type RecordShape } from "./objects.ts";
 import { recordedLayer, settingsFailure, type Env } from "./runtime.ts";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 import * as SettingsRuntime from "./SettingsRuntime.ts";
 
 type Part = ReturnType<typeof recordPart>;
@@ -19,7 +33,7 @@ const part = Effect.fnUntraced(function* (
   bytes: number | undefined,
   chain: Chain,
   at: number,
-) {
+) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const [, name] = yield* Schema.decodeUnknownEffect(
     Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
   )(ctx.id.name).pipe(Effect.mapError((cause) => new SinkError({ reason: "bad_row", held: 0, cause })));

@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 import { makeDurableObjectBridge, makeWorkerBridge } from "@alchemy.run/cloudflare/Bridge";
 import type { SettingsStart } from "@kampus/libfabrika";
 import { type Descriptor, type Incoming } from "@kampus/libfabrika";
@@ -22,6 +33,9 @@ import {
 import { DurableObject, WorkerEntrypoint, env } from "cloudflare:workers";
 import { Effect, Redacted, Schema } from "effect";
 import { assets, programs } from "virtual:fabrika-built";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 import type { ConnectionId } from "./door.ts";
 import { Objects } from "./objects.ts";
 import { connectionRuntime, projectRuntime, type Env } from "./runtime.ts";
@@ -30,7 +44,7 @@ export class Project extends DurableObject<Env> {
   readonly owner = projectRuntime(this.ctx, this.env);
   readonly runtime = settingsWire(this.owner.contextEffect);
 
-  settingsStart(input: SettingsStart.Input) {
+  settingsStart(input: SettingsStart.Input) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the trusted Project settings endpoint returns a Promise
     return Effect.runPromise(this.owner.settingsStart(input));
   }

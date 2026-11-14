@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // P17b slice 2, next/. Public runner laws; the app supplies real SQLite and the real checklist.
 // After build plants: dispatch before save/publish; replay a folded fire; turn a failed check
 // into done; retry interrupted fire; leak a marker into each saved answer/view/report/reason.
@@ -65,6 +76,9 @@ export type Open = Effect.Effect<
 
 type World = Open extends Effect.Effect<infer A, never, Scope.Scope> ? A : never;
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const bounded = (minimum: number, maximum: number) =>
   Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum, maximum })));
 
@@ -97,7 +111,7 @@ const target = (process: string) =>
     key: "public:1",
   });
 
-const startTarget = Effect.fnUntraced(function* (world: World, checklist: unknown) {
+const startTarget = Effect.fnUntraced(function* (world: World, checklist: unknown) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const session = yield* world.session(TARGET, "fabrika/checklist", checklist, {});
   const added = yield* session.runner.msg(world.letter(100, { type: "add", name: "task" }));
   expect(added._tag).toBe("accepted");

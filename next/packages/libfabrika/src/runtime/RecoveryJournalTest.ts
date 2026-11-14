@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // P34c slice 2, J2, J4, J5, J6, J7, J9 and J12 on real stores (0062): the laws, and no driver. The
 // module that owns a driver calls `RecoveryJournalTest.suite(rig)`; `rig.open` acquires one store in
 // a scope and gives it back when that scope closes (0061).
@@ -43,6 +54,9 @@ export type Rig = {
 const NAME = "counter:1";
 const BUILD = "build-a";
 const SEED = 119120;
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const RUNS = 40;
 const CUTS = ["after_observation", "after_dead", "after_exit", "after_start", "after_checkpoint"] as const;
 const pid = (n: number): string => `process_0000000000e00800${String(n).padStart(10, "0")}`;
@@ -67,7 +81,7 @@ const Msg = Schema.Union([
 ]);
 
 /** An Error whose class is named `name`, as a program's own error class would be. */
-const thrown = (name: string): Error => {
+const thrown = (name: string): Error => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const named = { [name]: class extends Error {} }[name] ?? Error;
   return new named("private failure text");
 };

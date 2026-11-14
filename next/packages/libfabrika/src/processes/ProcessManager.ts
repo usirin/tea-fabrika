@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The process manager: the one writer of process lifecycle events, after OTP's process calls.
  *
  * It starts and ends processes, keeps watches and writes their `DOWN` letters. Every line it
@@ -32,6 +43,9 @@ import {
   type State,
 } from "./Process.ts";
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const tag = (word: string): string => `fab.process.${word}`;
 const id = (...parts: ReadonlyArray<Schema.Json>): string => JSON.stringify(parts);
 const Send = Schema.TaggedStruct("send", { m: Down });
@@ -43,7 +57,7 @@ type Failure = ProcessError | LedgerError;
  */
 type Wiring = Caller & { readonly by: string };
 
-const failed = Effect.fnUntraced(function* (error: Failure) {
+const failed = Effect.fnUntraced(function* (error: Failure) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   yield* Effect.annotateCurrentSpan({ [tag("answer")]: "refused", [tag("reason")]: error.reason });
 });
 

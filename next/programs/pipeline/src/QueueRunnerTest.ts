@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Cause, Effect, Exit, Fiber, Logger, Redacted, Schema, type Scope, type Tracer } from "effect";
 import * as fc from "fast-check";
@@ -63,10 +74,13 @@ export type Driver = {
   readonly unleaked: (outputs: ReadonlyArray<string>, secrets: ReadonlyArray<string>) => void;
 };
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const replies = (snapshot: Snapshot, change: number) =>
   snapshot.letters.filter((l) => l.name === `lane:${change}`).map((l) => Schema.decodeUnknownSync(Mail.Reply)(l.m));
 
-const finish = Effect.fnUntraced(function* (h: World) {
+const finish = Effect.fnUntraced(function* (h: World) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   for (let turn = 0; turn < 96; turn++) {
     const state = (yield* h.snapshot).model;
 

@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 import { Outcome } from "@demlik/tea";
 import { Ci, CodeHost, type Handler } from "@kampus/libfabrika";
 import { Cause, Effect, Schema } from "effect";
@@ -7,6 +18,9 @@ export class HandlerDefect extends Schema.TaggedError<HandlerDefect>()("HandlerD
   cmd: Schema.Literals(["change", "update", "checks", "merge"]),
 }) {}
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const Fault = Schema.TaggedUnion({ unavailable: {}, rate_limited: {}, refused: {} });
 
 const faults = {
@@ -26,7 +40,7 @@ const outcome =
       Effect.catchTag(["CodeHostError", "CiError"], (error) =>
         Effect.succeed(Outcome.err(faults[error.reason._tag].make({}))),
       ),
-      Effect.catchCause((cause) => {
+      Effect.catchCause((cause) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
         if (Cause.hasInterrupts(cause)) {
           return Effect.interrupt;
         }

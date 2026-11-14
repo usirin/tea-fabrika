@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // P33 uses layer(caller, nextId). Caller is trusted wiring, never From.
 // The plan leaves Caller's fields unnamed; tests use {owner, recipient}, plus `by`, the brain's
 // own writer key, which `manager()` adds to every caller.
@@ -73,6 +84,9 @@ export const watcher = (process: string): Caller => ({
  */
 export const ERROR_CLASS_MAX = 256;
 const ErrorClass = Schema.NonEmptyString.check(Schema.isMaxLength(ERROR_CLASS_MAX));
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 export const PHASES = ["step", "saved_letter", "interrupted"] as const;
 
 export const ExitReason = Schema.TaggedUnion({
@@ -161,7 +175,7 @@ const folder = mkdtempSync(join(tmpdir(), "p33-"));
 const opened: Array<DatabaseSync> = [];
 let files = 0;
 
-afterAll(() => {
+afterAll(() => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   for (const db of opened) {
     if (db.isOpen) {
       db.close();

@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 import { Context, Effect, Layer } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { RecordedStart } from "../settings/RecordedStart.ts";
@@ -7,6 +18,9 @@ import { projectStub, recordedLayer, rpc, type BrainOptions, type Env } from "./
 // Worker bindings are immutable for an isolate, so a recorded start is kept by its `env` object. Only a
 // finished read is kept, never one still under way: the platform gives each request to a Worker its own
 // I/O context, and cancels as hung a request that waits on work another request started.
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const isolates = new WeakMap<Env, Context.Context<RecordedStart>>();
 
 /**
@@ -23,7 +37,7 @@ const isolates = new WeakMap<Env, Context.Context<RecordedStart>>();
  * @category getters
  */
 export const httpContext = (env: Env) =>
-  Effect.suspend(() => {
+  Effect.suspend(() => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
     const known = isolates.get(env);
 
     return known !== undefined

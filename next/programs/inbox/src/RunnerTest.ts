@@ -1,9 +1,23 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // Ticket 884, next/: the app supplies real runner wiring so this program imports only the library's front (0062).
 import { describe, expect, it } from "@effect/vitest";
 import type { ProgramRunner } from "@kampus/libfabrika";
 import { Arbitrary, Effect, Schema, type Scope } from "effect";
 import { inbox, Row } from "./program.ts";
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 type Runner = ProgramRunner["Service"];
 type Writer = unknown;
 
@@ -25,7 +39,7 @@ export type Open = Effect.Effect<
 const TRACE = { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" };
 
 export const suite = (open: Open) =>
-  describe("ticket 884 the inbox program at the runner", () => {
+  describe("ticket 884 the inbox program at the runner", () => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
     it.live.prop(
       "I2: a person, an agent and a recovered device cannot send added or change the brain's rows",
       [Schema.Literals(["person", "agent", "recovered"]), Arbitrary.schema(inbox.msg)],

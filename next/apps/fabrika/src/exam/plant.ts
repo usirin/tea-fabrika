@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // Lints planted files the way `pnpm lint` does, for the exam's rule tests. The files go into a
 // fresh folder that holds the repo's own `.oxlintrc.json` and its plugin folder, at the paths they are
 // given (`next/packages/tuval/src/window/use-model.ts`), so the rules' own edge paths and the config's
@@ -13,6 +24,9 @@ interface Fire {
   readonly line: number;
 }
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const Report = Schema.Struct({
   number_of_files: Schema.Number,
   diagnostics: Schema.Array(
@@ -32,7 +46,7 @@ const readReport = Schema.decodeUnknownSync(Schema.fromJsonString(Report));
  */
 export const plant = (
   files: Readonly<Record<string, string>>,
-): Promise<(code: string, file: string) => readonly number[]> => {
+): Promise<(code: string, file: string) => readonly number[]> => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Vitest awaits this test helper's Promise
   return Effect.runPromise(
     lint(files).pipe(

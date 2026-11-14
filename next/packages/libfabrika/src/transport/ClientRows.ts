@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 import { Context, type Effect, Schema } from "effect";
 
 /** The class of a failure, from a fixed list of words. Never a message, a stack or a value. */
@@ -26,6 +37,9 @@ const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 /**
  * One checked observation. Ids, counts, durations and fixed words only: no program body, no key
  * material, no message text. Client clocks and durations are measurements, never authority.
+ */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
  */
 export const ClientRecord = Schema.TaggedUnion({
   key: { result: Schema.Literals(["created", "reused", "replaced"]) },

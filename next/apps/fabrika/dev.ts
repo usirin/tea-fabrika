@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Id } from "@kampus/libfabrika";
 import type { LedgerCalls } from "@kampus/libfabrika/ledger/Ledger";
@@ -12,6 +23,9 @@ import { Config, Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { Command, Flag, Prompt } from "effect/cli";
 import { Digest, SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 import { build } from "./src/build.ts";
 import { localInstance } from "./src/local-instance.ts";
 import { Founding } from "./src/settings.ts";
@@ -27,7 +41,7 @@ const declarations = Declarations.all.declarations;
 // Each declared setting is a flag at its own path, as --instance.port. --port stays the port's
 // alias, for the commands and instance tests written before the setting.
 const settings = Object.fromEntries(
-  declarations.map((d) => {
+  declarations.map((d) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
     const flag = Flag.String(d.path);
     return [d.path, (d === Declarations.port ? Flag.withAlias(flag, "port") : flag).pipe(Flag.withDefault(undefined))];
   }),

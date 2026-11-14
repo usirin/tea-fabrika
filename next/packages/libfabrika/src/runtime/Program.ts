@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * A program: a pure tea machine and the declarations the runner checks it by. A program gets no
  * sender, key, ledger or service. `stepper` steps it by hand, as Elm's runtime would, and never
  * runs a Cmd: the runner does that, after the input is saved.
@@ -226,6 +237,9 @@ type Description =
       readonly answer?: never;
     };
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 type Port<M extends Typed, K, P> = P extends Pick<typeof InputSchema.cases.read.Type, "_tag"> & {
   readonly schema: infer Q extends Declared;
 }
@@ -396,7 +410,7 @@ const make = <
   A extends Declared = Declared,
 >(
   spec: Spec<T, V, I, O, W, A>,
-): Program<T, V, I, O, W, A> => {
+): Program<T, V, I, O, W, A> => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const checked = construct(spec);
 
   if (Result.isFailure(checked)) {

@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The React Compiler's one compile step, and the check on what it skipped
  * (docs/direction/react-compiler.md).
  *
@@ -89,11 +100,14 @@ interface Fn {
 // oxc-parser's tree, read loosely: the check only walks it.
 type Tree = any;
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const FUNCTIONS = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
 const lineAt = (text: string, at: number) => text.slice(0, at).split("\n").length;
 
 /** Whether a function body opens with `"use no memo"`, among its other directives. */
-const saysNoMemo = (body: Tree): boolean => {
+const saysNoMemo = (body: Tree): boolean => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   if (body?.type !== "BlockStatement") {
     return false;
   }

@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // Health in two levels, over an object's own SQLite: a raw row per ended span, and an hourly summary
 // per piece, both kept forever. Raw rows stay local about two weeks, then leave for R2, one file per
 // object per UTC day, deleted here only after the stored file's hash matches. A row of the day that
@@ -72,6 +83,9 @@ const decodeHealth = Schema.decodeUnknownSync(HealthColumns);
 const decodeHour = Schema.decodeUnknownSync(Schema.Struct({ hour: Schema.Int }));
 const decodeDay = Schema.decodeUnknownSync(Schema.Struct({ day: Schema.Int }));
 const decodeCount = Schema.decodeUnknownSync(Schema.Struct({ n: Schema.Int }));
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const decodeSeq = Schema.decodeUnknownSync(Schema.Struct({ seq: Schema.Int }));
 
 const decodeSummary = Schema.decodeUnknownSync(
@@ -91,7 +105,7 @@ const decodeSummary = Schema.decodeUnknownSync(
 const healthRows = (sql: Sql, query: string, ...params: ReadonlyArray<number>): Array<Measurements> =>
   sql.exec(query, ...params).map((row) => toHealth(row));
 
-const toHealth = (row: unknown): Measurements => {
+const toHealth = (row: unknown): Measurements => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const { ok, ...rest } = decodeHealth(row);
   return { ...rest, ok: ok === 1 };
 };

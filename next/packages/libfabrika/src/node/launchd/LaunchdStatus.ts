@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * Narrow decoding of launchctl's non-API print output.
  *
  * @stability unstable
@@ -8,6 +19,9 @@ import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import { BrainControlError, Command, Status, Unsupported } from "../../desktop/BrainControl.ts";
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const Response = Schema.Struct({
   target: Schema.String.check(Schema.isPattern(/^gui\/[0-9]+\/[a-zA-Z0-9._-]+$/u)),
   code: Schema.Int,
@@ -31,7 +45,7 @@ const scalar = Schema.is(Scalar);
  * @stability unstable
  * @category decoding
  */
-export const decode = Effect.fnUntraced(function* (input: typeof Response.Type) {
+export const decode = Effect.fnUntraced(function* (input: typeof Response.Type) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const failed = (cause: unknown) =>
     new BrainControlError({ reason: new Unsupported({ cause: Redacted.make(cause) }) });
   const response = yield* Schema.decodeUnknownEffect(Response)(input).pipe(Effect.mapError(failed));

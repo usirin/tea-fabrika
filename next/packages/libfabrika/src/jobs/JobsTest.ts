@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // P39 slice 1, L1 to L8 on a real store (0062): the laws, and no driver. A runner in the module that
 // owns a driver calls `JobsTest.suite(open)`; `open` acquires one store in a scope and gives it back
 // when that scope closes. Each law walks a decision tape (0093): every cell is read against the jobs
@@ -102,7 +113,7 @@ export type Said = Omit<Recorded, "seen">;
 export const copied = <A>(value: A): A => JSON.parse(JSON.stringify(value)) as A;
 
 /** The item a tape number picks; never called on an empty list. */
-export const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
+export const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const item = items[pick % items.length];
 
   if (item === undefined) {
@@ -192,6 +203,9 @@ export const BAD_REQUEST: ReadonlyArray<readonly [string, unknown]> = [
   ["traceId", "XYZ"],
 ];
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 export const BAD_EXECUTOR: ReadonlyArray<readonly [string, unknown]> = [
   ["key", ""],
   ["key", MISSING],

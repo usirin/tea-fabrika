@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // T695, next/. The door's storage and its SYN-cookie keys keep the failure they translate (decision
 // 0043 rule 12). A suite on any `Sql`, read through its module as `GatewayCauseTest.suite(law, harness)`;
 // the module that owns the driver runs it, and gives the ledger's error class, which a gateway file
@@ -23,6 +34,9 @@ const failures: fc.Arbitrary<object> = fc.oneof(
 );
 
 /** The error the door's store fails with, named through its own calls. */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 type StoreError = Effect.Error<ReturnType<ReturnType<typeof gatewayStore>["atomic"]>>;
 
 /** What the module that owns the driver gives: fresh storage, and the stores' error class. */
@@ -39,7 +53,7 @@ export type Law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) =>
 /** The same `Sql`, but each transaction throws `failure`, as SQLite does on a full disk. */
 const throwing = (sql: Sql, failure: unknown): Sql => ({
   ...sql,
-  transaction: () => {
+  transaction: () => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
     throw failure;
   },
 });

@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // P42 slice 1 (ticket 770), next/: the helpers L9, L10 and L11 share. They build two test programs into a
 // real local instance in a scope, as ticket 402's supervision test does: `starter` asks the host to
 // start a child with the built-in `start_child`, and `child` counts `inc` and throws on `throw`. The
@@ -20,6 +31,9 @@ import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 import { projectRuntime, type Env } from "./runtime.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -27,7 +41,7 @@ export const SENT = "2026-11-11T04:00:00.000Z";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 export const PROJECT = "p42-children";
 
-const field = (value: Buffer | string) => {
+const field = (value: Buffer | string) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const body = Buffer.from(value);
   const n = Buffer.alloc(4);
   n.writeUInt32BE(body.length);

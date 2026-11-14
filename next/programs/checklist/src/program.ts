@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // The checklist, next/: the example program that uses every part of a program (0125). A pure tea
 // machine and its declarations, on P11's `Program.make` until ticket 302 moves it to the decided
 // shape. Time comes in only as the runner's `timer {at, arrivedAt}`, never from a clock here.
@@ -44,6 +55,9 @@ type Item = typeof Item.Type;
 const Model = Schema.Struct({ items: Schema.Array(Item) });
 type Model = typeof Model.Type;
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("add"), name: Name }),
   Schema.Struct({ type: Schema.Literal("rename"), name: Name, to: Name }),
@@ -94,7 +108,7 @@ export const checklistMachine = Machine.make({
 const open = (i: Item) => i.state._tag !== "checked";
 
 /** `taken` when the new name exists, `missing` when the named item does not. */
-const refuse = (m: Model, msg: Msg): Refusal | null => {
+const refuse = (m: Model, msg: Msg): Refusal | null => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const has = (name: string) => m.items.some((i) => i.name === name);
 
   if (msg.type === "timer") {

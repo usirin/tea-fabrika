@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * Turns one incoming JSON-RPC text frame into the text to send back and the attachment to keep.
  *
  * @stability unstable
@@ -17,6 +28,9 @@ const Request = Schema.fromJsonString(
   }),
 );
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 type Online = typeof Attached.cases.online.Type;
 
 type Frame<A extends typeof Attached.Type, E, R, E2, R2> = [
@@ -65,7 +79,7 @@ const isOnline = <E, R, E2, R2>(frame: Incoming<E, R, E2, R2>): frame is Frame<O
  */
 export const answerFrame = Effect.fn("transport.answerFrame")(function* <E, R, E2, R2, A extends typeof Attached.Type>(
   ...frame: Incoming<E, R, E2, R2> & { readonly 1: A }
-) {
+) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const text = frame[0];
   const attached: A = frame[1];
   const request = Schema.decodeUnknownResult(Request)(text);

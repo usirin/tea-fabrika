@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // P17b slice 2, next/. Real runner storage. Each session opens new scoped connections.
 import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous SQLite transaction handle
 import { applyCell } from "@demlik/tea";
@@ -28,6 +39,9 @@ import * as NemesisLedger from "../runtime/NemesisLedger.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
 import { ProgramRunner } from "../runtime/Runner.ts";
 import { StepFault } from "../runtime/StepFault.ts";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 import * as StepFaultNone from "../runtime/StepFaultNone.ts";
 import type { Sql } from "../Sql.ts";
 import { Archive } from "../telemetry/Archive.ts";
@@ -69,7 +83,7 @@ const from = {
 
 const connection = (file: string): Effect.Effect<Sql, never, Scope.Scope> =>
   Effect.acquireRelease(
-    Effect.sync(() => {
+    Effect.sync(() => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
       const db = new DatabaseSync(file);
       // A test process never loses power, so it skips the sync and keeps the rollback journal in memory,
       // as Process.test-support does. Every byte a law reads stays in the file and survives reopen.

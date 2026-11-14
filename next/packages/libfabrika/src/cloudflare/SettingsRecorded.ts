@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The layer that puts an instance start on record and hands it on as `RecordedStart`.
  *
  * @stability unstable
@@ -6,6 +17,9 @@
 import { Effect, Layer } from "effect";
 import { Digest } from "effect/crypto";
 import { RecordedStart } from "../settings/RecordedStart.ts";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 import type * as Start from "../settings/Start.ts";
 import { Decode, Starts, StartsError } from "../settings/Starts.ts";
 import * as SettingsInput from "./SettingsInput.ts";
@@ -29,7 +43,7 @@ import * as SettingsInput from "./SettingsInput.ts";
 export const layer = (input: Start.Input) =>
   Layer.effect(
     RecordedStart,
-    Effect.gen(function* () {
+    Effect.gen(function* () {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
       const checked = yield* SettingsInput.check(input).pipe(
         Effect.mapError((cause) => new StartsError({ reason: new Decode({ cause }) })),
       );

@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // T695, next/. The runtime's stores keep the failure they translate (decision 0043 rule 12). A
 // suite on any `Sql`, read through its module as `RuntimeCauseTest.suite(law, harness)`; the module
 // that owns the driver runs it and gives the ledger the stores read, so this file names no ledger
@@ -32,6 +43,9 @@ import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherM
 import { Supervision } from "./internal/supervisor.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Input, ProgramDown } from "./Program.ts";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 import { RecoveryStore, recoveryStore as openRecovery } from "./RecoveryStore.ts";
 import { ProgramRunner, RunnerError, type RunnerOptions } from "./Runner.ts";
 
@@ -50,7 +64,7 @@ const reasons = fc.constantFrom("unreachable", "bad_row", "storage", "refused", 
 export type Law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effect.Effect<void, unknown>) => void;
 
 /** The same `Sql`, but each query throws `failure` once armed. */
-const throwing = (sql: Sql, failure: unknown): { readonly sql: Sql; readonly arm: () => void } => {
+const throwing = (sql: Sql, failure: unknown): { readonly sql: Sql; readonly arm: () => void } => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   let armed = false;
   return {
     sql: {

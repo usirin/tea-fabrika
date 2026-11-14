@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The local runtime's life as one tea machine. The driver in `dev.ts` sends it what the runtime
  * reports and reads the state back; nothing here does input or output.
  *
@@ -61,6 +72,9 @@ export const DevState = Schema.TaggedUnion({
 });
 type DevState = typeof DevState.Type;
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("listened"), port: Schema.Int }),
   Schema.Struct({
@@ -85,7 +99,7 @@ type Ctx = { readonly last: string | null };
 
 const none = Replacement.cases.none.make({});
 
-const heard = (port: number | null): Listener => {
+const heard = (port: number | null): Listener => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   if (port === null || port === 0) {
     return Listener.cases.absent.make({});
   }

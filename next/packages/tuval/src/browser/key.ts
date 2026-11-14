@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // The browser's window key, next/ (Tier 1, P14; experiment 215). One Ed25519 key pair per browser
 // profile, made with `extractable: false` and kept in IndexedDB as the `CryptoKeyPair` itself, so
 // the private half can sign and can never be read out. Only the public half leaves: as the raw
@@ -26,6 +37,9 @@ const USES: Array<KeyUsage> = ["sign", "verify"];
  *  `TypeError`, else `other`. Never its message. */
 const platformName = errorClass;
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const storeFailure = (op: StoreError["op"]) => (error: unknown) => new StoreError({ op, error: platformName(error) });
 
 type Stored = {
@@ -44,7 +58,7 @@ const isStored = (u: unknown): u is Stored =>
   typeof u.raw === "string";
 
 /** One IndexedDB request as an Effect. */
-const request = Effect.fnUntraced(function* <A>(op: StoreError["op"], make: () => IDBRequest<A>) {
+const request = Effect.fnUntraced(function* <A>(op: StoreError["op"], make: () => IDBRequest<A>) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   return yield* Effect.callback<A, StoreError>((resume) => {
     try {
       const req = make();

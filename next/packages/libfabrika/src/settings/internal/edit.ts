@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 import { Equal, Predicate, Result } from "effect";
 
 /** @internal */
@@ -57,6 +68,9 @@ export const prefix = (parent: Path, path: Path): boolean =>
 const same = (left: Path, right: Path): boolean => left.length === right.length && prefix(left, right);
 
 /** @internal */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 export const read = (value: unknown, path: Path): unknown =>
   path.reduce<unknown>(
     (parent, key) =>
@@ -64,7 +78,7 @@ export const read = (value: unknown, path: Path): unknown =>
     value,
   );
 
-const equal = (left: unknown, right: unknown): boolean => {
+const equal = (left: unknown, right: unknown): boolean => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   if (Predicate.isDate(left) || Predicate.isDate(right)) {
     return Equal.equals(left, right);
   }

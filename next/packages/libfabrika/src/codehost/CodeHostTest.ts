@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 import { describe, expect, it } from "@effect/vitest";
 import { Context, Effect, Layer, Redacted, Schema } from "effect";
 import * as fc from "fast-check";
@@ -28,6 +39,9 @@ export type ChangeData = typeof Change.cases.found.Type & {
 
 export type Method = "change" | "update" | "merge";
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 export type Fault =
   | { readonly kind: "fault"; readonly reason: "unavailable" | "rate_limited" | "refused" }
   | { readonly kind: "defect" }
@@ -54,7 +68,7 @@ const reasons = { unavailable: Unavailable, rate_limited: RateLimited, refused: 
 
 export const layer = (options: { readonly token?: Redacted.Redacted<string> } = {}): Layer.Layer<CodeHost | Control> =>
   Layer.effectContext(
-    Effect.sync(() => {
+    Effect.sync(() => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
       const changes = new Map<number, ChangeData>();
       const updates = new Map<string, typeof Updated.cases.updated.Type>();
       const merges = new Map<string, typeof Merged.cases.merged.Type>();

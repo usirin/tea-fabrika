@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // P41 slices 1 and 2 (tickets 744 and 764), next/: program mail's shared driver on node:sqlite (0062). This module owns
 // the driver, so it acquires every store and the alarm driver in a scope, and the scope gives each
 // file and handle back (0061). The alarm driver saves an alarm in its own real database before it
@@ -8,6 +19,9 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Effect } from "effect";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 import type * as ProcessesProgramMailTest from "../processes/ProgramMailTest.ts";
 import type * as RuntimeProgramMailTest from "../runtime/ProgramMailTest.ts";
 import type { Sql } from "../Sql.ts";
@@ -19,7 +33,7 @@ const folder = Effect.acquireRelease(
 );
 
 /** One database file per part, each opened on first use; `reopen` closes and reopens every one. */
-const databases = Effect.gen(function* () {
+const databases = Effect.gen(function* () {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const path = yield* folder;
   const held = new Map<string, { db: DatabaseSync; sql: Sql }>();
   const connect = (part: string) => {

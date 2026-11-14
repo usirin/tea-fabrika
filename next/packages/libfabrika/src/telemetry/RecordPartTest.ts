@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // P12, next/. A single real SQLite part, reopened as an object would be on storage wake.
 // P37 already owns manager traversal. Here the new adapter must not alias multiple parts.
 // The laws, and no driver (0062): a runner in the module that owns a driver calls
@@ -25,6 +36,9 @@ type Part = {
   deleteContent: (span: string, by: { by: string; at: number; reason: string }) => Effect.Effect<Lookup, unknown>;
 };
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const SEED = 119120;
 const pageBoundary: [number, string, number] = [503, "private failure", 42];
 const rollAtCap: [number[], number, number] = [[1, 2], 1000, 0];
@@ -60,7 +74,7 @@ const span = (n: number): SpanRow => ({
 
 const reopen = (open: Open, total: number, content: string, at: number) =>
   Effect.scoped(
-    Effect.gen(function* () {
+    Effect.gen(function* () {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
       // oxlint-disable-next-line fabrika/no-promises -- edge: the law loads the adapter as its wiring plant does
       const { recordPart } = yield* Effect.promise(() => import("./RecordPart.ts"));
       const store = yield* open("file");

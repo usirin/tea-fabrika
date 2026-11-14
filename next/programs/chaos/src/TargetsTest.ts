@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // next/, P17b slice 3. The app supplies the real checklist and scoped SQLite wiring (0062).
 // After build plants: omit StepFault.before, charge saved folds, reset the arm per process,
 // wrap the original error class, repeat a dead write, recompute a saved refusal, drop a note.
@@ -42,6 +53,9 @@ export type Open = Effect.Effect<
   Scope.Scope
 >;
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const NAME = "checklist:1";
 const PROGRAM = "fabrika/checklist";
 const options = { arbitrary: { seed: 119120, runs: 25 }, timeout: 120_000 };
@@ -57,7 +71,7 @@ const View = Schema.Struct({
   left: Schema.Int,
 });
 
-const shown = (raw: unknown) => {
+const shown = (raw: unknown) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const view = Schema.decodeUnknownSync(View)(raw);
   return { ...view, items: [...view.items].sort((a, b) => a.name.localeCompare(b.name)) };
 };

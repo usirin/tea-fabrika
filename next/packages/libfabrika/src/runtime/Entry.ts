@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * What a program runner is given: the programs it may load, the gateway's checked writer, the
  * watchers, the object's one alarm, and the recording flush. The Worker's runtime wires the real
  * ones to object calls, the Worker Loader and the span sink; Node tests wire the same shapes.
@@ -78,6 +89,9 @@ export const Incoming = Schema.Struct({
  * @stability unstable
  * @category models
  */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 export type Incoming = typeof Incoming.Type;
 
 /**
@@ -134,7 +148,7 @@ export class ProgramLoader extends Context.Service<
   ): Layer.Layer<ProgramLoader, never, R> =>
     Layer.effect(
       ProgramLoader,
-      Effect.gen(function* () {
+      Effect.gen(function* () {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
         const context = yield* Effect.context<R>();
         return {
           load: Effect.fn("loader.load")(function* (name: string, build = "node") {

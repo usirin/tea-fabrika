@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * Replayable fault draws. Version 1 fixes the generator and case order.
  *
  * @stability unstable
@@ -16,6 +27,9 @@ const Word = Schema.Int.check(Schema.isBetween({ minimum: -0x80000000, maximum: 
  * @stability unstable
  * @category schemas
  */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 export const Schedule = Schema.Struct({ version: Schema.Literal(1), words: Schema.Tuple([Word, Word, Word, Word]) });
 
 const words = Schema.decodeUnknownSync(Schedule.fields.words);
@@ -31,7 +45,7 @@ export const seed = (value: number): typeof Schedule.Type => ({
   words: words(xoroshiro128plus(value).getState()),
 });
 
-const select = (choice: number, start: typeof Chaos.Start.Type): Chaos.Fault => {
+const select = (choice: number, start: typeof Chaos.Start.Type): Chaos.Fault => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const { target } = start;
 
   switch (choice) {

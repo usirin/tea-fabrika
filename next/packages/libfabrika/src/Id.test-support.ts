@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 import { Arbitrary, Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Id from "./Id.ts";
@@ -9,7 +20,10 @@ export const processClocks = Arbitrary.schema(
 );
 
 // Encode independently of Id.Generator so these laws also catch an encoder or decoder mistake.
-const encodeProcess = (at: number, random: ReadonlyArray<number>): string => {
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
+const encodeProcess = (at: number, random: ReadonlyArray<number>): string => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const bytes = Uint8Array.from([
     ...Array.from({ length: 6 }, (_, i) => Number((BigInt(at) >> BigInt((5 - i) * 8)) & 255n)),
     ...random.map((byte, i) => (i === 0 ? (byte & 15) | 0x70 : i === 2 ? (byte & 63) | 0x80 : byte)),

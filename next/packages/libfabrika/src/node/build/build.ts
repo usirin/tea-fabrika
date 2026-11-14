@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The one-file build: every selected program as a sealed Worker Loader module, every window
  * script, chunk and stylesheet, the tab's script and page, and the brain that carries them all as
  * text. Nothing is published until every bundle and the Compiler check pass; a failure keeps the
@@ -82,10 +93,13 @@ const Manifest = Schema.Struct({
 });
 
 const fail = (reason: string) => (cause: unknown) => new BuildError({ reason, cause });
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const bytes = (text: string) => new TextEncoder().encode(text).byteLength;
 
 // The window a selected package exports, if any. A path, not a package name, has no manifest.
-const findWindow = Effect.fn("build.manifest")(function* (from: string, selected: string) {
+const findWindow = Effect.fn("build.manifest")(function* (from: string, selected: string) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
 

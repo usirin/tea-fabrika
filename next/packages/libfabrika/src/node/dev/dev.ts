@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The local brain's driver on Node: it starts the local runtime through a deploy the caller
  * gives, follows its starts, exits and restarts, and hands back stand-ins for its bindings that
  * call it over a private control socket.
@@ -17,6 +28,9 @@ import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
 import { ControlPlugin } from "./ControlPlugin.ts";
 import { devRecording } from "./dev-recording.ts";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 import { address, devLife, latest, pending, target } from "./DevLife.ts";
 import { brainOutbox, checkMemory } from "./local-dev.ts";
 
@@ -36,7 +50,7 @@ type Cause = {
 };
 
 // The token a move consumed, so its replacement is settled once.
-const consumed = (prev: Life, next: Life) => {
+const consumed = (prev: Life, next: Life) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const id = pending(prev);
   return id !== null && pending(next) !== id ? id : null;
 };

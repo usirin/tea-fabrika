@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // P42 slice 1's test program, next/ (ticket 770): one tea machine, made by one factory per program
 // name, that asks the host to start children with the built-in `start_child` and ends itself with the
 // built-in `exit`, as `mailRequester.test-support.ts` does with `send`. A step may list Cmds before
@@ -34,6 +45,9 @@ const Ask = Schema.Struct({
   drop: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const Start = Schema.Struct({
   type: Schema.Literal("start"),
   ask: Ask,
@@ -58,7 +72,7 @@ const Ping = Schema.Struct({ type: Schema.Literal("ping"), parent: Schema.option
 export const Msg = Schema.Union([Start, End, Ping]);
 
 /** The Cmd for one ask, with its extra fields beside and its dropped operands gone. */
-const asked = (ask: typeof Ask.Type) => {
+const asked = (ask: typeof Ask.Type) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const operands: Record<string, unknown> = {
     program: ask.program,
     name: ask.name,

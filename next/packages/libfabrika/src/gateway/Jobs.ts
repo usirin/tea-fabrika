@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * Job methods over an authenticated connection, called inside the shared write turn.
  *
  * @stability unstable
@@ -12,6 +23,9 @@ import { Answer, type Attached } from "../transport/Wire.ts";
 import * as JobAccess from "./JobAccess.ts";
 
 const Meta = { sentAt: Schema.String, seen: Rev };
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const Take = Schema.Struct({ process: ProcessId, ...Meta });
 const Read = Schema.Struct({ process: ProcessId, job: Schema.NonEmptyString });
 const Started = Schema.Struct({ ...Read.fields, execution: Schema.NonEmptyString, ...Meta });
@@ -34,7 +48,7 @@ const ok = (result: Schema.Json) => Answer.cases.ok.make({ result });
  * @category routing
  */
 export const route = Effect.fn("gateway.jobs")(
-  function* (jobs: Jobs["Service"], attached: typeof Attached.cases.online.Type, method: string, input: unknown) {
+  function* (jobs: Jobs["Service"], attached: typeof Attached.cases.online.Type, method: string, input: unknown) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
     const { identity, has, build, client } = attached;
 
     if (identity.as !== "hands") {

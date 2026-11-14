@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // T641 slice 1: the stores `RecordPartTest.suite` runs on, over node:sqlite (0061, 0062). This module
 // owns the driver, so the raw handle stays here: the suite sees only `Sql`, and each handle and
 // folder is acquired in a scope that gives it back.
@@ -8,6 +19,9 @@ import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type * as RecordPartTest from "../telemetry/RecordPartTest.ts";
 
 /** What the support did, in order, for its lifecycle laws. A watch that throws fails that step. */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 export type Event =
   | { readonly step: "folder"; readonly path: string }
   | { readonly step: "opening"; readonly file: string }
@@ -18,7 +32,7 @@ export type Watch = (event: Event) => void;
 
 const handle = (file: string, watch: Watch) =>
   Effect.acquireRelease(
-    Effect.sync(() => {
+    Effect.sync(() => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
       watch({ step: "opening", file });
       const db = new DatabaseSync(file);
       watch({ step: "opened", file, db });

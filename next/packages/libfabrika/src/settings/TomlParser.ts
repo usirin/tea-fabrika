@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The only adapter that knows the TOML parser and serializer. Edit receives source positions and text.
  *
  * @stability unstable
@@ -16,7 +27,7 @@ const key = (node: AST.TOMLKey): Array<string> => getStaticTOMLValue(node);
 const syntax = (text: string): AST.TOMLProgram => parseTOML(`${text} `);
 
 // Own properties matter here: TOML keys may spell __proto__, constructor or toString.
-const put = (table: object, path: Edit.Path, value: unknown): void => {
+const put = (table: object, path: Edit.Path, value: unknown): void => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   let parent = table;
 
   for (const [i, segment] of path.entries()) {
@@ -137,6 +148,9 @@ const index = (text: string, program: AST.TOMLProgram): Edit.Index => {
   return { value, assignments, inlines, sections, comments: program.comments.map(range) };
 };
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const failure = (reason: Syntax | Value | Conflict, line: number): TomlError =>
   new TomlError({
     reason,

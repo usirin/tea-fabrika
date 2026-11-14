@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // One job's control state, one Msg at a time (0037, 0046). `JobsLedger.ts` folds a job's committed
 // events through it, steps the call it was given, and appends that call only when the answer is
 // `accepted`. A repeat answers `repeated`; a refusal names its reason. Neither changes the state.
@@ -27,6 +38,9 @@ const Answer = Schema.TaggedUnion({
 type Answer = typeof Answer.Type;
 
 const Model = Schema.Struct({ state: State, answer: Answer });
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 type Model = typeof Model.Type;
 
 /** @internal */
@@ -53,7 +67,7 @@ export const job = Machine.make({
   cmds: [],
   init: (loaded) => [loaded ?? { state: State.cases.absent.make({}), answer: Answer.cases.none.make({}) }, []],
   update: {
-    request: (model, { request }) => {
+    request: (model, { request }) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
       const s = model.state;
 
       if (s._tag === "absent") {

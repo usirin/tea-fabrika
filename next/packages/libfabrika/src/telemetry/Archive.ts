@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * Where an object's old measurements go: one R2 bucket behind our own small interface, so nothing
  * here imports Cloudflare. The object's wiring passes the bucket's calls in.
  *
@@ -36,7 +47,10 @@ const hex = (bytes: Uint8Array): string => Array.from(bytes, (byte) => byte.toSt
  * @stability unstable
  * @category constructors
  */
-export const sha256 = Effect.fn(function* (body: Uint8Array) {
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
+export const sha256 = Effect.fn(function* (body: Uint8Array) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const bytes = new Uint8Array(body);
   const fail = (cause: unknown) => new SinkError({ reason: "storage", held: 0, cause });
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto answers only with a Promise

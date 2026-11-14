@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * `node:sqlite` as a `Sql`, on its own subpath so the data layer's top level names no platform. It
  * backs tests and the local brain's span queue, never a ledger file of its own: the one ledger
  * lives in the project object.
@@ -9,7 +20,10 @@ import type { DatabaseSync, SQLOutputValue, StatementSync } from "node:sqlite"; 
 import type { Sql, SqlValue } from "../Sql.ts";
 
 /** The ledger writes text, integers and nulls only. A blob or a big integer is a row it never wrote. */
-const value = (column: SQLOutputValue): SqlValue => {
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
+const value = (column: SQLOutputValue): SqlValue => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   if (typeof column === "string" || typeof column === "number" || column === null) {
     return column;
   }

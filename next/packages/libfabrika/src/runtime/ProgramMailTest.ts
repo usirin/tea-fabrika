@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // P41 slices 1 and 2, next/ (tickets 744 and 764): two real runners exchange a request and its answer through durable
 // mailboxes, and no driver. A runner in the module that owns a driver calls
 // `ProgramMailTest.suite(open)`; `open` acquires real stores and the scoped alarm driver in a scope
@@ -97,6 +108,9 @@ const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const GHOST = "ghost:1";
 /** The brain's own session: a process ID no start in a walk reaches. */
 const DOOR = PIDS.at(-1) ?? "";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const PAIRS = [1, 2] as const;
 type Pair = (typeof PAIRS)[number];
 const requesterName = (k: Pair) => `requester:${k}`;
@@ -131,7 +145,7 @@ const timerMachine = Machine.make({
       { ...s, requests: s.requests + 1 },
       [send({ to: m.reply, m: { type: "answer", ref: m.ref, value: m.value + 1 } })],
     ],
-    crash: () => {
+    crash: () => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
       throw new TypeError("timer fixture crash");
     },
     send_ok: (s) => [s, []],

@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // The runner's recovery journal, next/ (P34c slice 2): one saved tea machine. Its `journal` names the
 // one unfinished job; the runner performs it and sends the completion Msg only after the write
 // succeeds. Nothing here reads a clock, a store or a service (0037, 0046).
@@ -33,6 +44,9 @@ const Origin = Schema.TaggedUnion({
 });
 type Origin = typeof Origin.Type;
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const StartTiming = Schema.TaggedUnion({ immediate: {}, scheduled: { until: Millis } });
 
 const Journal = Schema.TaggedUnion({
@@ -67,7 +81,7 @@ export const Supervision = Schema.Struct({
   /** Completed person restarts, so a repeated request completes once. */
   requests: Schema.Array(Schema.Struct({ id: Text, build: Text, process: ProcessId })),
 }).check(
-  Schema.makeFilter((s) => {
+  Schema.makeFilter((s) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
     const j = s.journal;
 
     if (j._tag === "stepping" && j.attempt.phase === "fresh") {

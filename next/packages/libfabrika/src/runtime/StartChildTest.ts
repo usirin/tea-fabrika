@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // P42 slice 1, next/ (ticket 770): the built-in `start_child` and `exit` Cmds on real runners, laws
 // L5 to L8, L11 and L13, and no driver. A runner in the module that owns a driver calls
 // `StartChildTest.suite(open)`; `open` acquires real stores in a scope and gives them back when that
@@ -68,7 +79,7 @@ const PIDS: ReadonlyArray<string> = Array.from(
   (_, n) => `process_0000000000e00800${String(n).padStart(10, "0")}`,
 );
 
-const ids = (...values: ReadonlyArray<string>) => {
+const ids = (...values: ReadonlyArray<string>) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   let calls = 0;
   return {
     next: Effect.sync(() => {
@@ -122,6 +133,9 @@ export const STARTS = [
 ];
 
 /** The host's mail grant: `sender:1` mails both starters, so their steps run on another process's letter. */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 export const HOST: Grants = { "sender:1": ["starter:1", "starter:2"] };
 
 /** Names the boot registers: two starters, one program that never declared the Cmds, and a sender. */

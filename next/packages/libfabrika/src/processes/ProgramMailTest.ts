@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // P41 slice 1, L3, L4, L5, L6, L8 and L11 on a real store (0062): program mail's delivery, fencing
 // and records, and no driver. A runner in the module that owns a driver calls
 // `ProgramMailTest.suite(open)`; `open` acquires one store in a scope and gives it back when that
@@ -36,7 +47,7 @@ const PIDS: ReadonlyArray<string> = Array.from(
   (_, n) => `process_0000000000e00800${String(n).padStart(10, "0")}`,
 );
 
-const ids = (...values: ReadonlyArray<string>) => {
+const ids = (...values: ReadonlyArray<string>) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   let calls = 0;
   return {
     next: Effect.sync(() => {
@@ -106,6 +117,9 @@ const granted = (source: string, to: string) => Object.hasOwn(GRANTS, source) &&
 type Delivery = Parameters<ProgramMail["Service"]["deliver"]>[0];
 
 /** What the fold knows, from its own moves only: never read back from the product. */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 type World = {
   /** Each registered name's current life. */
   readonly lives: Map<string, { process: string; live: boolean }>;

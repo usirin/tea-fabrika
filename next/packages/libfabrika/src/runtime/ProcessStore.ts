@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * A process's own storage: its saved model, its unfinished turn and its Cmds' dispatch state, kept
  * in the process object's SQLite. It also appends the runtime's own records to the process's
  * stream, and nothing else. Tables come with the first call.
@@ -51,6 +62,9 @@ export const Placed = Schema.Struct({ id: Schema.String, rev: Rev, pos: Rev });
  *
  * @stability unstable
  * @category models
+ */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
  */
 export type Placed = typeof Placed.Type;
 
@@ -159,7 +173,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
   ): Layer.Layer<ProcessStore, never, Ledger> =>
     Layer.effect(
       ProcessStore,
-      Effect.gen(function* () {
+      Effect.gen(function* () {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
         const ledger = yield* Ledger;
         let ready = false;
         const stored = Effect.fnUntraced(function* <A>(step: () => A) {

@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // A client's link to the brain, next/ (Tier 1, P14, law p5 with Tier 1's grant-wait amendment). A
 // pure tea machine: it holds where the link is, and every Msg that names a dial is about that dial
 // only, so a stale close, reply or timer does nothing. The socket that carries it is a Sub keyed by
@@ -55,6 +66,9 @@ const OnDial = { dial: Dial };
 /** How long the dial took to reach an outcome, in ms: a measurement, never authority. */
 const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 export const LinkMsg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("admitted"), ...OnDial, ping: Schema.Number, ms: Ms }),
   Schema.Struct({
@@ -105,7 +119,7 @@ export const backoff = (tries: number): number => Math.min(CAP, 500 * 2 ** Math.
 /** The timer the state waits on, or null when only a person can move it. A stall it fires carries
  *  the wait it ran as its `ms`: the timer starts when the state is entered, so that is how long the
  *  dial sat without an answer. */
-export const linkTimer = (link: Link): { readonly after: number; readonly msg: LinkMsg } | null => {
+export const linkTimer = (link: Link): { readonly after: number; readonly msg: LinkMsg } | null => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   switch (link._tag) {
     case "dialing":
       return { after: DIALING, msg: { type: "stalled", dial: link.dial, ms: DIALING } };

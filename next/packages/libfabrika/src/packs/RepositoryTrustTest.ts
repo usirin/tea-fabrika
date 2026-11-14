@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // T878, next/, L5/L6. Shared laws take a scoped real SQL driver (0062).
 // No second trust reducer lives here: the opening machine consumes these saved events.
 import { describe, expect, it } from "@effect/vitest";
@@ -13,6 +24,9 @@ import * as LoadSnapshot from "../settings/Snapshot.ts";
 import * as Sources from "../settings/Sources.ts";
 import type { Sql } from "../Sql.ts";
 import * as Open from "./Open.ts";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 import { Event, RepositoryTrust, TrustDecision } from "./RepositoryTrust.ts";
 import * as RepositoryTrustLedger from "./RepositoryTrustLedger.ts";
 
@@ -24,7 +38,7 @@ class TrustLawFailed extends Schema.TaggedError<TrustLawFailed>()("TrustLawFaile
 
 // Effect 4 owns schema generation; fast-check chooses its seed and the operation tape.
 const generated = <S extends Schema.ConstraintDecoder<unknown>>(schema: S): fc.Arbitrary<S["Type"]> =>
-  fc.nat().map((seed) => {
+  fc.nat().map((seed) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
     return Schema.decodeUnknownSync(schema)(
       // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's generator is synchronous
       Effect.runSync(Arbitrary.sampleEffect(Arbitrary.schema(schema), { seed, count: 1 }))[0],

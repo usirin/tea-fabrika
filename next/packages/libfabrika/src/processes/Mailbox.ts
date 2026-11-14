@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The mailbox: how a letter gets into a name's inbox and comes back out.
  *
  * A letter goes into an inbox once per id, and comes back out as a `Letter`, in order. Delivery is
@@ -82,6 +93,9 @@ export type History = Letter & {
 const STREAM = "messaging.destination.name";
 const ID = "messaging.message.id";
 const OPERATION = "messaging.operation.type";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const tag = (word: string): string => `fab.mailbox.${word}`;
 
 /** A letter's line: its case, and its body `{m}`. */
@@ -117,7 +131,7 @@ export const letterLine = (from: From, m: Schema.Json) => lineFor(from, Send.mak
 export const letterBody = decodeJson;
 
 /** A `send` entry as its History; any other case is none, and kept in the log. */
-const history = Effect.fnUntraced(function* (entry: Entry) {
+const history = Effect.fnUntraced(function* (entry: Entry) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   if (entry._tag !== SEND) {
     return Option.none<History>();
   }

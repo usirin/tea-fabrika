@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 import { Cmd, Machine } from "@demlik/tea/effect";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -7,6 +18,9 @@ const Integer = Schema.Int.check(
   Schema.isBetween({ minimum: -Number.MAX_SAFE_INTEGER, maximum: Number.MAX_SAFE_INTEGER }),
 );
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const Positive = Integer.check(Schema.isGreaterThan(0));
 
 /** @internal The saved budget schema retains its synchronous codecs. */
@@ -29,7 +43,7 @@ export const machine = Machine.make({
   cmds: [report],
   init: (loaded) => [loaded ?? Model.cases.fresh.make({}), []],
   update: {
-    take: (s, m) => {
+    take: (s, m) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
       const live = s._tag !== "fresh" && m.at < s.until;
       const at = live ? Math.max(m.at, s.at) : m.at;
       const same = s._tag !== "fresh" && s.policy.limit === m.policy.limit && s.policy.window === m.policy.window;

@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * Jobs on the ledger (0095): each job is its own stream, named from its command id. One call is one
  * transaction: read the stream, fold it through the job machine, step the call, and append it only
  * when the machine accepts it. A repeat answers the first event's receipt; a refusal writes nothing.
@@ -27,6 +38,9 @@ const Stored = Schema.TaggedUnion({
   started: { execution: Schema.NonEmptyString, recorded: Schema.optionalKey(Recorded) },
   finished: { execution: Schema.NonEmptyString, result: Result, recorded: Schema.optionalKey(Recorded) },
 });
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 type Stored = typeof Stored.Type;
 
 const decodeStored = Schema.decodeUnknownSync(Stored);
@@ -36,7 +50,7 @@ const decodeCall = Schema.decodeUnknownResult(Schema.Struct({ msg: Msg, recorded
 
 const stream = (id: string) => `job:${id}`;
 
-const toMsg = (stored: Stored): Msg => {
+const toMsg = (stored: Stored): Msg => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   if (stored._tag === "requested") {
     return { type: "request", request: stored.request };
   }

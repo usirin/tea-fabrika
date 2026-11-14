@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // T753, next/. Shared start laws take their storage driver from the calling module (0062).
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Exit, Option, Schema, type Scope } from "effect";
@@ -22,7 +33,7 @@ export const law = <A>(
   arbitrary: fc.Arbitrary<A>,
   check: (value: A) => Effect.Effect<unknown, unknown, Scope.Scope | Digest.Digest>,
   examples?: Array<[A]>,
-) => {
+) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const scoped = (value: A) => Effect.scoped(check(value)).pipe(Effect.asVoid, Effect.provide(Digest.layerWebCrypto));
   // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each generated Effect walk
   const property = fc.asyncProperty(arbitrary, (value: A) => Effect.runPromise(scoped(value)));
@@ -51,6 +62,9 @@ export interface OriginFault {
 }
 
 // These strings fit Origin's wire schema but name no declared source, or reveal an absolute path.
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 export const originFault = (kind: (typeof originKinds)[number]): fc.Arbitrary<OriginFault> =>
   fc
     .tuple(

@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // The commit check's planted cases end to end (Tier 1, P32; laws p83 to p87 and p89). Each case is a
 // fresh temp repo: git with no global or system config, a `main` with one commit holding
 // `allowed_signers` and the real `exam-paths.json`, and a branch `pr` off it. Five throwaway Ed25519
@@ -30,7 +41,7 @@ const ENV: NodeJS.ProcessEnv = {
 delete ENV.GITHUB_STEP_SUMMARY;
 delete ENV.GITHUB_ACTIONS;
 
-const sh = (cwd: string, cmd: string, args: string[], input?: string, env = ENV) => {
+const sh = (cwd: string, cmd: string, args: string[], input?: string, env = ENV) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const ran = spawnSync(cmd, args, { cwd, env, input, encoding: "utf8" });
 
   if (ran.status !== 0) {
@@ -57,6 +68,9 @@ const pub = (signer: string) =>
     .join(" ");
 
 /** A key's fingerprint, as `ssh-keygen -l` prints it and a note's `key` holds it. */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const fingerprint = (signer: string) =>
   // oxlint-disable-next-line typescript/no-non-null-assertion -- Moved test setup reads ssh-keygen's fixed output after checking its exit code.
   sh(KEYS, "ssh-keygen", ["-l", "-f", join(KEYS, `${signer}.pub`)]).split(" ")[1]!;

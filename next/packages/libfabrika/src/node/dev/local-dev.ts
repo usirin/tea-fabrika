@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The local brain driver's two helpers on Node: the memory check that replaces a brain that grew
  * too big, and the durable outbox for its lifecycle events.
  *
@@ -14,6 +25,9 @@ class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {
 }) {}
 
 // Events have no transforms. Validate without rebuilding them, keeping retry bytes in their saved order.
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const PendingEvent = Schema.declare<typeof BrainEvent.Type>((raw): raw is typeof BrainEvent.Type =>
   Result.isSuccess(Schema.decodeUnknownResult(BrainEvent, { onExcessProperty: "error" })(raw)),
 );
@@ -34,7 +48,7 @@ export const checkMemory = Effect.fn("brain.checkMemory")(function* <E, R>(optio
   readonly pid: number;
   readonly sample: (pid: number) => Effect.Effect<number, E, R>;
   readonly replace: (reason: { reason: "memory"; pid: number; bytes: number }) => Effect.Effect<void, E, R>;
-}) {
+}) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const bytes = yield* options.sample(options.pid);
 
   if (bytes >= 500_000_000) {

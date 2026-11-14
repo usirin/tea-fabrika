@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The `Replies` layer over the runtime's own recovery SQL. One SQL transaction reads the row, sends
  * the reply machine its Msg and inserts what it remembers, within the runtime's storage capacity.
  *
@@ -14,6 +25,9 @@ const TABLE =
   "CREATE TABLE IF NOT EXISTS process_replies (name TEXT NOT NULL, id TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (name, id))";
 
 const decode = Schema.decodeUnknownResult(Schema.fromJsonString(Reply));
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const encode = Schema.encodeSync(Schema.fromJsonString(Reply));
 const issues = SchemaIssue.makeFormatterStandardSchemaV1();
 
@@ -22,7 +36,7 @@ const bytes = (text: string) => new TextEncoder().encode(text).length;
 const badRow = (detail: string) => new RepliesError({ reason: "bad_row", cause: new Error(detail) });
 
 /** The stored reply under this key as the machine's Model; a row that fails throws `bad_row`. */
-const load = (sql: Sql, name: string, id: string): typeof Model.Type => {
+const load = (sql: Sql, name: string, id: string): typeof Model.Type => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   sql.exec(TABLE);
   const [row] = sql.exec("SELECT value FROM process_replies WHERE name=? AND id=?", name, id);
 

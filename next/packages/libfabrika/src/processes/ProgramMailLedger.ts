@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The `ProgramMail` layer that delivers on the ledger.
  *
  * One transaction saves the receipt in the source's outbox and the letter in the target's inbox,
@@ -27,6 +38,9 @@ import {
   type Receipt,
 } from "./ProgramMail.ts";
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const tag = (word: string): string => `fab.mail.${word}`;
 
 /** What the source's outbox keeps beside the letter: who sent it, to which life, under which grant. */
@@ -51,7 +65,7 @@ const saved = (
   turn: LedgerTurn,
   delivery: Delivery,
   m: Schema.Json,
-): Option.Option<Result.Result<Receipt, ProgramMailError>> => {
+): Option.Option<Result.Result<Receipt, ProgramMailError>> => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const id = mailId(delivery.command);
   const entry = [...turn.read(outbox(delivery.source.name), 0)].find((e) => e.id === id);
 

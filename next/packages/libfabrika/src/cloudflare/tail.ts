@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * Worker Loader tail delivery. Only call metadata crosses into the Process object.
  *
  * @stability unstable
@@ -13,6 +24,9 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { errorClass } from "../telemetry/Trace.ts";
 import { isolateUsage, ProcessClient, rejected } from "./platform.ts";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 import { processStub, type Env } from "./runtime.ts";
 
 /**
@@ -32,7 +46,7 @@ export const Props = Schema.Struct({ project: Schema.String, name: Schema.String
 export const bind = Effect.fnUntraced(function* (
   ctx: { readonly exports: Parameters<typeof getLoopbackEntrypoint>[0] },
   props: typeof Props.Type,
-) {
+) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const tail = yield* getLoopbackEntrypoint(ctx.exports, "IsolateTail", { props });
   // The existing loader still takes native code options until its Alchemy port.
   return tail.raw;

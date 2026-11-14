@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * File and recorded encodings derived from settings declarations.
  *
  * @stability experimental
@@ -16,7 +27,7 @@ import type * as Setting from "./Setting.ts";
  * @stability unstable
  * @category constructors
  */
-export const file = <A>(declaration: Setting.Setting<A>) => {
+export const file = <A>(declaration: Setting.Setting<A>) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const codec =
     declaration.format === "text"
       ? Schema.toCodecStringTree(declaration.schema)
@@ -29,6 +40,9 @@ export const file = <A>(declaration: Setting.Setting<A>) => {
   );
 };
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 interface Json extends Struct.Lambda {
   <D extends Setting.Setting<unknown>>(declaration: D): Schema.toCodecJson<D["schema"]>;
   readonly "~lambda.out": this["~lambda.in"] extends Setting.Setting<unknown>

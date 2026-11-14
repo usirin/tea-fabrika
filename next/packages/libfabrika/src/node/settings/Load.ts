@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * One load of fabrika's settings at a process start: read both files, check them whole, resolve
  * the four sources and make the snapshot the process keeps. It returns all of that or one
  * `SettingsError`, so nothing starts on settings that were not checked.
@@ -9,6 +20,9 @@ import { Effect, FileSystem, Predicate } from "effect";
 import * as Declarations from "../../settings/Declarations.ts";
 import * as Files from "../../settings/Files.ts";
 import * as Snapshot from "../../settings/Snapshot.ts";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 import * as Sources from "../../settings/Sources.ts";
 import { Toml } from "../../settings/Toml.ts";
 
@@ -44,7 +58,7 @@ export const load = Effect.fnUntraced(function* (options: {
   readonly env: Readonly<Record<string, string>>;
   /** The running fabrika's version, which the repo's `fabrika-version` is checked against. */
   readonly version: string;
-}) {
+}) {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const fs = yield* FileSystem.FileSystem;
   const toml = yield* Toml;
   // A missing file is an empty one; any other read failure stops the start.

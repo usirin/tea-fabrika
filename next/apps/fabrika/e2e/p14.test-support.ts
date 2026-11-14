@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // P14 slice 2, next/ (ticket 828): the first-window suite's resources, each acquired in one Effect scope
 // before any setup step can fail (0061). The temp home with its person key, the port, the real `dev.ts`
 // instance, the headless browser, each profile (a browser context) and each tab (a page), released by
@@ -52,7 +63,7 @@ class KeygenFailed extends Schema.TaggedError<KeygenFailed>()("KeygenFailed", { 
 const STOPS = ["SIGTERM", "SIGINT", "disconnect"] as const;
 
 /** Fails once this worker is told to stop, so a race against the suite closes its scope first. */
-export const stopped = Effect.callback<never, Stopped>((resume) => {
+export const stopped = Effect.callback<never, Stopped>((resume) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const stops = STOPS.map((reason) => {
     const stop = () => resume(Effect.fail(new Stopped({ reason })));
     process.once(reason, stop);
@@ -132,6 +143,9 @@ const childEnv = (home: string, extra: Readonly<Record<string, string>>) => {
 };
 
 /** A temp home with its own person key, made by ssh-keygen as a person makes one. */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 export const homeWithCredential = (credential: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;

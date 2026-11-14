@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // L6, next/. The driver owner supplies real files and the adapter; desktop imports no platform.
 import { describe, expect, it } from "@effect/vitest";
 import type { Scope } from "effect";
@@ -30,6 +41,9 @@ export const Dirent = Schema.TaggedUnion({
 });
 export type Dirent = typeof Dirent.Type;
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const Byte = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 255 }));
 
 /** A symlink whose target is not valid UTF-8. Text cannot carry it, so it is held as bytes. */
@@ -85,7 +99,7 @@ type Files = {
 export type Open = (fault: Fault, replacement?: Replacement) => Effect.Effect<Files, unknown, Scope.Scope>;
 
 export const suite = (open: Open) =>
-  describe("P19 shared atomic publication laws", () => {
+  describe("P19 shared atomic publication laws", () => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
     it.effect.prop(
       "L2/L6 failed install or removal leaves foreign bytes untouched",
       [Schema.Literals(["compile", "sync", "publish"]), Schema.String, Schema.Literals(["install", "remove"])],

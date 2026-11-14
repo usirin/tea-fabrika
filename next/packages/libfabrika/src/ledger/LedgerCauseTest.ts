@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // T695, next/. The ledger's translated errors keep the failure they wrap (decision 0043 rule 12,
 // `.patterns/effect-errors-keep-their-cause.md`). A suite on any `Sql`, read through its module as
 // `LedgerCauseTest.suite(law, fresh, corrupt)`; the module that owns the driver runs it (0062).
@@ -19,6 +30,9 @@ const READER = "connection:t1";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 /** A failure as a platform gives one: an Error, a subclass with its own cause, or a plain object. */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const failures: fc.Arbitrary<object> = fc.oneof(
   fc.string().map((message) => new Error(message)),
   fc.string().map((message) => new TypeError(message, { cause: { detail: message } })),
@@ -48,7 +62,7 @@ const ring = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
 /** One call on the ledger, by name, run to its end: a read is collected whole. */
 const callOn = (method: Method) =>
-  Effect.gen(function* () {
+  Effect.gen(function* () {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
     const ledger = yield* Ledger;
 
     if (method === "append") {

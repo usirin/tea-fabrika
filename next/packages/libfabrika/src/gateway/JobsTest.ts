@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // T714, next/. A4 and A6-A12 walk the real authenticated gateway and durable Jobs.
 // The Node runner supplies its layers and scoped SQL; this module imports no driver or ledger.
 // A4 and A6-A12 plant trials, including A-Kept's reconnect metadata, are in the tests-step report.
@@ -46,7 +57,7 @@ const pick = <A>(values: ReadonlyArray<A>, n: number): A =>
 
 const text = (s: string) => new TextEncoder().encode(s);
 
-const join = (...parts: ReadonlyArray<Uint8Array>) => {
+const join = (...parts: ReadonlyArray<Uint8Array>) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   let offset = 0;
 
@@ -70,6 +81,9 @@ const field = (a: string | Uint8Array) => {
 };
 
 // A shared suite is not a `*.test.ts` file, so its failures are tagged like product code's.
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 class CryptoFailed extends Schema.TaggedError<CryptoFailed>()("CryptoFailed", { cause: Schema.Defect() }) {}
 
 const fail = (cause: unknown) => new CryptoFailed({ cause });

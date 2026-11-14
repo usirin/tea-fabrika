@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // next/, test support. A TCP port for a test's own dev.ts, kept apart from every other taker.
 //
 // The old way asked the OS for a free port, closed it and passed the number on. dev.ts builds for
@@ -19,10 +30,13 @@ const PAIRS = 6000;
 // Start at a different pair per process, so parallel test files rarely meet at all. Then move on
 // after every pair handed out: an instance that runs inside the test process leaves the runtime's own
 // note that its port is taken, for 30 seconds, so one process never gets the same pair twice in a row.
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 let cursor = process.pid % PAIRS;
 
 const listen = (port: number) =>
-  Effect.callback<Server | null>((resume) => {
+  Effect.callback<Server | null>((resume) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
     const server = createServer();
     server.once("error", () => resume(Effect.succeed(null)));
     server.listen({ port, host: "127.0.0.1", exclusive: true }, () => resume(Effect.succeed(server)));

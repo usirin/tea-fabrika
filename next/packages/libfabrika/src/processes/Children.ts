@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The contract for starting a child process: OTP's `whereis` then `supervisor:start_child`, in one
  * step, for every caller. Only a fresh start saves anything: the child's `started` line and its
  * first letter. This file holds the contract only (0095); `ChildrenLedger.layer(...)` starts on the
@@ -20,6 +31,9 @@ import { ProcessName } from "./Process.ts";
  *
  * @stability unstable
  * @category constants
+ */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
  */
 export const INPUT_BYTES = ROW_BYTES;
 

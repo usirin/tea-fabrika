@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 import { Machine } from "@demlik/tea/effect";
 import { Schema } from "effect";
 import { LedgerError } from "../../ledger/Ledger.ts";
@@ -57,6 +68,9 @@ export const ProcessEvent = Schema.TaggedUnion({
   },
 });
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 type To = typeof Recipient.Type;
 
 const canonical = (to: To): To =>
@@ -114,7 +128,7 @@ const put = <V>(map: ReadonlyMap<string, V>, key: string, value: V): ReadonlyMap
   new Map(map).set(key, value);
 
 /** A lifecycle event names a process the fold has started, or its row is bad. */
-const lifeFor = (s: Model, process: string): Life => {
+const lifeFor = (s: Model, process: string): Life => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const life = s.lives.get(process);
 
   if (life === undefined) {

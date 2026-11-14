@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // The library's test kit (Tier 1, P11). `syncTest` is saved-state S2: stop at every message, save
 // through JSON text, boot from it, and the rest of the run must match the run that never stopped.
 // `senderTest` is law p69: every write matches an expected table built from the inputs, never from
@@ -19,7 +30,7 @@ export const syncTest = <S, M extends { readonly type: string }, C extends Cmd, 
   machine: Machine<S, M, C, U, Ctx>,
   ctx: Ctx,
   { msgs, encode, decode, equals, seed }: Options<S, M>,
-): void => {
+): void => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const [first] = machine.init(null, ctx);
   const models: Array<S> = [first];
   const cmds: Array<ReadonlyArray<C>> = [];
@@ -74,6 +85,9 @@ export const syncTest = <S, M extends { readonly type: string }, C extends Cmd, 
   }
 };
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 type Who = { readonly key: string; readonly for: string };
 
 type SenderOptions = {

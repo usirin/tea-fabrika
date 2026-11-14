@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // next/. SQLite laws, with no driver (0062). A decision tape chooses only a move allowed by
 // the calls so far. The oracle reads committed health and span rows, never the sink's model.
 import { describe, expect, it } from "@effect/vitest";
@@ -47,6 +58,9 @@ export type Recording = {
   readonly flush: Effect.Effect<unknown, unknown>;
 };
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 export type UsageSpan = {
   readonly attributes: Readonly<Record<string, unknown>>;
   readonly startTimeUnixNano: string;
@@ -96,7 +110,7 @@ const sample = (process: string, cpuMs: number): typeof IsolateUsage.Usage.Type 
 });
 
 export const suite = (rig: Rig) =>
-  describe("next/ isolate usage on real SQLite", () => {
+  describe("next/ isolate usage on real SQLite", () => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
     // fast-check shrinks the decision tape; each replay picks only moves legal in its current state.
     it.effect("U1 names own their rows; replacements and late batches keep the process from the load", () =>
       Effect.gen(function* () {

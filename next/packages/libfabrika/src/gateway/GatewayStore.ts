@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The gateway's tables in the project's Sql. Only checked connection state and input metadata
  * belong here. Input bodies stay out.
  *
@@ -6,6 +17,9 @@
  */
 import { Effect, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 import { type Sql } from "../Sql.ts";
 
 /**
@@ -21,7 +35,7 @@ import { type Sql } from "../Sql.ts";
  * @stability unstable
  * @category constructors
  */
-export const gatewayStore = (sql: Sql) => {
+export const gatewayStore = (sql: Sql) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const ensure = () => {
     sql.exec("CREATE TABLE IF NOT EXISTS gateway_state (name TEXT PRIMARY KEY, value TEXT NOT NULL)");
     sql.exec("CREATE TABLE IF NOT EXISTS gateway_starts (id TEXT PRIMARY KEY)");

@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // The referee: the one place that numbers the log. Plain code over a synchronous `Sql`, the same on
 // workerd (a Durable Object's SQLite) and on Node (node:sqlite, in tests). Tier 1, P6 (laws p18,
 // p20, p68, p92 to p95).
@@ -52,6 +63,9 @@ const Last = Schema.Struct({ pos: Rev });
 const Lag = Schema.Struct({ head: Rev, lag: Rev });
 
 /** Checks types before telling a bad parent or trace id apart from a bad line. */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const Loose = Schema.Struct({
   ...Line.fields,
   parent: Schema.NullOr(Schema.String),
@@ -80,7 +94,7 @@ const bytes = (texts: ReadonlyArray<string | null>): number =>
 type Reason = (typeof Appended.cases.refused.Type)["reason"];
 
 /** The line, checked: shape (p92), parent (p68), trace (p68b) and row size (flag 13). */
-const check = (stream: string, id: string, input: unknown): Result.Result<Line, Reason> => {
+const check = (stream: string, id: string, input: unknown): Result.Result<Line, Reason> => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   if (Result.isFailure(decodeId({ stream, id }))) {
     return Result.fail("bad_line");
   }

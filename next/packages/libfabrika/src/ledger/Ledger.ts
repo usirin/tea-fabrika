@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The ledger as a service: `append`, `read` and `wait`, the same three calls for every caller. This
  * file is the contract only (0095). In the project object the service is the referee on that
  * object's SQLite (`LedgerSql.layer`); in any other object it is the project's stub
@@ -23,6 +34,9 @@ import type { Appended, Entry, Line, Waited } from "./Log.ts";
  *
  * @stability unstable
  * @category errors
+ */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
  */
 export class LedgerError extends Schema.TaggedError<LedgerError>()("LedgerError", {
   /** `unreachable`: a call that never reached the referee. `bad_row`: an answer or a row that does

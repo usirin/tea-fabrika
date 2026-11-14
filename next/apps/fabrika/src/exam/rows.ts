@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // The exam's row reader: which rows of the rule file (`layer-rules.json`) claim a file. `pnpm
 // lint:layers` (code-graph) reads the same file, so the exam and the tool keep one list of paths.
 // The exam maps a row to a part (`layers.test.ts`), and the lead's move checker asks whether a moved
@@ -33,6 +44,9 @@ interface Claim {
 
 const SPECIAL = /[.*+?^${}()|[\]\\]/g;
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const segmentSource = (segment: string): string =>
   segment === "*"
     ? "[^/]+"
@@ -42,7 +56,7 @@ const segmentSource = (segment: string): string =>
         .join("[^/]*");
 
 /** The pattern as a test on a path: it claims its own path and everything below it. */
-const claims = (pattern: string): RegExp => {
+const claims = (pattern: string): RegExp => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const kept = pattern.split("/");
 
   while (kept.at(-1) === "**") {

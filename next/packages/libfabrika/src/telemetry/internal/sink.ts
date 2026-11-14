@@ -1,3 +1,14 @@
+/**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
 // The span sink's control state as one tea machine (0037, 0046): spans held after a write that
 // could not land, a failure no flush has reported yet, and the newest hour sized. Memory only, as
 // before: a new sink starts clean and unchecked. No Cmds: `Sink.ts` runs the SQL and sends its
@@ -18,6 +29,9 @@ export type Ended = typeof Ended.Type;
 
 /** `clean` and `failed` hold no spans, `holding` and `reported` hold at least one. A failure awaits
  *  a flush in `failed` and `holding`. `checked` is the newest hour a sized commit reached. */
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const Model = Schema.TaggedUnion({
   clean: { checked: Schema.Number },
   failed: { checked: Schema.Number },
@@ -43,7 +57,7 @@ export const machine = Machine.make({
   cmds: [],
   init: () => [Model.cases.clean.make({ checked: Number.NEGATIVE_INFINITY }), []],
   update: {
-    commit_failed: (s, m) => {
+    commit_failed: (s, m) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
       const spans = [...held(s), ...m.more];
       return [
         Arr.isReadonlyArrayNonEmpty(spans)

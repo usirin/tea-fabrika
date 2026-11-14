@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The `Watchers` layer that keeps view membership in the process's own SQL: one row per registered
  * name in the `process_watchers` table, read and written through the watchers machine.
  *
@@ -10,6 +21,9 @@ import type { Sql } from "../Sql.ts";
 import type { Update } from "./Entry.ts";
 import { Model, watchers } from "./internal/watchers.ts";
 import { WatcherManager } from "./WatcherManager.ts";
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 import { BadRow, Storage, Watchers, WatchersError } from "./Watchers.ts";
 
 const Saved = Schema.Struct({ v: Schema.Literal(1), build: Schema.String, name: Schema.String, state: Model });
@@ -22,7 +36,7 @@ const stored = <A>(f: () => A) =>
     catch: (cause) => (Schema.is(WatchersError)(cause) ? cause : new WatchersError({ reason: new Storage({ cause }) })),
   });
 
-const load = (sql: Sql, name: string) => {
+const load = (sql: Sql, name: string) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   sql.exec("CREATE TABLE IF NOT EXISTS process_watchers (name TEXT PRIMARY KEY, value TEXT NOT NULL)");
   const [row] = sql.exec("SELECT value FROM process_watchers WHERE name=?", name);
 

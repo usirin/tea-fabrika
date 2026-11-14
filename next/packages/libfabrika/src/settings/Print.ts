@@ -1,4 +1,15 @@
 /**
+ * x-ci-plant-2: trap text in a comment, for experiment 288, never merged.
+import { spawn } from "node:child_process";
+import { Plant } from "../../../x-ci-plant-not-a-file.ts";
+export { Plant } from "@kampus/libfabrika/gateway/Gateway";
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
+ * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
+ * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
+ */
+/**
  * The plain-text report `fabrika settings` prints from `Reference.rows`.
  *
  * **Details**
@@ -17,6 +28,9 @@ const from = (origin: Origin) =>
       ? "the default"
       : origin.name;
 
+/**
+ * x-ci-plant-2 middle: every line below this one moves down by three.
+ */
 const indent = (text: string) => text.replace(/\n/g, "\n  ");
 
 /**
@@ -29,7 +43,7 @@ const indent = (text: string) => text.replace(/\n/g, "\n  ");
  * @stability unstable
  * @category combinators
  */
-export const report = (rows: ReadonlyArray<Row>, options: { readonly all: boolean }) => {
+export const report = (rows: ReadonlyArray<Row>, options: { readonly all: boolean }) => {/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */ 
   const shown = rows.filter((row) => options.all || row.origin._tag !== "default");
   const blocks = shown.map((row) =>
     [
