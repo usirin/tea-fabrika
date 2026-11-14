@@ -9,7 +9,7 @@ import { letterLine } from "@kampus/libfabrika/processes/Mailbox";
 import { Recipient } from "@kampus/libfabrika/processes/Process";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
-import { Effect, Exit, Layer, Logger, ManagedRuntime, Result, Schema, Scope } from "effect";
+import { Clock, Effect, Exit, Layer, Logger, ManagedRuntime, Result, Schema, Scope } from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, it, vi } from "vitest";
 import {
@@ -49,12 +49,11 @@ type Instance = Fixture["instance"] & Record<string, any>;
 
 const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
 
-/** A real pause in an Effect, on the platform's timer, whatever clock the law runs on. */
-const realPause = (ms: number) =>
-  Effect.callback<void>((resume) => {
-    const timer = setTimeout(() => resume(Effect.void), ms);
-    return Effect.sync(() => clearTimeout(timer));
-  });
+/**
+ * A real 5 ms pause on Effect's live clock, whatever clock the law runs on: the test clock under
+ * `it.effect`, the live one inside a fast-check run.
+ */
+const realPause = Effect.sleep("5 millis").pipe(Effect.provideService(Clock.Clock, Clock.Clock.defaultValue()));
 
 /** Polls an observable fact. A timeout fails with the last observed state. */
 const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) => boolean, ms = WAIT): Promise<A> => {
@@ -546,7 +545,7 @@ const storageCall = Effect.fnUntraced(function* (
       // The pause is a real one, since this law runs on the test clock, which never moves by itself.
       for (let tries = 0; fixture.undelivered() > 0; tries++) {
         expect(tries, "L11: the boot's own start is delivered before the migration").toBeLessThan(1000);
-        yield* realPause(5);
+        yield* realPause;
       }
 
       fixture.legacyDescriptors();
