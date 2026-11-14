@@ -3,6 +3,7 @@
 // failure text out of tags). The methods come from each client's own keys, so a new method joins the
 // law without an edit here. Plant: `catch: unreachable` that ignores its argument, as before this ticket.
 import { it } from "@effect/vitest";
+import { encodeRpcError, ErrorTag, RpcCallError } from "alchemy/Rpc";
 import { Effect, Schema } from "effect";
 import { expect } from "vitest";
 import { LedgerError } from "../ledger/Ledger.ts";
@@ -52,16 +53,74 @@ it.effect.prop(
     Effect.gen(function* () {
       const [client = "", method = ""] = call.split(".");
       const kind = faults.find((fault) => fault.name === name)!;
-      const service: Record<string, () => Effect.Effect<unknown, unknown>> = Reflect.get(
+      const service: Record<string, (request: Request) => Effect.Effect<unknown, unknown>> = Reflect.get(
         clients(kind.make(text)),
         client,
       );
-      const error = yield* Effect.flip(service[method]!());
+      // A real Request, so a client that hands `fetch` to a typed stub has one to read; the
+      // rejecting stub ignores what every other method is given.
+      const error = yield* Effect.flip(service[method]!(new Request("http://127.0.0.1:8787/client/a/b")));
       expect(error).toMatchObject({ _tag: "LedgerError", reason: "unreachable" });
       expect(Reflect.get(Object(error), "message")).toContain(kind.name);
       expect(Reflect.get(Object(error), "message")).toContain(text);
     }),
   { arbitrary: { runs: 200, seed: 119120 } },
+);
+
+// T502 S1, next/. The Connection object is called through Alchemy's typed stub and `reach`
+// (docs/plan/ticket-502-alchemy-port.md, "One value traced through", after S1). The methods come
+// from the client's own keys. `fetch` is left out: a typed stub serves it through its fetcher, not
+// as a call (@alchemy.run/cloudflare, Workers/Rpc.ts `makeRpcStub` and Fetcher.ts), and the law
+// above and error-cause.test.ts hold it.
+// Plants: no `errors: [LedgerError]` on the stub; map every failure to `unreachable`; keep the
+// thrown value and drop the RpcCallError.
+const calls = Object.keys(GatewayClient.make(rejecting(new Error("probe")))).filter((method) => method !== "fetch");
+
+/** A Connection stub whose every call resolves with `answer`, as the object's bridge answers. */
+const answering = <A>(answer: unknown) =>
+  new Proxy(
+    {},
+    {
+      get: () => () => Promise.resolve(answer),
+    },
+  ) as A;
+
+it.effect("vector: the Connection client has calls for this law to walk", () =>
+  // A floor, so a client that loses its methods cannot shrink the law below to nothing.
+  Effect.sync(() => expect(calls.length).toBeGreaterThanOrEqual(3)),
+);
+
+it.effect.prop(
+  "a LedgerError the Connection object failed with crosses as itself; a lost object is unreachable with the RpcCallError as its cause",
+  {
+    call: Schema.Literals(calls),
+    reason: LedgerError.fields.reason,
+    name: Schema.Literals(faults.map((fault) => fault.name)),
+    text: Schema.String.check(Schema.isMinLength(8), Schema.isMaxLength(64)),
+  },
+  ({ call, reason, name, text }) =>
+    Effect.gen(function* () {
+      const method = (stub: Parameters<typeof GatewayClient.make>[0]): Effect.Effect<unknown, unknown> =>
+        Reflect.apply(Reflect.get(GatewayClient.make(stub), call), undefined, []);
+
+      // The bridge answers a typed failure as this envelope (alchemy, Rpc.ts `encodeRpcError`).
+      const typed = yield* Effect.flip(
+        method(answering({ _tag: ErrorTag, error: encodeRpcError(new LedgerError({ reason })) })),
+      );
+      expect(typed).toBeInstanceOf(LedgerError);
+      expect(typed).toMatchObject({ reason });
+      expect(Reflect.get(Object(typed), "cause"), "nothing was lost on the way, so no cause").toBeUndefined();
+
+      const fault = faults.find((kind) => kind.name === name)!.make(text);
+      const lost = yield* Effect.flip(method(rejecting(fault)));
+      expect(lost).toBeInstanceOf(LedgerError);
+      expect(lost).toMatchObject({ reason: "unreachable" });
+      const cause: unknown = Reflect.get(Object(lost), "cause");
+      expect(cause).toBeInstanceOf(RpcCallError);
+      expect(cause).toMatchObject({ method: call });
+      expect(Reflect.get(Object(cause), "cause"), "the RpcCallError keeps what the platform threw").toBe(fault);
+    }),
+  { arbitrary: { runs: 100, seed: 119120 } },
 );
 
 // `rejected` turns that message back into the thrown class for a failed span. Plants: rebuild every
