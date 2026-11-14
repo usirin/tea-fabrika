@@ -73,7 +73,8 @@ Promise stub at the service boundary, so no caller sees a Promise. Code both lay
 composed with `Layer.provide` and `Layer.mergeAll`. The whole graph is provided once, at the edge:
 on workerd, one `ManagedRuntime` per object instance (`next/apps/fabrika/src/runtime.ts:19-23`,
 held at `next/apps/fabrika/src/brain.ts:26`); on Node, `NodeRuntime.runMain`
-(`next/apps/fabrika/grant.ts:129`).
+(`next/apps/fabrika/grant.ts:129`); in a tab, `BrowserRuntime.runMain`, re-exported by
+`@kampus/tuval/browser` (`next/apps/fabrika/src/entry/browser.tsx:24`).
 
 Rules:
 
