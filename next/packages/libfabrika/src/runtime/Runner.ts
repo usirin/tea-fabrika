@@ -78,7 +78,7 @@ import { defaultPolicy, supervisor, Supervision, type SupervisorMsg } from "./in
 import { MailDelivery } from "./MailDelivery.ts";
 import { diff } from "./Patch.ts";
 import { Admission, ProgramDown, Refusal, Step, Write } from "./Program.ts";
-import { recoveryStore } from "./RecoveryStore.ts";
+import { recoveryStore, RecoveryStoreError } from "./RecoveryStore.ts";
 import { Replies, type RepliesError } from "./Replies.ts";
 import * as RepliesSql from "./RepliesSql.ts";
 import { Queued, SendInput } from "./Send.ts";
@@ -1858,7 +1858,8 @@ export class ProgramRunner extends Context.Service<
                 // A storage failure while draining leaves the alarm that tries it again.
                 Effect.onExit((exit) =>
                   exit._tag === "Failure" &&
-                  Cause.squash(exit.cause) instanceof LedgerError &&
+                  (Cause.squash(exit.cause) instanceof LedgerError ||
+                    Cause.squash(exit.cause) instanceof RecoveryStoreError) &&
                   !Cause.hasInterrupts(exit.cause)
                     ? retryLater
                     : Effect.void,
@@ -2131,6 +2132,7 @@ export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError"
 
 type RunnerFailure =
   | LedgerError
+  | RecoveryStoreError
   | ProgramDown
   | RunnerError
   | SinkError
