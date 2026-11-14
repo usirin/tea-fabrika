@@ -13,6 +13,6 @@
   "proof": "Run 43578538911 (pull request 1209), job next (6), at f233705eb: 'Error: Test timed out in 60000ms' for L4 and 'Property failed after 2 tests, Caused by: Error: All fibers interrupted without error' for P40. Pull request 1209 changes .oxlintrc.json, oxlint-plugins/, field rows and prose only, nothing under next/apps. 33 runs were queued in the repo at the time.",
   "cost": "A pull request that cannot reach these laws goes red and must be run again; in the merge queue it is put out.",
   "head": "f233705eba37e066b817782c669e9f049882d1dc",
-  "ticket": 961,
+  "ticket": "kamp-us/tea-fabrika#961",
   "pr": "kamp-us/tea-fabrika#1209"
 }
