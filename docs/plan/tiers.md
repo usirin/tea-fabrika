@@ -9,6 +9,8 @@ the order from before that day: `fabsh` and pipes in Tier 2, agents in Tier 5, r
 and thin slices in Tier 1. The changed Tier 1 is written, and 0159 and that section win wherever
 this page differs.
 
+**Changed 2026-11-13 ([0185](../../.decisions/0185-tier-2-runs-agents-after-the-four-primitives.md)): the changed Tier 1 is the milestone named "4 primitives", and Tier 2 then builds hands and an agent fabrika starts for real.** They move forward from Tiers 4 and 5. The Tier 2, Tier 4 and Tier 5 sections below still show the old sorting until the Tier 2 plan is written.
+
 **Approved by the owner on 2026-11-13: what Tier 1 is now.** Tier 1 is the four primitives,
 `fabsh`, pipes, `summon` and `join`, working for real in `next/`, on the base its built rows
 already give. Done is seen in the Electron app and in a browser tab, built side by side. The pieces, in build order, and the mark on every row are in
@@ -54,12 +56,12 @@ thin working slice in Tier 1, and later tiers harden it
 
 ```text
 core idea                          thin slice   built for real in
-hands                              Tier 1 P39   Tier 4
+hands                              Tier 1 P39   Tier 2 (0185)
 programs written outside fabrika   Tier 1 P40   Tiers 5 and 7
 programs working together          Tier 1 P41   Tiers 2 and 4
 a person starting a program        Tier 1 P42   Tier 2
-an agent fabrika starts            Tier 1       Tier 5   (no row yet)
-a flow fabrika runs                Tier 1 P43   Tier 6   (P43: the merge queue, for landing changes)
+an agent fabrika starts            Tier 1       Tier 2 (0185)   (no row yet)
+a flow fabrika runs                Tier 1 P43   Tier 6          (P43: the merge queue, for landing changes)
 
                 transport   data   coordination   app   desktop
 Tier 1 works    ---------------------------------------------->  a checklist a person fills and agents check with a note through MCP, read from any window or a phone, plus the six slices
@@ -439,3 +441,6 @@ Git history keeps the old wording.
   [the four primitives first](./tier-1.md#the-four-primitives-first). Pieces come in from Tiers 2,
   4 and 5 and from no tier. The Electron app, the thin menu bar and the cloud instance are built
   beside them; 12 rows wait, and recovery is the first work after done.
+- 2026-11-13, [0185](../../.decisions/0185-tier-2-runs-agents-after-the-four-primitives.md): the
+  changed Tier 1 is named "4 primitives", and hands and an agent fabrika starts move forward from
+  Tiers 4 and 5 to Tier 2; the Tier 2, 4 and 5 sections are not resorted yet.
