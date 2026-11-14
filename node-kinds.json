@@ -2,7 +2,7 @@
   "entryExportConventions": {
     "alchemy-durable-object-export": {
       "files": "src/brain.ts",
-      "exports": ["RecordPart", "IsolateTail"]
+      "exports": ["RecordPart", "Process", "IsolateTail"]
     }
   }
 }

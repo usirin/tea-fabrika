@@ -116,7 +116,11 @@ Rules:
 - **The object class stays thin.** Every method is one `this.runtime.runPromise(...)` under an edge
   comment (`next/apps/fabrika/src/brain.ts:28-31`,
   [an object class stays thin](../docs/direction/object-classes-stay-thin.md)). A bare
-  `Effect.runPromise` there gets none of the runtime's Layers, tracer included.
+  `Effect.runPromise` there gets none of the runtime's Layers, tracer included. A ported object has
+  no plain class: `brain.ts` holds one bridge line, as `export class Process extends
+  Bridge("Process") {}`, and the object's Layer is a sibling file read through its module, as
+  `ProcessObject.layer({ programs })` (`next/packages/libfabrika/src/cloudflare/ProcessObject.ts`),
+  provided once in the app's `objects.ts`. Its methods return Effects, and Alchemy's bridge runs them.
 
 ## Where it applies
 

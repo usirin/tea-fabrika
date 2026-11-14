@@ -50,6 +50,7 @@
     "./workers/control": "./src/cloudflare/control.ts",
     "./workers/gateway": "./src/cloudflare/connection.ts",
     "./workers/objects": "./src/cloudflare/objects.ts",
+    "./workers/ProcessObject": "./src/cloudflare/ProcessObject.ts",
     "./workers/record": "./src/cloudflare/record.ts",
     "./workers/runtime": "./src/cloudflare/runtime.ts",
     "./node/build": "./src/node/build/bundle.ts",

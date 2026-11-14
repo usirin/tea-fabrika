@@ -1,10 +1,12 @@
 import { isWorkerEvent } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { isolateTail } from "@kampus/libfabrika/workers";
 import { Brain } from "@kampus/libfabrika/workers/objects";
+import * as ProcessObject from "@kampus/libfabrika/workers/ProcessObject";
 import { RecordPartLive } from "@kampus/libfabrika/workers/record";
 import type { FunctionContext } from "alchemy/Runtime/Function";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
+import { programs } from "virtual:fabrika-built";
 
 export const Objects = Brain.make(
   { main: import.meta.url },
@@ -20,5 +22,5 @@ export const Objects = Brain.make(
     });
     yield* Effect.logDebug("isolate.tail listener registered");
     return {};
-  }).pipe(Effect.provide(RecordPartLive)),
+  }).pipe(Effect.provide(Layer.mergeAll(RecordPartLive, ProcessObject.layer({ programs })))),
 );

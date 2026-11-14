@@ -5,7 +5,8 @@ import { Context, Effect, Predicate, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import type { ConnectionBinding, ProcessBinding, ProjectBinding } from "./bindings.ts";
-import type { RecordShape } from "./objects.ts";
+import type { ProcessShape, RecordShape } from "./objects.ts";
+import { reach } from "./reach.ts";
 
 /**
  * Reads only call metadata, including workerd's prototype getters.
@@ -42,12 +43,28 @@ type Client<S> = {
 /** A rejected platform call. It keeps the thrown value as its cause (ticket 695), and its message keeps
  *  that value's class and text as `<class>: <text>`. Both stay in memory: a sink stores a typed
  *  failure's tag and reason only, and never puts its text in a tag. */
-const unreachable = (cause: unknown) =>
+const unreachable = (cause: unknown, thrown: unknown = cause) =>
   new LedgerError({
     reason: "unreachable",
-    message: cause instanceof Error ? `${cause.name}: ${cause.message}` : `${typeof cause}: ${String(cause)}`,
+    message: thrown instanceof Error ? `${thrown.name}: ${thrown.message}` : `${typeof thrown}: ${String(thrown)}`,
     cause,
   });
+
+/** A call through a typed stub that got no answer. Its message names what the platform threw, and
+ *  its cause is Alchemy's RpcCallError, which holds that thrown value. */
+const lost = (error: RpcCallError) => unreachable(error, error.cause);
+
+/** A call through a typed stub, inside `reach`, with no span of its own. `reach` opens one, and a
+ *  lost call's message holds what the platform threw, which can be a letter's text: the caller's
+ *  span decides what of it is kept, as for every client here (the mail law T1b). */
+const reached = <A>(call: Effect.Effect<A, LedgerError>) => reach(call, lost).pipe(Effect.withTracerEnabled(false));
+
+/** An object's contract as its callers see it: each call needs nothing, and fails with `LedgerError`. */
+type Calls<S> = {
+  readonly [K in keyof S]: S[K] extends (...args: infer A) => Effect.Effect<infer B, infer _E, infer _R>
+    ? (...args: A) => Effect.Effect<B, LedgerError>
+    : never;
+};
 
 /** The thrown value behind an `unreachable` LedgerError, rebuilt from its message with its class as
  *  `name`, so a failed span names the class that was thrown; any other error stays as it is. */
@@ -187,51 +204,25 @@ export class ProjectClient extends Context.Service<
   }
 }
 
-export class ProcessClient extends Context.Service<
-  ProcessClient,
-  Client<Omit<ProcessBinding, keyof Rpc.DurableObjectBranded>>
->()("@kampus/libfabrika/cloudflare/platform.ProcessClient") {
+export class ProcessClient extends Context.Service<ProcessClient, Calls<Omit<ProcessShape, "alarm">>>()(
+  "@kampus/libfabrika/cloudflare/platform.ProcessClient",
+) {
   static make(stub: ProcessBinding): ProcessClient["Service"] {
+    // The object's own LedgerError crosses as itself; a call that got no answer is `unreachable`.
+    const process = makeRpcStub<ProcessClient["Service"]>(stub, { errors: [LedgerError] });
     return {
-      usage: (...args) =>
-        makeRpcStub<{
-          usage: (...input: Parameters<ProcessBinding["usage"]>) => Effect.Effect<void, RpcCallError>;
-        }>(stub)
-          .usage(...args)
-          .pipe(Effect.mapError((error) => unreachable(error.cause))),
-      mailed: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process mailed RPC enters Effect
-        Effect.tryPromise({ try: () => stub.mailed(...args), catch: unreachable }),
-      configure: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process configure RPC enters Effect
-        Effect.tryPromise({ try: () => stub.configure(...args), catch: unreachable }),
-      descriptor: () =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process descriptor RPC enters Effect
-        Effect.tryPromise({ try: () => stub.descriptor(), catch: unreachable }),
-      msg: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process msg RPC enters Effect
-        Effect.tryPromise({ try: () => stub.msg(...args), catch: unreachable }),
-      open: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process open RPC enters Effect
-        Effect.tryPromise({ try: () => stub.open(...args), catch: unreachable }),
-      due: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process due RPC enters Effect
-        Effect.tryPromise({ try: () => stub.due(...args), catch: unreachable }),
-      restart: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process restart RPC enters Effect
-        Effect.tryPromise({ try: () => stub.restart(...args), catch: unreachable }),
-      activity: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process activity RPC enters Effect
-        Effect.tryPromise({ try: () => stub.activity(...args), catch: unreachable }),
-      recover: () =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process recover RPC enters Effect
-        Effect.tryPromise({ try: () => stub.recover(), catch: unreachable }),
-      savedAlarm: () =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process savedAlarm RPC enters Effect
-        Effect.tryPromise({ try: () => stub.savedAlarm(), catch: unreachable }),
-      abort: () =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process abort RPC enters Effect
-        Effect.tryPromise({ try: () => stub.abort(), catch: unreachable }),
+      usage: (...args) => reached(process.usage(...args)),
+      mailed: (...args) => reached(process.mailed(...args)),
+      configure: (...args) => reached(process.configure(...args)),
+      descriptor: () => reached(process.descriptor()),
+      msg: (...args) => reached(process.msg(...args)),
+      open: (...args) => reached(process.open(...args)),
+      due: (...args) => reached(process.due(...args)),
+      restart: (...args) => reached(process.restart(...args)),
+      activity: (...args) => reached(process.activity(...args)),
+      recover: () => reached(process.recover()),
+      savedAlarm: () => reached(process.savedAlarm()),
+      abort: () => reached(process.abort()),
     };
   }
 }

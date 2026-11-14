@@ -56,13 +56,17 @@ view. Process monitors and their `DOWN` messages remain separate.
 ## Other state that outlives a wake
 
 The Process alarm saves `wake` before setting the platform alarm and reads it in the alarm handler
-(`next/packages/libfabrika/src/cloudflare/runtime.ts:1043`, `:1104`). No interval is needed for that
-wait. The Connection accepts hibernatable sockets, installs an automatic ping response, and keeps
+(`next/packages/libfabrika/src/cloudflare/runtime.ts:1341`, `:1399`). No interval is needed for that
+wait. The platform hands the alarm to the Process object's Layer through Alchemy's `alarm` slot
+(`next/packages/libfabrika/src/cloudflare/ProcessObject.ts`). The Layer builds the service on the
+first call that needs it and starts no timer or fiber of its own, so an idle Process object sleeps. The Connection accepts hibernatable sockets, installs an automatic ping response, and keeps
 identity in attachments (`next/packages/libfabrika/src/cloudflare/connection.ts:247`). The socket
 cache is rebuilt by decoding those attachments (`connection.ts:45`).
 
-The existing Process alarm handler still propagates a failed due call without catch-and-re-arm
-(`cloudflare/runtime.ts:1104`). This watcher change does not repair that separate finding.
+The Process alarm handler still propagates a failed due call without catch-and-re-arm
+(`cloudflare/runtime.ts:1399`). The `alarm` slot's type has no failure, so the Layer lets that
+failure die: the bridge rejects, and the platform delivers the alarm again. Catching it there would
+answer done and lose the wake.
 
 ## Where it applies
 
