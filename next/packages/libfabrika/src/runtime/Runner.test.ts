@@ -430,7 +430,7 @@ const worldOn = async (
     readonly execution?: (actual: Execution) => Execution;
   } = {},
 ) => {
-  const { ProgramRunner } = await import("./Runner.ts");
+  const { ProgramRunner, defaultPolicy } = await import("./Runner.ts");
   const { ProgramLoader, CheckedWriter, WatcherManager, Alarm, Recording } = await import("./Entry.ts");
   const { ProcessStore } = await import("./ProcessStore.ts");
   const coordination = await import("../coordination/index.ts");
@@ -492,6 +492,7 @@ const worldOn = async (
     flush: false,
     work: "ok" as "ok" | "declared" | "undeclared" | "throw" | "malformed" | "tagged" | "class" | "non_json",
     pause: false,
+    load: "" as "" | "down" | "pause" | "limit",
   };
   let fireCalls = 0;
   let workCalls = 0;
@@ -686,12 +687,26 @@ const worldOn = async (
           const actual = Context.get(context, ProgramLoader);
           return Layer.succeed(ProgramLoader, {
             load: (...args) =>
-              actual.load(...args).pipe(
-                Effect.map((loaded) => ({
+              Effect.gen(function* () {
+                if (fault.load === "down") {
+                  fault.load = "";
+                  return yield* new ProgramDown({ reason: "load" });
+                }
+
+                if (fault.load === "pause") {
+                  yield* Deferred.succeed(entered, undefined);
+                  yield* Deferred.await(gate);
+                }
+
+                const loaded = yield* actual.load(...args);
+                return {
                   ...loaded,
+                  // A new delivery limit is a journal change the load saves.
+                  declaration:
+                    fault.load === "limit" ? { ...loaded.declaration, maxDeliveries: 7 } : loaded.declaration,
                   execution: options.execution?.(loaded.execution) ?? loaded.execution,
-                })),
-              ),
+                };
+              }),
           });
         }),
       ),
@@ -903,6 +918,8 @@ const worldOn = async (
     layer,
     base,
     ProgramRunner: ViewedRunner,
+    // This world's wiring and program set no restart policy, so its runner keeps the default.
+    policy: defaultPolicy,
     workCalls: () => workCalls,
     fireCalls: () => fireCalls,
     reopen: () => {
@@ -1715,6 +1732,67 @@ describe("p35 Cmd order, replay and recorded failures", () => {
         }).pipe(Effect.provide(w.layer()));
       }),
     { arbitrary: { seed: SEED, runs: 50 } },
+  );
+  // The drain retries only a storage failure: LedgerError or RecoveryStoreError. Each fault lands
+  // on a woken runner before it holds a live state, so the program's own wake cannot hide the
+  // retry alarm. The recovery fault needs a journal save in that window: a new delivery limit.
+  const drainFaults = {
+    ledger: { failure: "LedgerError", retries: true },
+    recovery: { failure: "RecoveryStoreError", retries: true },
+    down: { failure: "ProgramDown", retries: false },
+    interrupt: { failure: "interrupted", retries: false },
+  } as const;
+  it.effect.prop(
+    "A-Timer: only a storage failure in a drain sets the retry alarm, one backoff after the failure",
+    {
+      asked: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100_000 })),
+      lag: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100_000 })),
+    },
+    ({ asked, lag }) =>
+      Effect.forEach(
+        Object.entries(drainFaults),
+        ([fault, { failure, retries }]) =>
+          Effect.gen(function* () {
+            const w = yield* disks.pipe(
+              Effect.flatMap((on) =>
+                Effect.tryPromise({
+                  try: () => worldOn(on),
+                  catch: (cause: unknown): Error => new Error("Runner fixture failed", { cause }),
+                }),
+              ),
+            );
+            yield* Effect.gen(function* () {
+              const r: Runner = yield* w.ProgramRunner;
+              yield* r.msg(w.input(1, { type: "schedule", at: asked }));
+              expect((yield* r.open("scheduled")).view.wake).toBe(asked);
+            }).pipe(Effect.provide(w.layer()));
+            const now = 1_000_000 + asked + lag;
+            const before = [...w.alarms];
+            const failing =
+              fault === "ledger" ? "SELECT checkpoint FROM process_state" : "INSERT INTO process_recovery";
+            w.store.fault.query = (q) => q.startsWith(failing);
+            w.store.fault.once = fault === "ledger" || fault === "recovery";
+            w.fault.load =
+              fault === "recovery" ? "limit" : fault === "down" ? "down" : fault === "interrupt" ? "pause" : "";
+            yield* Effect.gen(function* () {
+              const r: Runner = yield* w.ProgramRunner;
+              yield* TestClock.setTime(now);
+              const draining = yield* r.due(asked).pipe(Effect.exit, Effect.forkChild);
+              // An interrupted drain is cut while it loads the program; the others end on their own.
+              yield* Deferred.await(w.entered).pipe(Effect.race(Fiber.await(draining)));
+              yield* Fiber.interrupt(draining);
+              const exit = yield* Fiber.await(draining);
+              const failed = Exit.isFailure(exit)
+                ? Cause.hasInterrupts(exit.cause) && "interrupted"
+                : Exit.isFailure(exit.value) && Option.getOrUndefined(Cause.findErrorOption(exit.value.cause))?._tag;
+              expect(failed).toBe(failure);
+              expect(w.store.fault.once).toBe(false);
+              expect(w.alarms).toEqual(retries ? [...before, now + w.policy.backoff.minMs] : before);
+            }).pipe(Effect.provide(w.layer()));
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: SEED, runs: 25 } },
   );
   it.effect.prop(
     "A-Timer: a due writes no timer when the program asks for no wake or a later wake",
