@@ -1,6 +1,7 @@
 /**
- * Entry point for building one record part over a SQL handle, re-exported from `Records.ts` so a
- * runner can open a part without the rest of that module.
+ * The record part's own entry: it offers only `recordPart` from `Records.ts`, which the Cloudflare
+ * record part object in `cloudflare/record.ts` builds each part with. Importing it still loads all
+ * of `Records.ts`; only the names offered are fewer.
  *
  * @stability unstable
  */
