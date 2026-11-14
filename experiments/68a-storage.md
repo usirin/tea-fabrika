@@ -1,3 +1,9 @@
+---
+date: "2026-10-17"
+scripts: "`src/program/storage.ts`, `src/program/storage-node.ts`, `src/program/storage.test.ts`, `src/operator-ship-crash.test.ts`"
+summary: "Yes. The shelf is now storage, on Effect's `KeyValueStore`: `memoryStorage()`, `fileStorage(dir)` (the one Node line), or any layer through `storageOf`. `storage.open(run, flags)` answers a handle, like `fs.open`, and every write goes through it. One record per run keeps the flags, closed inputs, how the last start ended, and the index of machine runs. Each value is kept in two checksummed slots, so a torn write reads back as the value before it. Each open counts up and takes a new name; a write through an older handle fails `Stale` and writes nothing. No process ids. An answer is kept until its asker says `forget` (ship's new input; it answers `forgot`, and the operator waits for that before its lane line); a bare run is dropped once it is over; nothing expires by time. 66's five kill points plus four torn writes, on a real folder: 18 of 18 right, nothing queued twice, nothing left behind, and a restart after each tear starts cleanly. 66's 28 cells unchanged. tsh passes, `kill -9` and reattach included. Holes: across processes the fence has a one-write window (no compare-and-set), nothing removes runs yet, the checksum is Effect's `Hash.string`. `@demlik/tea` unchanged."
+---
+
 # 68a. Storage: one record per run, atomic writes, and a stale handle
 
 ```ts

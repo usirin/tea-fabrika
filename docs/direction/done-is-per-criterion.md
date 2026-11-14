@@ -1,3 +1,8 @@
+---
+state: "decided"
+summary: "A criterion is open or met; the owner changes criteria only as ticket events. One ticket, one PR, merged only when every criterion is met; a plan with many tasks is still one PR, tasks reviewed as they land, CI once at the end. A builder may not shrink a criterion; \"cannot meet as written\" is its honest exit."
+---
+
 # Done is per criterion; no deviations
 
 Decided 2026-10-12, written down 2026-10-18.

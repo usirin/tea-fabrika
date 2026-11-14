@@ -1,3 +1,8 @@
+---
+state: "proposed 2026-11-08; walked at Tier 6"
+summary: "Proposed for `next/`: an agent hands back a change; code checks, commits and signs it, using one list of roles. Today's tooling adopts only signing at fetch early, owner, 2026-11-08. Agents still commit; removing Git from their tools and adding roles remain proposed. *Changed 2026-11-13 (owner, [0161](../../.decisions/0161-no-step-signing-by-hand.md)): today's tooling stops signing.*"
+---
+
 # Code commits and signs each step
 
 **Proposed 2026-11-08.** `next/`, walked when Tier 6 starts, where the pipeline's steps land. It

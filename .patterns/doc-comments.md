@@ -1,9 +1,15 @@
+---
+where: "next/packages"
+when: "Adding or changing a public export of a library, or its module file"
+---
+
 # A public export carries an Effect-shaped doc comment
 
 ```mermaid
 flowchart TD
   file["a library module file, such as Deferred.ts"] --> moduleBlock["module block: prose, @stability, @since"]
   file --> exports["each public export"]
+  exports --> pair["a type right under its same-name schema: shares that block"]
   exports --> desc["one description paragraph"]
   desc --> sections["optional, in order: When to use, Details, Gotchas"]
   sections --> example["optional: Example (title), one ts fence"]
@@ -42,13 +48,17 @@ flowchart TD
 export const make = <A, E = never>(): Effect<Deferred<A, E>> => internalEffect.sync(() => makeUnsafe())
 ````
 
-Every public export in a `next/` library gets this block, in this order. The rules come from
+Every public export in a `next/` library gets this block, in this order. The lint rule
+`fabrika/jsdocs` asks for it (`oxlint-plugins/jsdocs.ts`). The rules come from
 Effect's own doc skill at the tag (`.agents/skills/jsdocs/declarations.md`, `categories.md`,
 `examples.md` in [Effect-TS/effect at effect@4.1.2](https://github.com/Effect-TS/effect/tree/effect%404.1.2/.agents/skills/jsdocs)),
 and each one is visible in the installed source:
 
 - **The module block comes first, above the imports.** Prose about the whole module, then
   `@stability` and `@since`, no `@category` (`node_modules/effect/src/Deferred.ts:1-10`).
+  When a file's first statement is not an import (an `export { a }` list, a `const`), one block
+  above it is that statement's own, as Effect's checker reads it, so such a file puts two blocks
+  there and the first is the module's (`oxlint-plugins/jsdocs.ts:29-35`).
 - **The description is one paragraph.** A function starts with a present-tense verb: `Creates`,
   `Returns`, `Converts` (`node_modules/effect/src/Deferred.ts:154`). A value starts with its noun
   family: `Schema for`, `Layer that`, `Service that`.
@@ -75,8 +85,26 @@ and each one is visible in the installed source:
   `export * as Duration from "./Duration.ts"` (`node_modules/effect/src/index.ts:190-195`).
 - **A member's doc is optional.** When present it takes `@since` and `@default`, never
   `@category`.
-- **One doc block per export.** A tool reads only the block right above the export, so a
-  description in one block and `@internal` in a second loses the description. Put both in one block:
+- **A type directly under its same-name schema shares the schema's block.** The pair is one
+  thing to a reader, so it gets one block, above the schema. "Directly" means the statement right
+  before it (`oxlint-plugins/jsdocs.ts:21-24`). This is a kept difference from Effect, which gives
+  the type its own block ([0023](../.decisions/0023-next-follows-effects-code-style.md#amendments)):
+
+  ```ts
+  // A sketch: no pair in a folder the rule is on has this shape yet.
+  /**
+   * Schema for ...
+   *
+   * @stability unstable
+   * @category schemas
+   */
+  export const Sent = Schema.Struct({ /* ... */ });
+  export type Sent = typeof Sent.Type;
+  ```
+
+- **One doc block per export.** The rule reads only the last block right above the export
+  (`oxlint-plugins/jsdocs.ts:25-28`), so a description in one block and `@internal` in a second
+  loses the description. Put both in one block:
 
   ```ts
   // next/packages/libfabrika/src/processes/internal/processTable.ts:66-71
@@ -93,54 +121,68 @@ and each one is visible in the installed source:
   cannot read them, and they rot when the plan moves. Keep the reason in words; a decision number
   such as `(0095)` may stay, since the record lasts. Effect's source cites no ticket.
 
-## Intended scope
+## Where it applies
 
 Every public export of a library under `next/packages/` (today `libfabrika`), and its module
-files. App code in `next/apps/` does not require it. A test helper (`*.test-support.ts`) does not
-either. Today no file in `next/` has a `@since` tag, and Effect's checker finds 92 places in
-`next/packages/libfabrika/src` that need a block or its tags. `@since` carries the library's own
-version, which is `0.0.0` while it is unpublished, so our blocks leave the tag out until a first
-release ([0118](../.decisions/0118-no-since-tag-before-a-release.md)).
+files ([0023](../.decisions/0023-next-follows-effects-code-style.md),
+[0120](../.decisions/0120-effect-code-guidelines.md)). `fabrika/jsdocs` is on at `error` for
+`next/packages/libfabrika/src/ci/**` and `codehost/**` (`.oxlintrc.json:1535-1536`). Each folder
+joins that list in the pull request that fills it, and the list ends as `next/packages/*/src/**`
+([Plan B, B2](../docs/plan/effect-rules-big.md#b2-the-docs-rule)). Until a folder is listed, the
+shape is asked of it by review alone.
 
-Not yet, in `next/packages/libfabrika/src`:
+It stops at what is not public: `internal/`, tests, test support (`*.test-support.ts`), shared
+suites (`*Test.ts`), fixtures and declaration files, where the rule is off
+(`.oxlintrc.json:1541-1550`). App code in `next/apps/` is not asked either. `@since` carries the
+library's own version, `0.0.0` while it is unpublished, so a block leaves the tag out until a first
+release, and the rule's `since: "absent"` fires on one
+([0118](../.decisions/0118-no-since-tag-before-a-release.md), `oxlint-plugins/jsdocs.ts:114-115`).
+
+How far it is, counted by the rule on 2026-11-14 on main `c0aaf4a24`
+(`oxlint-plugins/README.md`, "The docs rule, E6"), beside the counts made before it:
+
+- **On:** `ci` 9 of 9 exports pass and `codehost` 12 of 12, with both module blocks: 0 fires, as
+  the plan's prototype found.
+- **Not on yet:** the other public files of `libfabrika`, 136 in all, fire 666 times: 346 exports
+  with no block, 232 with a block out of shape (most lack `@stability` and `@category`) and 88
+  files with no module block or a wrong one. The README has the count by module.
+- **The counts before the rule:** Effect's checker run by hand found 92 places (2026-11-09); the
+  plan's grep found 333 exports with no block and 114 files with no module block. Neither read a
+  name in an `export { a }` list or a block out of shape, which is why the rule finds more.
+
+Not yet, in `next/packages/libfabrika/src`, and no rule catches them:
 
 - Doubled blocks: `ledger/internal/ledgerPages.ts:7-8`, `ledger/internal/ledgerTrace.ts:3-4` and
   `processes/internal/processMail.ts:9-14`, each a description block followed by a second
-  `/** @internal */` block.
-- Plan codes: a regex count on main `4cc93a8a0` finds 89 comment lines in 52 product files, for
-  example `ledger/Log.ts:1-2` ("Tier 1, P6 (laws p68 and p92)"), `processes/Mailbox.ts:2-3` and
-  `ledger/internal/ledgerStore.ts:20` ("(flag 13)"). A count, not a list.
+  `/** @internal */` block. `fabrika/jsdocs` reads only the last block and is off in `internal/`.
+- Plan codes: a regex count on main `4cc93a8a0` found 89 comment lines in 52 product files, for
+  example `ledger/Log.ts:1-2` ("Tier 1, P6 (laws p68 and p92)") and
+  `ledger/internal/ledgerStore.ts:81` ("(flag 13)"). A count, not a list.
 - History: `processes/internal/processMail.ts:10` ("Historical mailbox replay stays unchanged").
 
-## Decision
+## What holds it
 
-[0023](../.decisions/0023-next-follows-effects-code-style.md): `next/` follows Effect's code style
-and doc comment structure.
-
-## What can hold it
-
-- **Effect's own checker** (`packages/tools/jsdocs` in Effect's repo, run there as
-  `pnpm jsdocs --check`) checks every rule above. It is private, not on npm, and needs the
-  TypeScript JS API, which our TypeScript 7 does not have. A scratch copy with `effect@4.1.2`,
-  `glob` and TypeScript 5.9 ran on both trees on 2026-11-09. On Effect's 144 modules in
-  `packages/effect/src` it reported only `StandardSchema.ts`, which Effect's own config excludes: 0
-  false alarms. On `libfabrika` it reported 92 places. A hand read of 20 (seed 119120) found 20
-  real exports with no block or no tags; 2 were in `*.test-support.ts`, which a config would leave
-  out.
-- **Oxlint 1.90.0's `jsdoc` plugin cannot hold it.** It has no rule that requires a doc on an
-  export. On Effect's correct tree, `check-tag-names` (with `since`, `category`, `stability`
-  defined), `empty-tags` and `no-blank-blocks` fire 0 times, so they can guard tag spelling. Its
-  `require-param` and `require-returns` fire 1,494 and 1,679 times there, since Effect writes no
-  `@param` or `@returns`: all false alarms, so they stay off.
-- **`@effect/docgen` 4.1.2 is on npm**, but it builds a docs site and checks less: `@since` and a
-  description per export, not the section order.
-- **No check finds plan codes or doubled blocks.** Two small rules of ours are proposed in the Effect
-  code guidelines study (experiment 262, not on main yet): a word list on comments, and a rule on
-  two doc blocks above one export. Their false alarms get counted before either can block.
-- Lean, a guess, about 70% sure: a small rule of ours in `oxlint-plugins/` for presence, tag set
-  and tag order, since it needs no type information, plus Effect's checker run by hand for the
-  section rules until a block from it is measured on more of our tree. What would settle it: the
-  rule's false alarms on all of `libfabrika` after the first sweep.
+- **`fabrika/jsdocs`, ours** (`oxlint-plugins/jsdocs.ts`), finds each export and its block through
+  oxlint's syntax tree: `export const`, `let`, `function` (the first overload), `class`,
+  `interface`, `type`, `declare namespace` and each export in it, `export * as` and each name of
+  `export { a }`. No kind of export is exempt; only `@internal` takes one out.
+- **Whether a block is right is Effect's own grammar,** copied from Effect's checker
+  (`packages/tools/jsdocs/src/Jsdocs.ts` at `effect@4.1.2`) into `oxlint-plugins/effect-jsdocs.ts`
+  with Effect's MIT notice; its head lists every line taken and every change. So the description,
+  the sections, the examples and the tag order are judged as Effect judges them, and an Effect bump
+  means diffing those lines again.
+- **Measured against Effect's own verdict:** on Effect 4.1.2's 432 files outside `internal/`, with
+  `since` set to `required`, it fires 10 times, each where Effect's own checker also reports: the 6
+  exports of `StandardSchema.ts`, which Effect's config leaves out, and 4 files with no module block
+  of their own. 0 false alarms. The laws are in `oxlint-plugins/jsdocs.test.ts`.
+- **What it cannot see:** whether a description is true, whether `@see {@link x}` names a real
+  thing, whether an example compiles, and a name sent on under a new binding. A review reads each
+  description against the code.
+- **No check finds plan codes or doubled blocks.** A plan-code rule on comments comes later, with
+  its own plan, once its false alarms are counted (Plan B, B2, item 9).
+- The lean before the rule (2026-11-09, about 70% sure) was a small rule of ours for presence and
+  tags only, with Effect's checker run by hand for the sections. It was wrong in part: copying
+  Effect's grammar holds the sections in the same rule.
 
 ## Why it is not obvious
 

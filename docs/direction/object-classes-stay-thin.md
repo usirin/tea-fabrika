@@ -1,3 +1,8 @@
+---
+state: "decided (2026-10-31), built as plain classes in Tier 1's P12; amended 2026-11-09 by 0041, whose port is ticket 502 and not built yet; from 0042 the same day, what a class holds from the platform comes from Alchemy's services"
+summary: "In `next/`, a Durable Object class holds only what the platform gives it and a one-line handoff into Effect. The logic is plain code that also runs on Node in tests, so the mutation step can reach it. The brain stays on workerd. From 2026-11-09 the class itself is an Alchemy Effect Durable Object, a class plus a `.make()` Layer ([0041](../../.decisions/0041-object-classes-are-effect-objects.md))."
+---
+
 # An object class stays thin
 
 **Decided 2026-10-31,** from the plan for ticket 115. This is about `next/`.
@@ -8,7 +13,10 @@ Today's version does not change.
 written with Alchemy's Effect Durable Object model, a class that only names it plus a `.make()`
 Layer, not as a plain `cloudflare:workers` class. Only what the class is made of changes. The
 rule below stands: the logic is plain code behind a service, and it also runs on Node in tests.
-The port is tracker ticket 502 and is not built yet, so `brain.ts` still has the plain classes.
+The port is tracker ticket 502. `RecordPart` and `Connection` are built this way: each is one
+bridge line in `brain.ts`, and its Layer is a sibling file, such as `cloudflare/ConnectionObject.ts`,
+which builds the service with `ObjectService.make` and hands each slot and call to it. `Project`,
+`Process` and `Control` are still plain classes in `brain.ts`.
 
 ```ts
 // A sketch from 0041, not built yet. All the logic is in ProgramRunner, which also runs on Node.

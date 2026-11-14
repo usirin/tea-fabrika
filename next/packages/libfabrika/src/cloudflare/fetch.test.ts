@@ -183,8 +183,18 @@ describe("P12 public Worker fetch", () => {
         path = `/client/${encodeURIComponent(id)}`;
       const request = w.request(path, "GET", originHeader);
       const answer = await Effect.runPromise(fetch(request, w.env, w.config));
-      expect(answer).toBe(w.response);
-      expect(w.calls).toEqual([{ to: path, method: "fetch", args: [request] }]);
+      // T502 S1: the request crosses through Alchemy's typed stub, whose fetcher sends the object a
+      // copy of it with every part kept, and gives the object's answer back as a Response of its own.
+      expect(answer.status).toBe(w.response.status);
+      expect(await answer.text()).toBe("gateway");
+      expect(w.calls.map(({ to, method }) => ({ to, method }))).toEqual([{ to: path, method: "fetch" }]);
+      const sent: unknown = w.calls[0]?.args[0];
+      expect(sent).toBeInstanceOf(Request);
+      expect(sent instanceof Request ? [sent.method, sent.url, [...sent.headers]] : []).toEqual([
+        request.method,
+        request.url,
+        [...request.headers],
+      ]);
     }
   });
   law("POST grant forwards parsed JSON only to the configured project", async ({ port, name, body }, fetch) => {

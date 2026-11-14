@@ -1,3 +1,8 @@
+---
+state: "decided; the step is called triage from 2026-10-24; fold dropped and answers renamed 2026-10-24"
+summary: "No \"later\" and no priority. A \"no\" carries a one-line reason; \"later\" is a reopened \"no\", sent through sort again. Triage does not fold for now: every yes that needs a plan gets a plan of its own. Its answers are duplicate, decline, accept (to plan or research) and escalate."
+---
+
 # Sort answers yes or no
 
 Decided 2026-10-18.

@@ -1,3 +1,8 @@
+---
+state: "decided"
+summary: "Today's fabrika shows which jobs exist. It does not decide how they are built."
+---
+
 # Rethink, do not port
 
 Decided 2026-10-04, restated 2026-10-11 for the stage machines.

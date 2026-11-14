@@ -1,3 +1,8 @@
+---
+state: "vision"
+summary: "See the whole machine for one piece of work, and choose the harness and model on each agent node."
+---
+
 # A canvas per piece of work
 
 **A vision**, written down 2026-10-11. Not planned, not sized. It is here so

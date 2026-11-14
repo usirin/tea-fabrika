@@ -1,3 +1,8 @@
+---
+where: "next/"
+when: "About to write a helper, a guard, a parser, a retry, a loop or a wrapper"
+---
+
 # Reach for what Effect 4.1.2 ships before writing a helper
 
 ```mermaid

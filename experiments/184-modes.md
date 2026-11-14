@@ -1,3 +1,9 @@
+---
+date: "2026-11-01"
+scripts: "none; reading, plus a thirty-line type probe on a scratch file, not kept"
+summary: "Reading, not a measurement. Tesler, Raskin, Norman, NN/g, Vim, Helix, tmux, i3, Zellij, Transient, Hydra, Linear and Apple's HIG agree: avoid a mode, show it in words where the person looks, give it one plain way out, never stack two. They differ on what the base is called (`root`, `default`, `normal`) and whether outside keys still work. Today's info mode (`C-b i`) shows its name in words and never traps, but Escape does not leave it, it is on with no sign when the bars are hidden, a screen reader is never told, and it explains only what the pointer is over. Tier 1's notes tile already plans a real mode, reading and editing. The probe shows a `commands` field can be typed so a command's Msg and mode are checked by the compiler. No screen reader was run. $0."
+---
+
 # How do makers handle modes, and what does today's info mode teach?
 
 Read 2026-11-01. **This is reading, not a measurement.** One small type probe ran on a scratch

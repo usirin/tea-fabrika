@@ -1,3 +1,9 @@
+---
+date: "2026-11-01"
+scripts: "none, a study by reading only"
+summary: "Read 2026-10-31, at DeepSeek's `dsh-superagent-prototype` `6337fc8`, nothing run. A narrower neighbor, not a rival: an agent teammate for one GitHub repo where code guards who may ask and one worker agent carries the whole job. Us on checking a job and on keeping a bad text from doing harm (their agents have full access, by their own docs). Them on counting a person's attention as a cost, and on follow-up comments going to the agent that did the work. Best idea to take: an attention budget, since triage accepts about 130 to 190 asks a week with none set. Five ideas to take, three tests, six to leave. Checked against `main` at `92740b7`."
+---
+
 # dsh-superagent against tea-fabrika
 
 Read 2026-10-31, at commit

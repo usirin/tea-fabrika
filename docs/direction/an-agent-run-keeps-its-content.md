@@ -1,3 +1,8 @@
+---
+state: "proposed 2026-10-29; walked at Tier 5"
+summary: "An agent run is a conversation plus tool calls. Its spans keep each prompt, reply, and tool input and result (OpenTelemetry's \"content\"), in the names tea already writes (Langfuse's `input` and `output`); today's harness blanks them. The content sits in a `content` table in the job's own record, the one table a person can delete from, since the mask of known `Redacted` values misses a key read from a file. A value over a cap goes to `Blobs`. trace draws the content by Langfuse's public names and still imports nothing from `agents/`. Not one Durable Object per agent run."
+---
+
 # An agent run keeps its content in the trace, the way Langfuse does
 
 Proposed 2026-10-29. Walked when Tier 5 starts (owner, 2026-11-08): agent transcripts, masking and deletion. An agent run is a conversation plus tool calls. Today its

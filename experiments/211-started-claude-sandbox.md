@@ -1,3 +1,9 @@
+---
+date: "2026-11-05"
+scripts: "none"
+summary: "Today's version; reading only, with file and line for each wall, and the docs of Claude Code's sandbox, Codex, Copilot's cloud agent and dev containers. Keep today's sandbox and change the folder: the started claude reads and edits the person's checkout and runs its checks, with no network, no git writes (`denyWrite .git`, as Codex's default), no login of the person's, and asks refused. It cannot commit, push, merge, approve or answer; the person commits. The person meets no prompt while it works. Two walls to build with it: the shell guard as a command hook (the `acp` row has none) and experiment 210's start check. Every tool vendor runs MCP servers outside its box, so the fabrika connection is the widest door. Not closed by any option: write now, run later; a secret inside the repo. Options: A repo-write, no network, no git writes; B A plus code pushes `claude/<run>`; C read-only repo plus a worktree it owns. Lean A, 75%; the doubt is tests that need a local socket (experiment 77b), settled by one `pnpm test` under these settings. No model, $0."
+---
+
 # What should the sandbox of the claude that `@claude` starts still block, once it works in the repo?
 
 Read 2026-11-05. **This is reading only.** No agent, no model, no sandbox run, $0. Today's version

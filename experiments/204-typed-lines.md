@@ -1,3 +1,8 @@
+---
+date: "2026-11-03"
+summary: "`next/` design, built in experiments only. Yes: tail-recursive conditional types read a literal line ArkType's way, and the editor says `Type '\"asks | nope\"' is not assignable to type '\"no program nope\"'`. Programs reach the checker through a `Register` interface each fills from its own file (TanStack Router's), no import between them. On 40 lines the compiler and a run-time reader of the same grammar give the same words on 37; on 3 the compiler lets through what the schema's checks refuse (`--ticket 0`, `1.5`), never the other way. One line costs about 520 instantiations and 0.45 ms of check time on TypeScript 7 (0.6 ms on 6); 167 stages (666 words) is the longest before TS2589. A line with a hole (`string`, a template) must go through `unchecked`, and `bad_line` stays. Shared ids need a brand and an `identifier`; today's `TicketNumber` has neither. Lean: yes for lines in program code, 70%; the doubt is how the registry reaches each program package's own type check. No model, $0."
+---
+
 # A tsh line typed at compile time
 
 **Yes, the compiler can check a literal line, and say why it is wrong in words.** A chain of

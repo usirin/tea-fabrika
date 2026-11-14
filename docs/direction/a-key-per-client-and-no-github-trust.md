@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-05"
+summary: "`next/`. Each client signs `initialize` with its own key pair; the person key grants each new client in SSHSIG's shape. No key is ever let in because GitHub lists it: GitHub's key list is at most a way to look one up. A second person (Tier 3) joins by invite and approval, the same flow as a new tab, and `next/` depends on GitHub as little as it can. Today's version keeps its GitHub sign-in until `next/` replaces it. Answers Tier 1's question 10."
+---
+
 # A key per client, and GitHub is never a way in
 
 **Decided by the owner, 2026-11-05.** This is about `next/`. Today's version keeps its GitHub

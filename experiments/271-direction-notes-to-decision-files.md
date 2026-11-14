@@ -1,3 +1,9 @@
+---
+date: "2026-11-11"
+scripts: "none; reading, nothing ran"
+summary: "Both versions' notes under `docs/direction/`, at `259704b1f`. Of 148 notes, 135 are decided or decided in part; 76 are linked by no decision and 9 only in passing, so 85 notes and 798 rules are in scope (1 already a decision, about 29 partly covered, about 11 repeated). 28 batches, everyday `next/` design rules first and today's UI rules last, in seven groups of decision files (group 3, 0320 to 0339, merged; the rest being written). 140 drift flags (104 stale, 29 contradictions, 7 status mismatches); most are settled by a later decision such as 0081, 0066, 0099 or 0080, and about 20 items need the owner's read. The ticket's count of 133 and 73 was wrong. Agent time only, $0; tokens not recorded."
+---
+
 # 271. Which decided rules in the direction notes have no decision file, and in what order should they move?
 
 Read on 2026-11-11. **This is reading, not a measurement.** Seven agents read every note under

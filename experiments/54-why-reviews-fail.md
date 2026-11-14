@@ -1,3 +1,8 @@
+---
+date: "2026-10-11"
+summary: "714 of 774 `FAIL` lines matched a failing verdict on kamp-us/phoenix. Two failed reviews in three needed a reader, mostly for a doc or skill page that no longer matched the code. About one in ten was only a red check, and a check was red on GitHub's record at one failed commit in four. About one in ten went against a rule already written down. Jev at 0.8 and up agreed with the hand labels 91% of the time and reached 0.8 on 56% of items, for $0.15."
+---
+
 # 54. Why reviews fail: 707 failed reviews, read on their pull requests
 
 Experiment 53 found that a failed review is the most common detour in a lane.

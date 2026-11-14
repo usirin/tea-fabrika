@@ -1,3 +1,9 @@
+---
+date: "2026-11-09"
+scripts: "none"
+summary: "`next/`, reading plus counts and one probe script, no model, $0. One test: a machine stores a value that changes (T1) and that value decides what is legal next (T2), which is control state (Harel 1987). 13 implicit machines, 12 already explicit, 5 step-by-step functions already right, 22 not machines. One reproduced bug: the span sink's \"tables made\" latch turns on before its transaction commits, so one failed first write leaves the sink without tables (`data/sink.ts:268-278`; `data/records.ts` has the same lines). Top three: the table latch (4 copies, 3 rules), the supervision record (24 state pairs allowed, 8 real, best fixed inside P34c), the connection handshake (two writers). The brain stage keeps a tea machine nobody reads. Made explicit, the 13 would gain about 15 properties over about 65 example tests (a rough read of titles), with 23 invariants to write. Only the latch and three schema decodes were run; the rest is read."
+---
+
 # 246. Which state machines in `next/` are implicit, and what form should each take?
 
 Run 2026-11-09 on origin/main at `b865c421`. **All claims are about `next/`.** This is reading plus

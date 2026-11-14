@@ -1,3 +1,8 @@
+---
+date: "2026-11-11"
+summary: "`next/`'s stack: `effect` 4.1.2, Alchemy beta.84, local workerd through Alchemy's dev deploy. Yes, in our own code with no patch: exporters with no interval plus `OtlpExporter.Flusher.flush` at the end of every wake hibernated 3 of 3 times, with no timer pending, and exported all 4 spans and 6 logs. Effect's PR 10235 (in 4.1.2) already ended alchemy#2878's endless timer for logs and traces. Default intervals still keep the object awake about 5 s after a wake (awake at 12 s idle 2 of 2, asleep at 40 s). The metrics exporter's 10 s timer never stops, and that object never slept. `next/` exports no OTLP today; its span sink already flushes per call with no timer. Lean, about 85%: (a) when `next/` adds an OTLP export, no metrics exporter in an object. Upstream comment drafted, not filed. Local only, no cloud run. $0, no model."
+---
+
 # 259. Can a Durable Object export OTLP telemetry from its instance fibers and still hibernate?
 
 Measured on 2026-11-11, on main at `a8c4cd722`, on the laptop's own workerd, started through Alchemy's

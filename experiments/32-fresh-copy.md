@@ -1,3 +1,9 @@
+---
+date: "2026-10-04"
+scripts: "none"
+summary: "A fix that leans on a git-ignored file passes in the builder's folder and fails on a fresh copy. Shown on a real checkout in `local.test.ts`."
+---
+
 # 32. A fresh copy of the change
 
 The tests ran in the folder the builder worked in, which can hold files git

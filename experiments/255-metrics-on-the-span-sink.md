@@ -1,3 +1,8 @@
+---
+date: "2026-11-10"
+summary: "`next/`, at `f678d742c`, on `node:sqlite`. One tag (`fab.outcome`, the five verbs, else `other`) and one count (a sum point per piece, hour and outcome) in about 100 lines; five tests green. Yes for storage, no for reading. A tagged row grows 48 to 52 bytes; aggregates grow by `P + 6` rows an hour, never with spans; three tags split jointly reach 125 per piece-hour. At 50 spans per run (a guess) over 132 runs a day, about 0.57 MB of measurements a day against 10 GB per object. Missing: a reader across objects, mergeable histograms, a monitor, a window; nothing reads metrics today. The sink drops two outcome tags pieces already write, and a late span is counted nowhere. Lean, about 70%: rows in the sink, tags one by name, next work on the read side. No model, agent time only."
+---
+
 # 255. Can `next/`'s span sink, as built, carry the primitives of a metrics product at one team's scale?
 
 Measured on 2026-11-10, on a spike, on main at `f678d742c`. The spike code stays on the branch

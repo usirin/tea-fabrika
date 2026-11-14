@@ -1,3 +1,8 @@
+---
+date: "2026-11-13"
+summary: "Today's hand-run tooling; $0. The skill Markdown under `.agents/skills/` on `origin/main` at `f18bea901`: 2,928 lines, 186.5 KB. 578 lines (about 49 KB) can be cut with proof, 308 of them in the lead skill's 766. The biggest reason: the lead skill repeats what the headers of `drive.ts` (61 lines) and `chain.ts` (96 lines) already say, and the copy has drifted, since it never mentions the chain's host step. Next: duplicates (the adr template twice, the Mermaid rules in two skills, 13 review clauses in two files), then history, wrong homes and six stale spots. `skillscheck.sh` requires three of the duplicates, so 39 of those lines need the check changed first. About 205 lines are mechanical cuts today. Not counted, because the code still matches: signing prose owed out by 0161, landing prose owed out by 0162, and about 45 lines for a lane parked before 0066. The 11 skill descriptions are 2,932 characters in every session. The root `AGENTS.md` (722 lines) was left to 0129's own cut. No agent ran, so it cannot say whether shorter text works better."
+---
+
 # 283. How much of the text agents are made to read here can be cut, and where does each cut go?
 
 Read on 2026-11-13, on `origin/main` at `f18bea901`. It covers today's hand-run tooling, which is

@@ -1,3 +1,8 @@
+---
+state: "proposed 2026-11-05; walked at Tier 6"
+summary: "Both versions. A strategy is the lane's answer to \"this gate isn't perfect, now what?\": fix forward, stop the line, ship dark or roll back. Fix forward ships good enough with each gap a ticket, and never skips a gate, merges red or changes a test. The line: can a later change undo the harm? Open: does a strategy belong to the ticket, the area or the step."
+---
+
 # Pipeline strategies: what a lane does when a gate is not perfect
 
 **Proposed 2026-11-05.** Walked when Tier 6 starts (owner, 2026-11-08): pipeline stages and their gate strategies. The owner's idea, named on 2026-11-05: a strategy is the lane's answer to

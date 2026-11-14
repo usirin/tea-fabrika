@@ -1,3 +1,9 @@
+---
+date: "2026-10-04"
+scripts: "none"
+summary: "On real output: no made-up quotes, and a dispute caught a finding that would have broken a test. A fresh reviewer raised decided findings again in new words."
+---
+
 # 28. Review as its own machine, with a real reviewer
 
 Review moved out of the lane into `src/review.ts`, a child machine the lane

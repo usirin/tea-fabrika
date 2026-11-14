@@ -1,3 +1,9 @@
+---
+date: "2026-11-07, 2026-11-08"
+scripts: "none"
+summary: "Both versions, mostly `next/`; reading and a lab build, not a measurement. About 13 makers (Linear, macOS, Raycast, VS Code, Zed, tmux, i3, i3status, Ableton, WCAG, Erlang `pg`, Elm) agree: a program offers, the person places, the frame draws. Leans: one glance slot, picked by palette row or settings line (65%); a program never adds its own top bar item (70%); the inbox tile shows asks, then agents' lines, as two groups (65%), and \"Open all\" is the inbox's `open` command on its toolbar (75%); placement is the person's per-program rule, beside by default (70%). Call 7, float or unfold, was a clash with Linear. Step 5 (2026-11-08) built four designs in today's app and shot 21 states at eight layouts (210 headless shots); the owner picked D1 (the inbox's glance in the top bar) with D3 (one list in two groups, the look unfolds in place, a place rule may float it), and named the second group Messages. Note: [Customization](../docs/direction/customization.md). $0."
+---
+
 # What may a person change about where programs show, and what may a program claim for itself?
 
 Read 2026-11-07; designs built and shot 2026-11-08. **This is reading, not a measurement.**

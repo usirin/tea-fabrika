@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-24; 2026-10-25: the planner picks a property's tool, `\"tla\"` only for a design with no code yet (experiment 139); nothing built"
+summary: "Checks split by who checks them: a Property is checked by a tool and lasts as a test; a Criterion is read by a reviewer and ends with the ticket. A Property is `{when, result, why, behavior, tool, stories, code}`, new or existing, with a `p<n>` id in the criteria book and results as `checked` facts from a tool. One main `scenario` per task, with a fixture. Plan has no ask of its own: it answers `done`, and the parent asks the owner once per version. It runs in a box, writes only its `planned` fact, and reads the ticket from our tracker. The owner's approval records the version and a hash of the ticket's text."
+---
+
 # The plan stage
 
 Decided 2026-10-24. Who picks a property's tool was decided 2026-10-25, from

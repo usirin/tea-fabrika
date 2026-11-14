@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-09 ([0017](../../.decisions/0017-each-model-we-follow-has-one-table.md))"
+summary: "`next/`. One living table per outside model: [OTP](./follows/otp.md) for coordination, [Elm](./follows/elm.md) for tea and windows, [Kubernetes](./follows/kubernetes.md) for backoff, `resourceVersion`, limits, labels and leases. One row per behavior: what the model does with a source, what we do with `path:line` or \"not built\", and \"same\" or \"differs, because ...\". A pull request that changes a behavior updates its row."
+---
+
 # Where we follow a model, and where we leave it
 
 One living table per outside system that a note in `docs/direction/` names as the model for a

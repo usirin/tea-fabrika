@@ -1,3 +1,8 @@
+---
+date: "2026-10-10"
+summary: "kamp-us/demlik#559 went from claim to merged in 18.8 minutes. 22 Cmds, no tokens of the machine's own, $1.74 for its three shells."
+---
+
 # 49. The operator machine drives one real lane
 
 Section 48 stopped at a fake. This one wires the machine to real fabrika,

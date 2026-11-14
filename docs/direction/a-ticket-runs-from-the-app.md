@@ -1,3 +1,8 @@
+---
+state: "proposed 2026-10-27; filing starts the lane and a person's agent is the ticket's delegate, decided 2026-11-06; its model name is from before `gpt-6-astra`"
+summary: "The plan for v1: a filed tracker ticket starts a lane on its assignee's host, claimed on the ledger. A new hand-written parent, `lane`, steps triage, plan, the owner's approval, the test writer, build with quick checks per task, the mutation step, one review per plan, push and merge, writing its facts onto the ticket and asking through its box. Push is a new small program; merge is today's ship code. Every stage runs in a box; stage agents run on GPT sol through Codex, triage on opus. The `pr` fact is the PR watcher's. The cloud host is in v1. Sixteen slices, fakes first at $0; the first real ticket is a tea-fabrika one. The core sweep waits."
+---
+
 # A ticket runs from the app
 
 **Proposed 2026-10-27, brought up to date the same day** with the owner's

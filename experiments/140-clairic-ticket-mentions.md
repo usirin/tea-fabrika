@@ -1,3 +1,9 @@
+---
+date: "2026-10-24"
+scripts: "`140-clairic-ticket-mentions.ts`, `results/140-clairic-ticket-mentions.json`"
+summary: "No. Cloudflare's preview extraction model Clairic, three list fields (code names, file paths, error messages) written once and kept, on 86b's six demlik tickets, against `mentionsOf` (`legacy/src/facts.ts`); each arm's list went through the same facts pack. Both reached 13 of the 36 files 86b's plans cited, and 5 or 6 of the 20 the fix PRs changed; Clairic's one extra came from the word `span`. Code by hand: `mentionsOf` 35 of 36 items, Clairic 68 of 130 (45 prose, 17 cut pieces such as `scoreCo`); 22 of its noise items exist at the base, so a lookup would not clean them. Every span exact, 0 items not in the text, the same answer on all 3 runs. Clairic's one real win: two bare folder paths `mentionsOf` drops (it misses a folder outside backticks), holding 15 cited files; a regex fix in our code would close it. Confidence is one number a list and follows list length (Spearman -0.93), so it cannot flag an item. Error messages: 1 of 3 quotes whole, 10 of 13 items not outputs. Two thirds of the cited files are not named in the ticket at all. 18 calls, 16,209 input tokens, $0.0016, median 185 ms; `mentionsOf` 0.025 ms. No agent, no Jev. Confidence 80%."
+---
+
 # 140. Can Clairic list what a ticket names, for the plan agent?
 
 The question: a study of our lane found the biggest waste is each fresh agent

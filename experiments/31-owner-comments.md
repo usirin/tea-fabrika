@@ -1,3 +1,8 @@
+---
+date: "2026-10-04"
+summary: "27 of 48 answers right and 21 unsure. 0 said \"changes nothing\" about a comment that changes something."
+---
+
 # 31. The owner's comments
 
 A comment the owner leaves while the work is under way can change what "done"

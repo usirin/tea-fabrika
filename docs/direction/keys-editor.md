@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-08"
+summary: "Today's version first. The keys editor is one searchable list in a tile, not a box over the tiles: the name on the left, keycaps on the right, recording in the row, each change said in words with Undo. A keyboard map is a second view of the same program, `keys --map`, drawn on the person's own keyboard layout and physical layout, never the system's guess. Seven principles; the owner picked the list, the keyboard map as a second view and the tile on 2026-11-08. Changes the frame's shortcuts list row."
+---
+
 # Keys editor
 
 **Decided 2026-11-08** by the owner, after the look walk: build A first, as PR 1; D, the keyboard

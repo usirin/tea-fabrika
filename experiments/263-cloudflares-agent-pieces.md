@@ -1,3 +1,9 @@
+---
+date: "2026-11-11"
+scripts: "none; reading, nothing ran"
+summary: "`next/`. Borrow, do not build on them. The 2026-11-09 Codex entry is an experimental example whose agent has two tools, read a file and write a file. Lifecycle's one alarm per object matches our rule. Worth taking: its crash cases for our recovery laws, Streams' resume by cursor for the window's feed, and git with no container for a hand that has no shell. As a base it would replace the tea machine inside each process object, add three records beside the ledger, and re-run cut-off work on its own. Decided as 0121. No model, $0."
+---
+
 # Should `next/` build on Cloudflare's agent pieces (Lifecycle, Tasks, Streams, Sessions, Workspace), or borrow from them?
 
 Read 2026-11-11. **This is reading, not a measurement.** Nothing ran. The owner walked it the same day and decided [0121](../.decisions/0121-borrow-from-cloudflares-agent-pieces.md). Sources were read from the packages themselves (`npm pack` into a temp folder,

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { RpcCallError } from "alchemy/Rpc";
 import { Effect, Layer, Schema } from "effect";
 import * as fc from "fast-check";
 // T695, next/. The Cloudflare adapters keep the failure they translate (decision 0043 rule 12).
@@ -67,6 +68,23 @@ const calls = Object.entries(clients(null)).flatMap(([client, made]) =>
   Object.keys(made).map((method) => ({ client, method })),
 );
 
+// Ticket 502 slices S1 and S2: a ProcessClient call and a Connection call other than `fetch` go
+// through Alchemy's typed stub inside `reach`, so the cause is the stub's RpcCallError, and that
+// error holds the rejection. A typed stub serves `fetch` through Alchemy's fetcher, not as a call:
+// the fetcher fails typed with the rejection as its cause. Plant: `unreachable(error.cause)`.
+const throughStub = (client: string, method: string) =>
+  client === "process" || (client === "gateway" && method !== "fetch");
+
+/** The rejection a client's `unreachable` kept: its cause, or what the stub's RpcCallError holds. */
+const kept = (client: string, method: string, cause: unknown) => {
+  if (!throughStub(client, method)) {
+    return cause;
+  }
+
+  expect(cause, `${client}.${method} keeps Alchemy's RpcCallError`).toBeInstanceOf(RpcCallError);
+  return cause instanceof RpcCallError ? cause.cause : undefined;
+};
+
 describe("T695, the platform clients keep what the platform rejected with", () => {
   // C5, platform.ts:12, every `catch: unreachable` in that file. Plant: the zero-argument callback.
   it("vector: the shared callback serves at least every client method the adapters call", () => {
@@ -75,7 +93,7 @@ describe("T695, the platform clients keep what the platform rejected with", () =
   });
 
   law(
-    "C5: a generated rejection on any client call is `unreachable` with that very value as its cause",
+    "C5: a generated rejection on any client call is `unreachable` and keeps that very value, as its cause or in the one RpcCallError a Connection call wraps it in",
     fc.record({
       steps: fc.array(fc.record({ call: fc.constantFrom(...calls), failure: failures }), {
         minLength: 1,
@@ -87,10 +105,17 @@ describe("T695, the platform clients keep what the platform rejected with", () =
         for (const { call, failure } of steps) {
           const method = clients(failure)[call.client]?.[call.method];
           expect(method, `${call.client}.${call.method}`).toBeTypeOf("function");
-          const error = yield* Effect.flip((method as () => Effect.Effect<unknown, LedgerError>)());
+          // A real Request, so a client that hands `fetch` to a typed stub has one to read.
+          const error = yield* Effect.flip(
+            (method as (request: Request) => Effect.Effect<unknown, LedgerError>)(
+              new Request("http://127.0.0.1:8787/client/a/b"),
+            ),
+          );
           expect(error).toBeInstanceOf(LedgerError);
           expect(error.reason).toBe("unreachable");
-          expect(error.cause, `${call.client}.${call.method} keeps the rejection`).toBe(failure);
+          expect(kept(call.client, call.method, error.cause), `${call.client}.${call.method} keeps the rejection`).toBe(
+            failure,
+          );
         }
       }),
   );

@@ -1,3 +1,9 @@
+---
+date: "2026-10-24"
+scripts: "`135-triage-models.ts`, `lib/sort.ts` (`sortOnce` takes an effort), `results/135-triage-models.json`"
+summary: "Partly. Same briefs, two runs a ticket, only the model and effort changed: haiku at low effort (the built machine's), sonnet and opus at the SDK's default. Phoenix's missed \"no\" (92b's \"both\" brief; today's bar has no \"hardening\" or \"churn\" rule) is the model's: on 29 real no's sonnet missed, opus closed 32 of 58 answers, haiku 18, sonnet 6, and opus said \"no\" to built work no more often (8 of 20 answers on 10 built tickets, as sonnet; 0 on demlik). Three built tickets every model closes fit \"hardening with no incident\" word for word: the bar's, not the model's. Fold (133, today's brief) is not: opus 5 of 26, sonnet 2, inside the run-to-run wobble, and every model gave the same wrong answer on all 4 later reports. Route on 88's 6 route misses is not: opus 0 of 12, sonnet 3, haiku 5, and the models agree with each other, not with 88's older key. Haiku fails the bar written first: 10 of 26 false folds on 133's controls (sonnet 1), 4 of 12 easy no's let go; level on \"no\" to good work (9 of 94, sonnet 8 of 72). Both fails are on things today's machine does not do. A ticket's first sort: haiku $0.004, sonnet $0.06, opus $0.11; median 4.3, 4.3 and 6.9 s. Not run, for the $10 cap: opus at high effort, opus on the controls and on the easy no's. $9.90, 335 sorts. Confidence 75% on the \"no\", 80% on fold and route, 70% on haiku."
+---
+
 # 135. Are triage's weak scores the model's?
 
 The question: every accuracy test of triage (the step the code still calls

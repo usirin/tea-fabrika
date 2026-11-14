@@ -1,3 +1,8 @@
+---
+state: "decided"
+summary: "Typed services that code imports, not a command-line tool that agents call."
+---
+
 # The backend is a library
 
 Decided 2026-10-10.

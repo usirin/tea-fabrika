@@ -13,9 +13,11 @@
 //
 // It is a property when its chain names `prop` (`it.prop`, `it.effect.prop`), or when its body
 // calls fast-check's `assert` (through any local name an import of `fast-check` gives it) or one of
-// `@demlik/tea/pbt`'s runners (`propertyTrace`, `propertyInvariant`, `propertyTerminates`). A body
-// that calls a function this file declares counts as that function's body too, followed to any
-// depth. An imported helper is not followed.
+// `@demlik/tea/pbt`'s runners (`propertyTrace`, `propertyInvariant`, `propertyTerminates`), or the
+// shared runner: `property` from a `Testing.test-support.ts` module (libfabrika's, which calls
+// `fc.assert` itself), named, renamed or through a namespace. A body that calls a function this file
+// declares counts as that function's body too, followed to any depth. Any other imported helper is
+// not followed, a `property` from another module included.
 //
 // A title is read only when it is written out: a string, or a template whose text before its first
 // `${}` already decides it. Any other title (a helper's parameter, `name + x`) is not judged, so a
@@ -29,6 +31,9 @@ const LABELS = ["vector", "format", "pinned", "scenario"] as const;
 const ID = /^[A-Za-z0-9.]+ /;
 const LABELED = new RegExp(`^(?:${ID.source.slice(1)})?(${LABELS.join("|")}):\\s*\\S`);
 const RUNNERS = new Set(["propertyTrace", "propertyInvariant", "propertyTerminates"]);
+/** The shared runner's module, by its last path segment: `../Testing.test-support.ts`, and its one export. */
+const SHARED = /(?:^|\/)Testing\.test-support\.ts$/;
+const SHARED_RUNNER = "property";
 
 /** Calls that make a test from their own call: `it.each(rows)` is not a test, `it.each(rows)(...)` is. */
 const MAKERS = new Set(["each", "for", "skipIf", "runIf"]);
@@ -117,6 +122,7 @@ export const lawShape: CreateRule = {
           const from = statement.source.value;
           const fastCheck = from === "fast-check";
           const pbt = from === "@demlik/tea/pbt";
+          const shared = SHARED.test(from);
 
           for (const spec of statement.specifiers) {
             const name = spec.local.name;
@@ -132,6 +138,10 @@ export const lawShape: CreateRule = {
                 runners.add(`${name}.${runner}`);
               }
             } else if (pbt && imported !== null && RUNNERS.has(imported)) {
+              runners.add(name);
+            } else if (shared && spec.type === "ImportNamespaceSpecifier") {
+              runners.add(`${name}.${SHARED_RUNNER}`);
+            } else if (shared && imported === SHARED_RUNNER) {
               runners.add(name);
             }
           }

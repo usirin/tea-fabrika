@@ -1,3 +1,9 @@
+---
+date: "2026-10-18"
+scripts: "`layer-rules.json`, `.structure-sweep/move-manifest.json`, `packages/`, `wip/`, `legacy/`, `programs/`"
+summary: "Yes. tea-program and tsh are packages of their own, and `pnpm lint` fails any import that points up the stack (code-graph `--layers`, under one second; red shown for a package-name import and a path import). 1,595 tests green twice, and tsh prints the same as main. structure-sweep moved 243 files and rewrote 1,132 imports, but stripped the `.ts` from every one it rewrote and cannot move a non-TypeScript file; biome's `useImportExtensions` put the extensions back and stays on. wip holds 125 files that import each other too tightly to pull one stage out alone; a shared stage package comes first. $0. Confidence 80%."
+---
+
 # 82. The repo as a pnpm workspace: two packages, wip and legacy
 
 Code and tooling only: no agent, no Jev, no GitHub, $0.

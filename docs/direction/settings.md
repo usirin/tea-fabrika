@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-10 ([0086](../../.decisions/0086-settings-are-declared-once.md))"
+summary: "Both versions, built in `next/` first by Tier 1's P38. How a person, a repo, a test and an agent set a choice. Seven principles: a choice is a setting, and a short list never is (0069); each is declared once with `Setting.make`, an Effect `Config` plus its words, a required `scope` (the files that may set it) and how it reloads, and the file reader, env name, flag, print, two editor schemas and error come from it; an empty file works; one order per key, flag then env then the repo's file then the person's then the default, and `fabrika settings` says where each value came from; a wrong value stops in words at the file, line and key, read through a `Toml` service on `toml-eslint-parser`; read at the edge, handed in through a `ConfigProvider`, and recorded with its hash beside `build`; what you can set comes from fabrika itself. Settings are per pack in `[pack.<name>.settings]`; the repo's `fabrika-version` names the oldest fabrika it works with. The design: TOML tables per area and per pack with a `#:schema` line, each change the hands see a ledger fact. A table of Tier 1's choices for P38's plan. From experiment 251."
+---
+
 # Settings
 
 **Decided 2026-11-10.** The owner approved the seven principles, the shape and the smaller calls below

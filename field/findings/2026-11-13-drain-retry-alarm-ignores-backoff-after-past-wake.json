@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-drain-retry-alarm-ignores-backoff-after-past-wake",
+  "date": "2026-11-13",
+  "by": "tests",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/Runner.ts",
+    "line": 1689
+  },
+  "says": "Once a runner holds its loaded program state, a drain's retry after a storage failure gets no backoff: the alarm is the earlier of the process's wake and the retry time (Runner.ts:490-526), and a wake already in the past wins, so the retry alarm lands on that past wake (retryLater, Runner.ts:1687-1691). It may be intended, so it needs a call.",
+  "proof": "Probe by the agent writing pull request 1189's retry law: a warm runner, a wake scheduled at 500, the clock at 1000, a LedgerError planted with the `fault.record` fixture, then `due(500)`. Saved alarms were `[null, 500, 500]`, not `1000 + backoff.minMs` (1100). Not yet a committed law.",
+  "cost": "On the platform an alarm in the past fires at once, so a lasting storage fault would make the drain retry in a tight loop with no backoff.",
+  "head": "130014b8ab6a86cb3716140f15fe0cba82807dc0",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1189"
+}

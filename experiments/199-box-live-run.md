@@ -1,3 +1,9 @@
+---
+date: "2026-11-02"
+scripts: "`199-box-live-run.ts`, `199-box-live-run/`, `results/199-box-live-run*.json`"
+summary: "Two live `standard-4` boxes, for `next/`, testing today's code at main; no model. A box is ready to test in about 45 s from its start call (clone 6 s, install 28 to 30 s), not 197's guessed 5 minutes; the first mutant answer comes at about 85 s. On 181's `lane139` set, same answer on all 116 mutants, a box worker is about 2.3x slower than a laptop worker (mutant time 157 s against 70 s; median 2.7x; wall 2.0x with 4 box workers against 3). 4 workers peaked at 2.2 GiB of 12 GiB; the whole suite at 4.3 GiB. 181's `ship121` sample gave no answer: the box's user holds full ambient capabilities, so bubblewrap refuses to start, the lane's end-to-end tests fail and Stryker's first test run stops. The suite failed 111 of 5,224 tests and mostly waited (16% CPU). 197's range moves to about $11 for the first pass ($5.50 to $22) and $14 to $48 a month daily. $0.14 at list price for both runs; two platform-made registry artifacts are left (409, as in 148)."
+---
+
 # 199. One live box on Cloudflare: setup time, speed and memory for 197's daily checks
 
 Done 2026-11-02. This measures for experiment 197, which is about `next/`. The code the box tested

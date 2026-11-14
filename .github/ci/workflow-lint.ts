@@ -67,6 +67,7 @@ const TOOLING = "!cancelled()&&needs.changes.outputs.today=='false'";
 // The commit a run's change starts from, for vitest's `--changed`: a pull request's base, a merge
 // queue group's base, or what main held before a push. All zeros (a first push) is no base.
 const TEST_BASE = `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`;
+const RATCHET = 'node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"';
 const TOOLING_EXCLUDES = ["next/**", "apps/**", "packages/**", "programs/**"];
 
 // Chromium's OS packages come from apt, so the step first finds a mirror that answers (apt.sh).
@@ -74,6 +75,38 @@ const chromium =
   "sudo sh .github/ci/apt.sh update\n" + "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium\n";
 
 const forced = ["apps/fabrika/src/bundles.test.ts", "packages/pipeline/src/laws/standard.test.ts"];
+
+// The next job's machines. Each is a string, so a workflow `if` compares a string with a string.
+// The end-to-end legs `e2e-1` to `e2e-N` come first; the lint pins their shape, and the count law in
+// vitest.shards.test.ts (E4) pins N from measured seconds.
+const E2E_PREFIX = "e2e-";
+const VITEST_LEGS = ["1", "2", "3", "4", "5"];
+const ON_E2E = `startsWith(matrix.shard, '${E2E_PREFIX}')`;
+
+/** A job's matrix legs as the workflow wrote them, numbers and strings kept apart. */
+const legs = (job: Record<string, unknown>): unknown[] => {
+  const shard = map(map(job["strategy"])["matrix"])["shard"];
+  return Array.isArray(shard) ? shard : [];
+};
+
+/** The legs that run vitest: the ones written as a quoted whole number. */
+const numbered = (all: readonly unknown[]): string[] =>
+  all.filter((leg): leg is string => typeof leg === "string" && /^[1-9]\d*$/.test(leg));
+
+/** The legs that run the end-to-end files: the ones written as `e2e-` and a whole number. */
+const ends = (all: readonly unknown[]): string[] =>
+  all.filter((leg): leg is string => typeof leg === "string" && /^e2e-[1-9]\d*$/.test(leg));
+
+const nextJob = (text: string) => map(map(map(parse(text))["jobs"])["next"]);
+
+/** The next job's vitest legs in a workflow's text, for the law on how the table splits. */
+export const vitestLegs = (text: string): string[] => numbered(legs(nextJob(text)));
+
+/** The next job's end-to-end legs in a workflow's text, for the law on how many there are. */
+export const e2eLegs = (text: string): string[] => ends(legs(nextJob(text)));
+
+/** The next job's `timeout-minutes` in a workflow's text, for the same law: a leg gets half of it. */
+export const nextMinutes = (text: string): number => Number(nextJob(text)["timeout-minutes"]);
 
 export const lintWorkflow = (text: string): string[] => {
   let source: unknown;
@@ -128,6 +161,18 @@ export const lintWorkflow = (text: string): string[] => {
     require(slow ? compact(step["if"]) === BUILD : !("if" in step), "only promises and build skip, on the build flag");
   }
 
+  // 0524: a list file only shrinks. Without its one step a pull request could drop the ratchet and
+  // pass with a grown list; a first push's zeros map to no base, as for the test steps.
+  const ratchets = checkSteps.filter(
+    (step) => typeof step["run"] === "string" && step["run"].includes("next/apps/fabrika/src/exam/ratchet"),
+  );
+  require(ratchets.length === 1 &&
+    ratchets[0]?.["run"] === RATCHET &&
+    compact(map(ratchets[0]?.["env"])["BASE"]) === compact(TEST_BASE) &&
+    !("if" in (ratchets[0] ?? {})) &&
+    ratchets[0]?.["continue-on-error"] ===
+      undefined, `check runs ${RATCHET} once, on the test base, and its failure blocks`);
+
   for (const name of gated) {
     const job = map(jobs[name]);
     const needs = job["needs"];
@@ -164,9 +209,42 @@ export const lintWorkflow = (text: string): string[] => {
     outputs = map(changes["outputs"]);
   require(!("if" in changes) && !("needs" in changes), "changes starts on every event");
 
-  for (const name of ["check", "typecheck", "test", "next", "e2e", "field", "build", "today"]) {
+  for (const name of ["check", "typecheck", "test", "e2e", "field", "build", "today"]) {
     require(compact(outputs[name]) === `steps.diff.outputs.${name}`, `changes exposes ${name}`);
   }
+
+  // The plan for CI paths, slice 2: the parser's pass (`--same`) prints `next` and `filter` again
+  // when it proved a next/ file is the same program, and the first pass's stand when it printed
+  // nothing. Its install and its run may fail without failing changes, which would run everything
+  // and turn ci-required red.
+  for (const name of ["next", "filter"]) {
+    require(compact(outputs[name]) ===
+      `steps.same.outputs.${name}||steps.diff.outputs.${name}`, `changes exposes ${name} from the parser's pass, else the first`);
+  }
+
+  const changeSteps = steps(changes);
+  const same = changeSteps.find((s) => s["id"] === "same");
+  require(same?.["run"] === "node .github/ci/changes.mjs --same" &&
+    same["continue-on-error"] === true, "changes runs the parser's pass, and its failure fails nothing");
+
+  for (const [key, expected] of Object.entries(classifier)) {
+    require(map(same?.["env"])[key] === expected, `the parser's pass gets event ${key} through env`);
+  }
+
+  for (const step of changeSteps.filter(
+    (s) =>
+      (typeof s["uses"] === "string" && /^(pnpm\/action-setup|actions\/setup-node)@/.test(s["uses"])) ||
+      (typeof s["run"] === "string" && s["run"].startsWith("pnpm install")),
+  )) {
+    require(step["continue-on-error"] === true &&
+      same !== undefined &&
+      changeSteps.indexOf(step) <
+        changeSteps.indexOf(same), "the parser's setup comes before its pass, and its failure fails nothing");
+  }
+
+  require(changeSteps.some(
+    (s) => typeof s["run"] === "string" && s["run"].startsWith("pnpm install"),
+  ), "changes installs the parser for its pass");
 
   // The typecheck is its own job, so its answer comes as soon as it ends and a lane can read it
   // alone (0133). check runs no second one.
@@ -318,11 +396,35 @@ export const lintWorkflow = (text: string): string[] => {
     matrix = map(strategy["matrix"]),
     nextSteps = steps(nextJob);
   require(!("name" in nextJob), "next keeps the default matrix check names");
-  require(JSON.stringify(matrix["shard"]) === "[1,2,3,4,5,6]" &&
-    Object.keys(matrix).length === 1, "next has exactly six shards and no other matrix entries");
+  // E1. The end-to-end legs `e2e-1` to `e2e-N`, in order, then the vitest legs "1" to "5", all
+  // strings. The count N is E4's, in vitest.shards.test.ts; here only its shape and its `/N`.
+  // Plants (T967), each run once on check.yaml and restored, each exit 1: drop e2e-2 and keep `/2`
+  // (E2's count error); `e2e-2, e2e-1` (E1); a leg named plain `e2e` (E1 and E2); `/3` with two legs
+  // (E2); the end-to-end step's guard dropped (E2); `--shard` dropped (E2's command); shard times back
+  // before the end-to-end step (E3); chromium on every leg (E3); the vitest step on the old
+  // `matrix.shard != 'e2e'` (E3).
+  const allLegs = legs(nextJob),
+    e2eCount = ends(allLegs).length;
+  const expectedLegs = [...Array.from({ length: e2eCount }, (_, i) => `${E2E_PREFIX}${i + 1}`), ...VITEST_LEGS];
+  require(e2eCount >= 1 &&
+    JSON.stringify(allLegs) === JSON.stringify(expectedLegs) &&
+    Object.keys(matrix).length ===
+      1, "next's legs are e2e-1 to e2e-N in order, then 1 to 5, all strings, with no other matrix entries");
   require(strategy["fail-fast"] === false, "next lets every shard finish");
+  // The plan for CI paths, slice 2: the path is `filter` from changes, the reader tests or `next/`,
+  // unquoted so each reader path is its own argument. A missing filter runs all of next/.
+  // On a pull request CHANGED is `--changed=<base> --passWithNoTests`, so only the tests a change
+  // reaches run; on the merge queue and main it is empty, so the whole suite runs as the backstop.
   const nextCommand =
-    'pnpm exec vitest run next/ --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
+    'pnpm exec vitest run $FILTER $CHANGED --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
+  // The leg `e2e-k` with SHARD `e2e-k/N` asks Vitest for shard `k/N` of the end-to-end files. It
+  // takes no filter, so under the reader filter the e2e legs still run every end-to-end file a
+  // pull request's change reaches, and every one in the queue and on main.
+  const e2eCommand = `node next/apps/fabrika/e2e.ts $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
+  const changedOnPullRequests = `\${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
+  // The vitest step's own: empty when the filter names the reader tests too. They read files as
+  // text, so `--changed`, which follows imports, would drop them; there the filter alone decides.
+  const changedUnlessReaders = `\${{ github.event_name == 'pull_request' && (needs.changes.outputs.filter || 'next/') == 'next/' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
   const adviceCommand = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"';
   // Only these whole scripts are allowed; shell aliases and alternate paths cannot add work.
   const allowed = [
@@ -330,7 +432,7 @@ export const lintWorkflow = (text: string): string[] => {
     nextCommand,
     adviceCommand,
     chromium,
-    "node next/apps/fabrika/e2e.ts",
+    e2eCommand,
     'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
   ];
   const nextRuns = nextSteps.filter((s) => "run" in s).map((s) => s["run"]);
@@ -341,30 +443,59 @@ export const lintWorkflow = (text: string): string[] => {
   const testStep = nextSteps.find((s) => s["run"] === nextCommand);
   require(testStep !== undefined, "next runs all its own tests with --shard and no exclusions");
   const shard = map(testStep?.["env"])["SHARD"];
-  require(testStep !== undefined &&
-    !("if" in testStep) &&
-    typeof shard === "string" &&
-    /^\$\{\{\s*matrix\.shard\s*\}\}\/6$/.test(
+  // E3. The one `if` the vitest step may carry. Without it an e2e leg asks vitest for `e2e-1/5`.
+  require(compact(testStep?.["if"]) ===
+    compact(`!${ON_E2E}`), "next's vitest step runs only on the numbered legs, and has no other guard");
+  // A larger denominator leaves a share of the files on no machine; a smaller one fails a leg.
+  require(typeof shard === "string" &&
+    new RegExp(`^\\$\\{\\{\\s*matrix\\.shard\\s*\\}\\}/${VITEST_LEGS.length}$`).test(
       shard,
-    ), "next passes its six-shard expression without an extra test guard");
+    ), "next's vitest step passes --shard <leg>/<the count of numbered legs>");
+  require(compact(map(testStep?.["env"])["FILTER"]) ===
+    "needs.changes.outputs.filter||'next/'", "next takes its path from filter, with the fallback next/");
+  // E2. The same for the end-to-end step, over the count of e2e legs.
+  const e2eStep = nextSteps.find((s) => s["run"] === e2eCommand);
+  const e2eShard = map(e2eStep?.["env"])["SHARD"];
+  require(typeof e2eShard === "string" &&
+    new RegExp(`^\\$\\{\\{\\s*matrix\\.shard\\s*\\}\\}/${e2eCount}$`).test(
+      e2eShard,
+    ), "next's end-to-end step passes --shard <leg>/<the count of e2e legs>");
+
+  // Both test steps narrow to the changed files on a pull request only. Any other value could narrow
+  // the merge queue or main, where the whole suite is the backstop for what the import graph misses.
+  // The vitest step also leaves it empty when the filter names the reader tests.
+  for (const [step, name, expected] of [
+    [testStep, "vitest", changedUnlessReaders],
+    [e2eStep, "end-to-end", changedOnPullRequests],
+  ] as const) {
+    require(map(step?.["env"])["CHANGED"] ===
+      expected, `next's ${name} step narrows with --changed on pull requests only`);
+  }
+
+  // E3. Both kinds of leg write next.json, so the advice comes after both test steps.
   const advice = nextSteps.find((s) => s["run"] === adviceCommand);
   require(testStep !== undefined &&
+    e2eStep !== undefined &&
     advice !== undefined &&
     nextSteps.indexOf(testStep) < nextSteps.indexOf(advice) &&
-    compact(advice["if"]) === "!cancelled()", "next timing advice follows tests even after failure, unless cancelled");
+    nextSteps.indexOf(e2eStep) < nextSteps.indexOf(advice) &&
+    compact(advice["if"]) ===
+      "!cancelled()", "next timing advice follows both test steps even after failure, unless cancelled");
 
-  for (const [command, condition] of [
-    [chromium, "matrix.shard == 1 && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''"],
-    ["node next/apps/fabrika/e2e.ts", "matrix.shard == 1"],
+  // E2 and E3. Chromium and the end-to-end runner only on the e2e legs, edges only on leg 1.
+  for (const [command, leg, condition] of [
+    [chromium, "the e2e legs", `${ON_E2E} && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''`],
+    [e2eCommand, "the e2e legs", ON_E2E],
     [
       'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
-      "matrix.shard == 1 && github.event_name == 'pull_request'",
+      "leg 1",
+      "matrix.shard == '1' && github.event_name == 'pull_request'",
     ],
   ] as const) {
     const matches = nextSteps.filter((s) => s["run"] === command);
     require(matches.length === 1 &&
       compact(matches[0]?.["if"]) ===
-        compact(condition), `next runs ${command} once on shard 1 with its original condition`);
+        compact(condition), `next runs ${command} once, only on ${leg}, with its pinned condition`);
   }
 
   return errors;

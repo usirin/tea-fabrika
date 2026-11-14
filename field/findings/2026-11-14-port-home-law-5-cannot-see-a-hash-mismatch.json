@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-port-home-law-5-cannot-see-a-hash-mismatch",
+  "date": "2026-11-14",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "next/apps/fabrika/src/port-home.laws.test.ts",
+    "line": 114
+  },
+  "says": "In next/, T502 law 5 compares only the process table and stream entries of the saved home, so it cannot see a process running this build's code while its records name the saved build's hash; the fixture holds no Process checkpoints, so a load-time state.upgraded is never reached.",
+  "proof": "In the fixture fixtures/next/port-home, both Process SQLite files have an empty process_state table. The law passes on pull request 1012's fix round 8ba7894a5 while next/packages/libfabrika/src/runtime/Runner.ts:1101-1103 keeps the descriptor's hash 4c7111d9 for code loaded by name.",
+  "cost": "A change that opens an old home under the wrong code label passes the law; a wrong label on a record cannot be corrected later.",
+  "head": "8ba7894a5aa267ed5465465b2c6d726c4f2aae1e",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1012"
+}

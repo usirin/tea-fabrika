@@ -1,3 +1,8 @@
+---
+state: "proposed 2026-10-27; walked 2026-10-30, leans written in; 2026-10-30 later: program as a Durable Object, brain and hands, workerd everywhere decided; one object per thing plus one project object decided; 2026-10-31: the app layer decided, how a pinned pack learns of updates later; 2026-11-07: A5's one re-ask is wrong, a schema miss ends the step stuck; walked at Tier 2"
+summary: "Next iteration: no special \"ledger server\". Every place fabrika runs is a host of the same kind; the Cloudflare host keeps the shared ledger and runs programs and jobs. \"Never sleeps\" was wrong: it sleeps when idle and wakes on a message or its alarm. Hosts still meet only on the shared ledger. Reopens the cloud host parked on 2026-10-25. Draft design: one `Host` Durable Object everywhere, built for Cloudflare's rules; a timer is an absolute time with one alarm per host (`durableTimer`); a scheduled job is a permanent program with a timer (OTP's child spec), listed in `fabrika.toml` with where it runs (`on`); the PR watcher is the first; the laptop host moving off Node onto workerd is the costly last step. Since 2026-10-30: a program instance is a Durable Object; the brain (workerd, laptop too) runs programs, the hands (Node on each computer) do their machine Cmds. Since 2026-10-31 it holds the app layer: a queue of Cmds for the hands (A1), limits as one cgroups-style primitive, `LimitManager`, with no alerting system (A2), a window protocol of views, revisions, patches and `saw` (A3), packs locked per project and loaded with Worker Loader (A4), and the builder's gaps (A5)."
+---
+
 # The cloud is one more host
 
 **Part decided, part proposed. Not built.** Walked when Tier 2 starts (owner, 2026-11-08): program storage and Topic for the tracker.

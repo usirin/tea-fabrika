@@ -1,3 +1,8 @@
+---
+date: "2026-11-10"
+summary: "Not about this repo's code. 457 merged pull requests on kamp-us/phoenix (2026-09-11 to 10-11), read-only `gh`, no model, $0. No. Tiers from phoenix's own control-plane and governed paths plus auth, migrations and infra put 22 low, 123 medium, 312 high (68%, mostly `claude-plugins/` and `.decisions/`). A fix pull request within 7 days on the same files that links the same issue or the pull request: low 0 of 22, medium 9.8% (5.7 to 16.3), high 7.4% (5.0 to 10.8), so high is not above medium. Size orders it: 50 lines or fewer 1.3%, over 400 lines 11.6%; at equal load size puts 31 of 35 fixed changes before two people, tiers 23. Reverts: 1 partial in 457. The pre-set \"any\" outcome is noise: 16 of 20 hand-checked detections false, as agent-written issues name hot files; 1 likely miss in 20 non-detections. Governed paths mark who may change the rules, not where bugs come from (about 70% sure). One repo, after its review gate."
+---
+
 # 252. Would a risk tier set from a pull request's paths have predicted which changes later needed fixing?
 
 Run 2026-11-10 on the public repo [kamp-us/phoenix](https://github.com/kamp-us/phoenix), whose pull

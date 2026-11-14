@@ -1,3 +1,8 @@
+---
+date: "2026-10-04"
+summary: "With clear rules a throwaway reference caught 20 of 20 wrong examples with no false alarm. With loose rules it caught 19 of 20 with one false alarm."
+---
+
 # 20. Does anything catch a wrong example?
 
 A wrong example becomes a wrong visible test, and the builder codes to it.

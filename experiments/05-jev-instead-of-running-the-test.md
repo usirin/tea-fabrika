@@ -1,3 +1,9 @@
+---
+date: "2026-10-04"
+scripts: "none"
+summary: "With a concrete example Jev never confidently passed broken code, but it confidently caught the bug less than half the time (8 of 18)."
+---
+
 # 5. Can Jev stand in for running the test?
 
 The idea: write the test in prose and let Jev judge the code against it, with

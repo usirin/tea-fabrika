@@ -1,3 +1,9 @@
+---
+date: "2026-10-05"
+scripts: "none"
+summary: "The demo ran slugify from the ticket to `main`, stopping once for the approval. A moved base merges, passes on a fresh copy, and lands without a second approval."
+---
+
 # 33. Ship
 
 Ship is a third machine beside triage and the lane; the factory starts it when

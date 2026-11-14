@@ -25,11 +25,11 @@ flowchart LR
 ## 1. Find the next number
 
 ```sh
-ls .decisions | grep -E '^[0-9]{4}-' | sort | tail -1
-git fetch -q origin && gh pr list --state open --search ".decisions in:files" --json number,headRefName
+node .agents/skills/lead/scripts/records.ts next .decisions   # fetches, then reads origin/main
+gh pr list --state open --search ".decisions in:files" --json number,headRefName
 ```
 
-Take the highest number on `origin/main` or in an open PR, plus one. A number is not reserved until
+Take the larger of the command's number and the highest number in an open PR plus one. A number is not reserved until
 your PR is open, so check again just before you open it. If another PR took it first, the one opened
 first keeps it, and you renumber yours.
 

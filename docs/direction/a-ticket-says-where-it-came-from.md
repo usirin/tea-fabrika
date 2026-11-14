@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-03, shape proposed; walked at Tier 2"
+summary: "Today's version first. A filing records `from`: the pull request, review, run or walk it came out of, since only the filer knows it then. Tickets stay without a type label; area and project wait for experiment 205's designs."
+---
+
 # A ticket says where it came from
 
 **Decided 2026-11-03 by the owner,** from [experiment 205](../../experiments/205-organizing-work.md):

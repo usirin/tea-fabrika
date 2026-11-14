@@ -51,7 +51,9 @@ export const testConfig = {
     exclude: [
       ...configDefaults.exclude,
       ".agents/skills/*/scripts/**/fixtures/**",
+      // It starts Chromium, so it runs with the end-to-end files, under vitest.e2e.config.ts.
       "next/packages/tuval/src/browser/key.laws.test.ts",
+      "next/**/dist/**",
     ],
     // One time limit for every test, chosen from measured times, not vitest's 5 s default,
     // which turned main red 6 times for slow tests and found no bug (experiment 125).

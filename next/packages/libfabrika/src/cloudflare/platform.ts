@@ -1,11 +1,14 @@
 import type { RpcCallError } from "@alchemy.run/cloudflare/Bridge";
 import { makeRpcStub } from "@alchemy.run/cloudflare/Bridge";
+import type { Fetcher } from "@alchemy.run/cloudflare/Fetcher";
 import type { WorkerEvent } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Context, Effect, Predicate, Schema } from "effect";
+import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { LedgerError } from "../ledger/Ledger.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import type { ConnectionBinding, ProcessBinding, ProjectBinding } from "./bindings.ts";
-import type { RecordShape } from "./objects.ts";
+import type { ConnectionShape, ProcessShape, RecordShape } from "./objects.ts";
+import { reach } from "./reach.ts";
 
 /**
  * Reads only call metadata, including workerd's prototype getters.
@@ -42,12 +45,21 @@ type Client<S> = {
 /** A rejected platform call. It keeps the thrown value as its cause (ticket 695), and its message keeps
  *  that value's class and text as `<class>: <text>`. Both stay in memory: a sink stores a typed
  *  failure's tag and reason only, and never puts its text in a tag. */
-const unreachable = (cause: unknown) =>
-  new LedgerError({
-    reason: "unreachable",
-    message: cause instanceof Error ? `${cause.name}: ${cause.message}` : `${typeof cause}: ${String(cause)}`,
-    cause,
-  });
+const thrown = (cause: unknown) =>
+  cause instanceof Error ? `${cause.name}: ${cause.message}` : `${typeof cause}: ${String(cause)}`;
+
+const unreachable = (cause: unknown) => new LedgerError({ reason: "unreachable", message: thrown(cause), cause });
+
+/** A call the typed stub could not make. Its RpcCallError is the cause, and the message names what
+ *  the platform threw inside it, in the form `unreachable` writes. */
+const lost = (cause: RpcCallError) => new LedgerError({ reason: "unreachable", message: thrown(cause.cause), cause });
+
+/** An object's contract as its callers see it: each call needs nothing, and fails with `LedgerError`. */
+type Calls<S> = {
+  readonly [K in keyof S]: S[K] extends (...args: infer A) => Effect.Effect<infer B, infer _E, infer _R>
+    ? (...args: A) => Effect.Effect<B, LedgerError>
+    : never;
+};
 
 /** The thrown value behind an `unreachable` LedgerError, rebuilt from its message with its class as
  *  `name`, so a failed span names the class that was thrown; any other error stays as it is. */
@@ -187,51 +199,25 @@ export class ProjectClient extends Context.Service<
   }
 }
 
-export class ProcessClient extends Context.Service<
-  ProcessClient,
-  Client<Omit<ProcessBinding, keyof Rpc.DurableObjectBranded>>
->()("@kampus/libfabrika/cloudflare/platform.ProcessClient") {
+export class ProcessClient extends Context.Service<ProcessClient, Calls<Omit<ProcessShape, "alarm">>>()(
+  "@kampus/libfabrika/cloudflare/platform.ProcessClient",
+) {
   static make(stub: ProcessBinding): ProcessClient["Service"] {
+    // The object's own LedgerError crosses as itself; a call that got no answer is `unreachable`.
+    const process = makeRpcStub<ProcessClient["Service"]>(stub, { errors: [LedgerError] });
     return {
-      usage: (...args) =>
-        makeRpcStub<{
-          usage: (...input: Parameters<ProcessBinding["usage"]>) => Effect.Effect<void, RpcCallError>;
-        }>(stub)
-          .usage(...args)
-          .pipe(Effect.mapError((error) => unreachable(error.cause))),
-      mailed: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process mailed RPC enters Effect
-        Effect.tryPromise({ try: () => stub.mailed(...args), catch: unreachable }),
-      configure: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process configure RPC enters Effect
-        Effect.tryPromise({ try: () => stub.configure(...args), catch: unreachable }),
-      descriptor: () =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process descriptor RPC enters Effect
-        Effect.tryPromise({ try: () => stub.descriptor(), catch: unreachable }),
-      msg: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process msg RPC enters Effect
-        Effect.tryPromise({ try: () => stub.msg(...args), catch: unreachable }),
-      open: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process open RPC enters Effect
-        Effect.tryPromise({ try: () => stub.open(...args), catch: unreachable }),
-      due: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process due RPC enters Effect
-        Effect.tryPromise({ try: () => stub.due(...args), catch: unreachable }),
-      restart: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process restart RPC enters Effect
-        Effect.tryPromise({ try: () => stub.restart(...args), catch: unreachable }),
-      activity: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process activity RPC enters Effect
-        Effect.tryPromise({ try: () => stub.activity(...args), catch: unreachable }),
-      recover: () =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process recover RPC enters Effect
-        Effect.tryPromise({ try: () => stub.recover(), catch: unreachable }),
-      savedAlarm: () =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process savedAlarm RPC enters Effect
-        Effect.tryPromise({ try: () => stub.savedAlarm(), catch: unreachable }),
-      abort: () =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process abort RPC enters Effect
-        Effect.tryPromise({ try: () => stub.abort(), catch: unreachable }),
+      usage: (...args) => reach(process.usage(...args), lost),
+      mailed: (...args) => reach(process.mailed(...args), lost),
+      configure: (...args) => reach(process.configure(...args), lost),
+      descriptor: () => reach(process.descriptor(), lost),
+      msg: (...args) => reach(process.msg(...args), lost),
+      open: (...args) => reach(process.open(...args), lost),
+      due: (...args) => reach(process.due(...args), lost),
+      restart: (...args) => reach(process.restart(...args), lost),
+      activity: (...args) => reach(process.activity(...args), lost),
+      recover: () => reach(process.recover(), lost),
+      savedAlarm: () => reach(process.savedAlarm(), lost),
+      abort: () => reach(process.abort(), lost),
     };
   }
 }
@@ -241,19 +227,25 @@ export class GatewayClient extends Context.Service<
   Client<Omit<ConnectionBinding, keyof Rpc.DurableObjectBranded>>
 >()("@kampus/libfabrika/cloudflare/platform.GatewayClient") {
   static make(stub: ConnectionBinding): GatewayClient["Service"] {
+    // The object's own contract: a LedgerError it fails with crosses as itself. Its `fetch` is
+    // Alchemy's fetcher, which keeps a socket upgrade's own Response (a 101 is a raw body).
+    const calls = makeRpcStub<Pick<ConnectionShape, "ring" | "notify" | "probe"> & Pick<Fetcher, "fetch">>(stub, {
+      errors: [LedgerError],
+    });
     return {
-      fetch: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Connection fetch RPC enters Effect
-        Effect.tryPromise({ try: () => stub.fetch(...args), catch: unreachable }),
-      ring: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Connection ring RPC enters Effect
-        Effect.tryPromise({ try: () => stub.ring(...args), catch: unreachable }),
-      notify: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Connection notify RPC enters Effect
-        Effect.tryPromise({ try: () => stub.notify(...args), catch: unreachable }),
-      probe: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Connection probe RPC enters Effect
-        Effect.tryPromise({ try: () => stub.probe(...args), catch: unreachable }),
+      // A lost object is `unreachable` with what the platform threw as its cause. Alchemy's fetcher
+      // made a rejected platform fetch a defect; our Alchemy patch makes it fail typed, as an
+      // HttpServerError that keeps the rejection as its cause.
+      fetch: (request) =>
+        calls.fetch(HttpServerRequest.fromWeb(request)).pipe(
+          Effect.flatMap((response) =>
+            Effect.map(Effect.context<never>(), (context) => HttpServerResponse.toWeb(response, { context })),
+          ),
+          Effect.mapError((error) => unreachable(error.cause)),
+        ),
+      ring: (stream, rev) => reach(calls.ring(stream, rev), lost),
+      notify: (client, news) => reach(calls.notify(client, news), lost),
+      probe: (session) => reach(calls.probe(session), lost),
     };
   }
 }

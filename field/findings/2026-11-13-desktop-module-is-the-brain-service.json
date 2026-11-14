@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-desktop-module-is-the-brain-service",
+  "date": "2026-11-13",
+  "by": "plan",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".glossary/TERMS.md",
+    "line": 405
+  },
+  "says": "The glossary says desktop means only layer 5, Tuval, but libfabrika's desktop/ module holds the Mac app's brain service, launchd control and the menu bar's machine, so a reader looking for 0274's platform-free desktop core finds the brain's lifecycle.",
+  "proof": ".glossary/TERMS.md:405 reads 'desktop | Only layer 5, Tuval: the desktop environment'; next/packages/libfabrika/src/desktop/BrainService.ts:2 reads 'Public lifecycle for a home-owned brain' and desktop/BrainControl.ts:2 'Installation and service-manager contract'; layer-rules.json names the folder next-desktop-core.",
+  "cost": "Plans for the client core (P18) and the desk read the word two ways; the P18 draft had to check that desktop/ is not the core 0274 names.",
+  "head": "cd4ef5398087c83f1a6baf6b7b5d6c59a8e4b4d9",
+  "ticket": null,
+  "pr": null
+}

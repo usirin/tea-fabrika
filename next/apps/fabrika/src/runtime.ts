@@ -1,7 +1,8 @@
 import { RecordedStart } from "@kampus/libfabrika";
 import * as RateLimiterSql from "@kampus/libfabrika/gateway/RateLimiterSql";
 import { LedgerError } from "@kampus/libfabrika/ledger/Ledger";
-import { connectionRuntime as connection } from "@kampus/libfabrika/workers/gateway";
+import * as ConnectionObject from "@kampus/libfabrika/workers/ConnectionObject";
+import * as ProcessObject from "@kampus/libfabrika/workers/ProcessObject";
 import {
   projectRuntime as project,
   settings as readSettings,
@@ -26,8 +27,11 @@ export const settings = Effect.fn("instance.settings")(function* (env: Pick<Env,
   return { ...checked.input, ...checked.input.founding, port: checked.values.port };
 });
 
-export const connectionRuntime = (ctx: DurableObjectState, env: Env) =>
-  connection(ctx, env, undefined, checkedSettings(env));
+/** The Connection object, reading the instance's setting through the app's checked read. */
+export const connectionObject = ConnectionObject.layer({ input: checkedSettings });
+
+/** The Process object, reading the instance's setting through the app's checked read. */
+export const processObject = ProcessObject.layer({ programs, input: checkedSettings });
 
 export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
   project(ctx, env, {

@@ -1,3 +1,9 @@
+---
+date: "2026-10-20"
+scripts: "`95-agents-across-hosts.ts`, `95-agents-across-hosts/`, `results/95-agents-across-hosts.json`"
+summary: "Yes on every run. tea-host's second test: an `asker` on a Mac host calls an `answerer` registered as `answerer:1` on a host in a Docker container (repo mounted read-only, Linux node_modules in a volume, no secret in the image), through 93's Ledger in Miniflare. A call is one inbox append with a message id, a reply-to and a correlation id, plus a timeout; a late call is sent again under the same id, and the answerer replies to a repeat from its record without asking the agent. Three runs of 200 questions and one of 2,000, each with two `docker kill`s of the answerer, one takeover by a second container while the first was paused past its lease, and one SIGKILL of the asking host: every question answered once and right, no answer produced twice, every reply from the lease holder, 0 writes accepted from the woken owner. 93's fence reached only the lease's own stream, so this copy adds `fenceOn` (a write to any stream fenced on a name's lease). Round trip Mac to container to Mac p50 11 ms, p99 20 to 21 ms (11 and 14 to 15 on the Mac alone); `docker run` to owning the name 369 to 441 ms; takeover = the lease's end + 2 to 28 ms to claim, + 11 to 61 ms to the first answer; a container host about 150 MiB. The answer is once but the agent's work is at least once: one id per run was run twice, by the paused owner and its successor. A missing Claude Code login comes back as a `success` result; only `is_error` says it failed. Laws: calls 9 and answerer 4 hold, 13 planted mistakes caught. Real mode (`REAL=1`) built, not run. Confidence 80%. $0."
+---
+
 # 95. An agent asks an agent in a container, through the shared ledger
 
 The question: tea-host's second test (tea-host).

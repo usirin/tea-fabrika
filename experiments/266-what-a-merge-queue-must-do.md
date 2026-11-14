@@ -1,3 +1,9 @@
+---
+date: "2026-11-11"
+scripts: "none; reading, nothing ran"
+summary: "Today's lead tooling, plus how others queue merges (Rust bors, bors-ng, Zuul, GitLab trains, GitHub's queue, Mergify, Aviator, Graphite), and how phoenix and demlik use GitHub's queue (squash, `ALLGREEN`, 5 to build and 5 to merge, 5-minute wait). The rule all of them follow: test the exact tree that will land, on the main it lands on, before main moves. On 2026-11-10, 147 merges landed and 23 touched code. One full CI run is 16 jobs and GitHub Free runs 20 at once, so running merges side by side does not fit. So: stage 1 lands one change at a time; stage 2 batches 4 or 5 and splits a red batch in halves; stage 3 has the queue sign a link from the checked tree to the landed tree, closing 0098's gap. Workflows cost $0 above the plan, but they keep control state as a position in code (0037, 0046). Lean, about 75%: a tea machine in one Durable Object, with alarms. The owner kept \"no Workflows\" and chose one queue program plus one merger per change, talking by mail; the cheap lane moved to the \"better\" stage. Decided as 0107, 0110 and 0111. No model, $0."
+---
+
 # 266. What must a merge queue do, and how should fabrika's own be built?
 
 Read on 2026-11-11. **This is reading, not a measurement.** Nothing was changed on GitHub or in

@@ -1,3 +1,8 @@
+---
+date: "2026-10-04"
+summary: "At 0.8 and up, right 218 of 221. With a passing test for the criterion, 117 of 117."
+---
+
 # 4. How often is the judge right at each confidence?
 
 `04-judge-calibration.ts`, 87 cases, 261 answers. Question: "does this change

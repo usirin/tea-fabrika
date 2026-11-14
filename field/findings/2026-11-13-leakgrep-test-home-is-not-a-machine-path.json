@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-leakgrep-test-home-is-not-a-machine-path",
+  "date": "2026-11-13",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": ".agents/skills/lead/scripts/leakgrep.sh",
+    "line": 68
+  },
+  "says": "The machine_path pattern's first branch, a slash, Users or home, then a slash, is not anchored to the start of a path, so a made-up fixture path whose second folder is named home (under a root folder named test) counts as a leak.",
+  "proof": "A file holding one line that names brain.plist under the made-up root test, then home, checked with leakgrep.sh --text, prints 'leakgrep: leak machine_path at added line 1' and exits 1. The commit check on pull request 1079 exited 1 with three such hits in commit 259d4c655, all fixture paths under that made-up root, and an earlier push of 1079 needed its fixture folder renamed to brain-home to pass. This row itself first failed the check for quoting the path.",
+  "cost": "A lead must hand-read every hit under a made-up root, or rename honest fixtures to dodge the check, and a hand-waved hit is how a real leak gets through.",
+  "head": "50518753511181625371d5cfb124d2de46b2c24b",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1079"
+}

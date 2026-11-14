@@ -1,3 +1,9 @@
+---
+date: "2026-11-11"
+scripts: "none on main; the script `experiments/258-pipes-on-mail.ts` is on the branch `fabrikalfa/exp-pipes-on-mail`, raw timings under `runs/` on the owner's machine"
+summary: "`next/`, PR 929 at `808e954eb`, node:sqlite on real files, five runs per cell. Yes, with batching, once two scans are fixed. The save is cheap: a delivery's two appends alone (a simulation) cost 0.13 to 0.15 ms, flat to 10,000. `deliver` reads the sender's whole outbox and the target's whole inbox per send (2,022,011 rows read for 1,000 mails, against 3,999), and the recovery save rereads every receipt per step (on main too; a finding row). So one line per mail slows with each line: through two real runners, 19 lines/s at 1,000 lines, 85 ms per line in the last tenth against 9 in the first. 100 lines per mail: 8,290 lines/s, 10,000 lines in 1.2 s, 3 KB of WAL per line. Full sync added about 0.08 ms per commit (macOS, a lower bound). The unsaved queue baseline is 60 to 160 times faster than the floor, but the ephemeral lane may not feed a program's input. Lean, about 75%: one transport, lookups by ID, chunked writes, and a bound on unread letters (a pipe's 64 KiB, GenStage's demand). No Durable Object ran. | $0"
+---
+
 # 258. Can a pipe between two programs ride on program mail, or does saving each output cost too much?
 
 Measured on 2026-11-11, on PR 929's branch (`fabrikalfa/p41-1`, at `808e954eb`, P41 slice 1). The

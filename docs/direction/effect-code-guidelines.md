@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-11"
+summary: "`next/`. How Effect's own team would build each file, as eight principles, each with real before and after code: use what Effect and Alchemy ship; a failure keeps its cause, is caught by its tag and is never thrown from pure code; a long body is a `make` with a shelf of named pieces; control state is a saved tea machine; a layer asks for what it needs; public exports are documented and comments say why; imports and ids read like Effect's; a difference from Effect keeps its reason beside it. Each has a kind (lint, law, pattern, taste) and says what holds it. The Alchemy port goes first in the fix order. From experiment 262; the rules are in 0120."
+---
+
 # Effect code guidelines
 
 **Decided 2026-11-11.** The owner approved the eight principles, the shape and the smaller calls
@@ -313,7 +318,7 @@ a **pattern** that exists (`effect-services-and-layers.md`).
 Before, `runtime/Runner.ts:188-200` and `:218-221`:
 
 ```ts
->()("@kampus/libfabrika/ProgramRunner") {
+>()("@kampus/libfabrika/runtime/Runner.ProgramRunner") {
   // the layer lives on the service class
   static readonly layer = (initial: Descriptor, options: RunnerOptions): Layer.Layer</* ... */> =>
     Layer.unwrap(Effect.map(ProgramLoader, (loader) => ProgramRunner.withLoader(initial, loader, options)));
@@ -345,12 +350,19 @@ RunnerLive.layer(initial, options).pipe(
   layer (`AGENTS.md:146`), and Effect 3 taught `Effect.Service` with `dependencies`. Only a rule
   stops it.
 - **Elm or OTP.** OTP's child specs list what a supervisor starts, in order.
-- **What holds it.** `fabrika/no-static-layer`, owed by 0095. Shipped `strictEffectProvide` only
-  advises (3 of 5 sampled hits right).
-- **Cost.** 24 static layers on 19 classes, each a new sibling file. About 40 files and 600 lines,
-  mostly moved.
-- **Today's example.** `Runner.ts` breaks it at `:190`, `:200`, `:218-221`, `:1174`. It follows it
-  by listing its requirements in the layer's type (`:196`).
+- **What holds it.** `fabrika/no-static-layer` (`oxlint-plugins/no-static-layer.ts`, ticket 911),
+  at `error` in the 13 `next/` folders where it finds nothing today, tests left out. It refuses every
+  static member of a class that extends `Context.Service`, not only a layer, as 0095 was amended on
+  2026-11-13: a syntax rule cannot read a member's type. Each move adds its folder, and the list
+  becomes `next/**` with the Alchemy port (`oxlint-plugins/README.md`). Shipped
+  `strictEffectProvide` only advises (3 of 5 sampled hits right). "Never built inside" is still
+  review.
+- **Cost.** Guessed on 2026-11-11: 24 static layers on 19 classes, each a new sibling file. Measured
+  by the rule's replay on 2026-11-14: 26 static members, 19 layers on 15 classes and 7
+  `static make`, in 8 modules (top 1, `access` 1, `gateway` 1, `presence` 1, `processes` 3,
+  `runtime` 7, `telemetry` 6, `cloudflare` 6). About 40 files and 600 lines, mostly moved.
+- **Today's example.** `Runner.ts` breaks it at `:335`, `:345`, `:364`, `:369` and `:1343` (read
+  2026-11-14). It follows it by listing its requirements in the layer's type (`:338-342`).
 
 ### E6: a public export has a doc, and a comment says why
 
@@ -385,11 +397,24 @@ export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError"
 - **A good one of ours,** `Runner.ts:1181`: "A refusal is the Cmd's answer; a storage failure is
   not, so the Cmd stays dispatched." A why, at the line it guards.
 - **Elm or OTP.** OTP 27's `-doc` attributes and Elm's documented packages (both secondary).
-- **What holds it.** A copy of Effect's docs lint rule, without `@since` (0118): 0023 ran it with 0
-  false alarms on Effect's 144 modules. Ours, new: a plan-code rule on comments (`P\d+`,
-  `law p\d+`, `flag \d+`), once its false alarms are counted.
-- **Cost.** About 240 exports with no doc block (an upper bound) and about 28 plan codes. About 60
-  files and 2,000 lines of comments.
+- **What holds it.** The lint rule `fabrika/jsdocs` (`oxlint-plugins/jsdocs.ts`, ticket 913),
+  which judges each block with Effect's own block grammar, copied from Effect's checker at
+  `effect@4.1.2` into `oxlint-plugins/effect-jsdocs.ts`, and asks for no `@since` (0118). It is on
+  for `ci/` and `codehost/` of `libfabrika`, and each folder joins as it is filled
+  ([Plan B, B2](../plan/effect-rules-big.md#b2-the-docs-rule)). The guess was a copy of Effect's
+  rule with 0 false alarms, as 0023 ran it on Effect's 144 modules; measured on 2026-11-14 on
+  Effect 4.1.2's 432 public files, it fires only where Effect's own checker reports, so 0 false
+  alarms. Still to come: a plan-code rule on comments (`P\d+`, `law p\d+`, `flag \d+`), once its
+  false alarms are counted.
+- **One difference from Effect.** A type directly under its same-name schema shares the schema's
+  block (the owner, 2026-11-13), and the rule reads the pair as one; a kept difference in
+  [0023](../../.decisions/0023-next-follows-effects-code-style.md#amendments).
+- **Cost.** The guess: about 240 exports with no doc block (an upper bound) and about 28 plan codes,
+  about 60 files and 2,000 lines of comments. Measured by the rule on 2026-11-14 on main
+  `c0aaf4a24`, across `libfabrika`'s 136 public files: 346 exports with no block, 232 with a block
+  out of shape and 88 files with no module block or a wrong one, so the upper bound was wrong. `ci`
+  (9 of 9 exports) and `codehost` (12 of 12) were already at zero (`oxlint-plugins/README.md`, "The
+  docs rule, E6").
 - **Today's example.** Half: a fine why at `:1181`, a plan code at `:1`, a stale doc at `:1737`.
 
 ### E7: imports and service ids read like Effect's
@@ -407,7 +432,7 @@ import {
   // ...ten more
 } from "effect";
 
->()("@kampus/libfabrika/ProgramRunner") {
+>()("@kampus/libfabrika/runtime/Runner.ProgramRunner") {
 ```
 
 After:
@@ -499,8 +524,8 @@ None. The note is about `next/` only.
    sites), the `Cause.squash` ban (2), `no-raw-crypto` (11), `no-hand-guard` (11).
 4. **The Alchemy port (0041, ticket 502), first of the old-code work** (owner, 2026-11-11).
 5. The sweeps, smallest first, each turning its check to `error` when it lands: the small shipped
-   checks (about 125 hits), `keep-cause` with the tagged reasons, `no-static-layer` (24),
-   `deterministicKeys` (40), docs (about 240 exports), imports (441).
+   checks (about 125 hits), `keep-cause` with the tagged reasons, `no-static-layer` (24 guessed, 26
+   measured on 2026-11-14), `deterministicKeys` (40), docs (about 240 exports), imports (441).
 6. The move-only splits of `Runner.ts`, `Gateway.ts` and `cloudflare/runtime.ts`, then the holder
    and envelope machines.
 

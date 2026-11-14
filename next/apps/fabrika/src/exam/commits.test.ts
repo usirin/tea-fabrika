@@ -386,6 +386,11 @@ describe("exam paths and scope", () => {
           `fixtures/next/${name}`,
           "allowed_signers",
           "exam-paths.json",
+          // 0524: a list file is an exam path until it is deleted, and so are code-graph's names.
+          "next-ledger.json",
+          "agents-ledger.json",
+          "unreachable-ledger.json",
+          "node-kinds.json",
         ]) {
           expect(isExam(path)).toBe(true);
         }
@@ -860,6 +865,7 @@ describe("trusted config files", () => {
         { "glob": "stylelint.config.ts", "why": "the CSS lint rules and their known lists" },
         { "glob": "oxlint-plugins/**", "why": "the custom lint rules and the lint runner" },
         { "glob": "vitest.config.ts", "why": "which tests run, and their time limit" },
+        { "glob": "vitest.e2e.config.ts", "why": "which end-to-end tests run, and their time limit" },
         {
           "glob": ".agents/skills/*/scripts/*.test.ts",
           "why": "the step scripts' laws and planted breaks"
@@ -882,6 +888,9 @@ describe("trusted config files", () => {
           "why": "the owner's ledger of functions left out of the React Compiler"
         },
         { "glob": "unreachable-ledger.json", "why": "the owner's ledger of dead exports" },
+        { "glob": "next-ledger.json", "why": "next/'s list of old lint breaks, which only shrinks (0524)" },
+        { "glob": "agents-ledger.json", "why": "lead tooling's list of old lint breaks, which only shrinks (0524)" },
+        { "glob": "node-kinds.json", "why": "names code-graph treats as used; each must be bound by that name (0524)" },
         { "glob": "package.json", "why": "the root scripts: lint, test, typecheck and this check" },
         { "glob": "pnpm-lock.yaml", "why": "the exact dependencies the tests and checks run" },
         { "glob": "tsconfig.base.json", "why": "the type checker's strictness" },

@@ -7,6 +7,7 @@
  */
 import { type Outcome, type Tagged } from "@demlik/tea";
 import { Context, Effect, Layer, Option, Schema } from "effect";
+import { type SessionManagerError } from "../access/SessionManager.ts";
 import {
   type Appended,
   type Archive,
@@ -204,14 +205,14 @@ export class CheckedWriter extends Context.Service<
       id: string,
       parent: string,
       kind: string,
-    ) => Effect.Effect<Session, LedgerError | SigningRefused | NotGranted>;
+    ) => Effect.Effect<Session, LedgerError | SessionManagerError | SigningRefused | NotGranted>;
     readonly append: (input: Incoming) => Effect.Effect<Appended, LedgerError | NotGranted>;
     readonly commit: (
       id: string,
       session: Session,
       stream: string,
       event: Event,
-    ) => Effect.Effect<Appended, LedgerError | SigningRefused | NotGranted>;
+    ) => Effect.Effect<Appended, LedgerError | SessionManagerError | SigningRefused | NotGranted>;
     readonly own: (id: string, stream: string, event: Event) => Effect.Effect<Appended, LedgerError | SigningRefused>;
   }
 >()("@kampus/libfabrika/runtime/Entry.CheckedWriter") {}

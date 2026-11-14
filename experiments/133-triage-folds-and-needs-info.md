@@ -1,3 +1,9 @@
+---
+date: "2026-10-24"
+scripts: "`133-triage-folds-and-needs-info.ts`, `lib/sort.ts`, `133-truth.json`, `results/133-triage-folds-and-needs-info.json`"
+summary: "No to both. Today's sort brief and Check (`packages/pipeline/src/stages/sort/`), sonnet, no tools, each ticket's first revision with the tickets open at its filing listed as open plans. Fold: on 13 demlik tickets triage really folded into an open ticket, the right fold 2 of 26 answers; 13 a plan of its own, 4 a duplicate of the right ticket, 6 a fold into a neighbour, 1 a ruling. On 13 controls (own plan while a related ticket was open) it folded 1 of 26. 9 of the 13 folds were batch siblings filed within 21 seconds of their target, and only 2 targets had been triaged when the fold ticket was filed, so today's design (an open plan is a ticket sort already planned) could see 2; it missed both. The bar's `carried` rule, whose reason says \"folded\", never fired. Lean: leave folding to the planner, which reads the code (70%). Needs-info: of 15 closed phoenix tickets that had `status:needs-info`, 7 waited only for an owner's permission to close a known duplicate, 6 on a fact in the code, 1 on a ruling, 1 on the filer (a link-only body; sort said `no`). A missing fact changed the end on 4, all held by the code: a scout's job, not a seventh answer. Sort reached the real end on 8 of 15; same answer both runs on 37 of 41 tickets. $2.66 for 82 sorts. Confidence 80% (fold), 75% (needs-info)."
+---
+
 # 133. Triage's fold, and whether it needs "ask the filer"
 
 Two questions about triage (the step the code still calls `sort`, in

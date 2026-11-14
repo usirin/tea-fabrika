@@ -1,3 +1,8 @@
+---
+state: "decided in pieces, see the note"
+summary: "Both versions. A review's verdict, a person's yes and the lane's stand-in carry to a new head by one rule: `kept` on the same head, a clean replay of the reviewed diff onto the base branch (Gerrit's trivial rebase), or a format-only change; `glance` when only the `-U0 --verbatim` patch-id matches; `stale` otherwise. Diffs are read against the pull request's base branch. Checks always run again at the final head. 13 places in today's code bind to a sha or to no head. From experiment 165."
+---
+
 # A yes binds to the diff, not the commit
 
 **Decided, in pieces:**

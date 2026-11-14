@@ -1,3 +1,9 @@
+---
+date: "2026-10-04"
+scripts: "`07-test-writer.ts`"
+summary: "All 48 criteria got a good test, and none passed on the starting code. Judge confidence bunched at 0.86 to 0.89, just under the 0.9 floor."
+---
+
 # 9. The three rules, given to the writer
 
 The writer was told: exactly one test per criterion; when the criterion gives

@@ -1,3 +1,8 @@
+---
+date: "2026-10-04"
+summary: "Triage wrote no idle example in 131. Jev's flags were all false alarms."
+---
+
 # 22. Does Jev flag triage's own idle examples?
 
 Experiment 18 found the one example question Jev answers well: does the input

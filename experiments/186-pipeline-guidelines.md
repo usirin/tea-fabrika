@@ -1,3 +1,9 @@
+---
+date: "2026-11-01"
+scripts: "none; reading only"
+summary: "Reading, not a measurement. Toyota, the Lean Enterprise Institute, Shingo, Erlang/OTP, Temporal, GitHub Actions, Buildkite, Argo, Bazel, Nx, Google SRE and AWS agree: stop the line on an abnormality and say where and why, restart only what broke within a bound, keep finished work keyed by its inputs, retry at one level, and page a person only for what needs one. Today's lane follows about half. Checked against the twelve principles of the pipeline guidelines, 35 places in PR 289 break one, in 17 groups; the worst: a fresh lane on ticket 117 when the fold cannot prove a field, a resume point that is optional in the note's own type, and an exam-file conflict on rebase that stops with no picks. $0."
+---
+
 # 186. How do factories, supervisors and build tools handle a stop, and where does the self-fix plan break it?
 
 Read 2026-11-01. **This is reading, not a measurement.** No code ran and no model was called; the

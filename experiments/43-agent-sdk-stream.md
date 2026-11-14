@@ -1,3 +1,8 @@
+---
+date: "2026-10-10"
+summary: "The stream is enough to judge and stop a run (2 ms after the call it judged), not to prevent a step. Prevention belongs in the PreToolUse hook."
+---
+
 # 43. Claude through the Agent SDK: can a tea machine judge a running agent?
 
 The Draft step (enricher, builder, reviewer) runs `claude -p`: prompt in,
