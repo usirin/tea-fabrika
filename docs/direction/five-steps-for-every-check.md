@@ -62,7 +62,8 @@ Decided 2026-11-08 by the owner, after PR 516's laws were all example tests.
 - **A hand-picked example stays only as a pinned case of a named past bug,** in fast-check's
   `examples`, with the bug named beside it.
 - **A check on the shape of code is a lint rule or a type,** not a test.
-- **Four kinds of law may be a fixed test, and the test's name says which** (owner, 2026-11-08).
+- **Five kinds of law may be a fixed test, and the test's name says which** (owner, 2026-11-08;
+  the fifth, `type:`, 2026-11-14).
   Anything else is a property. A hand-picked example that checks a general rule is a miss.
 
 | Label | What it is | Example |
@@ -71,6 +72,7 @@ Decided 2026-11-08 by the owner, after PR 516's laws were all example tests.
 | `format:` | A fixed format the code must write or read exactly | the `keybindings.toml` a person would write by hand |
 | `pinned:` | A named past bug, kept so it never comes back | the duplicate-id bug |
 | `scenario:` | One scripted run against the outside world | a real Electron window opens; a real `git push` lands |
+| `type:` | A check only the compiler makes, with no samples to draw ([0527](../../.decisions/0527-type-laws-get-a-type-label.md)) | no service of `access/` fails with the ledger's error |
 
 ```ts
 // A sketch: one law, with one pinned case of a named past bug.
@@ -90,7 +92,7 @@ it("scenario: the app opens a real window on a fresh home", () => {/* ... */});
 checks general rules with generated inputs.
 [Hypothesis's `@example`](https://hypothesis.readthedocs.io/en/latest/tutorial/replaying-failures.html#using-example-to-run-a-specific-input)
 keeps explicit inputs alongside generated cases, as fast-check's `examples` does for `pinned:`.
-The four labels name why a fixed case exists; they do not claim that one example checks a general
+The five labels name why a fixed case exists; they do not claim that one example checks a general
 rule.
 
 The plan names the generator, or a label with its reason, for each law. The test writer keeps that
