@@ -120,7 +120,10 @@ All on main in `next/`, read 2026-11-13.
 - **The checklist program** and **the thin inbox program** (P44, P45's slice 1). The app's table
   still holds one program, `fabrika/counter` (`next/apps/fabrika/src/table.ts:7`).
 
-No code in `next/` names `fabsh`, `summon`, a room or a registry of names (searched 2026-11-13).
+No code in `next/` names `summon`, a room or a registry of names (searched 2026-11-13). *2026-11-14:*
+`fabsh` slice 1 is built on its branch: the program `fabrika/fabsh` (`next/programs/fabsh`) in a
+fixed `fabsh:1` tile, the reader (S1), and the ephemeral lane's first client frame,
+`process.draft`.
 
 ### What is missing, piece by piece
 
@@ -211,10 +214,16 @@ In build order. "Decide first" lists only what no decision answers yet.
 - Designed by: [0275](../../.decisions/0275-the-shell-is-a-regular-program.md),
   [0432](../../.decisions/0432-next-has-fabsh-rethought-from-tsh.md), S1 of the summon guidelines,
   [fabsh grows into a language](../direction/fabsh-grows-into-a-language.md) (proposed).
-- In code now: nothing named `fabsh`. Today's `tsh` has 12 built-in words
-  (`packages/fabrika/src/shell/grammar.ts:83`), which maps the jobs and is not copied.
-- Not built: the program, its line editor in its model, its view with local echo (0275), the
-  reader that gives every word a role (S1), and the built-ins.
+- In code now (*2026-11-14,* slice 1 on its branch, [the plan](./lanes/fabsh-PLAN.md)): the program
+  `fabrika/fabsh` with `help`, `clear` and `history`, history 500 and scrollback 2,000; the reader
+  that gives every word a role (S1); the tile with local echo, one draft frame in flight, and one
+  `draft` client row per line; the library's `process.draft`, its own budget
+  `gateway.draft-limit`, and the runner's memory-only draft. The tile is a fixed `fabsh:1` beside
+  the checklist until the desk starts it. Today's `tsh` (`packages/fabrika/src/shell/grammar.ts:83`)
+  mapped the jobs and is not copied.
+- Not built: slice 2, a program word that starts a program in a tile beside fabsh's, with
+  `programs` and `exit` (it waits on ticket 953's start check and the desk lane); the Electron run
+  of L17 (L18, owed to P19 slice 3).
 - Decide first: S1, and with it what a line may hold and which built-in words `fabsh` has (both
   listed as not decided in 0159).
 

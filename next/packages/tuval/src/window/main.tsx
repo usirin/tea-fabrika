@@ -104,9 +104,6 @@ const Tile = ({
       inert={offline || tile.reach._tag !== "open"}
     >
       <header className="titlebar">
-        <span className="tile-mark" aria-hidden="true">
-          ·
-        </span>
         <span className="tile-name">{tile.name}</span>
         <span className="tile-state">{state}</span>
         <span className="tile-id">{tile.id}</span>

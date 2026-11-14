@@ -6,4 +6,5 @@ import type { Selection } from "@kampus/libfabrika/build";
 export const programs: ReadonlyArray<Selection> = [
   { name: "fabrika/counter", package: "@kampus/counter", export: "counter" },
   { name: "fabrika/checklist", package: "@kampus/checklist", export: "checklist" },
+  { name: "fabrika/fabsh", package: "@kampus/fabsh", export: "fabsh" },
 ];

@@ -163,6 +163,7 @@ export class ProgramLoader extends Context.Service<
                   ]),
                 ),
                 cmds: (loaded.program.machine.cmds ?? []).map((d) => d.cmdType),
+                ...(loaded.program.draft === undefined ? {} : { draft: true }),
               },
               handler: (cmd: string) => {
                 const owner = CHAOS_ONLY[cmd];

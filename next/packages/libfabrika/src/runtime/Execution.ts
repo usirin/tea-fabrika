@@ -10,7 +10,7 @@ import { Cause, Effect, Option, Result, Schema } from "effect";
 import * as Redacted from "effect/Redacted";
 import * as Audit from "./Audit.ts";
 import { Deliveries, Policy } from "./internal/recovery.ts";
-import { Admission, type Input, ProgramDown, stepper, Step, type Prepared, type Stepper } from "./Program.ts";
+import { Admission, type Input, ProgramDown, Refusal, stepper, Step, type Prepared, type Stepper } from "./Program.ts";
 import { Saved } from "./State.ts";
 
 const Upgraded = Schema.Struct({ saved: Saved, ran: Schema.Array(Schema.String) });
@@ -110,6 +110,8 @@ export const Declaration = Schema.Struct({
   /** Each input port: whether it takes writes, and whether only a person may send it. */
   inputs: Schema.Record(Schema.String, Schema.Struct({ write: Schema.Boolean, personOnly: Schema.Boolean })),
   cmds: Schema.Array(Schema.String),
+  /** Whether the program declares a draft, which a client may send on the ephemeral lane. */
+  draft: Schema.optionalKey(Schema.Boolean),
 });
 /**
  * A loaded program's checked declaration, as `Declaration` decodes it.
@@ -118,6 +120,29 @@ export const Declaration = Schema.Struct({
  * @category models
  */
 export type Declaration = typeof Declaration.Type;
+
+/**
+ * Schema for a draft frame's answer: `ok` with the program's checked draft, which is the echo, or
+ * `err`: `no_draft` when the program declares none, `bad_draft` when the frame does not decode, and
+ * `refused` with the program's own `reason`.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const DraftAnswer = Schema.Union([
+  Schema.Struct({ ok: Schema.Json }),
+  Schema.Struct({
+    err: Schema.Literals(["no_draft", "bad_draft", "refused"]),
+    reason: Schema.optionalKey(Schema.String),
+  }),
+]);
+/**
+ * A draft frame's answer, as `DraftAnswer` decodes it.
+ *
+ * @stability unstable
+ * @category models
+ */
+export type DraftAnswer = typeof DraftAnswer.Type;
 
 /**
  * One program's compiled source and the hash of it, as the build hands it to the Worker's loader.
@@ -152,6 +177,8 @@ export type Execution = {
   readonly check: (kind: string, event: unknown) => Effect.Effect<boolean, ProgramDown>;
   /** Whether a stamped input decodes against its write port's schema, checked inside the box. */
   readonly admit: (m: unknown) => Effect.Effect<boolean, ProgramDown>;
+  /** Checks one draft frame against the program's draft. It steps nothing and opens no span. */
+  readonly draft: (m: unknown) => Effect.Effect<DraftAnswer, ProgramDown>;
 };
 
 /**
@@ -172,6 +199,7 @@ export type ExecutionCalls = {
   readonly reply: (cmd: unknown, outcome: unknown) => Promise<unknown>;
   readonly check?: (kind: string, event: unknown) => Promise<unknown>;
   readonly admit?: (m: unknown) => Promise<unknown>;
+  readonly draft?: (m: unknown) => Promise<unknown>;
 };
 
 const attempt = <A>(reason: ProgramDown["reason"], f: () => A) =>
@@ -201,6 +229,31 @@ const admits = (inputs: Readonly<Record<string, Input>>, m: unknown): boolean =>
 
   const port = inputs[typed.value.type];
   return port !== undefined && port._tag === "write" && Result.isSuccess(Schema.decodeUnknownResult(port.schema)(m));
+};
+
+const decodeRefusal = Schema.decodeUnknownSync(Schema.NullOr(Refusal));
+
+/** One draft frame against the program's draft: its schema, then its own check. Nothing is kept. */
+const drafted = (program: Stepper["program"], m: unknown): DraftAnswer => {
+  const draft = program.draft;
+
+  if (draft === undefined || !isCodec(draft.schema)) {
+    return { err: "no_draft" };
+  }
+
+  const decoded = Schema.decodeUnknownResult(draft.schema)(m);
+
+  if (Result.isFailure(decoded)) {
+    return { err: "bad_draft" };
+  }
+
+  const refusal = decodeRefusal(draft.refuse(decoded.success));
+
+  if (refusal !== null) {
+    return { err: "refused", reason: refusal.reason };
+  }
+
+  return { ok: Schema.decodeUnknownSync(Schema.Json)(Schema.encodeUnknownSync(draft.schema)(decoded.success)) };
 };
 
 const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Schema.Json => {
@@ -278,6 +331,8 @@ export const nodeExecution = (declared: unknown, build = "node"): Execution => {
       run("step", (pure) => reply(pure.program.machine.cmds ?? [], cmd, outcome)),
     ),
     admit: Effect.fn("execution.admit")((m) => run("step", (pure) => admits(pure.program.inputs, m))),
+    // Untraced: a frame at typing speed opens no span (the ephemeral lane's rule).
+    draft: (m) => run("step", (pure) => drafted(pure.program, m)),
     check: Effect.fn("execution.check")((kind, event) =>
       run("step", (pure) => {
         const policy = pure.program.writes[kind];
@@ -383,5 +438,6 @@ export const workerExecution = (binding: ExecutionCalls): Execution => {
       ask(Schema.Boolean, call("check", [kind, event], "step"), "step"),
     ),
     admit: Effect.fn("execution.admit")((m) => ask(Schema.Boolean, call("admit", [m], "step"), "step")),
+    draft: (m) => ask(DraftAnswer, call("draft", [m], "step"), "step"),
   };
 };

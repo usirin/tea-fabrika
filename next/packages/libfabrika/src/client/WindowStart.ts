@@ -233,17 +233,19 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
               ? { method: "view.open", params: { pid: call.pid } }
               : call._tag === "knock"
                 ? { method: "gateway.knock", params: { label: options.client.label } }
-                : {
-                    method: "process.send",
-                    params: {
-                      pid: call.pid,
-                      letter: call.letter,
-                      m: call.m,
-                      sentAt: call.sentAt,
-                      seen: call.seen,
-                      ...(call.traceId ? { traceId: call.traceId } : {}),
-                    },
-                  };
+                : call._tag === "draft"
+                  ? { method: "process.draft", params: { pid: call.pid, m: call.m } }
+                  : {
+                      method: "process.send",
+                      params: {
+                        pid: call.pid,
+                        letter: call.letter,
+                        m: call.m,
+                        sentAt: call.sentAt,
+                        seen: call.seen,
+                        ...(call.traceId ? { traceId: call.traceId } : {}),
+                      },
+                    };
         const written = handles.get(cmd.dial)?.written;
         written?.set(cmd.id, yield* Clock.currentTimeMillis);
         yield* send(cmd.dial, JSON.stringify({ jsonrpc: "2.0", id: cmd.id, ...message })).pipe(

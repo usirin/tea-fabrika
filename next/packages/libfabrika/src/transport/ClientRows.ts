@@ -61,6 +61,9 @@ export const ClientRecord = Schema.TaggedUnion({
     /** On a `patch` row only: how many patches the run installed. */
     patches: Schema.optionalKey(Count),
   },
+  /** One per submitted line of a tile that drafts, never one per frame: the draft calls written
+   *  since the tile's last press, the echoes handed back, and the slowest echo. No draft text. */
+  draft: { pid: Schema.String, frames: Count, echoes: Count, slowest: Ms },
   persist: { result: Schema.Literals(["granted", "refused", "failed"]) },
   failure: {
     op: Schema.Literals(["key", "connect", "request", "view", "persist", "record"]),

@@ -36,6 +36,7 @@ import { ProcessManager } from "../processes/ProcessManager.ts";
 import { ProcessId } from "../ProcessId.ts";
 import * as Audit from "../runtime/Audit.ts";
 import { Incoming } from "../runtime/Entry.ts";
+import type { DraftAnswer } from "../runtime/Execution.ts";
 import { type ProgramDown } from "../runtime/Program.ts";
 import { type RepliesError } from "../runtime/Replies.ts";
 import { type RunnerError, Sent } from "../runtime/Runner.ts";
@@ -53,6 +54,7 @@ import { gatewayStore } from "./GatewayStore.ts";
 import * as Waiting from "./internal/waiting.ts";
 import * as JobRoutes from "./Jobs.ts";
 import { Policy as RatePolicy } from "./RateLimit.ts";
+import * as RateLimiterSql from "./RateLimiterSql.ts";
 
 const ConnectionId = Schema.NonEmptyString.pipe(Schema.brand("ConnectionId"));
 /**
@@ -240,6 +242,8 @@ const SpanRead = Schema.Struct({
   after: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 
+const DraftFrame = Schema.Struct({ pid: ProcessId, m: Schema.Json });
+
 const SpanContent = Schema.Struct({ chain: Chain, spanId: Schema.String });
 const DeleteContent = Schema.Struct({ ...SpanContent.fields, reason: Schema.String });
 
@@ -269,11 +273,19 @@ type Options<A, RNext, RDeliver, RNotify> = {
   readonly inputCap: number;
   readonly spentCap: number;
   readonly rateLimit: RatePolicy;
+  /** The draft frames' own budget, `gateway.draft-limit`: a draft never spends `rateLimit`. */
+  readonly draftLimit?: RatePolicy;
   readonly turn?: Semaphore.Semaphore;
   readonly write?: <B, E, R>(work: Effect.Effect<B, E, R>) => Effect.Effect<B, E, R>;
-  readonly policy?: (
-    process: string,
-  ) => Effect.Effect<{ readonly inputs: ReadonlyArray<string>; readonly events: ReadonlyArray<string> }, LedgerError>;
+  readonly policy?: (process: string) => Effect.Effect<
+    {
+      readonly inputs: ReadonlyArray<string>;
+      readonly events: ReadonlyArray<string>;
+      /** Whether the process's program declares a draft. */
+      readonly draft?: boolean;
+    },
+    LedgerError
+  >;
   readonly isLive?: (process: string) => Effect.Effect<boolean, LedgerError>;
   readonly open?: (process: string, client: string) => Effect.Effect<Schema.Json, LedgerError, RDeliver>;
   readonly wait?: (stream: string, after: number, reader: string) => Effect.Effect<unknown, LedgerError>;
@@ -297,6 +309,8 @@ type Options<A, RNext, RDeliver, RNotify> = {
     RDeliver
   >;
   readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError, RNotify>;
+  /** Hands one draft frame to the process's runner, which answers its echo. Nothing is recorded. */
+  readonly draft?: (process: string, m: Schema.Json) => Effect.Effect<DraftAnswer, unknown, RDeliver>;
   readonly audit?: (process: string, message: unknown) => Effect.Effect<Schema.Json, Audit.AuditError, RDeliver>;
   readonly inputs: {
     readonly schema: Schema.Codec<A, unknown>;
@@ -323,6 +337,12 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   const ratePolicy = yield* Schema.decodeUnknownEffect(RatePolicy)(options.rateLimit).pipe(
     Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
   );
+  const draftPolicy =
+    options.draftLimit === undefined
+      ? null
+      : yield* Schema.decodeUnknownEffect(RatePolicy)(options.draftLimit).pipe(
+          Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+        );
   const records = yield* RecordManager;
   const archive = yield* Archive;
   const processes = yield* Effect.serviceOption(ProcessManager);
@@ -1061,6 +1081,67 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       .write(MemberEvent.cases.denied.make({ id: random(), key, saw, by: from.by }), from)
       .pipe(write);
   });
+  /**
+   * One draft frame on the ephemeral lane: checked like a send's session and key, then its own
+   * budget, the process's life and its program's draft, and routed. It writes no input row, no
+   * binding and no ledger entry, and runs under the quiet tracer, so no span holds it.
+   */
+  const drafted = Effect.fnUntraced(function* (
+    attached: { readonly identity: { readonly as: string; readonly key: string } },
+    raw: string,
+    params: unknown,
+  ) {
+    if (attached.identity.as === "hands") {
+      return no("not_allowed");
+    }
+
+    if (Result.isFailure(yield* Effect.result(membership(raw, attached.identity.key)))) {
+      return no("not_granted");
+    }
+
+    if (draftPolicy !== null) {
+      const at = yield* clock;
+      const decision = yield* Effect.try({
+        try: () =>
+          RateLimiterSql.take(sql, {
+            table: "gateway_draft_limits",
+            key: attached.identity.key,
+            at,
+            policy: draftPolicy,
+            build: options.build,
+          }),
+        catch: (cause) => new LedgerError({ reason: "storage", cause }),
+      });
+
+      if (decision._tag === "refused") {
+        return RateRefusal.make({ reason: "rate_limited", retryAfter: decision.retryAfter });
+      }
+    }
+
+    const frame = Schema.decodeUnknownResult(DraftFrame)(params);
+
+    if (Result.isFailure(frame) || reserved(params)) {
+      return no("bad_input");
+    }
+
+    const { pid, m } = frame.success;
+
+    if (options.isLive !== undefined && !(yield* options.isLive(pid))) {
+      return no("ended");
+    }
+
+    const policy = options.policy === undefined ? null : yield* options.policy(pid);
+
+    if (options.draft === undefined || (policy !== null && policy.draft !== true)) {
+      return no("no_draft");
+    }
+
+    const answer = yield* options.draft(pid, m).pipe(
+      Effect.provideContext(context),
+      Effect.mapError((cause) => new LedgerError({ reason: "unreachable", cause })),
+    );
+    return "ok" in answer ? ok(answer.ok) : no(answer.err === "refused" ? (answer.reason ?? "refused") : answer.err);
+  });
   const route = Effect.fnUntraced(function* (
     client: ConnectionId,
     method: string,
@@ -1074,6 +1155,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     }
 
     const { attached, raw } = checked.success;
+
+    if (method === "process.draft") {
+      return yield* silent(drafted(attached, raw, params));
+    }
 
     // One budget per authenticated key, hands included, before a window or agent becomes a Writer.
     const budget = yield* Effect.result(

@@ -46,6 +46,8 @@ const Call = Schema.TaggedUnion({
     traceId: Schema.optionalKey(Schema.String),
   },
   knock: {},
+  /** One draft frame on the ephemeral lane: the wire's `process.draft`, never saved. */
+  draft: { pid: Schema.String, m: Schema.Json },
 });
 type Call = typeof Call.Type;
 
@@ -80,6 +82,16 @@ export const WindowModel = Schema.Struct({
       recovery: Recovery,
       own: Schema.Json,
       refusal: Schema.NullOr(Schema.Struct({ m: Schema.Json, reason: Schema.String })),
+      /** A drafting tile's lane: the newest frame waiting for the one in flight, and the counts
+       *  since its last press for its `draft` row. Absent until the tile first drafts. */
+      drafts: Schema.optionalKey(
+        Schema.Struct({
+          queued: Schema.NullOr(Schema.Struct({ m: Schema.Json })),
+          frames: Count,
+          echoes: Count,
+          slowest: Ms,
+        }),
+      ),
     }),
   ),
   link: Link,
@@ -99,6 +111,9 @@ export const WindowModel = Schema.Struct({
   // Slot ownership survives reconnects and identifies the tile whose answer is refused.
   from: Schema.Record(Schema.String, Schema.Struct({ tile: Schema.String, via: Via })),
   redate: Schema.Array(Schema.Int),
+  /** The pids of draft calls dropped with their dial this step, each handed back to its tile
+   *  before the step ends. Empty between steps. */
+  lost: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
 /**
@@ -145,6 +160,8 @@ const Own = Schema.Union([
   Schema.Struct({ type: Schema.Literal("send_err"), ...OnWrite, error: CallError }),
   Schema.Struct({ type: Schema.Literal("knock_ok"), ...OnWrite, value: Schema.Null, ms: Ms }),
   Schema.Struct({ type: Schema.Literal("knock_err"), ...OnWrite, error: CallError }),
+  Schema.Struct({ type: Schema.Literal("draft_ok"), ...OnWrite, value: Schema.Json, ms: Ms }),
+  Schema.Struct({ type: Schema.Literal("draft_err"), ...OnWrite, error: CallError }),
 ]);
 
 const key = Cmd.make("key", {
@@ -242,7 +259,7 @@ type AnyProgram = Program<any, any, any, any, any>;
 type ProgramTile<P extends AnyProgram> = Machine<
   any,
   any,
-  { readonly type: "press"; readonly m: ProgramMsg<P> },
+  { readonly type: "press"; readonly m: ProgramMsg<P> } | { readonly type: "draft"; readonly m: Schema.Json },
   any,
   any
 > &
@@ -455,6 +472,13 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
     rejected: link._tag === "removed" ? link.fingerprint : s.rejected,
     flight: s.flight.filter((f) => f.dial === open),
   };
+  // A draft call that ends with its dial is answered to its tile as lost: it cannot come back.
+  const lost = s.flight.flatMap((f) => (f.dial !== open && f.call._tag === "draft" ? [f.call.pid] : []));
+
+  if (lost.length > 0) {
+    next = { ...next, lost: [...(s.lost ?? []), ...lost] };
+  }
+
   const out: Array<Out[number]> = cmds.filter((c): c is ReturnType<typeof ping> => c.type === "ping");
   const knocks = cmds.filter((c) => c.type === "knock").map(() => Call.cases.knock.make({}));
   const [knocked, writes] = wrote(next, open ?? 0, knocks);
@@ -637,6 +661,11 @@ const answerTo = (
         onNone: () => [],
         onSome: (value) => [{ type: "send_ok", ...on, value, ms }],
       });
+    case "draft":
+      return Option.match(Schema.decodeUnknownOption(Schema.Json)(result), {
+        onNone: () => [],
+        onSome: (value) => [{ type: "draft_ok", ...on, value, ms }],
+      });
     case "knock":
       // A renewed knock keeps or renews the code the Link shows.
       return Option.match(Schema.decodeUnknownOption(WaitingCode)(result), {
@@ -702,9 +731,12 @@ const frameIn = (s: WindowModel, m: Frame, own: (s: WindowModel, msg: OwnerMsg) 
               type: `${tag}_err`,
               ...on,
               error:
-                reason !== undefined && AGAIN.has(reason)
-                  ? CallError.cases.unreachable.make({})
-                  : CallError.cases.unknown.make({}),
+                // A draft's refusal is handed back to its tile in words, so its reason is kept.
+                tag === "draft"
+                  ? CallError.cases.unknown.make(reason === undefined ? {} : { reason })
+                  : reason !== undefined && AGAIN.has(reason)
+                    ? CallError.cases.unreachable.make({})
+                    : CallError.cases.unknown.make({}),
             },
           ];
     return msgs.reduce<Step>(
@@ -743,6 +775,49 @@ const frameIn = (s: WindowModel, m: Frame, own: (s: WindowModel, msg: OwnerMsg) 
   return [s, []];
 };
 
+type Drafts = NonNullable<WindowModel["tiles"][number]["drafts"]>;
+const NO_DRAFTS: Drafts = { queued: null, frames: 0, echoes: 0, slowest: 0 };
+
+const withDrafts = (s: WindowModel, id: string, f: (d: Drafts) => Drafts): WindowModel => ({
+  ...s,
+  tiles: s.tiles.map((t) => (t.id === id ? { ...t, drafts: f(t.drafts ?? NO_DRAFTS) } : t)),
+});
+
+/** The tile that shows `pid`, open now or last. */
+const showing = (s: WindowModel, pid: string) =>
+  s.tiles.find((t) => "pid" in t.reach && t.reach.pid === pid) ?? s.tiles.find((t) => t.last === pid);
+
+/** Writes a tile's queued draft once it is open, the link is online and none of its drafts flies. */
+const sendDraft = (s: WindowModel, id: string): Step => {
+  const t = s.tiles.find((t) => t.id === id);
+  const queued = t?.drafts?.queued ?? null;
+
+  if (t === undefined || queued === null || s.link._tag !== "online" || t.reach._tag !== "open") {
+    return [s, []];
+  }
+
+  const pid = t.reach.pid;
+
+  if (s.flight.some((f) => f.call._tag === "draft" && f.call.pid === pid)) {
+    return [s, []];
+  }
+
+  const [written, out] = wrote(s, s.link.dial, [Call.cases.draft.make({ pid, m: queued.m })]);
+  return [withDrafts(written, id, (d) => ({ ...d, queued: null, frames: d.frames + 1 })), out];
+};
+
+/** Every tile's queued draft that can go now. */
+const sendDrafts = (s: WindowModel): Step =>
+  s.tiles.reduce<Step>(
+    ([acc, out], t) => {
+      const [next, more] = sendDraft(acc, t.id);
+      return [next, [...out, ...more]];
+    },
+    [s, []],
+  );
+
+const IsDraft = Schema.Struct({ type: Schema.Literal("draft"), m: Schema.Json });
+
 /**
  * Makes the window parent for one client, from the checks of the programs its tiles show.
  *
@@ -762,6 +837,105 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
     const [next, cmds] = applyCell<C.Client, C.ClientMsg, ReturnType<typeof client.init>[1][number]>(client, s, m);
     return [next, cmds.map((c) => c.pid)];
   };
+  /** Steps one tile's own machine with `raw`, and sends on its presses and its drafts. */
+  const stepTile = (s: WindowModel, id: string, raw: unknown): Step => {
+    const t = s.tiles.find((t) => t.id === id);
+    const child = t && checks.tile?.(t.name);
+
+    if (t === undefined || child === undefined) {
+      return [s, []];
+    }
+
+    const msg = Schema.decodeUnknownResult(Schema.toType(child.msg))(raw);
+
+    if (Result.isFailure(msg) || !Schema.is(Schema.Struct({ type: Schema.String }))(msg.success)) {
+      return [s, []];
+    }
+
+    const [own, cmds] = applyCell(child, t.own, msg.success);
+
+    if (!Schema.is(child.model)(own) || !Schema.is(Schema.Json)(own)) {
+      return [s, []];
+    }
+
+    // A queued submit can arrive after the link drops. Keep its draft until a press can land.
+    if (cmds.some((cmd) => cmd.type === "press") && t.reach._tag !== "open") {
+      return [s, []];
+    }
+
+    const drafts = cmds.filter((cmd) => Schema.is(IsDraft)(cmd));
+    let next: WindowModel = { ...s, tiles: s.tiles.map((row) => (row.id === t.id ? { ...row, own } : row)) };
+    const out: Array<Out[number]> = [];
+
+    for (const cmd of cmds) {
+      if (cmd.type === "press" && Schema.is(Schema.Struct({ m: Schema.Json }))(cmd)) {
+        const row = next.tiles.find((r) => r.id === t.id);
+
+        // One draft row per submitted line of a tile that drafts: its counts before this press.
+        if (row !== undefined && t.reach._tag === "open" && (row.drafts !== undefined || drafts.length > 0)) {
+          const d = row.drafts ?? NO_DRAFTS;
+          out.push(
+            record({
+              record: ClientRecord.cases.draft.make({
+                pid: t.reach.pid,
+                frames: d.frames,
+                echoes: d.echoes,
+                slowest: d.slowest,
+              }),
+            }),
+          );
+          next = withDrafts(next, t.id, (d) => ({ ...d, frames: 0, echoes: 0, slowest: 0 }));
+        }
+
+        const [after, sent] = pressed(next, step, t.id, cmd.m, "button");
+        next = after;
+        out.push(...sent);
+      }
+    }
+
+    // A newer draft replaces the one waiting, so the newest is always the last one written.
+    for (const cmd of drafts) {
+      next = withDrafts(next, t.id, (d) => ({ ...d, queued: { m: cmd.m } }));
+    }
+
+    const [sent, writes] = sendDraft(next, t.id);
+    return [sent, [...out, ...writes]];
+  };
+  /** A draft call's answer, back to the tile that shows its pid as that tile's own Msg. */
+  const handBack = (s: WindowModel, pid: string, msg: unknown, echo?: number): Step => {
+    const t = showing(s, pid);
+
+    if (t === undefined) {
+      return [s, []];
+    }
+
+    const counted =
+      echo === undefined
+        ? s
+        : withDrafts(s, t.id, (d) => ({ ...d, echoes: d.echoes + 1, slowest: Math.max(d.slowest, echo) }));
+    const [handed, out] = stepTile(counted, t.id, msg);
+    const [sent, writes] = sendDraft(handed, t.id);
+    return [sent, [...out, ...writes]];
+  };
+  /** Hands back every draft call this step dropped with its dial, so no tile waits on one. */
+  const settle = ([s, out]: Step): Step => {
+    if (s.lost === undefined) {
+      return [s, out];
+    }
+
+    const { lost, ...rest } = s;
+    return lost.reduce<Step>(
+      ([acc, cmds], pid) => {
+        const [next, more] = handBack(acc, pid, { type: "echo_refused", reason: "unreachable" });
+        return [next, [...cmds, ...more]];
+      },
+      [rest, out],
+    );
+  };
+  const settled =
+    <M>(handler: (s: WindowModel, m: M) => Step) =>
+    (s: WindowModel, m: M): Step =>
+      settle(handler(s, m));
   const machine = Machine.make({
     model: WindowModel,
     msg: Schema.Union([LinkMsg, Own]),
@@ -799,69 +973,38 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
       [key({ rejected: null })],
     ],
     update: {
-      ...linkUpdate,
+      ...(Object.fromEntries(
+        Object.entries(linkUpdate).map(([type, handler]) => [
+          type,
+          settled(handler as (s: WindowModel, m: unknown) => Step),
+        ]),
+      ) as typeof linkUpdate),
       press: (s, m): Step => pressed(s, step, m.tile, m.m, m.via ?? "button"),
-      tile: (s, m): Step => {
-        const t = s.tiles.find((t) => t.id === m.id);
-        const child = t && checks.tile?.(t.name);
-
-        if (t === undefined || child === undefined) {
-          return [s, []];
-        }
-
-        const msg = Schema.decodeUnknownResult(Schema.toType(child.msg))(m.msg);
-
-        if (Result.isFailure(msg) || !Schema.is(Schema.Struct({ type: Schema.String }))(msg.success)) {
-          return [s, []];
-        }
-
-        const [own, cmds] = applyCell(child, t.own, msg.success);
-
-        if (!Schema.is(child.model)(own) || !Schema.is(Schema.Json)(own)) {
-          return [s, []];
-        }
-
-        // A queued submit can arrive after the link drops. Keep its draft until a press can land.
-        if (cmds.some((cmd) => cmd.type === "press") && t.reach._tag !== "open") {
-          return [s, []];
-        }
-
-        let next: WindowModel = { ...s, tiles: s.tiles.map((row) => (row.id === t.id ? { ...row, own } : row)) };
-        const out: Array<Out[number]> = [];
-
-        for (const cmd of cmds) {
-          if (cmd.type === "press" && Schema.is(Schema.Struct({ m: Schema.Json }))(cmd)) {
-            const [after, sent] = pressed(next, step, t.id, cmd.m, "button");
-            next = after;
-            out.push(...sent);
-          }
-        }
-
-        return [next, out];
-      },
+      tile: (s, m): Step => stepTile(s, m.id, m.msg),
       key_ok: (s, m): Step => [
         { ...s, fingerprint: m.value.fingerprint },
         [record({ record: ClientRecord.cases.key.make({ result: m.value.found }) })],
       ],
-      key_err: (s, m): Step => {
+      key_err: settled((s, m): Step => {
         const error = platformFailure(m.error);
         const [next, cmds] = linked(s, { type: "blocked", reason: error });
         return [next, [...cmds, record({ record: ClientRecord.cases.failure.make({ op: "key", error }) })]];
-      },
+      }),
       socket_failure: (s, m): Step => [
         s,
         socketDial(s.link) === m.dial
           ? [record({ record: ClientRecord.cases.failure.make({ op: m.op, error: m.error }) })]
           : [],
       ],
-      socket_opened: (s, m): Step =>
+      socket_opened: settled((s, m): Step =>
         socketDial(s.link) === m.dial ? shook(s, { type: "opened", dial: m.dial, at: m.at }) : [s, []],
-      frame: (s, m): Step => frameIn(s, m, (at, msg) => applyCell(machine, at, msg)),
-      socket_closed: (s, m): Step => closedIn(s, m),
-      hello_ok: (s, m): Step => shook(s, m),
-      hello_err: (s, m): Step => shook(s, m),
-      enroll_ok: (s, m): Step => shook(s, { type: "knock_ok", cmd: knock(m.cmd), value: null, at: m.at }),
-      enroll_err: (s, m): Step => shook(s, { type: "knock_err", cmd: knock(m.cmd), error: m.error, at: m.at }),
+      ),
+      frame: settled((s, m): Step => frameIn(s, m, (at, msg) => applyCell(machine, at, msg))),
+      socket_closed: settled((s, m): Step => closedIn(s, m)),
+      hello_ok: settled((s, m): Step => shook(s, m)),
+      hello_err: settled((s, m): Step => shook(s, m)),
+      enroll_ok: settled((s, m): Step => shook(s, { type: "knock_ok", cmd: knock(m.cmd), value: null, at: m.at })),
+      enroll_err: settled((s, m): Step => shook(s, { type: "knock_err", cmd: knock(m.cmd), error: m.error, at: m.at })),
       now_ok: (s, m): Step => dated(s, step, m.cmd.n, m.value),
       now_err: (s, m): Step => [{ ...s, redate: [...new Set([...s.redate, m.cmd.n])] }, []],
       write_ok: (s): Step => [s, []],
@@ -873,6 +1016,11 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         }
 
         const call = found.call;
+
+        if (call._tag === "draft") {
+          return handBack({ ...s, flight: found.rest }, call.pid, { type: "echo_refused", reason: "unreachable" });
+        }
+
         return [
           {
             ...s,
@@ -972,10 +1120,13 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           return [written, [...rows, ...writes]];
         }
 
-        return [
-          next.client.views[pid] !== s.client.views[pid] ? opened(next, pid) : { ...next, trouble: "Bad view" },
-          rows,
-        ];
+        if (next.client.views[pid] === s.client.views[pid]) {
+          return [{ ...next, trouble: "Bad view" }, rows];
+        }
+
+        // A tile that opens sends the draft it kept while it could not.
+        const [sent, writes] = sendDrafts(opened(next, pid));
+        return [sent, [...rows, ...writes]];
       },
       open_err: (s, m): Step => {
         const found = answered(s, m, "open");
@@ -1049,24 +1200,38 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         const f = answered(s, m, "knock");
         return f === null ? [s, []] : [{ ...s, flight: f.rest }, []];
       },
+      draft_ok: (s, m): Step => {
+        const f = answered(s, m, "draft");
+        return f === null || f.call._tag !== "draft"
+          ? [s, []]
+          : handBack({ ...s, flight: f.rest }, f.call.pid, { type: "echoed", value: m.value, ms: m.ms }, m.ms);
+      },
+      draft_err: (s, m): Step => {
+        const f = answered(s, m, "draft");
+        const reason = m.error._tag === "unknown" ? (m.error.reason ?? "unknown") : m.error._tag;
+        return f === null || f.call._tag !== "draft"
+          ? [s, []]
+          : handBack({ ...s, flight: f.rest }, f.call.pid, { type: "echo_refused", reason });
+      },
       view: (s, m): Step => {
         const [next, rows, asks] = noticed(s, step, m.pid, m.note);
-        const after = next.client.views[m.pid] !== s.client.views[m.pid] ? opened(next, m.pid) : next;
+        const [after, drafted] =
+          next.client.views[m.pid] !== s.client.views[m.pid] ? sendDrafts(opened(next, m.pid)) : [next, []];
 
         if (
           asks.length === 0 ||
           s.link._tag !== "online" ||
           !s.tiles.some((t) => "pid" in t.reach && t.reach.pid === m.pid)
         ) {
-          return [after, rows];
+          return [after, [...rows, ...drafted]];
         }
 
         if (after.flight.some((f) => f.call._tag === "open" && f.call.pid === m.pid)) {
-          return [after, rows];
+          return [after, [...rows, ...drafted]];
         }
 
         const [written, writes] = wrote(after, s.link.dial, [Call.cases.open.make({ pid: m.pid })]);
-        return [written, [...rows, ...writes]];
+        return [written, [...rows, ...drafted, ...writes]];
       },
       seen: (s, m): Step => [{ ...s, client: step(s.client, { type: "read", rev: m.rev })[0] }, []],
       resend: (s, m): Step => {

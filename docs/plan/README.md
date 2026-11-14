@@ -84,7 +84,9 @@ on the laptop, which the owner accepts. The merge line is decided
 [0162](../../.decisions/0162-no-friction-before-a-merge.md),
 [0164](../../.decisions/0164-the-bot-stays-without-signing.md)): what is left is the queue's
 trigger in CI ([PR 1120](https://github.com/kamp-us/tea-fabrika/pull/1120)), the queue turned on,
-and the bot's plain tooling. Nothing in `next/` names `fabsh`, `summon` or a room yet. Open pull
+and the bot's plain tooling. Nothing in `next/` names `summon` or a room yet; *2026-11-14:* `fabsh`
+slice 1 is built on its branch ([the plan](./lanes/fabsh-PLAN.md)): the program in a fixed tile,
+its reader and the `process.draft` frame. Open pull
 requests on Tier 1 rows: [1028](https://github.com/usirin/tea-fabrika/pull/1028)
 (P14), [1044](https://github.com/usirin/tea-fabrika/pull/1044) (P13),
 [1054](https://github.com/usirin/tea-fabrika/pull/1054) (P38),

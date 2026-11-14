@@ -72,6 +72,7 @@ import {
   Recording,
   type View,
 } from "./Entry.ts";
+import type { DraftAnswer, Execution } from "./Execution.ts";
 import { fromFailure } from "./internal/exitReason.ts";
 import { Failure, Policy, type Receipt } from "./internal/recovery.ts";
 import { defaultPolicy, supervisor, Supervision, type SupervisorMsg } from "./internal/supervisor.ts";
@@ -351,6 +352,12 @@ export class ProgramRunner extends Context.Service<
      * `accepted` with the input's place in the inbox, or `refused` with the reason.
      */
     readonly msg: (input: unknown) => Effect.Effect<Sent, RunnerFailure>;
+    /**
+     * Takes one draft frame on the ephemeral lane: under the process's permit it checks the frame
+     * against the program's draft, keeps the newest in memory and answers it as the echo. It saves
+     * nothing, publishes nothing and opens no span, so a wake loses it and the next frame heals it.
+     */
+    readonly draft?: (m: unknown) => Effect.Effect<DraftAnswer, RunnerFailure>;
     /** Save the one alarm for newly arrived mail, without running or starting the recipient. */
     readonly mailed: Effect.Effect<void, RunnerFailure>;
     /** The object's alarm fired at `at`: the program's timer, if it asked for one by then. */
@@ -1753,6 +1760,8 @@ export class ProgramRunner extends Context.Service<
             );
           });
         };
+        /** The process's newest draft and the code that checked it: memory only, never saved. */
+        const drafts: { for: string; code: Execution | null; newest: unknown } = { for: "", code: null, newest: null };
         const open = call("runner.open");
         const msg = call("runner.step");
         const due = call("runner.due");
@@ -1769,6 +1778,26 @@ export class ProgramRunner extends Context.Service<
               }),
             )
             .pipe(Effect.withSpan("runner.mailed")),
+          draft: (m: unknown) =>
+            permit
+              .withPermit(
+                Effect.gen(function* () {
+                  const kept = drafts.for === process.id ? drafts.code : null;
+                  const code =
+                    live?.loaded.execution ?? kept ?? (yield* loader.load(process.program, process.build)).execution;
+                  drafts.for = process.id;
+                  drafts.code = code;
+                  const answer = yield* code.draft(m);
+
+                  if ("ok" in answer) {
+                    drafts.newest = answer.ok;
+                  }
+
+                  return answer;
+                }),
+              )
+              // A frame at typing speed is not a span: the ephemeral lane records no frame.
+              .pipe(Effect.withTracerEnabled(false)),
           open: (client: string) =>
             open(
               Effect.gen(function* () {

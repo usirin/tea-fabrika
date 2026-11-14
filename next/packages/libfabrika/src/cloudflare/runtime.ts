@@ -32,7 +32,7 @@ import * as ProgramMailLedger from "../processes/ProgramMailLedger.ts";
 import * as Audit from "../runtime/Audit.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import { Alarm, CheckedWriter, Recording, type Incoming } from "../runtime/Entry.ts";
-import type { Declaration } from "../runtime/Execution.ts";
+import { type Declaration, DraftAnswer } from "../runtime/Execution.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
 import { ProgramDown } from "../runtime/Program.ts";
@@ -242,13 +242,17 @@ export interface ProjectDoorOptions {
   readonly founder: Parameters<typeof ClientManagerLedger.layer>[0];
   readonly turn: Semaphore.Semaphore;
   readonly write: <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
-  readonly policy: (process: string) => Effect.Effect<{ inputs: Array<string>; events: Array<string> }, LedgerError>;
+  readonly policy: (
+    process: string,
+  ) => Effect.Effect<{ inputs: Array<string>; events: Array<string>; draft: boolean }, LedgerError>;
   readonly isLive: (process: string) => Effect.Effect<boolean, LedgerError>;
   readonly audit: (process: string, message: unknown) => Effect.Effect<Schema.Json, Audit.AuditError>;
   readonly nextProcess: () => Effect.Effect<string>;
   readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError>;
   readonly deliver: (process: string, input: Incoming) => Effect.Effect<Sent, LedgerError>;
   readonly open: (process: string, client: string) => Effect.Effect<Schema.Json, LedgerError>;
+  /** One draft frame to the process's runner, which echoes it; nothing is recorded. */
+  readonly draft: (process: string, m: Schema.Json) => Effect.Effect<DraftAnswer, LedgerError>;
   readonly wait: (stream: string, after: number, reader: string) => Effect.Effect<unknown, LedgerError>;
 }
 
@@ -701,7 +705,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       .pipe(Effect.catchTag("ProcessError", (cause) => Effect.fail(new LedgerError({ reason: "refused", cause }))));
   /** The registered name whose object stores this process ID. */
   const processObject = (pid: string) => Effect.map(resolved(pid), (life) => life.name);
-  type InputPolicy = { inputs: Array<string>; events: Array<string> };
+  type InputPolicy = { inputs: Array<string>; events: Array<string>; draft: boolean };
   const policies = new Map<string, InputPolicy>();
   const remember = (owner: string, declaration: Declaration): InputPolicy => {
     const policy = {
@@ -711,6 +715,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       events: Object.entries(declaration.writes)
         .filter(([, p]) => p.personOnly)
         .map(([name]) => name),
+      draft: declaration.draft === true,
     };
     policies.set(owner, policy);
     return policy;
@@ -812,6 +817,15 @@ const projectLogic = Effect.fn("project.init")(function* (
           Effect.flatMap((owner) => rpc(ProcessClient.make(processStub(env, name, owner)).open(client))),
           Effect.flatMap((value) =>
             Schema.decodeUnknownEffect(Schema.Json)(value).pipe(
+              Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+            ),
+          ),
+        ),
+      draft: (pid, m) =>
+        processObject(pid).pipe(
+          Effect.flatMap((owner) => rpc(ProcessClient.make(processStub(env, name, owner)).draft(m))),
+          Effect.flatMap((value) =>
+            Schema.decodeUnknownEffect(DraftAnswer)(value).pipe(
               Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
             ),
           ),
@@ -1367,7 +1381,11 @@ const processLogic = Effect.fnUntraced(function* (
   yield* sink.flush.pipe(Effect.provideContext(services));
   const attributed = <A, E, R>(work: Effect.Effect<A, E, R>) =>
     Effect.suspend(() => work.pipe(Effect.annotateSpans({ "fab.process": active }), Effect.provideContext(services)));
+  // The draft call is the runner's own, when it has one: a process service without it drafts nothing.
+  const drafts: { readonly draft?: (m: unknown) => ReturnType<NonNullable<typeof runner.draft>> } =
+    runner.draft === undefined ? {} : { draft: runner.draft };
   return {
+    ...drafts,
     usage: Effect.fnUntraced(
       function* (rows: unknown) {
         const usage = yield* Schema.decodeUnknownEffect(Schema.Array(IsolateUsage.Usage))(rows);

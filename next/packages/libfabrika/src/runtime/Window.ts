@@ -17,7 +17,12 @@ type AnyProgram = Program<any, any, any, any, any>;
  * @stability unstable
  * @category models
  */
-export type WindowData<P extends AnyProgram> = Readonly<ReturnType<P["view"]["select"]>>;
+export type WindowData<P extends AnyProgram> =
+  // A parent over programs of any view (`any`) takes any JSON; `Readonly<any>` would refuse `null`.
+  0 extends 1 & ReturnType<P["view"]["select"]>
+    ? ReturnType<P["view"]["select"]>
+    : Readonly<ReturnType<P["view"]["select"]>>;
+
 /**
  * The Msgs a program's window may send: the program's own, and nothing else.
  *
@@ -42,7 +47,8 @@ export type WindowProps<P extends AnyProgram> = {
 };
 
 /**
- * A pure child machine stepped by a window parent. Its only output is a program press.
+ * A pure child machine stepped by a window parent. Its outputs are a program press and, for a
+ * program that declares a draft, one draft frame on the ephemeral lane.
  *
  * @stability unstable
  * @category models
@@ -69,10 +75,9 @@ export type TileProps<T extends AnyTile = never> = [T] extends [never]
 type TileCommand<T> = T extends Machine<any, any, infer C, any, any> ? C : never;
 
 type CheckedTile<P extends AnyProgram, T extends AnyTile> =
-  TileCommand<T> extends {
-    readonly type: "press";
-    readonly m: WindowMsg<P>;
-  }
+  TileCommand<T> extends
+    | { readonly type: "press"; readonly m: WindowMsg<P> }
+    | { readonly type: "draft"; readonly m: Schema.Json }
     ? T
     : never;
 

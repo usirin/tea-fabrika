@@ -93,6 +93,23 @@ export const gatewayWindow = Setting.make("gateway.window", {
 });
 
 /**
+ * Setting for the most draft frames one checked sender may route in a gateway window: their own
+ * budget, so typing never spends `gateway.limit`. The default is twice a fast typist's ten keys a
+ * second over the 60-second window.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const gatewayDraftLimit = Setting.make("gateway.draft-limit", {
+  schema: Positive,
+  default: 1_200,
+  doc: "The most draft frames one signed-in key may send in one gateway window.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+/**
  * Setting for a one-time browser link's lifetime in whole milliseconds.
  *
  * @stability unstable

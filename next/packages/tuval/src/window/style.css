@@ -1,4 +1,4 @@
-/* next/: frame and checklist rules. Manti and the shared tokens load before this sheet. */
+/* next/: frame, checklist and fabsh rules. Manti and the shared tokens load before this sheet. */
 * {
   box-sizing: border-box;
 }
@@ -108,7 +108,10 @@ input {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.tile-mark,
+.tile-name::before {
+  content: "·" / "";
+  padding-right: var(--s-2);
+}
 .tile-state,
 .tile-id {
   flex: none;
@@ -165,6 +168,75 @@ input {
   overflow-wrap: anywhere;
   margin-block: var(--s-2);
 }
+.fabsh {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  max-width: 56rem;
+  font-family: var(--mono);
+}
+.fabsh-log {
+  max-height: 24rem;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+.fabsh-entry p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+.fabsh-ran::before {
+  content: "› " / "";
+  color: var(--text-faint);
+}
+.fabsh-says {
+  color: var(--text-faint);
+}
+.fabsh-refused {
+  color: var(--role-unknown);
+}
+.fabsh-line {
+  position: relative;
+}
+/* The spans sit behind the input's clear text, on the same metrics: Manti's md control. */
+.fabsh-spans {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding-inline: calc(var(--s-3) + 1px);
+  overflow: hidden;
+  font-size: var(--manti-text-sm);
+  white-space: pre;
+  pointer-events: none;
+}
+.fabsh-line input {
+  color: transparent;
+  caret-color: var(--text-primary);
+  font-family: var(--mono);
+}
+[data-role="verb"] {
+  color: var(--role-verb);
+}
+[data-role="keyword"] {
+  color: var(--role-keyword);
+}
+[data-role="name-new"] {
+  color: var(--role-name);
+}
+[data-role="word"] {
+  color: var(--text-primary);
+}
+/* Never color alone: a refused word is underlined too, and its reason is said in the status. */
+[data-role="unknown"] {
+  color: var(--role-unknown);
+  text-decoration: underline wavy;
+  text-underline-offset: 3px;
+}
+.fabsh-status {
+  min-height: var(--s-5);
+  margin: 0;
+  color: var(--role-unknown);
+}
 .sr-only {
   position: absolute;
   width: 1px;
@@ -191,5 +263,12 @@ input {
   .tile.disconnected {
     opacity: 1;
     outline-style: dashed;
+  }
+  /* The system draws one color: the input's own text shows, and the status still says each reason. */
+  .fabsh-spans {
+    display: none;
+  }
+  .fabsh-line input {
+    color: CanvasText;
   }
 }

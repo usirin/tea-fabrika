@@ -214,6 +214,9 @@ export class ProcessClient extends Context.Service<
       open: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Process open RPC enters Effect
         Effect.tryPromise({ try: () => stub.open(...args), catch: unreachable }),
+      draft: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Process draft RPC enters Effect
+        Effect.tryPromise({ try: () => stub.draft(...args), catch: unreachable }),
       due: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Process due RPC enters Effect
         Effect.tryPromise({ try: () => stub.due(...args), catch: unreachable }),

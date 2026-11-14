@@ -183,6 +183,7 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
 
 export type ProcessBinding = Rpc.DurableObjectBranded &
   Remote<Pick<Runner, "msg" | "open" | "due" | "restart">> & {
+    draft: RemoteCall<NonNullable<Runner["draft"]>>;
     mailed: RemoteCall<(trace?: { traceId: string; spanId: string }) => Runner["mailed"]>;
     configure: RemoteCall<(descriptor: Descriptor, drain?: boolean) => Effect.Effect<void>>;
     usage: RemoteCall<typeof IsolateUsage.record>;

@@ -52,6 +52,7 @@ export const programBox = (declared: unknown, build: string) => {
           ]),
         ),
         cmds: (pure.program.machine.cmds ?? []).map((d) => d.cmdType),
+        ...(pure.program.draft === undefined ? {} : { draft: true }),
       }),
     ),
   );
@@ -109,6 +110,11 @@ export const programBox = (declared: unknown, build: string) => {
     admit(m: unknown) {
       // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Worker Loader RPC must answer a Promise
       return Effect.runPromise(checked(execution.admit(m)));
+    }
+
+    draft(m: unknown) {
+      // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Worker Loader RPC must answer a Promise
+      return Effect.runPromise(checked(execution.draft(m)));
     }
   };
 };

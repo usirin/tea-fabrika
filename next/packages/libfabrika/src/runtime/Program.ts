@@ -208,6 +208,13 @@ const Declaration = Schema.Struct({
   outputs: Schema.Record(Schema.String, Schemas),
   writes: Schema.Record(Schema.String, EventPolicy),
   wake: code<Code<[model: unknown], unknown>>("a wake time"),
+  /** The one draft a client may send on the ephemeral lane: shown, never saved, never decided with. */
+  draft: Schema.optionalKey(
+    Schema.Struct({
+      schema: Schemas,
+      refuse: code<Code<[draft: unknown], unknown>>("a draft check"),
+    }),
+  ),
 });
 
 type Typed = { readonly type: string };
@@ -261,7 +268,14 @@ type Policies<W> = {
   };
 };
 
-type Spec<T extends ProgramMachine, V extends Schema.Json, I, O, W, A extends Declared> = {
+/** A program's draft: what one frame carries, and the program's own no to it. The check answers a
+ *  refusal or null, never a step: a draft decides nothing. */
+type DraftSpec<D extends Declared> = {
+  readonly schema: D;
+  readonly refuse: (draft: NoInfer<D["Type"]>) => Refusal | null;
+};
+
+type Spec<T extends ProgramMachine, V extends Schema.Json, I, O, W, A extends Declared, D extends Declared> = {
   readonly name: string;
   readonly maxDeliveries?: number;
   readonly policy?: Policy;
@@ -278,6 +292,7 @@ type Spec<T extends ProgramMachine, V extends Schema.Json, I, O, W, A extends De
   readonly outputs: O;
   readonly writes: W & Policies<W>;
   readonly wake: (model: NoInfer<T["model"]["Type"]>) => number | null;
+  readonly draft?: DraftSpec<D>;
 };
 
 type FilledPort<T extends ProgramMachine, P> =
@@ -304,6 +319,7 @@ export type Program<
   O = Record<string, Declared>,
   W = Record<string, EventPolicy>,
   A extends Declared = Declared,
+  D extends Declared = Declared,
 > = {
   readonly name: string;
   readonly maxDeliveries?: number;
@@ -321,6 +337,7 @@ export type Program<
   readonly outputs: O;
   readonly writes: W;
   readonly wake: (model: T["model"]["Type"]) => number | null;
+  readonly draft?: { readonly schema: D; readonly refuse: Code<[draft: D["Type"]], Refusal | null> };
 };
 
 const Authoring = Schema.Struct({
@@ -347,6 +364,7 @@ const Authoring = Schema.Struct({
   outputs: Declaration.fields.outputs,
   writes: Declaration.fields.writes,
   wake: Declaration.fields.wake,
+  draft: Declaration.fields.draft,
 });
 
 const decodeDeclaration = Schema.decodeUnknownResult(Declaration);
@@ -375,11 +393,11 @@ const construct = (raw: unknown) =>
   );
 
 // Schema checks callable fields; the spec's types check the signatures without calling them.
-const typedProgram = <T extends ProgramMachine, V extends Schema.Json, I, O, W, A extends Declared>(
-  spec: Spec<T, V, I, O, W, A>,
+const typedProgram = <T extends ProgramMachine, V extends Schema.Json, I, O, W, A extends Declared, D extends Declared>(
+  spec: Spec<T, V, I, O, W, A, D>,
 ) =>
   Schema.declare(
-    (u): u is Program<T, V, I, O, W, A> =>
+    (u): u is Program<T, V, I, O, W, A, D> =>
       Result.isSuccess(decodeDeclaration(u)) &&
       Predicate.isObjectOrArray(u) &&
       Predicate.hasProperty(u, "machine") &&
@@ -394,9 +412,10 @@ const make = <
   O extends Readonly<Record<string, Declared>>,
   W extends Readonly<Record<string, EventPolicy>>,
   A extends Declared = Declared,
+  D extends Declared = Declared,
 >(
-  spec: Spec<T, V, I, O, W, A>,
-): Program<T, V, I, O, W, A> => {
+  spec: Spec<T, V, I, O, W, A, D>,
+): Program<T, V, I, O, W, A, D> => {
   const checked = construct(spec);
 
   if (Result.isFailure(checked)) {
@@ -413,7 +432,8 @@ const makeEffect = Effect.fn("program.make")(function* <
   O extends Readonly<Record<string, Declared>>,
   W extends Readonly<Record<string, EventPolicy>>,
   A extends Declared = Declared,
->(spec: Spec<T, V, I, O, W, A>): Effect.fn.Return<Program<T, V, I, O, W, A>, SchemaIssue.Issue> {
+  D extends Declared = Declared,
+>(spec: Spec<T, V, I, O, W, A, D>): Effect.fn.Return<Program<T, V, I, O, W, A, D>, SchemaIssue.Issue> {
   const checked = construct(spec);
 
   if (Result.isFailure(checked)) {

@@ -5,6 +5,7 @@ import type { Child } from "@kampus/libfabrika/processes/Children";
 import type { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import type { Activity, Start } from "@kampus/libfabrika/processes/Process";
+import { DraftAnswer } from "@kampus/libfabrika/runtime/Execution";
 import { fetch } from "@kampus/libfabrika/workers";
 import { control } from "@kampus/libfabrika/workers/control";
 import { ConnectionService } from "@kampus/libfabrika/workers/gateway";
@@ -254,6 +255,15 @@ export class Process extends DurableObject<Env> {
   open(client: string) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProcessService.use((p) => p.open(client)));
+  }
+
+  draft(m: unknown) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(
+      ProcessService.use((p) =>
+        p.draft === undefined ? Effect.succeed(DraftAnswer.make({ err: "no_draft" })) : p.draft(m),
+      ),
+    );
   }
 
   mailed(trace?: { traceId: string; spanId: string }) {
