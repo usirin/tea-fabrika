@@ -1,11 +1,11 @@
 /**
- * The `Children` layer that starts a child on the ledger.
+ * The `Children` layer that starts and stops a child on the ledger.
  *
  * The answer is a function of the start id's state and the process table, read in one ledger turn:
  * a saved id answers its `started` forever, and an unsaved one is asked afresh. Only the write turn
  * writes, and it is `ProcessManager.start`'s own: the name's registration, its `started` line at
  * the start's id and its first letter, in one turn. Whatever that turn answers, the start reads
- * again once.
+ * again once. A stop is checked in one turn and ended in `ProcessManager.exit`'s own.
  *
  * @stability unstable
  */
@@ -13,7 +13,8 @@ import { Cause, Effect, Equal, Exit, Layer, Option, Result, Schema, Tracer } fro
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { short } from "../telemetry/Trace.ts";
-import { Child, Children, ChildrenError, INPUT_BYTES, type StartGrant, Started } from "./Children.ts";
+import { Child, Children, ChildrenError, type ChildStop, INPUT_BYTES, type StartGrant, Started } from "./Children.ts";
+import { ExitReason } from "./ExitReason.ts";
 import { type From, inbox, letterLine } from "./Mailbox.ts";
 import { ProcessError, ProcessName, type ProcessTable, Start } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
@@ -46,7 +47,7 @@ const fits = (child: Child, from: From, m: Schema.Json): boolean => {
 
 /**
  * The checks after decoding, in one turn and in this order: a saved start, the requester, the
- * grant, then whereis.
+ * member's permission or, with no member's letter behind the start, the grant, then whereis.
  * `none` is a free name the write turn may take.
  */
 const answer = (
@@ -81,8 +82,9 @@ const answer = (
     return Option.some(Result.fail(refuse("stale_sender")));
   }
 
-  // An ungranted program learns nothing of a name, its own included.
-  if (!granted(requester.state.code.program, child.code.program)) {
+  // A start a member's letter caused is the member's (0170); the requester's program holds no grant
+  // for it. An ungranted start learns nothing of a name, its own included.
+  if (!(child.permitted ?? granted(requester.state.code.program, child.code.program))) {
     return Option.some(Result.fail(refuse("forbidden")));
   }
 
@@ -97,14 +99,76 @@ const answer = (
 };
 
 /**
+ * A stop's checks, in one turn: the name must be a child the requester's name started, then live.
+ * Answers the child's life to end.
+ */
+const stopped = (table: ProcessTable, stop: ChildStop): Result.Result<string, ChildrenError> => {
+  const requester = Option.getOrUndefined(table.life(stop.requester.process));
+  const own =
+    isName(stop.name) &&
+    requester !== undefined &&
+    Option.exists(table.starter(stop.name), (name) => name === requester.name);
+  const current = own ? Option.getOrUndefined(table.whereis(stop.name)) : undefined;
+
+  if (current === undefined) {
+    return Result.fail(refuse("not_child"));
+  }
+
+  return current.state._tag === "live" ? Result.succeed(current.state.process) : Result.fail(refuse("noproc"));
+};
+
+/** Keeps a storage failure's cause with the caller: every nested span records only the safe reason,
+ *  and a defect is replaced by a plain one with no detail. */
+const guarded = <A>(work: Effect.Effect<A, ChildrenError>, defect: string) =>
+  Effect.gen(function* () {
+    const tracer = yield* Tracer.Tracer;
+    const safe = Tracer.make({
+      context: tracer.context,
+      span(options) {
+        const span = tracer.span(options);
+        const attribute = span.attribute.bind(span);
+        span.attribute = (key, value) => {
+          if (key !== "fab.ledger.code") {
+            attribute(key, key === "error.type" ? "ChildrenError" : value);
+          }
+        };
+        const end = span.end.bind(span);
+        span.end = (time, exit) => {
+          const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
+          end(
+            time,
+            Exit.isSuccess(exit)
+              ? exit
+              : Exit.fail(
+                  new ChildrenError({
+                    reason:
+                      Option.isSome(error) && error.value instanceof ChildrenError ? error.value.reason : "storage",
+                  }),
+                ),
+          );
+        };
+        return span;
+      },
+    });
+    return yield* work.pipe(
+      Effect.withTracer(safe),
+      Effect.catchCause((cause) => (Cause.hasDies(cause) ? Effect.die(new Error(defect)) : Effect.failCause(cause))),
+    );
+  });
+
+/**
  * Layer that provides `Children` on the ledger, through `LedgerTransaction` and `ProcessManager`.
  *
  * **Details**
  *
  * `grants` is the host's closed list of which program may start which. A start is judged in this
- * order: the name, the rest of the request, a saved `id`, a live requester, the grant, then the
- * name's current holder. A requester with no grant is refused `forbidden` before it can learn
- * whether a name exists.
+ * order: the name, the rest of the request, a saved `id`, a live requester, the permission, then
+ * the name's current holder. The permission is the member's verdict the start carries, or, with
+ * none, the grant. A start with neither is refused `forbidden` before it can learn whether a name
+ * exists.
+ *
+ * A stop ends the child with `shutdown` through `ProcessManager.exit`, which writes each watcher's
+ * `DOWN`. A child that ends between the check and the exit is `noproc`.
  *
  * **Gotchas**
  *
@@ -193,47 +257,31 @@ export const layer = (config: {
           Effect.annotateCurrentSpan({ [tag("answer")]: "refused", [tag("reason")]: error.reason }),
         ),
       );
+      const stop = Effect.fn("children.stop")(
+        function* (asked: ChildStop, from: From) {
+          yield* Effect.annotateCurrentSpan(short({ [tag("name")]: asked.name }));
+          const child = yield* tx
+            .transact((turn) => stopped(manager.table(turn), asked))
+            .pipe(Effect.mapError(storage), Effect.flatMap(Effect.fromResult));
+          yield* manager
+            .exit(child, ExitReason.cases.shutdown.make({}), from)
+            .pipe(
+              Effect.catch((error) =>
+                error instanceof ProcessError
+                  ? error.reason === "ended"
+                    ? Effect.fail(refuse("noproc"))
+                    : Effect.die(new Error(`a stop's exit was refused: ${error.reason}`))
+                  : Effect.fail(storage(error)),
+              ),
+            );
+        },
+        Effect.tapError((error) =>
+          Effect.annotateCurrentSpan({ [tag("answer")]: "refused", [tag("reason")]: error.reason }),
+        ),
+      );
       return Children.of({
-        start: Effect.fnUntraced(function* (input, from) {
-          const tracer = yield* Tracer.Tracer;
-          // Storage causes stay with the caller. Every nested span records only the safe reason.
-          const safe = Tracer.make({
-            context: tracer.context,
-            span(options) {
-              const span = tracer.span(options);
-              const attribute = span.attribute.bind(span);
-              span.attribute = (key, value) => {
-                if (key !== "fab.ledger.code") {
-                  attribute(key, key === "error.type" ? "ChildrenError" : value);
-                }
-              };
-              const end = span.end.bind(span);
-              span.end = (time, exit) => {
-                const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
-                end(
-                  time,
-                  Exit.isSuccess(exit)
-                    ? exit
-                    : Exit.fail(
-                        new ChildrenError({
-                          reason:
-                            Option.isSome(error) && error.value instanceof ChildrenError
-                              ? error.value.reason
-                              : "storage",
-                        }),
-                      ),
-                );
-              };
-              return span;
-            },
-          });
-          return yield* start(input, from).pipe(
-            Effect.withTracer(safe),
-            Effect.catchCause((cause) =>
-              Cause.hasDies(cause) ? Effect.die(new Error("children.start failed")) : Effect.failCause(cause),
-            ),
-          );
-        }),
+        start: (input, from) => guarded(start(input, from), "children.start failed"),
+        stop: (asked, from) => guarded(stop(asked, from), "children.stop failed"),
       });
     }),
   );
