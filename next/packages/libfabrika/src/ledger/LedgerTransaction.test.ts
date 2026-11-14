@@ -1,6 +1,6 @@
 // P33, p79 atomic exit's storage contract. Each plant is named beside its law.
 import { DatabaseSync } from "node:sqlite";
-import { afterEach, describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Schema, Stream, Tracer } from "effect";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError } from "./Ledger.ts";
@@ -10,13 +10,11 @@ import * as LedgerTransactionSql from "./LedgerTransactionSql.ts";
 import type { Line } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 
-const opened: Array<DatabaseSync> = [];
-
-afterEach(() => {
-  for (const db of opened.splice(0)) {
-    db.close();
-  }
-});
+// A fresh in-memory node:sqlite, closed by the test's scope (0061).
+const memory = Effect.acquireRelease(
+  Effect.sync(() => new DatabaseSync(":memory:")),
+  (db) => Effect.sync(() => db.close()),
+);
 
 const line = (n: number): Line => ({
   by: "SHA256:brain",
@@ -31,10 +29,9 @@ const line = (n: number): Line => ({
 });
 
 const setup = (
+  db: DatabaseSync,
   ring: (to: string, stream: string, rev: number) => Effect.Effect<void, LedgerError> = () => Effect.void,
 ) => {
-  const db = new DatabaseSync(":memory:");
-  opened.push(db);
   const backend = nodeSql(db);
   const fault: { after: number | null; passed: number } = { after: null, passed: 0 };
   const sql: Sql = {
@@ -69,59 +66,62 @@ const diskFailure = (code: string): never => {
 };
 
 describe("p79, LedgerTransaction", () => {
-  it.effect("plant, separate numbering: reads see earlier writes and share P6's rev and pos", () => {
-    const store = setup();
-    return Effect.gen(function* () {
-      const ledger = yield* Ledger;
-      const tx = yield* LedgerTransaction;
-      expect(yield* ledger.append("a", "one", line(1))).toEqual({ _tag: "placed", rev: 1, pos: 1 });
-      expect(
-        yield* tx.transact((turn) => {
-          const a = turn.append("a", "two", line(2));
-          const b = turn.append("b", "three", line(3));
-          return { a, b, read: [...turn.read("a", 1)].map((row) => row.id) };
-        }),
-      ).toEqual({ a: { rev: 2, pos: 2 }, b: { rev: 3, pos: 1 }, read: ["two"] });
-      expect(yield* ledger.append("b", "four", line(4))).toEqual({
-        _tag: "placed",
-        rev: 4,
-        pos: 2,
-      });
-    }).pipe(Effect.provide(store.layer));
-  });
+  it.effect("plant, separate numbering: reads see earlier writes and share P6's rev and pos", () =>
+    Effect.flatMap(memory, (db) => {
+      const store = setup(db);
+      return Effect.gen(function* () {
+        const ledger = yield* Ledger;
+        const tx = yield* LedgerTransaction;
+        expect(yield* ledger.append("a", "one", line(1))).toEqual({ _tag: "placed", rev: 1, pos: 1 });
+        expect(
+          yield* tx.transact((turn) => {
+            const a = turn.append("a", "two", line(2));
+            const b = turn.append("b", "three", line(3));
+            return { a, b, read: [...turn.read("a", 1)].map((row) => row.id) };
+          }),
+        ).toEqual({ a: { rev: 2, pos: 2 }, b: { rev: 3, pos: 1 }, read: ["two"] });
+        expect(yield* ledger.append("b", "four", line(4))).toEqual({
+          _tag: "placed",
+          rev: 4,
+          pos: 2,
+        });
+      }).pipe(Effect.provide(store.layer));
+    }),
+  );
   it.effect.prop(
     "plant, swallow a later storage failure: an earlier successful INSERT rolls back",
     { generated: Schema.Int },
     ({ generated }) =>
       Effect.forEach(
         [2, generated],
-        (value) => {
-          const store = setup();
-          return Effect.gen(function* () {
-            const ledger = yield* Ledger;
-            const tx = yield* LedgerTransaction;
-            yield* ledger.append("a", "one", line(1));
-            store.fault.after = 1;
-            const before = store.fault.passed;
-            expect(
-              (yield* Effect.flip(
-                tx.transact((turn) => {
-                  turn.append("a", "two", line(value));
-                  turn.append("b", "three", line(3));
-                }),
-              )).reason,
-            ).toBe("storage");
-            expect(store.fault.passed - before).toBe(1);
-            store.fault.after = null;
-            expect((yield* Stream.runCollect(ledger.read("a", 0))).map((row) => row.id)).toEqual(["one"]);
-            expect(yield* Stream.runCollect(ledger.read("b", 0))).toEqual([]);
-            expect(yield* ledger.append("b", "after", line(4))).toEqual({
-              _tag: "placed",
-              rev: 2,
-              pos: 1,
-            });
-          }).pipe(Effect.provide(store.layer));
-        },
+        (value) =>
+          Effect.flatMap(memory, (db) => {
+            const store = setup(db);
+            return Effect.gen(function* () {
+              const ledger = yield* Ledger;
+              const tx = yield* LedgerTransaction;
+              yield* ledger.append("a", "one", line(1));
+              store.fault.after = 1;
+              const before = store.fault.passed;
+              expect(
+                (yield* Effect.flip(
+                  tx.transact((turn) => {
+                    turn.append("a", "two", line(value));
+                    turn.append("b", "three", line(3));
+                  }),
+                )).reason,
+              ).toBe("storage");
+              expect(store.fault.passed - before).toBe(1);
+              store.fault.after = null;
+              expect((yield* Stream.runCollect(ledger.read("a", 0))).map((row) => row.id)).toEqual(["one"]);
+              expect(yield* Stream.runCollect(ledger.read("b", 0))).toEqual([]);
+              expect(yield* ledger.append("b", "after", line(4))).toEqual({
+                _tag: "placed",
+                rev: 2,
+                pos: 1,
+              });
+            }).pipe(Effect.provide(store.layer));
+          }),
         { concurrency: 1, discard: true },
       ),
     { arbitrary: { seed: 119120, runs: 12 } },
@@ -132,26 +132,27 @@ describe("p79, LedgerTransaction", () => {
     ({ generated }) =>
       Effect.forEach(
         ["EIO", generated],
-        (value) => {
-          const store = setup();
-          const spans: Array<Tracer.NativeSpan> = [];
-          const tracer = Tracer.make({
-            span: (options) => {
-              const span = new Tracer.NativeSpan(options);
-              spans.push(span);
-              return span;
-            },
-          });
-          return Effect.gen(function* () {
-            const tx = yield* LedgerTransaction;
-            const error = yield* Effect.flip(tx.transact(() => diskFailure(value)));
-            expect(error.reason).toBe("storage");
-            const codes = spans.flatMap((span) =>
-              [...span.attributes].filter(([key]) => key.endsWith(".code")).map(([, value]) => value),
-            );
-            expect(codes).toEqual([value]);
-          }).pipe(Effect.provide(store.layer), Effect.withTracer(tracer));
-        },
+        (value) =>
+          Effect.flatMap(memory, (db) => {
+            const store = setup(db);
+            const spans: Array<Tracer.NativeSpan> = [];
+            const tracer = Tracer.make({
+              span: (options) => {
+                const span = new Tracer.NativeSpan(options);
+                spans.push(span);
+                return span;
+              },
+            });
+            return Effect.gen(function* () {
+              const tx = yield* LedgerTransaction;
+              const error = yield* Effect.flip(tx.transact(() => diskFailure(value)));
+              expect(error.reason).toBe("storage");
+              const codes = spans.flatMap((span) =>
+                [...span.attributes].filter(([key]) => key.endsWith(".code")).map(([, value]) => value),
+              );
+              expect(codes).toEqual([value]);
+            }).pipe(Effect.provide(store.layer), Effect.withTracer(tracer));
+          }),
         { concurrency: 1, discard: true },
       ),
     { arbitrary: { seed: 119120, runs: 12 } },
@@ -164,131 +165,139 @@ describe("p79, LedgerTransaction", () => {
       ({ generated }) =>
         Effect.forEach(
           [2, generated],
-          (value) => {
-            const store = setup();
-            return Effect.gen(function* () {
-              const ledger = yield* Ledger;
-              const tx = yield* LedgerTransaction;
-              yield* ledger.append("a", "one", line(1));
-              const refused =
-                reason === "seen_ahead"
-                  ? { ...line(3), seen: 900 }
-                  : reason === "bad_trace"
-                    ? { ...line(3), traceId: "wrong" }
-                    : line(3);
-              expect(
-                (yield* Effect.flip(
-                  tx.transact((turn) => {
-                    turn.append("b", "early", line(value));
-                    turn.append("a", reason === "id_reused" ? "one" : "late", refused);
-                  }),
-                )).reason,
-              ).toBe("refused");
-              expect(yield* Stream.runCollect(ledger.read("b", 0))).toEqual([]);
-              expect(yield* Stream.runCollect(ledger.read("a", 0))).toHaveLength(1);
-            }).pipe(Effect.provide(store.layer));
-          },
+          (value) =>
+            Effect.flatMap(memory, (db) => {
+              const store = setup(db);
+              return Effect.gen(function* () {
+                const ledger = yield* Ledger;
+                const tx = yield* LedgerTransaction;
+                yield* ledger.append("a", "one", line(1));
+                const refused =
+                  reason === "seen_ahead"
+                    ? { ...line(3), seen: 900 }
+                    : reason === "bad_trace"
+                      ? { ...line(3), traceId: "wrong" }
+                      : line(3);
+                expect(
+                  (yield* Effect.flip(
+                    tx.transact((turn) => {
+                      turn.append("b", "early", line(value));
+                      turn.append("a", reason === "id_reused" ? "one" : "late", refused);
+                    }),
+                  )).reason,
+                ).toBe("refused");
+                expect(yield* Stream.runCollect(ledger.read("b", 0))).toEqual([]);
+                expect(yield* Stream.runCollect(ledger.read("a", 0))).toHaveLength(1);
+              }).pipe(Effect.provide(store.layer));
+            }),
           { concurrency: 1, discard: true },
         ),
       { arbitrary: { seed: 119120, runs: 12 } },
     );
   }
 
-  it.effect("plant, reappend on retry: the original placings return without new rows or rings", () => {
-    const rings: Array<string> = [];
-    const store = setup((_to, stream) =>
-      Effect.sync(() => {
-        rings.push(stream);
-      }),
-    );
-    return Effect.gen(function* () {
-      const ledger = yield* Ledger;
-      const tx = yield* LedgerTransaction;
-      yield* ledger.wait("a", 0);
-      yield* ledger.wait("b", 0);
-      const write = () => tx.transact((turn) => [turn.append("a", "one", line(1)), turn.append("b", "two", line(2))]);
-      const a = yield* write();
-      expect(yield* write()).toEqual(a);
-      expect(rings.sort()).toEqual(["a", "b"]);
-      expect(yield* Stream.runCollect(ledger.read("a", 0))).toHaveLength(1);
-    }).pipe(Effect.provide(store.layer));
-  });
-  it.effect("plant, ring before commit: every notification sees both committed appends", () => {
-    const observations: Array<{ inTransaction: boolean; rows: number }> = [];
-    const store = setup(() =>
-      Effect.sync(() => {
-        observations.push({
-          inTransaction: store.db.isTransaction,
-          rows: Number(store.db.prepare("SELECT count(*) AS n FROM entries").get()?.["n"]),
-        });
-      }),
-    );
-    return Effect.gen(function* () {
-      const ledger = yield* Ledger;
-      const tx = yield* LedgerTransaction;
-      yield* ledger.wait("a", 0);
-      yield* ledger.wait("b", 0);
-      store.fault.after = 1;
-      yield* Effect.flip(
-        tx.transact((turn) => {
-          turn.append("a", "one", line(1));
-          turn.append("b", "two", line(2));
+  it.effect("plant, reappend on retry: the original placings return without new rows or rings", () =>
+    Effect.flatMap(memory, (db) => {
+      const rings: Array<string> = [];
+      const store = setup(db, (_to, stream) =>
+        Effect.sync(() => {
+          rings.push(stream);
         }),
       );
-      expect(observations).toEqual([]);
-      store.fault.after = null;
-      yield* tx.transact((turn) => {
-        turn.append("a", "one", line(1));
-        turn.append("b", "two", line(2));
-      });
-      expect(observations).toEqual([
-        { inTransaction: false, rows: 2 },
-        { inTransaction: false, rows: 2 },
-      ]);
-    }).pipe(Effect.provide(store.layer));
-  });
+      return Effect.gen(function* () {
+        const ledger = yield* Ledger;
+        const tx = yield* LedgerTransaction;
+        yield* ledger.wait("a", 0);
+        yield* ledger.wait("b", 0);
+        const write = () => tx.transact((turn) => [turn.append("a", "one", line(1)), turn.append("b", "two", line(2))]);
+        const a = yield* write();
+        expect(yield* write()).toEqual(a);
+        expect(rings.sort()).toEqual(["a", "b"]);
+        expect(yield* Stream.runCollect(ledger.read("a", 0))).toHaveLength(1);
+      }).pipe(Effect.provide(store.layer));
+    }),
+  );
+  it.effect("plant, ring before commit: every notification sees both committed appends", () =>
+    Effect.flatMap(memory, (db) => {
+      const observations: Array<{ inTransaction: boolean; rows: number }> = [];
+      const store = setup(db, () =>
+        Effect.sync(() => {
+          observations.push({
+            inTransaction: store.db.isTransaction,
+            rows: Number(store.db.prepare("SELECT count(*) AS n FROM entries").get()?.["n"]),
+          });
+        }),
+      );
+      return Effect.gen(function* () {
+        const ledger = yield* Ledger;
+        const tx = yield* LedgerTransaction;
+        yield* ledger.wait("a", 0);
+        yield* ledger.wait("b", 0);
+        store.fault.after = 1;
+        yield* Effect.flip(
+          tx.transact((turn) => {
+            turn.append("a", "one", line(1));
+            turn.append("b", "two", line(2));
+          }),
+        );
+        expect(observations).toEqual([]);
+        store.fault.after = null;
+        yield* tx.transact((turn) => {
+          turn.append("a", "one", line(1));
+          turn.append("b", "two", line(2));
+        });
+        expect(observations).toEqual([
+          { inTransaction: false, rows: 2 },
+          { inTransaction: false, rows: 2 },
+        ]);
+      }).pipe(Effect.provide(store.layer));
+    }),
+  );
   it.effect.prop(
     "plant, undo a commit on notification failure: a failed bell cannot lose entries",
     { generated: Schema.Int },
     ({ generated }) =>
       Effect.forEach(
         [1, generated],
-        (value) => {
-          let rings = 0;
-          const store = setup(() =>
-            Effect.sync(() => {
-              rings++;
-            }).pipe(Effect.andThen(Effect.fail(new LedgerError({ reason: "unreachable" })))),
-          );
-          return Effect.gen(function* () {
-            const ledger = yield* Ledger;
-            const tx = yield* LedgerTransaction;
-            yield* ledger.wait("a", 0);
-            const write = () => tx.transact((turn) => turn.append("a", "one", line(value)));
-            expect(yield* write()).toEqual({ rev: 1, pos: 1 });
-            expect(yield* write()).toEqual({ rev: 1, pos: 1 });
-            expect(rings).toBe(1);
-            expect(yield* Stream.runCollect(ledger.read("a", 0))).toHaveLength(1);
-          }).pipe(Effect.provide(store.layer));
-        },
+        (value) =>
+          Effect.flatMap(memory, (db) => {
+            let rings = 0;
+            const store = setup(db, () =>
+              Effect.sync(() => {
+                rings++;
+              }).pipe(Effect.andThen(Effect.fail(new LedgerError({ reason: "unreachable" })))),
+            );
+            return Effect.gen(function* () {
+              const ledger = yield* Ledger;
+              const tx = yield* LedgerTransaction;
+              yield* ledger.wait("a", 0);
+              const write = () => tx.transact((turn) => turn.append("a", "one", line(value)));
+              expect(yield* write()).toEqual({ rev: 1, pos: 1 });
+              expect(yield* write()).toEqual({ rev: 1, pos: 1 });
+              expect(rings).toBe(1);
+              expect(yield* Stream.runCollect(ledger.read("a", 0))).toHaveLength(1);
+            }).pipe(Effect.provide(store.layer));
+          }),
         { concurrency: 1, discard: true },
       ),
     { arbitrary: { seed: 119120, runs: 12 } },
   );
-  it.effect("plant, one page is all history: a turn reads past P6's 256-row page", () => {
-    const store = setup();
-    return Effect.gen(function* () {
-      const tx = yield* LedgerTransaction;
-      yield* tx.transact((turn) => {
-        for (let n = 1; n <= 260; n++) {
-          turn.append("a", `m${n}`, line(n));
-        }
-      });
-      expect(yield* tx.transact((turn) => [...turn.read("a", 0)].map((row) => row.rev))).toEqual(
-        Array.from({ length: 260 }, (_, i) => i + 1),
-      );
-    }).pipe(Effect.provide(store.layer));
-  });
+  it.effect("plant, one page is all history: a turn reads past P6's 256-row page", () =>
+    Effect.flatMap(memory, (db) => {
+      const store = setup(db);
+      return Effect.gen(function* () {
+        const tx = yield* LedgerTransaction;
+        yield* tx.transact((turn) => {
+          for (let n = 1; n <= 260; n++) {
+            turn.append("a", `m${n}`, line(n));
+          }
+        });
+        expect(yield* tx.transact((turn) => [...turn.read("a", 0)].map((row) => row.rev))).toEqual(
+          Array.from({ length: 260 }, (_, i) => i + 1),
+        );
+      }).pipe(Effect.provide(store.layer));
+    }),
+  );
   it.effect.prop(
     "plant, reset corrupt storage: a malformed saved row fails as bad_row",
     {
@@ -306,15 +315,16 @@ describe("p79, LedgerTransaction", () => {
     ({ generated }) =>
       Effect.forEach(
         ["not JSON", generated],
-        (value) => {
-          const store = setup();
-          return Effect.gen(function* () {
-            const tx = yield* LedgerTransaction;
-            yield* tx.transact((turn) => turn.append("a", "one", line(1)));
-            store.db.prepare("UPDATE entries SET body=?").run(value);
-            expect((yield* Effect.flip(tx.transact((turn) => [...turn.read("a", 0)]))).reason).toBe("bad_row");
-          }).pipe(Effect.provide(store.layer));
-        },
+        (value) =>
+          Effect.flatMap(memory, (db) => {
+            const store = setup(db);
+            return Effect.gen(function* () {
+              const tx = yield* LedgerTransaction;
+              yield* tx.transact((turn) => turn.append("a", "one", line(1)));
+              store.db.prepare("UPDATE entries SET body=?").run(value);
+              expect((yield* Effect.flip(tx.transact((turn) => [...turn.read("a", 0)]))).reason).toBe("bad_row");
+            }).pipe(Effect.provide(store.layer));
+          }),
         { concurrency: 1, discard: true },
       ),
     { arbitrary: { seed: 119120, runs: 12 } },

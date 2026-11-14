@@ -27,6 +27,12 @@ const diff = {
 };
 
 const build = `\${{ needs.changes.outputs.build != 'false' }}`;
+
+const testEnv = {
+  BASE: `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`,
+};
+
+const toolingExcludes = "--exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**'";
 const fieldIf = "steps.diff.outputs.field == 'true'";
 const name = fc.string({ maxLength: 20 });
 
@@ -46,7 +52,7 @@ const valid = (label: string, extra: string) => ({
       "runs-on": "ubuntu-latest",
       "timeout-minutes": 5,
       outputs: Object.fromEntries(
-        ["check", "typecheck", "test", "next", "e2e", "field", "build"].map((key) => [
+        ["check", "typecheck", "test", "next", "e2e", "field", "build", "today"].map((key) => [
           key,
           `\${{ steps.diff.outputs.${key} }}`,
         ]),
@@ -84,7 +90,8 @@ const valid = (label: string, extra: string) => ({
       steps: [
         {
           name: "test",
-          if: "!cancelled()",
+          if: `\${{ !cancelled() && needs.changes.outputs.today != 'false' }}`,
+          env: testEnv,
           run: [
             'if [ -n "$BASE" ]; then',
             'pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests --exclude \'next/**\' --exclude apps/fabrika/src/bundles.test.ts --exclude packages/pipeline/src/laws/standard.test.ts',
@@ -97,6 +104,18 @@ const valid = (label: string, extra: string) => ({
           ]
             .map((line) => (line.startsWith("pnpm exec vitest run") ? `${line} --exclude '${LANE_GLOB}'` : line))
             .join("\n"),
+        },
+        {
+          name: "tooling tests",
+          if: `\${{ !cancelled() && needs.changes.outputs.today == 'false' }}`,
+          env: testEnv,
+          run: [
+            'if [ -n "$BASE" ]; then',
+            `pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests ${toolingExcludes}`,
+            "else",
+            `pnpm exec vitest run --shard "$SHARD" --passWithNoTests ${toolingExcludes}`,
+            "fi",
+          ].join("\n"),
         },
       ],
     },
@@ -169,7 +188,8 @@ const wiring = fc
     const clean = valid(label, extra);
     clean.jobs.test.steps.unshift({
       name: "lane tests, one file at a time",
-      if: "",
+      if: `\${{ needs.changes.outputs.today != 'false' }}`,
+      env: testEnv,
       run: [
         'if [ -n "$BASE" ]; then',
         `pnpm exec vitest run ${LANE_FILTER} --changed "$BASE" --shard "$SHARD" --maxWorkers=1 --passWithNoTests --exclude 'next/**'`,
@@ -178,7 +198,12 @@ const wiring = fc
         "fi",
       ].join("\n"),
     });
-    clean.jobs.test.steps.push({ name: "shard times", if: "!cancelled()", run: "node .github/ci/shard-times.ts" });
+    clean.jobs.test.steps.push({
+      name: "shard times",
+      if: "!cancelled()",
+      env: testEnv,
+      run: "node .github/ci/shard-times.ts",
+    });
 
     if (whitespace) {
       clean.jobs.next.steps[0]!.env!.SHARD = `\${{${gap}matrix.shard${gap}}}/6`;
@@ -308,7 +333,50 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "L3: failure skips advice",
     (w) => {
-      w.jobs.test.steps[2]!.if = "";
+      w.jobs.test.steps[3]!.if = "";
+    },
+  ],
+  // 0175: today's tests start only on the today flag, and the tooling tests run when they do not.
+  [
+    "T1: the lane tests run with no file of today's version changed",
+    (w) => {
+      w.jobs.test.steps[0]!.if = "";
+    },
+  ],
+  [
+    "T1: today's tests run with no file of today's version changed",
+    (w) => {
+      w.jobs.test.steps[1]!.if = "!cancelled()";
+    },
+  ],
+  [
+    "T2: the tooling tests are gone",
+    (w) => {
+      w.jobs.test.steps.splice(2, 1);
+    },
+  ],
+  [
+    "T2: the tooling tests run beside today's",
+    (w) => {
+      w.jobs.test.steps[2]!.if = "!cancelled()";
+    },
+  ],
+  [
+    "T3: the tooling tests run today's packages' tests",
+    (w) => {
+      w.jobs.test.steps[2]!.run = w.jobs.test.steps[2]!.run.replace(" --exclude 'packages/**'", "");
+    },
+  ],
+  ...[0, 1, 2].map((index): [string, (w: Workflow) => void] => [
+    `T4: test step ${index} reads its base from a pull request alone`,
+    (w) => {
+      w.jobs.test.steps[index]!.env = { BASE: `\${{ github.event.pull_request.base.sha }}` };
+    },
+  ]),
+  [
+    "changes hides the today flag",
+    (w) => {
+      delete (w.jobs.changes.outputs as Record<string, string>)["today"];
     },
   ],
   [

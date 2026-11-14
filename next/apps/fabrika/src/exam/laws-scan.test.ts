@@ -16,7 +16,8 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "@effect/vitest";
+import { Effect } from "effect";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
 const PBT = "@demlik/tea/pbt";
@@ -97,8 +98,6 @@ describe("the real next/", () => {
 });
 
 describe("planted machines", () => {
-  const root = mkdtempSync(join(tmpdir(), "next-exam-"));
-  afterAll(() => rmSync(root, { recursive: true, force: true }));
   const planted: Readonly<Record<string, string>> = {
     "a/machine.ts": "export const m = defineMachine({init, update});",
     "a/machine.laws.test.ts": 'import {forAll} from "@demlik/tea/pbt";\nsyncTest(m, opts);',
@@ -124,16 +123,32 @@ describe("planted machines", () => {
     "l/split.sync.laws.test.ts": "syncTest(split, opts);",
   };
 
-  for (const [path, text] of Object.entries(planted)) {
-    mkdirSync(dirname(join(root, path)), { recursive: true });
-    writeFileSync(join(root, path), `${text}\n`);
-  }
+  // Each test plants its own folder in its own scope, which removes it when the test ends (0061).
+  const root = Effect.acquireRelease(
+    Effect.sync(() => {
+      const folder = mkdtempSync(join(tmpdir(), "next-exam-"));
 
-  it("fires on a machine with no laws, laws without pbt, and an inline machine whose laws are another file's", () => {
-    expect(lawless(root)).toEqual(["b/link.ts", "c/view.ts", "e/inline.tsx"]);
-  });
+      for (const [path, text] of Object.entries(planted)) {
+        mkdirSync(dirname(join(folder, path)), { recursive: true });
+        writeFileSync(join(folder, path), `${text}\n`);
+      }
 
-  it("fires on laws with no sync test and no reason, or an empty reason, wherever the call stands", () => {
-    expect(unsynced(root)).toEqual(["i/none.ts", "k/bare.ts"]);
-  });
+      return folder;
+    }),
+    (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
+  );
+
+  it.effect(
+    "fires on a machine with no laws, laws without pbt, and an inline machine whose laws are another file's",
+    () =>
+      Effect.gen(function* () {
+        expect(lawless(yield* root)).toEqual(["b/link.ts", "c/view.ts", "e/inline.tsx"]);
+      }),
+  );
+
+  it.effect("fires on laws with no sync test and no reason, or an empty reason, wherever the call stands", () =>
+    Effect.gen(function* () {
+      expect(unsynced(yield* root)).toEqual(["i/none.ts", "k/bare.ts"]);
+    }),
+  );
 });

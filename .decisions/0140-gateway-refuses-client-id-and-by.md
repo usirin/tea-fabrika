@@ -1,7 +1,7 @@
 ---
 id: 0140
 title: In next/, the gateway refuses a write whose client sent its own id or by, counts each refusal in its hourly metric and never keeps it, and a write with no cause is the owner's own
-status: amended-in-part by [0143](0143-a-refused-write-is-counted-never-a-row.md)
+status: amended-in-part by [0143](0143-a-refused-write-is-counted-never-a-row.md), [0173](0173-child-root-and-requester.md)
 date: 2026-11-11
 tags: [gateway, sender, envelope, refusal, metric, mass-assignment, own, next]
 ---

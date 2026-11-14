@@ -13,7 +13,7 @@
 //   Stream with `LedgerError` `bad_row`.
 // - No Layer fails when it is built.
 import { DatabaseSync } from "node:sqlite";
-import { afterAll, describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";
@@ -35,30 +35,24 @@ const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-07T21:10:01.204Z";
 const LETTER = "letter_01m6v5270hetdrt4r8h9vvjwjr";
 
-// Every ledger is a fresh node:sqlite database in memory, closed after. Never a file: each send is one
-// transaction, and on a file each one waits for the disk to sync. The page law sends about 17,000 letters,
-// so on CI's disk it took 36 to 60 s of waiting that no law here reads (ticket 544). No law in this file
-// closes a ledger and opens it again.
-const opened: Array<DatabaseSync> = [];
-
-const fresh = (): Sql => {
-  const db = new DatabaseSync(":memory:");
-  opened.push(db);
-  return nodeSql(db);
-};
-
-afterAll(() => {
-  for (const db of opened.splice(0)) {
-    if (db.isOpen) {
-      db.close();
-    }
-  }
-});
+// Every ledger is a fresh node:sqlite database in memory, closed by its layer's scope (0061). Never a
+// file: each send is one transaction, and on a file each one waits for the disk to sync. The page law
+// sends about 17,000 letters, so on CI's disk it took 36 to 60 s of waiting that no law here reads
+// (ticket 544). No law in this file closes a ledger and opens it again.
+const fresh = Effect.acquireRelease(
+  Effect.sync(() => new DatabaseSync(":memory:")),
+  (db) =>
+    Effect.sync(() => {
+      if (db.isOpen) {
+        db.close();
+      }
+    }),
+).pipe(Effect.map(nodeSql));
 
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 const onSql = (sql: Sql) => LedgerSql.layer(sql, { reader: READER }).pipe(Layer.provide(quiet));
 /** A Mailbox and the Ledger beneath it, so a test can read and write the log beside it. */
-const mail = () => Mailbox.layer.pipe(Layer.provideMerge(onSql(fresh())));
+const mail = () => Layer.unwrap(fresh.pipe(Effect.map((sql) => Mailbox.layer.pipe(Layer.provideMerge(onSql(sql))))));
 
 const from = (over: Partial<From> = {}): From => ({
   by: "SHA256:t2",

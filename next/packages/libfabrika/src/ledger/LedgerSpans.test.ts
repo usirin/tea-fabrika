@@ -17,8 +17,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterAll, describe, expect, it } from "@effect/vitest";
-import { Duration, Effect, Exit, Layer, Schema, Stream, Tracer } from "effect";
+import { describe, expect, it } from "@effect/vitest";
+import { Duration, Effect, Exit, Layer, Schema, type Scope, Stream, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
@@ -32,28 +32,28 @@ import * as RefereeSql from "./RefereeSql.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
-// Every ledger is a fresh node:sqlite file in one temp folder, removed after.
-const folder = mkdtempSync(join(tmpdir(), "p6-spans-"));
-const opened: Array<DatabaseSync> = [];
-let files = 0;
+// Every ledger is a fresh node:sqlite file in its own temp folder. The scope it is opened in closes
+// the connection, then removes the folder (0061).
+const folder = Effect.acquireRelease(
+  Effect.sync(() => mkdtempSync(join(tmpdir(), "p6-spans-"))),
+  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+);
 
-const freshDb = (): DatabaseSync => {
-  const db = new DatabaseSync(join(folder, `ledger-${++files}.db`));
-  opened.push(db);
-  return db;
-};
+const freshDb = folder.pipe(
+  Effect.flatMap((path) =>
+    Effect.acquireRelease(
+      Effect.sync(() => new DatabaseSync(join(path, "ledger.db"))),
+      (db) =>
+        Effect.sync(() => {
+          if (db.isOpen) {
+            db.close();
+          }
+        }),
+    ),
+  ),
+);
 
-const fresh = (): Sql => nodeSql(freshDb());
-
-afterAll(() => {
-  for (const db of opened.splice(0)) {
-    if (db.isOpen) {
-      db.close();
-    }
-  }
-
-  rmSync(folder, { recursive: true, force: true });
-});
+const fresh = () => freshDb.pipe(Effect.map(nodeSql));
 
 const READER = "connection:t1";
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
@@ -64,8 +64,14 @@ const failing = (fails: string) =>
     ring: (to) => (to === fails ? Effect.fail(new LedgerError({ reason: "unreachable" })) : Effect.void),
   });
 
-const onSql = (sql: Sql, doorbell: Layer.Layer<Doorbell> = quiet) =>
-  LedgerSql.layer(sql, { reader: READER }).pipe(Layer.provide(doorbell));
+// Each takes the store as a scoped Effect, so the layer's own scope holds the open file.
+type Store = Effect.Effect<Sql, never, Scope.Scope>;
+
+const onSql = (sql: Store, doorbell: Layer.Layer<Doorbell> = quiet, reader = READER) =>
+  Layer.unwrap(sql.pipe(Effect.map((sql) => LedgerSql.layer(sql, { reader }).pipe(Layer.provide(doorbell)))));
+
+const onReferee = (sql: Store, doorbell: Layer.Layer<Doorbell> = quiet) =>
+  Layer.unwrap(sql.pipe(Effect.map((sql) => RefereeSql.layer(sql).pipe(Layer.provide(doorbell)))));
 
 const BODY = "body-marker-7c1d";
 const SENT = "sent-marker-2026-11-07T21:10:01.204Z";
@@ -237,10 +243,7 @@ describe("p95, every call is one span, names and numbers only", () => {
               ["w-3", "refused", "bad_line"],
               ["w-4", "refused", "bad_parent"],
             ]);
-          }).pipe(
-            Effect.provide(Layer.merge(onSql(fresh()), RefereeSql.layer(fresh()).pipe(Layer.provide(quiet)))),
-            Effect.withTracer(tracer),
-          );
+          }).pipe(Effect.provide(Layer.merge(onSql(fresh()), onReferee(fresh()))), Effect.withTracer(tracer));
         },
         { concurrency: 1, discard: true },
       ),
@@ -330,10 +333,7 @@ describe("p95, every call is one span, names and numbers only", () => {
           expect(texts.filter((text) => text.includes(BODY) || text.includes("sent-marker"))).toEqual([]);
           expect(texts.filter((text) => /\b(select|insert|update|delete|create)\b/i.test(text))).toEqual([]);
           expect(texts.filter((text) => text.length > MOST).map((text) => text.length)).toEqual([]);
-        }).pipe(
-          Effect.provide(LedgerSql.layer(fresh(), { reader }).pipe(Layer.provide(quiet))),
-          Effect.withTracer(tracer),
-        ),
+        }).pipe(Effect.provide(onSql(fresh(), quiet, reader)), Effect.withTracer(tracer)),
       );
     };
     await fc.assert(fc.asyncProperty(names, run), {
@@ -404,10 +404,7 @@ describe("p95, every call is one span, names and numbers only", () => {
         const read = one("ledger.read");
         heldShort(read, STREAM, stream);
         heldShort(read, tag("reader"), reader);
-      }).pipe(
-        Effect.provide(LedgerSql.layer(fresh(), { reader }).pipe(Layer.provide(quiet))),
-        Effect.withTracer(tracer),
-      );
+      }).pipe(Effect.provide(onSql(fresh(), quiet, reader)), Effect.withTracer(tracer));
       // The caller's side: `Ledger.remote`'s `ledger.call` span takes the stream and the reader too.
       const { tracer: callTracer, tags: callTags } = capture();
       const stub: LedgerCalls = {
@@ -466,7 +463,7 @@ describe("p95, every call is one span, names and numbers only", () => {
             const values = Object.values(tags("ledger.append")[0] ?? {});
             expect(values.some((value) => value === full.code || value === full.errcode)).toBe(true);
             expect(all().filter((value) => String(value).includes("message-marker"))).toEqual([]);
-          }).pipe(Effect.provide(onSql(broken)), Effect.withTracer(tracer));
+          }).pipe(Effect.provide(onSql(Effect.succeed(broken))), Effect.withTracer(tracer));
         },
         { concurrency: 1, discard: true },
       ),
@@ -505,7 +502,7 @@ describe("p95, every call is one span, names and numbers only", () => {
             expect(tags("ledger.append")).toEqual([expect.objectContaining(keys)]);
             expect(tags("ledger.read")).toEqual([expect.objectContaining(keys)]);
             expect(tags("ledger.wait")).toEqual([expect.objectContaining(keys)]);
-          }).pipe(Effect.provide(onSql(broken)), Effect.withTracer(tracer));
+          }).pipe(Effect.provide(onSql(Effect.succeed(broken))), Effect.withTracer(tracer));
         },
         { concurrency: 1, discard: true },
       ),
@@ -534,7 +531,7 @@ describe("p95, every call is one span, names and numbers only", () => {
             const [span = {}] = tags("ledger.append");
             expect(span).toEqual(expect.objectContaining({ [tag("reason")]: "storage", [ERROR]: "TypeError" }));
             expect(Object.keys(span)).not.toContain(tag("code"));
-          }).pipe(Effect.provide(onSql(odd)), Effect.withTracer(tracer));
+          }).pipe(Effect.provide(onSql(Effect.succeed(odd))), Effect.withTracer(tracer));
         },
         { concurrency: 1, discard: true },
       ),
@@ -547,36 +544,36 @@ describe("p95, every call is one span, names and numbers only", () => {
     ({ generated }) =>
       Effect.forEach(
         [100000, generated],
-        (value) => {
-          const { tracer, tags, failed } = capture();
-          const db = freshDb();
-          return Effect.gen(function* () {
-            const ledger = yield* Ledger;
-            expect(yield* ledger.append("a", "w-1", line())).toEqual({
-              _tag: "placed",
-              rev: 1,
-              pos: 1,
-            });
-            // No page past the ones there now: the next big row fails with SQLITE_FULL, and SQLite rolls
-            // the whole transaction back by itself, so a ROLLBACK after it finds none.
-            const { page_count: pages } = db.prepare("PRAGMA page_count").get() ?? {};
-            db.exec(`PRAGMA max_page_count = ${Number(pages)}`);
-            const error = yield* Effect.flip(ledger.append("a", "w-2", line({ body: { note: "y".repeat(value) } })));
-            expect(error).toBeInstanceOf(LedgerError);
-            expect(error.reason).toBe("storage");
-            expect(failed("ledger.append")).toEqual([false, true]);
-            expect(tags("ledger.append")[1]?.[tag("code")]).toBe(13);
-            expect(tags("ledger.append")[1]).toEqual(expect.objectContaining({ [tag("reason")]: "storage" }));
-            expect(error.message ?? "").not.toMatch(/no transaction is active/);
-            // With room again, the failed step left nothing behind and the next append is placed.
-            db.exec("PRAGMA max_page_count = 1073741823");
-            expect(yield* ledger.append("a", "w-3", line())).toEqual({
-              _tag: "placed",
-              rev: 2,
-              pos: 2,
-            });
-          }).pipe(Effect.provide(onSql(nodeSql(db))), Effect.withTracer(tracer));
-        },
+        (value) =>
+          Effect.flatMap(freshDb, (db) => {
+            const { tracer, tags, failed } = capture();
+            return Effect.gen(function* () {
+              const ledger = yield* Ledger;
+              expect(yield* ledger.append("a", "w-1", line())).toEqual({
+                _tag: "placed",
+                rev: 1,
+                pos: 1,
+              });
+              // No page past the ones there now: the next big row fails with SQLITE_FULL, and SQLite rolls
+              // the whole transaction back by itself, so a ROLLBACK after it finds none.
+              const { page_count: pages } = db.prepare("PRAGMA page_count").get() ?? {};
+              db.exec(`PRAGMA max_page_count = ${Number(pages)}`);
+              const error = yield* Effect.flip(ledger.append("a", "w-2", line({ body: { note: "y".repeat(value) } })));
+              expect(error).toBeInstanceOf(LedgerError);
+              expect(error.reason).toBe("storage");
+              expect(failed("ledger.append")).toEqual([false, true]);
+              expect(tags("ledger.append")[1]?.[tag("code")]).toBe(13);
+              expect(tags("ledger.append")[1]).toEqual(expect.objectContaining({ [tag("reason")]: "storage" }));
+              expect(error.message ?? "").not.toMatch(/no transaction is active/);
+              // With room again, the failed step left nothing behind and the next append is placed.
+              db.exec("PRAGMA max_page_count = 1073741823");
+              expect(yield* ledger.append("a", "w-3", line())).toEqual({
+                _tag: "placed",
+                rev: 2,
+                pos: 2,
+              });
+            }).pipe(Effect.provide(onSql(Effect.succeed(nodeSql(db)))), Effect.withTracer(tracer));
+          }),
         { concurrency: 1, discard: true },
       ),
     { arbitrary: { seed: 119120, runs: 12 } },
@@ -633,10 +630,7 @@ describe("p95, every call is one span, names and numbers only", () => {
             expect.objectContaining({ [tag("answer")]: "placed", [tag("rings")]: 2 }),
           ]);
           expect(all().filter((value) => String(value).includes("message-marker"))).toEqual([]);
-        }).pipe(
-          Effect.provide(RefereeSql.layer(fresh()).pipe(Layer.provide(dying(location, rang)))),
-          Effect.withTracer(tracer),
-        );
+        }).pipe(Effect.provide(onReferee(fresh(), dying(location, rang))), Effect.withTracer(tracer));
       },
     );
   }

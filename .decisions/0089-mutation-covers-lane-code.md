@@ -16,7 +16,7 @@ that runs lanes: the chain script, the drive script and the flow runner.
 [0066](0066-mutation-runs-on-a-schedule.md) made mutation one run an hour on the changed lines of
 what merged to main, and [0067](0067-hourly-mutation-runs-in-ci.md) moved that run to GitHub CI.
 Neither says whether lead tooling under `.agents/` is part of it. Lead tooling is fast-tracked: it
-skips the plan, tests and review steps ([AGENTS.md](../AGENTS.md#two-versions-side-by-side),
+skips the plan, tests and review steps ([AGENTS.md](../AGENTS.md#how-a-change-lands),
 2026-11-09), and [0033](0033-agents-code-follows-next-rules.md) holds its code to `next/`'s lint
 rules. [0007](0007-drive-is-the-pipeline-lab.md) makes `drive.ts` the lab that `next/`'s pipeline
 is rethought from.

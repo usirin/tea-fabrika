@@ -1,7 +1,7 @@
 ---
 id: 0076
 title: A lane stops and asks a person to redo, cut scope or drop when 3 of its last 5 steps were stuck on the work or sent back, with twice the plan's estimate in steps and dollars as a backstop, while a stuck on a tool files a finding and drains one tool budget shared by all lanes, as a trial
-status: amended-in-part by [0096](0096-the-lead-fixes-forward-while-the-owner-is-away.md)
+status: amended-in-part by [0096](0096-the-lead-fixes-forward-while-the-owner-is-away.md), [0176](0176-second-send-back-stops-lane.md)
 date: 2026-11-10
 tags: [lead, chain, lane, budget, plan, redo, cost, trial, intensity, tool]
 ---

@@ -781,6 +781,6 @@ it("each added line that is not JSON is an invalid-JSON error at its own line, a
 // Show changes + skills + tracked-file scans pass; check/next/e2e/all six shards skip
 // without runners; field starts independently and validates only new rows. Plant an
 // invalid row and see field fail, then fix it; advisory drift must warn with exit 0.
-// Close the proof PR. Its non-main base means commits does not run: no 44 s claim.
-// The implementation PR must pass commits and every heavy job, show no next files in
+// Close the proof PR.
+// The implementation PR must pass every heavy job, show no next files in
 // today's shards, retain every next test, and record setup/install/test/wall timings.

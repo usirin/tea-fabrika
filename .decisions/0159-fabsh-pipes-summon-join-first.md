@@ -1,7 +1,7 @@
 ---
 id: 0159
 title: The next thing built in next/ is the four primitives, fabsh, pipes, summon and join, working for real with whatever they need, so fabrika is built inside fabrika, never thin slices of them behind the rest of Tier 1
-status: accepted
+status: amended-in-part by [0181](0181-the-alchemy-port-keeps-a-slot.md), [0185](0185-tier-2-runs-agents-after-the-four-primitives.md)
 date: 2026-11-13
 tags: [plan, tiers, tier-1, fabsh, pipes, summon, join, rooms, order, next]
 ---
@@ -159,3 +159,5 @@ working for real, with whatever they need.**
     done,** ahead of the programs with their own view. This changes the bullet above that puts the
     tracker and the ticket page first after done: they follow these rows. Until then daily work in
     `next/` lives only in the laptop's ledger, and the owner accepts that.
+    Changed by [0185](0185-tier-2-runs-agents-after-the-four-primitives.md) the same day: these rows
+    wait behind Tier 2, which comes right after the 4 primitives.

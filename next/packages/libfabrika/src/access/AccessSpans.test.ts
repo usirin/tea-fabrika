@@ -14,8 +14,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterAll, describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Option, Schema, Stream, Tracer } from "effect";
+import { describe, expect, it } from "@effect/vitest";
+import { Effect, Layer, Option, Schema, type Scope, Stream, Tracer } from "effect";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
@@ -75,33 +75,49 @@ const SAW_MARK = "saw-marker-8a2e";
 const SIG_MARK = "sig-marker-3f71";
 const MARKS = [M_MARK, SAW_MARK, SIG_MARK];
 
-// Every ledger is a fresh node:sqlite file in one temp folder, removed after.
-const folder = mkdtempSync(join(tmpdir(), "p9-spans-"));
-const opened: Array<DatabaseSync> = [];
-let files = 0;
+// Every ledger is a fresh node:sqlite file in its own temp folder. The scope that opens it closes
+// the connection, then removes the folder (0061).
+const folder = Effect.acquireRelease(
+  Effect.sync(() => mkdtempSync(join(tmpdir(), "p9-spans-"))),
+  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+);
 
-const fresh = (): Sql => {
-  const db = new DatabaseSync(join(folder, `ledger-${++files}.db`));
-  opened.push(db);
-  return nodeSql(db);
-};
+// A store is a scoped Effect, so the layer built on it holds the open file in its own scope.
+type Store = Effect.Effect<Sql, never, Scope.Scope>;
 
-afterAll(() => {
-  for (const db of opened.splice(0)) {
-    if (db.isOpen) {
-      db.close();
-    }
-  }
+const fresh = (): Store =>
+  folder.pipe(
+    Effect.flatMap((path) =>
+      Effect.acquireRelease(
+        Effect.sync(() => new DatabaseSync(join(path, "ledger.db"))),
+        (db) =>
+          Effect.sync(() => {
+            if (db.isOpen) {
+              db.close();
+            }
+          }),
+      ),
+    ),
+    Effect.map(nodeSql),
+  );
 
-  rmSync(folder, { recursive: true, force: true });
-});
+/** One fresh store, opened in the test's scope, for the layers of a test that share one ledger. */
+const shared = (): Effect.Effect<Store, never, Scope.Scope> => fresh().pipe(Effect.map((sql) => Effect.succeed(sql)));
 
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
-const onSql = (sql: Sql) =>
-  Layer.mergeAll(LedgerSql.layer(sql, { reader: READER }), LedgerTransactionSql.layer(sql)).pipe(Layer.provide(quiet));
+const onSql = (sql: Store) =>
+  Layer.unwrap(
+    sql.pipe(
+      Effect.map((sql) =>
+        Layer.mergeAll(LedgerSql.layer(sql, { reader: READER }), LedgerTransactionSql.layer(sql)).pipe(
+          Layer.provide(quiet),
+        ),
+      ),
+    ),
+  );
 
-const all = (sql: Sql = fresh()) =>
+const all = (sql: Store = fresh()) =>
   Layer.mergeAll(Mailbox.layer, ProcessManager.layer(brain(), ids(A).next), ClientManagerLedger.layer(FOUNDER)).pipe(
     Layer.provideMerge(onSql(sql)),
   );
@@ -421,59 +437,60 @@ describe("p97, member spans", () => {
   it.effect.prop(
     "plant, ignored reported as applied: the Mac that lost the sheet race has an ignored span",
     [keyArb],
-    examples([["r1"]], (key: string) => {
-      const { tracer, ended, spans } = capture();
-      const sql = fresh();
-      const sheet = addedSheet("pA", key);
-      const macC = addedDevice(key, "pC", "wC", ["pA"]);
-      const macX = addedDevice(key, "pX", "wX");
-      const hook: { before: Effect.Effect<void, LedgerError> | null } = {
-        before: write(macX).pipe(
-          Effect.asVoid,
-          Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
-        ),
-      };
-      const target = macC._tag === "added" ? macC.add.id : "";
-      // A Ledger that runs Mac X's whole write just before Mac C's append: the race, made certain.
-      const racing = Layer.effect(
-        Ledger,
-        Effect.gen(function* () {
-          const real = yield* Ledger;
-          return {
-            read: real.read,
-            wait: real.wait,
-            append: (stream: string, id: string, line: Parameters<typeof real.append>[2]) =>
-              Effect.suspend(() => {
-                const before = id === target ? hook.before : null;
+    examples([["r1"]], (key: string) =>
+      Effect.flatMap(shared(), (sql) => {
+        const { tracer, ended, spans } = capture();
+        const sheet = addedSheet("pA", key);
+        const macC = addedDevice(key, "pC", "wC", ["pA"]);
+        const macX = addedDevice(key, "pX", "wX");
+        const hook: { before: Effect.Effect<void, LedgerError> | null } = {
+          before: write(macX).pipe(
+            Effect.asVoid,
+            Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
+          ),
+        };
+        const target = macC._tag === "added" ? macC.add.id : "";
+        // A Ledger that runs Mac X's whole write just before Mac C's append: the race, made certain.
+        const racing = Layer.effect(
+          Ledger,
+          Effect.gen(function* () {
+            const real = yield* Ledger;
+            return {
+              read: real.read,
+              wait: real.wait,
+              append: (stream: string, id: string, line: Parameters<typeof real.append>[2]) =>
+                Effect.suspend(() => {
+                  const before = id === target ? hook.before : null;
 
-                if (before === null) {
-                  return real.append(stream, id, line);
-                }
+                  if (before === null) {
+                    return real.append(stream, id, line);
+                  }
 
-                hook.before = null;
-                return Effect.andThen(before, real.append(stream, id, line));
-              }),
-          };
-        }),
-      ).pipe(Layer.provide(onSql(sql)));
-      return Effect.gen(function* () {
-        const clients = yield* ClientManager;
-        yield* write(sheet);
-        expect(yield* write(macC)).toEqual({ _tag: "ignored", rev: 4, reason: "used" });
-        // Spans are kept in the order they start, and Mac X's starts inside Mac C's, so sort them.
-        const answers = ended("access.write")
-          .map((span) => `${String(tagged(span, "answer"))} ${String(tagged(span, "reason") ?? "")}`)
-          .sort();
-        expect(answers).toEqual(["applied ", "applied ", "ignored used"]);
-        yield* clients.members;
-        const read = ended("access.read").at(-1);
-        expect(read === undefined ? null : tagged(read, "ignored")).toBe(1);
-        clean(spans);
-      }).pipe(
-        Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(racing))),
-        Effect.withTracer(tracer),
-      );
-    }),
+                  hook.before = null;
+                  return Effect.andThen(before, real.append(stream, id, line));
+                }),
+            };
+          }),
+        ).pipe(Layer.provide(onSql(sql)));
+        return Effect.gen(function* () {
+          const clients = yield* ClientManager;
+          yield* write(sheet);
+          expect(yield* write(macC)).toEqual({ _tag: "ignored", rev: 4, reason: "used" });
+          // Spans are kept in the order they start, and Mac X's starts inside Mac C's, so sort them.
+          const answers = ended("access.write")
+            .map((span) => `${String(tagged(span, "answer"))} ${String(tagged(span, "reason") ?? "")}`)
+            .sort();
+          expect(answers).toEqual(["applied ", "applied ", "ignored used"]);
+          yield* clients.members;
+          const read = ended("access.read").at(-1);
+          expect(read === undefined ? null : tagged(read, "ignored")).toBe(1);
+          clean(spans);
+        }).pipe(
+          Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(racing))),
+          Effect.withTracer(tracer),
+        );
+      }),
+    ),
     options,
   );
 });
@@ -573,52 +590,53 @@ describe("p97, the tags hold the right names and numbers", () => {
   it.effect.prop(
     "an ignored write's span holds the rev it was placed at",
     [keyArb],
-    examples([["r1"]], (key: string) => {
-      const { tracer, ended } = capture();
-      const sql = fresh();
-      const sheet = addedSheet("pA", key);
-      const macC = addedDevice(key, "pC", "wC", ["pA"]);
-      const macX = addedDevice(key, "pX", "wX");
-      const target = macC._tag === "added" ? macC.add.id : "";
-      let before: Effect.Effect<void, LedgerError> | null = write(macX).pipe(
-        Effect.asVoid,
-        Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
-      );
-      // Mac X's whole write runs just before Mac C's append, as in the race above.
-      const racing = Layer.effect(
-        Ledger,
-        Effect.map(Ledger, (real) => ({
-          read: real.read,
-          wait: real.wait,
-          append: (stream: string, id: string, line: Parameters<typeof real.append>[2]) =>
-            Effect.suspend(() => {
-              const first = id === target ? before : null;
+    examples([["r1"]], (key: string) =>
+      Effect.flatMap(shared(), (sql) => {
+        const { tracer, ended } = capture();
+        const sheet = addedSheet("pA", key);
+        const macC = addedDevice(key, "pC", "wC", ["pA"]);
+        const macX = addedDevice(key, "pX", "wX");
+        const target = macC._tag === "added" ? macC.add.id : "";
+        let before: Effect.Effect<void, LedgerError> | null = write(macX).pipe(
+          Effect.asVoid,
+          Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
+        );
+        // Mac X's whole write runs just before Mac C's append, as in the race above.
+        const racing = Layer.effect(
+          Ledger,
+          Effect.map(Ledger, (real) => ({
+            read: real.read,
+            wait: real.wait,
+            append: (stream: string, id: string, line: Parameters<typeof real.append>[2]) =>
+              Effect.suspend(() => {
+                const first = id === target ? before : null;
 
-              if (first === null) {
-                return real.append(stream, id, line);
-              }
+                if (first === null) {
+                  return real.append(stream, id, line);
+                }
 
-              before = null;
-              return Effect.andThen(first, real.append(stream, id, line));
-            }),
-        })),
-      ).pipe(Layer.provide(onSql(sql)));
-      return Effect.gen(function* () {
-        yield* write(sheet);
-        expect(yield* write(macC)).toEqual({ _tag: "ignored", rev: 4, reason: "used" });
-        const ignored = ended("access.write").find((span) => tagged(span, "answer") === "ignored");
+                before = null;
+                return Effect.andThen(first, real.append(stream, id, line));
+              }),
+          })),
+        ).pipe(Layer.provide(onSql(sql)));
+        return Effect.gen(function* () {
+          yield* write(sheet);
+          expect(yield* write(macC)).toEqual({ _tag: "ignored", rev: 4, reason: "used" });
+          const ignored = ended("access.write").find((span) => tagged(span, "answer") === "ignored");
 
-        if (ignored === undefined) {
-          return expect.unreachable();
-        }
+          if (ignored === undefined) {
+            return expect.unreachable();
+          }
 
-        expect(tagged(ignored, "rev")).toBe(4);
-        expect(tagged(ignored, "reason")).toBe("used");
-      }).pipe(
-        Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(racing))),
-        Effect.withTracer(tracer),
-      );
-    }),
+          expect(tagged(ignored, "rev")).toBe(4);
+          expect(tagged(ignored, "reason")).toBe("used");
+        }).pipe(
+          Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(racing))),
+          Effect.withTracer(tracer),
+        );
+      }),
+    ),
     options,
   );
 

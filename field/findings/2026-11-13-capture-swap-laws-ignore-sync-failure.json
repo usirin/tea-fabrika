@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-capture-swap-laws-ignore-sync-failure",
+  "date": "2026-11-13",
+  "by": "review",
+  "model": "claude-fable-5-2",
+  "rule": "missing_test",
+  "location": {
+    "path": "next/packages/libfabrika/src/desktop/BrainFilesTest.ts",
+    "line": 78
+  },
+  "says": "In next/, the two capture swap laws still generate a directory-sync failure, but since removal moved to the rename capture both laws fail before syncHome runs, so that generated choice reaches no code.",
+  "proof": "BrainFilesTest.ts:78-80 arms failDirectorySync before the removal. BrainControlLaunchd.ts:270-276 returns a conflict for both checkpoints before syncHome at :278. Launchd.test-support.ts:225 fails only a sync of the home folder, which is never opened on those paths.",
+  "cost": "Half of each law's 100 runs repeat the other half, and the law reads as if it covered a sync failure during a swapped removal when it does not.",
+  "head": "306ac1ceb0781d0e93894481a252f56bf85046cb",
+  "ticket": "kamp-us/tea-fabrika#881",
+  "pr": "kamp-us/tea-fabrika#1079"
+}

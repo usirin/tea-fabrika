@@ -16,7 +16,7 @@ steps; `next/`'s pipeline is the proper, formal version of what drive proves.
 Drive runs real tickets through the hand-run steps today, on our own laptop. `next/` builds the same
 pipeline as code, with a plan, tests and review
 ([the steps](../docs/direction/next-is-a-pipeline-pre-run.md)). Lead tooling is already
-fast-tracked ([AGENTS.md](../AGENTS.md), "Lead tooling is fast-tracked too"). This says what drive is
+fast-tracked ([AGENTS.md](../AGENTS.md#how-a-change-lands), "Lead tooling is fast-tracked too"). This says what drive is
 for, and which way lessons travel.
 
 ```mermaid

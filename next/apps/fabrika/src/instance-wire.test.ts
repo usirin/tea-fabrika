@@ -259,6 +259,8 @@ class Client {
   // Node's WebSocket fires `error` on a failed upgrade (the proxy's 502 while workerd
   // restarts) but can stay CONNECTING with no `close`, so `error` counts as closed.
   private closed = false;
+  // A caller waits on the socket's own events (open, frame, error, close), never on a timer.
+  private readonly waiting: Array<() => void> = [];
   private readonly ws: WebSocket;
   private readonly base: string;
   private readonly key: ReturnType<typeof identity>;
@@ -270,15 +272,30 @@ class Client {
     this.tab = tab;
     this.ws = new WebSocket(`${base.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
     sockets.push(this.ws);
+    this.ws.addEventListener("open", () => this.wake());
     this.ws.addEventListener("error", () => {
       this.closed = true;
+      this.wake();
     });
     this.ws.addEventListener("close", () => {
       this.closed = true;
+      this.wake();
     });
     this.ws.addEventListener("message", ({ data }) => {
       this.frames.push(data === "pong" ? "pong" : JSON.parse(String(data)));
+      this.wake();
     });
+  }
+
+  private wake() {
+    for (const done of this.waiting.splice(0)) {
+      done();
+    }
+  }
+
+  /** The socket's next event: it opened, a frame arrived, or it closed. */
+  private changed() {
+    return new Promise<void>((done) => this.waiting.push(done));
   }
 
   async next(test: (f: Frame | string) => boolean): Promise<any> {
@@ -293,7 +310,7 @@ class Client {
         throw new Error("wire closed before answer");
       }
 
-      await pause();
+      await this.changed();
     }
   }
 
@@ -332,7 +349,7 @@ class Client {
         throw new Error("wire closed before open");
       }
 
-      await pause();
+      await this.changed();
     }
 
     this.ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
@@ -717,7 +734,14 @@ describe("P12 real dev.ts wire", () => {
     expect(accepted.every((a, n) => n === 0 || a.rev > accepted[n - 1]!.rev)).toBe(true);
     // Gateway input events occupy the intervening global revisions.
     expect(accepted.some((a, n) => n > 0 && a.rev > accepted[n - 1]!.rev + 1)).toBe(true);
-  });
+    // The limit, from measured times. The time is the law's own work: a second page needs PAGE + 3 real
+    // sends, and the gateway answers one socket's sends one at a time (sent all at once they took as long).
+    // On main's CI, in 22 runs from 43365290308 to 43529835092, all while the client still polled for its
+    // replies, this took 32.2 s at its fastest (43365290308) and 50.1 s at the median (43470989655), and was
+    // cut at 60 s in 43489825701 and 43529835092. In the last of these the scenario before it took 13.9 s
+    // against 6.6 s in 43528965610, 2.1 times, which puts this one near 112 s there. 180 s is 1.6 times
+    // that, and what the real-workerd scenarios beside it have.
+  }, 180_000);
   it("scenario: a parked wire wait receives the next append and a ready wait answers now", async () => {
     const s = await instance(),
       c = await connected(s),
