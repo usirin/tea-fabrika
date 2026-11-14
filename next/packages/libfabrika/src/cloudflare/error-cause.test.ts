@@ -98,14 +98,10 @@ describe("T695, the platform clients keep what the platform rejected with", () =
           expect(error.reason).toBe("unreachable");
           const cause: unknown = error.cause;
 
-          if (call.client !== "gateway") {
+          if (call.client !== "gateway" || call.method === "fetch") {
+            // T502 S1. A typed stub serves `fetch` through Alchemy's fetcher, not as a call: the
+            // fetcher fails typed with the rejection as its cause, and the client keeps that value.
             expect(cause, `${call.client}.${call.method} keeps the rejection`).toBe(failure);
-          } else if (call.method === "fetch") {
-            // T502 S1. A typed stub serves `fetch` through its fetcher, not as a call, so the
-            // rejection is the cause itself or sits in the one RpcCallError around it.
-            expect(cause instanceof RpcCallError ? cause.cause : cause, "gateway.fetch keeps the rejection").toBe(
-              failure,
-            );
           } else {
             // T502 S1. A Connection call goes through Alchemy's typed stub and `reach`: the cause
             // is the stub's RpcCallError, and that error holds the very value the platform threw.

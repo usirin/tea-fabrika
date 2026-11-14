@@ -4,7 +4,7 @@
 // law without an edit here. Plant: `catch: unreachable` that ignores its argument, as before this ticket.
 import { it } from "@effect/vitest";
 import { encodeRpcError, ErrorTag, RpcCallError } from "alchemy/Rpc";
-import { Effect, Schema } from "effect";
+import { Deferred, Effect, Fiber, Schema } from "effect";
 import { expect } from "vitest";
 import { LedgerError } from "../ledger/Ledger.ts";
 import * as RepliesTest from "../runtime/RepliesTest.ts";
@@ -20,16 +20,17 @@ const faults = [
   { name: "WireFault", make: (message: string): Error => new WireFault(message) },
 ] as const;
 
-/** A platform stub whose every method rejects with `fault`, standing in for a binding, storage or bucket. */
-const rejecting = <A>(fault: unknown) =>
-  new Proxy(
-    {},
-    {
-      get: () => async () => {
-        throw fault;
-      },
-    },
-  ) as A;
+/** A platform stub whose every method rejects with `fault`, standing in for a binding, storage or
+ *  bucket; a method `own` holds answers as `own` says. */
+const rejecting = <A>(fault: unknown, own: object = {}) =>
+  new Proxy(own, {
+    get: (target, key) =>
+      Reflect.has(target, key)
+        ? Reflect.get(target, key)
+        : async () => {
+            throw fault;
+          },
+  }) as A;
 
 const clients = (fault: Error) => ({
   Project: ProjectClient.make(rejecting(fault)),
@@ -120,6 +121,92 @@ it.effect.prop(
       expect(cause).toBeInstanceOf(RpcCallError);
       expect(cause).toMatchObject({ method: call });
       expect(Reflect.get(Object(cause), "cause"), "the RpcCallError keeps what the platform threw").toBe(fault);
+    }),
+  { arbitrary: { runs: 100, seed: 119120 } },
+);
+
+// T502 S1, next/. A request into the Connection object goes through Alchemy's typed stub too, as
+// docs/direction/no-promises.md says of every call to `Connection`: the stub's own `fetch` is Alchemy's
+// fetcher (@alchemy.run/cloudflare, Workers/Rpc.ts `makeRpcStub`, Fetcher.ts `fromCloudflareFetcher`).
+// It hands the object the caller's request with an abort signal that the caller's interruption fires,
+// and gives the object's answer back as the platform's Response; a socket upgrade (status 101) comes
+// back as the very Response the object answered. A rejected request is the first law in this file.
+// Plants: call the platform `fetch` straight, as the reviewed head did; rebuild the answer without its
+// body, which rebuilds a 101 too.
+const requestHeaders = ["x-fabrika", "sec-websocket-key", "sec-websocket-protocol", "content-type"] as const;
+
+/** A 101 answer as workerd gives one for a socket upgrade. Node refuses to build a Response with that
+ *  status, so the status alone is set on a real Response. */
+const upgraded = (): Response => Object.defineProperty(new Response(null), "status", { value: 101 });
+
+/** Text a URL, a header and a UTF-8 body can carry unchanged: no lone surrogate. */
+const Text = Schema.String.check(Schema.makeFilter((text) => !/\p{Surrogate}/u.test(text)));
+
+it.effect.prop(
+  "a request into the Connection object is the typed stub's fetch: the object gets it with an abort signal, and its answer comes back as a Response",
+  {
+    method: Schema.Literals(["GET", "POST", "PUT", "DELETE"]),
+    path: Text,
+    header: Schema.Literals(requestHeaders),
+    value: Text,
+    body: Text,
+    status: Schema.Literals([200, 201, 202, 400, 403, 404, 426, 500, 503]),
+    text: Text,
+    upgrade: Schema.Boolean,
+  },
+  ({ method, path, header, value, body, status, text, upgrade }) =>
+    Effect.gen(function* () {
+      const ask = () =>
+        new Request(`http://127.0.0.1:8787/client/${encodeURIComponent(path)}`, {
+          method,
+          headers: { [header]: encodeURIComponent(value) },
+          ...(method === "GET" ? {} : { body }),
+        });
+      const request = ask();
+      const answered = upgrade
+        ? upgraded()
+        : new Response(text, { status, headers: { "x-answer": encodeURIComponent(text) } });
+      const received: Array<{ request: Request; signal: unknown }> = [];
+      const answering = {
+        fetch: async (input: Request, init?: RequestInit) => {
+          received.push({ request: input, signal: init?.signal });
+          return answered;
+        },
+      };
+
+      const answer = yield* GatewayClient.make(rejecting(new Error("only fetch is called"), answering)).fetch(request);
+
+      expect(received).toHaveLength(1);
+      const into = received[0]!;
+      expect(into.request.method).toBe(method);
+      expect(into.request.url).toBe(request.url);
+      expect([...into.request.headers]).toEqual([...request.headers]);
+      expect(yield* Effect.promise(() => into.request.text())).toBe(method === "GET" ? "" : body);
+      expect(into.signal, "Alchemy's fetcher hands the object an abort signal").toBeInstanceOf(AbortSignal);
+
+      if (upgrade) {
+        expect(answer, "a socket upgrade comes back as the object's own Response").toBe(answered);
+      } else {
+        expect(answer).toBeInstanceOf(Response);
+        expect(answer.status).toBe(status);
+        expect(answer.headers.get("x-answer")).toBe(encodeURIComponent(text));
+        expect(yield* Effect.promise(() => answer.text())).toBe(text);
+      }
+
+      // The caller stops waiting: the request into the object is aborted, not left running.
+      const reached = yield* Deferred.make<AbortSignal | undefined>();
+      const waiting = {
+        fetch: (_: Request, init?: RequestInit) => {
+          Deferred.doneUnsafe(reached, Effect.succeed(init?.signal ?? undefined));
+          return new Promise<Response>(() => {});
+        },
+      };
+      const pending = yield* Effect.forkChild(
+        GatewayClient.make(rejecting(new Error("only fetch is called"), waiting)).fetch(ask()),
+      );
+      const signal = yield* Deferred.await(reached);
+      yield* Fiber.interrupt(pending);
+      expect(signal?.aborted, "the caller's interruption aborts the request into the object").toBe(true);
     }),
   { arbitrary: { runs: 100, seed: 119120 } },
 );

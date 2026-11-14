@@ -756,6 +756,10 @@ const FrameInput = Schema.Struct({
         "async",
         "unnamed",
         "eval",
+        "nestedEval",
+        "slashName",
+        "slashBare",
+        "query",
       ]),
       name: FrameWord,
       line: FramePosition,
@@ -774,6 +778,10 @@ const frameCases = Arbitrary.schema(FrameInput).pipe(
     }[rootKind];
     return {
       root,
+      // A span's name can hold a slash, and a name is kept whole: S1 reads only the rest of its frame.
+      slashed: frames.flatMap(({ shape, name }) =>
+        shape === "slashName" || shape === "slashBare" ? [`${name}/${word}`] : [],
+      ),
       frames: frames.map(({ shape, name, line, column }) => {
         const file = `${name}.ts:${line}:${column}`;
         const location = `${root}/nested/${file}`;
@@ -802,10 +810,26 @@ const frameCases = Arbitrary.schema(FrameInput).pipe(
             return { raw: `at async Promise.all (index ${line})`, kept: `at async Promise.all (index ${line})` };
           case "unnamed":
             return { raw: `at ${location}`, kept: `at ${file}` };
+          case "slashName":
+            return { raw: `at ${name}/${word} (${location})`, kept: `at ${name}/${word} (${file})` };
+          case "slashBare":
+            return { raw: `at ${name}/${word}`, kept: `at ${name}/${word}` };
+          case "query":
+            // A dev server's URL: the query can hold a folder, and the file name sits before it.
+            return {
+              raw: `at ${name} (http://localhost:5173/src/${name}.ts?t=${root}/${word}:${line}:${column})`,
+              kept: `at ${name} (${file})`,
+            };
+          case "nestedEval":
+            return {
+              raw: `at eval (eval at ${name} (eval at ${word} (${location}), <anonymous>:${line}:1), <anonymous>:1:${column})`,
+              kept: `at eval (eval at ${name} (eval at ${word} (${file}), <anonymous>:${line}:1), <anonymous>:1:${column})`,
+            };
           default:
+            // An eval frame names the caller it ran in: `eval at <name> (` stays, with its location's file.
             return {
               raw: `at eval (eval at ${name} (${location}), <anonymous>:1:1)`,
-              kept: `at eval (${file}), <anonymous>:1:1)`,
+              kept: `at eval (eval at ${name} (${file}), <anonymous>:1:1)`,
             };
         }
       }),
@@ -865,7 +889,10 @@ describe("A-Sink, stored error frames keep no machine folders", () => {
         }
 
         for (const line of message.split("\n").filter((line) => /^\s*at /.test(line))) {
-          const withoutNode = line.replace(/node:[^)]*/g, "");
+          const frame = line.trim();
+          const named = sample.slashed.find((name) => frame === `at ${name}` || frame.startsWith(`at ${name} (`));
+          const location = named === undefined ? frame : frame.slice(`at ${named}`.length);
+          const withoutNode = location.replace(/node:[^)]*/g, "");
           expect(withoutNode, "a stored frame names a folder").not.toMatch(/[/\\]/);
         }
       }),
