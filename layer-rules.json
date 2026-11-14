@@ -58,6 +58,11 @@
       "paths": ["next/packages/libfabrika/src/schedules"]
     },
     {
+      "name": "next-client",
+      "layer": 6,
+      "paths": ["next/packages/libfabrika/src/client"]
+    },
+    {
       "name": "next-door",
       "layer": 6,
       "paths": ["next/packages/libfabrika/src/gateway"]

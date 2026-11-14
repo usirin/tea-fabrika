@@ -1,37 +1,41 @@
-// P14 slice 2, next/ (ticket 828): the page's run, laws L2 (retry timing), L10 (real runtime progress),
-// L11 (scope cleanup) and L12 (wire formats) of the approved plan. Written before `window/main.tsx`.
+// P18 slice 1, next/ (ticket 290): the window start's laws. P14 slice 2's laws of the page's run
+// (ticket 828: L2 retry timing, L10 real runtime progress, L9 failure classes, L12 wire formats)
+// moved here with the start, every assertion kept, on Effect's own socket through an injected
+// `Socket.WebSocketConstructor` (P18 L1). Then P18's own: L4, one Effect socket per dial, and L5,
+// no secret leaves in a row, a span, a URL or a failure.
 //
-// The shape these laws hold `main.tsx` to, from the plan (the build may add more):
-// - `startWindow({ tiles, window, build, origin })`: boots the window machine (`window`, from
-//   `windowMachineFor`) on tea's Effect engine outside React, with its socket Sub, the dial's jitter
-//   and its Cmd handlers, and returns tea's booting run, whose `ready` is the run. It needs libfabrika's
-//   three contracts, `ClientKey`, `ClientSocket` and `ClientRows`, `Id.Generator` and a `Scope`: closing
-//   the scope stops the run, its socket and every Sub.
-// - `ClientSocket.dial(url)`: one dial's socket in a scope, `{events, send, close}`. `events` is a
-//   Stream of {event: "open"} | {event: "message", data} | {event: "close", code}; `send(text)` is
-//   false when the socket is not open.
-// - `ClientKey.current(rejected)`: the profile's identity {fingerprint, raw, line, found, sign}.
-// - `ClientRows.put(row)`: keeps one `ClientRow` {id, tab, build, sentAt, record}.
+// The shape these laws hold `client/WindowStart.ts` to, from the approved plan (the build may add more):
+// - `start({ tiles, window, origin, build, client })`: boots the window machine (`window`, from
+//   `windowMachineFor`) on tea's Effect engine, with its socket Sub, the dial's jitter and its Cmd
+//   handlers, and returns tea's booting run, whose `ready` is the run. `client` is a `ClientInfo`:
+//   the hello's `platform`, `os` and `has`, and the knock's `label`. It needs `ClientKey`,
+//   `ClientRows`, `Id.Generator`, `Socket.WebSocketConstructor` and a `Scope`: closing the scope stops
+//   the run, its sockets and every Sub.
+// - Each dial is one constructor call, one `Socket.fromWebSocket` with one reader and one writer in
+//   the dial's own scope. A constructor that throws is `socket_failure` (op `connect`) and a close
+//   with code 1006, never a defect. A `write` or `ping` for a dial with no open writer answers its
+//   error at once. Reconnects are the Link machine's: the start never dials again by itself.
 // - The wire is P12's as built, the door's own: a `challenge` notice with a nonce, a signed
-//   `initialize` answered {version, ping, identity}, text `ping` and `pong`, and JSON-RPC 2.0 calls `ledger.read`
-//   ({entries}), `view.open` ({rev, view}) and `process.send` (accepted{rev, pos}). View notices are
-//   `view.whole` and `view.patch` with the runner's update and its `pid`.
+//   `initialize` answered {version, ping, identity}, text `ping` and `pong`, and JSON-RPC 2.0 calls
+//   `ledger.read` ({entries}), `view.open` ({rev, view}) and `process.send` (accepted{rev, pos}).
+//   View notices are `view.whole` and `view.patch` with the runner's update and its `pid`.
 //
 // The peer is the door as a script: it answers what the walk lets it answer and nothing else, on the
 // real run under TestClock, so a Cmd that waits for an answer, or a timer that never fires, shows.
 import { describe, expect, it } from "@effect/vitest";
-import { ClientRow, Id } from "@kampus/libfabrika";
-import { ClientKey, ClientKeyError } from "@kampus/libfabrika/transport/ClientKey";
-import { ClientRows, ClientRowsError, ErrorClass } from "@kampus/libfabrika/transport/ClientRows";
-import { ClientSocket, ClientSocketError } from "@kampus/libfabrika/transport/ClientSocket";
-import { backoff, CAP, linkTimer } from "@kampus/libfabrika/transport/Link";
-import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
-import { Deferred, Effect, Exit, Fiber, Layer, Option, Queue, Random, Schema, Scope, Stream } from "effect";
+import { Deferred, Effect, Exit, Fiber, Layer, Option, Random, Schema, Scope, Tracer } from "effect";
 import * as Clock from "effect/Clock";
+import { Socket } from "effect/socket";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
-import { windowMachineFor } from "./machine.ts";
-import { startWindow } from "./main.tsx";
+import * as Id from "../Id.ts";
+import { ClientKey, ClientKeyError } from "../transport/ClientKey.ts";
+import { ClientRow, ClientRows, ClientRowsError, ErrorClass } from "../transport/ClientRows.ts";
+import { backoff, CAP, linkTimer } from "../transport/Link.ts";
+import { KeyLine } from "../transport/Sshsig.ts";
+import { windowMachineFor } from "./WindowMachine.ts";
+import { MemorySocket } from "./WindowStart.test-support.ts";
+import { start } from "./WindowStart.ts";
 
 const SEED = 119120;
 const BUILD = "build_test";
@@ -51,11 +55,8 @@ const list = (n: number) => ({
 
 const window = windowMachineFor({ decode: () => Schema.decodeUnknownSync(ListView), tile: () => undefined });
 const tiles = [{ id: "tile_1", name: "checklist:1" }];
-
-type SocketEvent =
-  | { readonly event: "open" }
-  | { readonly event: "message"; readonly data: unknown }
-  | { readonly event: "close"; readonly code: number };
+/** The browser's facts, as the browser entry passes them. */
+const BROWSER = { platform: "browser", os: "unknown", has: [], label: "Browser" } as const;
 
 /** One JSON-RPC 2.0 call as the page frames it. */
 const Call = Schema.fromJsonString(
@@ -90,17 +91,17 @@ type Script = {
 };
 
 /** The door as a script on one in-memory socket per dial, and every frame the page sent. */
-const peer = (script: Script, pong: () => void = () => {}) => {
+const peer = (script: Script, pong: () => void = () => {}, nonce = (n: number) => `nonce_${n}`) => {
   const sent: Array<string> = [];
   const dials: Array<string> = [];
   const resources = { sockets: 0, released: 0, streams: 0, ended: 0 };
   const ids = new Map<string, number | string>(); // the last id of each method the page called
   let knocks = 0;
-  let open: Queue.Queue<SocketEvent> | null = null;
+  let open: MemorySocket | null = null;
   // The page signs each hello with real WebCrypto, which TestClock does not move. So the door counts,
   // for each socket still open, the nonces it gave that no `initialize` has answered yet, and a walk
   // waits on `quiet` before it moves the clock: no virtual time passes while real work is running.
-  const owed = new Map<Queue.Queue<SocketEvent>, number>();
+  const owed = new Map<MemorySocket, number>();
   let waiting: Deferred.Deferred<void> | null = null;
   const settled = () => [...owed.values()].every((n) => n === 0);
   const wake = () => {
@@ -109,7 +110,7 @@ const peer = (script: Script, pong: () => void = () => {}) => {
       waiting = null;
     }
   };
-  const owe = (events: Queue.Queue<SocketEvent>, n: number) => {
+  const owe = (events: MemorySocket, n: number) => {
     const before = owed.get(events);
 
     // A socket already released owes nothing.
@@ -131,16 +132,17 @@ const peer = (script: Script, pong: () => void = () => {}) => {
       owe(open!, 1);
     }
 
-    return Queue.offerUnsafe(open!, { event: "message", data: JSON.stringify(frame) });
+    open!.receive(JSON.stringify(frame));
+    return true;
   };
 
-  const answer = (text: string, events: Queue.Queue<SocketEvent>): boolean => {
+  const answer = (text: string, events: MemorySocket): boolean => {
     sent.push(text);
 
     if (text === "ping") {
       if (script.pong) {
         pong();
-        Queue.offerUnsafe(open!, { event: "message", data: "pong" });
+        open!.receive("pong");
       }
 
       return true;
@@ -169,7 +171,7 @@ const peer = (script: Script, pong: () => void = () => {}) => {
       result({ version: 1, ping: 5_000, identity: { key: "SHA256:test", person: "person_test", as: "window" } });
 
       for (const junk of script.junk) {
-        Queue.offerUnsafe(open!, { event: "message", data: junk(ids) });
+        open!.receive(junk(ids));
       }
     } else if (frame.method === "gateway.knock") {
       if (++knocks === 1) {
@@ -188,38 +190,35 @@ const peer = (script: Script, pong: () => void = () => {}) => {
     return true;
   };
 
-  const socket = Layer.succeed(ClientSocket, {
-    dial: (url: string) =>
-      Effect.acquireRelease(
-        Effect.gen(function* () {
-          dials.push(url);
-          resources.sockets++;
-          const events = yield* Queue.unbounded<SocketEvent>();
-          open = events;
-          owed.set(events, 0);
-          Queue.offerUnsafe(events, { event: "open" });
-          message({ jsonrpc: "2.0", method: "challenge", params: { nonce: `nonce_${dials.length}` } });
-          return events;
-        }),
-        (events) =>
-          Effect.sync(() => {
-            resources.released++;
-            open = null;
-            owed.delete(events);
-            wake();
-          }),
-      ).pipe(
-        Effect.map((events) => ({
-          events: Stream.fromQueue(events).pipe(
-            Stream.onStart(Effect.sync(() => void resources.streams++)),
-            Stream.ensuring(Effect.sync(() => void resources.ended++)),
-          ),
-          send: (text: string) => answer(text, events),
-          close: (code: number) => {
-            Queue.offerUnsafe(events, { event: "close", code });
-          },
-        })),
-      ),
+  // One constructed socket per dial, opened at once with the door's challenge waiting in it. The
+  // start's release closes it; a reader is its `message` listener, attached and removed.
+  const socket = Layer.succeed(Socket.WebSocketConstructor, (url: string) => {
+    dials.push(url);
+    resources.sockets++;
+    const events: MemorySocket = new MemorySocket(url, {
+      send: (text, from) => void answer(text, from),
+      closed: (from) => {
+        resources.released++;
+        open = open === from ? null : open;
+        owed.delete(from);
+        wake();
+      },
+    });
+    const listen = events.addEventListener.bind(events);
+    const unlisten = events.removeEventListener.bind(events);
+    events.addEventListener = (type, listener, options) => {
+      resources.streams += type === "message" ? 1 : 0;
+      listen(type, listener, options);
+    };
+    events.removeEventListener = (type, listener) => {
+      resources.ended += type === "message" ? 1 : 0;
+      unlisten(type, listener);
+    };
+    open = events;
+    owed.set(events, 0);
+    events.open();
+    message({ jsonrpc: "2.0", method: "challenge", params: { nonce: nonce(dials.length) } });
+    return events;
   });
   return {
     socket,
@@ -233,10 +232,26 @@ const peer = (script: Script, pong: () => void = () => {}) => {
   };
 };
 
+/** WebCrypto refused to make or export the test key: the test's own failure, never the product's. */
+class TestKeyError extends Schema.TaggedError<TestKeyError>()("TestKeyError", {}) {}
+
+/** A constructor's refusal, as a browser's `new WebSocket` throws one: a DOMException of a platform class. */
+const refuse = (message: string, name: string): never => {
+  throw new DOMException(message, name);
+};
+
 /** A real Ed25519 key in WebCrypto, as the browser layer makes one, with its ssh key line. */
 const identity = Effect.gen(function* () {
-  const pair = yield* Effect.promise(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
-  const raw = new Uint8Array(yield* Effect.promise(() => crypto.subtle.exportKey("raw", pair.publicKey)));
+  const pair = yield* Effect.tryPromise({
+    try: () => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]),
+    catch: () => new TestKeyError({}),
+  });
+  const raw = new Uint8Array(
+    yield* Effect.tryPromise({
+      try: () => crypto.subtle.exportKey("raw", pair.publicKey),
+      catch: () => new TestKeyError({}),
+    }),
+  );
   const field = (bytes: Uint8Array) => [...new Uint8Array(new Uint32Array([bytes.length]).buffer).reverse(), ...bytes];
   const blob = new Uint8Array([...field(new TextEncoder().encode("ssh-ed25519")), ...field(raw)]);
   const line = Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`);
@@ -249,13 +264,14 @@ const identity = Effect.gen(function* () {
     line,
     found: "reused" as const,
     sign: (bytes: Uint8Array) =>
-      Effect.promise(() => crypto.subtle.sign("Ed25519", pair.privateKey, new Uint8Array(bytes))).pipe(
-        Effect.map((b) => new Uint8Array(b)),
-      ),
+      Effect.tryPromise({
+        try: () => crypto.subtle.sign("Ed25519", pair.privateKey, new Uint8Array(bytes)),
+        catch: () => new ClientKeyError({ op: "sign", error: "OperationError" }),
+      }).pipe(Effect.map((b) => new Uint8Array(b))),
   };
 });
 
-const services = (socket: Layer.Layer<ClientSocket>, rows: Array<unknown>) =>
+const services = (socket: Layer.Layer<Socket.WebSocketConstructor>, rows: Array<unknown>) =>
   Layer.mergeAll(
     socket,
     Layer.effect(
@@ -290,22 +306,15 @@ const retryTiming = (list: ReadonlyArray<Choice>, seed: number, seen: Map<number
     const key = yield* identity;
     const clock = yield* Clock.Clock;
     const opened: Array<number> = [];
-    let events: Queue.Queue<SocketEvent> | undefined;
-    const socket = Layer.succeed(ClientSocket, {
-      dial: () =>
-        Effect.acquireRelease(
-          Effect.gen(function* () {
-            opened.push(clock.currentTimeMillisUnsafe());
-            const queue = yield* Queue.unbounded<SocketEvent>();
-            events = queue;
-            return {
-              events: Stream.fromQueue(queue),
-              send: () => true,
-              close: (code: number) => void Queue.offerUnsafe(queue, { event: "close", code }),
-            };
-          }),
-          (socket) => Effect.sync(() => socket.close(1000)),
-        ),
+    let events: MemorySocket | undefined;
+    // Each dial's socket opens at once and the door never speaks, so the link stays dialing until
+    // the walk drops it or its stall timer fires.
+    const socket = Layer.succeed(Socket.WebSocketConstructor, (url: string) => {
+      opened.push(clock.currentTimeMillisUnsafe());
+      const made = new MemorySocket(url);
+      events = made;
+      made.open();
+      return made;
     });
     const layers = Layer.mergeAll(
       socket,
@@ -318,7 +327,9 @@ const retryTiming = (list: ReadonlyArray<Choice>, seed: number, seen: Map<number
       Id.Generator.layer,
     );
     const started = clock.currentTimeMillisUnsafe();
-    const booting = yield* startWindow({ tiles, window, build: BUILD, origin: ORIGIN }).pipe(Effect.provide(layers));
+    const booting = yield* start({ tiles, window, build: BUILD, origin: ORIGIN, client: BROWSER }).pipe(
+      Effect.provide(layers),
+    );
     const run = yield* booting.ready;
     yield* run.idle();
     yield* tick(0);
@@ -334,7 +345,7 @@ const retryTiming = (list: ReadonlyArray<Choice>, seed: number, seen: Map<number
       }
 
       if (c.move % 2 === 0) {
-        Queue.offerUnsafe(events!, { event: "close", code: 1006 });
+        events!.drop(1006);
         yield* tick(0);
       } else {
         yield* tick(dialingAt + linkTimer(link)!.after - clock.currentTimeMillisUnsafe());
@@ -367,7 +378,7 @@ const retryTiming = (list: ReadonlyArray<Choice>, seed: number, seen: Map<number
   }).pipe(Effect.scoped, Random.withSeed(seed), Effect.provide(TestClock.layer()));
 
 describe("L2: retry jitter in the dial", () => {
-  it("a retry dial opens no earlier than backoff(tries), no later than the jitter bound, and never past 30 s", async () => {
+  it("L2 scenario: a retry dial opens no earlier than backoff(tries), no later than the jitter bound, and never past 30 s", async () => {
     const seen = new Map<number, Set<number>>();
     await fc.assert(
       fc.asyncProperty(fc.array(choice, { minLength: 1, maxLength: 40 }), fc.integer(), async (list, seed) => {
@@ -381,7 +392,7 @@ describe("L2: retry jitter in the dial", () => {
 
 describe("L10: real runtime progress", () => {
   it.effect.prop(
-    "with unanswered sends, opens and knocks, every Cmd finishes and the tab leaves online within 10 s of its last pong",
+    "L10 scenario: with unanswered sends, opens and knocks, every Cmd finishes and the tab leaves online within 10 s of its last pong",
     {
       plan: Schema.Struct({
         open: Schema.Boolean,
@@ -402,7 +413,7 @@ describe("L10: real runtime progress", () => {
         });
         const rows: Array<unknown> = [];
         const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void));
-        const booting = yield* startWindow({ tiles, window, build: BUILD, origin: ORIGIN }).pipe(
+        const booting = yield* start({ tiles, window, build: BUILD, origin: ORIGIN, client: BROWSER }).pipe(
           Effect.provide(services(door.socket, rows)),
           Scope.provide(scope),
         );
@@ -527,7 +538,7 @@ describe("L9: failure classes through the real runtime", () => {
   // current link and open tiles, so shortened walks cannot press an unopened process.
   for (const operation of ["connect", "sign", "claim", "record"] as const) {
     it.effect.prop(
-      `${operation} keeps the platform failure class in one failure record, without recursive row writes`,
+      `L9 scenario: ${operation} keeps the platform failure class in one failure record, without recursive row writes`,
       {
         error: ErrorClass,
         skip: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 4 })),
@@ -537,7 +548,7 @@ describe("L9: failure classes through the real runtime", () => {
         Effect.gen(function* () {
           const script: Script = { pong: true, open: true, send: true, waiting: operation === "claim", junk: [] };
           const door = peer(script);
-          const normalSocket = yield* ClientSocket.pipe(Effect.provide(door.socket));
+          const normalSocket = yield* Socket.WebSocketConstructor.pipe(Effect.provide(door.socket));
           const key = yield* identity;
           const rows: Array<ClientRow> = [];
           let injected = 0;
@@ -545,13 +556,13 @@ describe("L9: failure classes through the real runtime", () => {
           let failedRecord: ClientRow["record"] | undefined;
           const op = operation === "sign" ? "key" : operation === "claim" ? "persist" : operation;
           const provided = Layer.mergeAll(
-            Layer.succeed(ClientSocket, {
-              dial: (url: string) =>
-                Effect.suspend(() =>
-                  operation === "connect" && injected++ === 0
-                    ? Effect.fail(new ClientSocketError({ error }))
-                    : normalSocket.dial(url),
-                ),
+            // The first dial's constructor throws, as a browser's refuses a URL, with the platform's class.
+            Layer.succeed(Socket.WebSocketConstructor, (url: string) => {
+              if (operation === "connect" && injected++ === 0) {
+                return refuse("refused", error);
+              }
+
+              return normalSocket(url);
             }),
             Layer.succeed(ClientKey, {
               current: () =>
@@ -593,7 +604,7 @@ describe("L9: failure classes through the real runtime", () => {
             }),
             Id.Generator.layer,
           );
-          const booting = yield* startWindow({ tiles, window, build: BUILD, origin: ORIGIN }).pipe(
+          const booting = yield* start({ tiles, window, build: BUILD, origin: ORIGIN, client: BROWSER }).pipe(
             Effect.provide(provided),
           );
           const run = yield* booting.ready;
@@ -648,7 +659,7 @@ describe("L9: failure classes through the real runtime", () => {
 
 describe("L12: wire formats are refused as typed values", () => {
   it.effect(
-    "format: a malformed open_ok.value, a view notice without pid, a refused answer without a string reason, an answer to an unknown id and a broken frame install nothing and stop nothing",
+    "L12 format: a malformed open_ok.value, a view notice without pid, a refused answer without a string reason, an answer to an unknown id and a broken frame install nothing and stop nothing",
     () =>
       Effect.gen(function* () {
         // The parent also validates this public protocol value before its reducer sees it.
@@ -688,7 +699,7 @@ describe("L12: wire formats are refused as typed values", () => {
         };
         const door = peer(script);
         const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void));
-        const booting = yield* startWindow({ tiles, window, build: BUILD, origin: ORIGIN }).pipe(
+        const booting = yield* start({ tiles, window, build: BUILD, origin: ORIGIN, client: BROWSER }).pipe(
           Effect.provide(services(door.socket, [])),
           Scope.provide(scope),
         );
@@ -736,5 +747,353 @@ describe("L12: wire formats are refused as typed values", () => {
         expect(run.getState().link._tag).toBe("online");
         yield* Scope.close(scope, Exit.void);
       }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+  );
+});
+
+// --- P18 L4: one Effect socket per dial ------------------------------------------------------------
+
+/** The link's socket dial, as the window's model says. */
+const socketDialIn = (link: { readonly _tag: string; readonly dial?: number }): number | null =>
+  link._tag === "dialing" || link._tag === "waiting_grant" || link._tag === "online" ? (link.dial ?? null) : null;
+
+/** One thing the door, the network or a person does next. A move whose state does not allow it is skipped. */
+const Act = Schema.Union([
+  Schema.TaggedStruct("open", {}),
+  Schema.TaggedStruct("admit", {}),
+  Schema.TaggedStruct("beat", {}),
+  Schema.TaggedStruct("frame", { text: Schema.Literals(["pong", "{ not json", "[]", "ping"]) }),
+  Schema.TaggedStruct("close", {
+    code: Schema.Union([
+      Schema.Literals([1000, 1001, 1006, 1011, 4003]),
+      Schema.Int.check(Schema.isBetween({ minimum: 3000, maximum: 4999 })),
+    ]),
+  }),
+  Schema.TaggedStruct("throw", {}),
+  Schema.TaggedStruct("again", {}),
+  Schema.TaggedStruct("wait", { ms: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 20_000 })) }),
+]);
+
+describe("P18 L4: one dial is one constructed socket, one reader and one writer", () => {
+  it.effect.prop(
+    "the start dials once per dialing the link emits, never again by itself; an ended dial's reader and writer are gone; a write or ping with no open writer answers at once; a throw and every close code reach the window as they happened",
+    { acts: Schema.Array(Act).check(Schema.isMinLength(10), Schema.isMaxLength(60)) },
+    ({ acts }) =>
+      Effect.gen(function* () {
+        const key = yield* identity;
+        const rows: Array<ClientRow> = [];
+        const made: Array<{ readonly ws: MemorySocket; readonly dial: number | null; sentBefore: number | null }> = [];
+        let read: () => { readonly link: { readonly _tag: string; readonly dial?: number } } = () => ({
+          link: { _tag: "dialing", dial: 1 },
+        });
+        let armed = false;
+        let thrown: number | null = null;
+        // A hello is signed with real WebCrypto, which TestClock does not move: wait for each one, or
+        // for its socket to go, before the virtual clock moves. Two real seconds bound the wait.
+        let owed = 0;
+        let woken: Deferred.Deferred<void> | null = null;
+        const live = () => made.at(-1)?.ws;
+        const lower = () => {
+          if (woken !== null && (owed <= 0 || live()?.readyState !== 1)) {
+            Deferred.doneUnsafe(woken, Effect.void);
+            woken = null;
+          }
+        };
+        const quiet = Effect.suspend(() =>
+          owed <= 0 || live()?.readyState !== 1
+            ? Effect.void
+            : Deferred.await((woken ??= Deferred.makeUnsafe<void>())).pipe(
+                Effect.raceFirst(TestClock.withLive(Effect.sleep("2 seconds"))),
+              ),
+        );
+        const socket = Layer.succeed(Socket.WebSocketConstructor, (url: string) => {
+          const dial = socketDialIn(read().link);
+
+          for (const older of made) {
+            older.sentBefore ??= older.ws.sent.length;
+          }
+
+          const ws = new MemorySocket(url, {
+            send: (text) => {
+              owed -= text.includes('"initialize"') ? 1 : 0;
+              lower();
+            },
+            closed: lower,
+          });
+          owed = 0;
+          made.push({ ws, dial, sentBefore: null });
+
+          if (armed) {
+            armed = false;
+            thrown = dial;
+            return refuse("refused", "NetworkError");
+          }
+
+          return ws;
+        });
+        const layers = Layer.mergeAll(
+          socket,
+          Layer.succeed(ClientKey, {
+            current: () => Effect.succeed(key),
+            claimPersist: Effect.succeed(false),
+            persist: Effect.succeed(true),
+          }),
+          Layer.succeed(ClientRows, { put: (row: ClientRow) => Effect.sync(() => void rows.push(row)) }),
+          Id.Generator.layer,
+        );
+        const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void));
+        const booting = yield* start({ tiles, window, build: BUILD, origin: ORIGIN, client: BROWSER }).pipe(
+          Effect.provide(layers),
+          Scope.provide(scope),
+        );
+        const run = yield* booting.ready;
+        read = () => run.getState();
+        const settle = Effect.gen(function* () {
+          yield* quiet;
+
+          for (let n = 0; n < 5; n++) {
+            yield* TestClock.adjust(0);
+            yield* Effect.yieldNow;
+          }
+        });
+        yield* settle;
+
+        for (const act of acts) {
+          const state = run.getState();
+          const dial = socketDialIn(state.link);
+          const ws = live();
+          let closed: { readonly dial: number; readonly code: number } | null = null;
+
+          if (act._tag === "open" && ws !== undefined && ws.readyState === 0) {
+            ws.open();
+            owed++;
+            ws.receive(JSON.stringify({ jsonrpc: "2.0", method: "challenge", params: { nonce: "n" } }));
+          } else if (act._tag === "admit" && state.link._tag === "dialing" && dial !== null) {
+            yield* run.dispatch({ type: "admitted", dial, ping: 30_000, ms: 0 });
+          } else if (act._tag === "beat" && state.link._tag === "online" && dial !== null) {
+            yield* run.dispatch({ type: "beat", dial });
+          } else if (act._tag === "frame" && ws?.readyState === 1) {
+            ws.receive(act.text);
+          } else if (act._tag === "close" && ws !== undefined && ws.readyState < 2 && dial !== null) {
+            closed = { dial, code: act.code };
+            ws.drop(act.code);
+            lower();
+          } else if (act._tag === "throw") {
+            armed = true;
+          } else if (act._tag === "again" && state.link._tag === "removed") {
+            yield* run.dispatch({ type: "ask_again", dial: state.dials + 1 });
+          } else if (act._tag === "wait") {
+            yield* TestClock.adjust(act.ms);
+          }
+
+          // Every Cmd finishes: a write or ping on a dial with no open writer fails at once.
+          const idle = yield* Effect.forkChild(run.idle());
+          yield* settle;
+          expect(idle.pollUnsafe() !== undefined, `after ${act._tag} a Cmd is still waiting`).toBe(true);
+          yield* Fiber.interrupt(idle);
+          const after = run.getState();
+          const current = socketDialIn(after.link);
+
+          // One constructor call per dial the link is dialing; the start never dials again itself.
+          const dials = made.map((m) => m.dial);
+          expect(dials.includes(null), "a socket was made with no dial to make it for").toBe(false);
+          expect(new Set(dials).size, `dials made ${JSON.stringify(dials)}`).toBe(dials.length);
+
+          for (const m of made) {
+            expect(m.ws.readers, `dial ${m.dial} has more than one reader`).toBeLessThanOrEqual(1);
+
+            if (m.sentBefore !== null) {
+              expect(m.ws.sent.length, `dial ${m.dial} took a write after a newer dial`).toBe(m.sentBefore);
+            }
+
+            if (m.dial !== current) {
+              expect(
+                ["message", "close", "open", "error"].map((kind) => m.ws.listening(kind as never)),
+                `dial ${m.dial}'s reader outlived it`,
+              ).toEqual([0, 0, 0, 0]);
+            }
+          }
+
+          if (closed !== null) {
+            const connect = rows.filter((r) => r.record._tag === "connect" && r.record.dial === closed.dial).at(-1);
+            expect(connect?.record, `close ${closed.code} on dial ${closed.dial}`).toMatchObject({
+              _tag: "connect",
+              result: closed.code === 4003 ? "removed" : "closed",
+              code: closed.code,
+            });
+          }
+
+          if (thrown !== null) {
+            const failures = rows.filter((r) => r.record._tag === "failure" && r.record.op === "connect");
+            expect(failures.length, "the throw left no failure row").toBeGreaterThan(0);
+            expect(Schema.is(ErrorClass)(Reflect.get(failures.at(-1)!.record, "error"))).toBe(true);
+            expect(
+              rows.find((r) => r.record._tag === "connect" && r.record.dial === thrown)?.record,
+              "the throw did not close its dial with 1006",
+            ).toMatchObject({ result: "closed", code: 1006 });
+            thrown = null;
+          }
+        }
+
+        yield* Scope.close(scope, Exit.void);
+        yield* settle;
+
+        for (const m of made) {
+          expect(
+            ["message", "close", "open", "error"].map((kind) => m.ws.listening(kind as never)),
+            `dial ${m.dial} kept a listener past the scope`,
+          ).toEqual([0, 0, 0, 0]);
+        }
+
+        const refused = yield* run.dispatch(press).pipe(Effect.flip);
+        expect(refused._tag, "a stopped start refuses a press").toBe("Stopped");
+      }).pipe(Effect.scoped, Random.withSeed(SEED), Effect.provide(TestClock.layer())),
+    // A red walk may leave a Cmd that never ends, and each shrink waits two real seconds on it.
+    { arbitrary: { seed: SEED, runs: 100, maxShrinks: 10 } },
+  );
+});
+
+// --- P18 L5 [secrets]: nothing secret leaves --------------------------------------------------------
+
+/** A recording tracer: every span the start makes, with its attributes and events. */
+const recording = (spans: Array<Tracer.AnySpan>) =>
+  Effect.map(Effect.tracer, (native) =>
+    Tracer.make({
+      span: (options) => {
+        const span = native.span(options);
+        spans.push(span);
+        return span;
+      },
+    }),
+  );
+
+/** The ways a secret can be written out: as it is, URL-encoded, and JSON-escaped. */
+const forms = (secret: string) => [secret, encodeURIComponent(secret), JSON.stringify(secret).slice(1, -1)];
+
+const Secret = Schema.String.check(Schema.isMinLength(4), Schema.isMaxLength(24));
+
+describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => {
+  it.effect.prop(
+    "nonces, input bodies, signatures, frame texts and key bytes never reach a row, a span or a dial's URL, which holds only the fingerprint and the tab",
+    { nonce: Secret, body: Secret, signature: Secret, frame: Secret, failure: Secret },
+    (generated) =>
+      Effect.gen(function* () {
+        // Marked, so a secret is never a word the start writes anyway.
+        const s = Object.fromEntries(
+          Object.entries(generated).map(([k, v]) => [k, `Q9X${k}${v}Z`]),
+        ) as typeof generated;
+        const spans: Array<Tracer.AnySpan> = [];
+        const tracer = yield* recording(spans);
+        const script: Script = {
+          pong: true,
+          open: true,
+          send: true,
+          junk: [
+            () => `{ not json ${s.frame}`,
+            () =>
+              JSON.stringify({
+                jsonrpc: "2.0",
+                method: "view.whole",
+                params: { pid: PID, type: "whole", rev: 1, view: list(1), note: s.frame },
+              }),
+            () =>
+              JSON.stringify({ jsonrpc: "2.0", id: 999_999, error: { message: s.frame, data: { reason: s.frame } } }),
+          ],
+        };
+        const door = peer(
+          script,
+          () => {},
+          (n) => `${s.nonce}${n}`,
+        );
+        const key = yield* identity;
+        const rows: Array<ClientRow> = [];
+        const urls: Array<string> = [];
+        let first = true;
+        const normal = yield* Socket.WebSocketConstructor.pipe(Effect.provide(door.socket));
+        const layers = Layer.mergeAll(
+          // The first dial's constructor throws with a secret in its message; the retry dials as usual.
+          Layer.succeed(Socket.WebSocketConstructor, (url: string) => {
+            urls.push(url);
+
+            if (first) {
+              first = false;
+              return refuse(s.failure, "SecurityError");
+            }
+
+            return normal(url);
+          }),
+          Layer.succeed(ClientKey, {
+            current: () =>
+              Effect.succeed({
+                ...key,
+                sign: () => Effect.succeed(new TextEncoder().encode(s.signature)),
+              }),
+            claimPersist: Effect.succeed(false),
+            persist: Effect.succeed(true),
+          }),
+          Layer.succeed(ClientRows, { put: (row: ClientRow) => Effect.sync(() => void rows.push(row)) }),
+          Id.Generator.layer,
+        );
+        const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void));
+        const booting = yield* start({ tiles, window, build: BUILD, origin: ORIGIN, client: BROWSER }).pipe(
+          Effect.provide(layers),
+          Scope.provide(scope),
+          Effect.withTracer(tracer),
+        );
+        const run = yield* booting.ready;
+
+        for (let n = 0; n < 12 && run.getState().tiles[0]?.reach._tag !== "open"; n++) {
+          yield* door.tick(1_000);
+        }
+
+        expect(run.getState().tiles[0]?.reach._tag, "the tile opened").toBe("open");
+        yield* run.dispatch({ type: "press", tile: "tile_1", m: { type: "add", name: s.body }, via: "button" });
+
+        for (let n = 0; n < 4; n++) {
+          yield* door.tick(1_000);
+        }
+
+        yield* Scope.close(scope, Exit.void);
+        const hello = door.sent.flatMap((t) => Option.toArray(decodeFrame(t))).find((f) => f.method === "initialize");
+        const signed = String(Reflect.get(Object(hello?.params), "signed") ?? "");
+        const tab = String(Reflect.get(Object(hello?.params), "tab") ?? "");
+        expect(signed.length, "the hello was signed").toBeGreaterThan(0);
+        expect(
+          door.sent.some((t) => forms(s.body).some((form) => t.includes(form))),
+          "the press reached the door",
+        ).toBe(true);
+        const outputs = {
+          rows: JSON.stringify(rows),
+          spans: JSON.stringify(
+            spans.map((span) => ({
+              name: span.name,
+              attributes: [...("attributes" in span ? span.attributes : new Map())],
+              events: Reflect.get(span, "events") ?? [],
+            })),
+          ),
+          urls: JSON.stringify([...urls, ...urls.map((u) => decodeURIComponent(u))]),
+        };
+        const secrets = [...Object.values(s).flatMap(forms), ...forms(signed), ...forms(key.raw)];
+
+        for (const [output, text] of Object.entries(outputs)) {
+          expect(
+            secrets.filter((secret) => text.includes(secret)),
+            `${output} holds a secret`,
+          ).toEqual([]);
+        }
+
+        // A dial's URL is the origin's socket path, the fingerprint and the tab, and nothing else.
+        const ws = ORIGIN.replace(/^http/, "ws");
+        expect(urls.length, "the start dialed twice: the throw, then its retry").toBeGreaterThanOrEqual(2);
+
+        for (const url of urls) {
+          expect(url).toBe(`${ws}/client/${encodeURIComponent(key.fingerprint)}/${encodeURIComponent(tab)}`);
+        }
+
+        expect(
+          rows.filter((r) => r.record._tag === "failure" && r.record.op === "connect").length,
+          "the throw wrote its failure row",
+        ).toBe(1);
+      }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+    { arbitrary: { seed: SEED, runs: 100 } },
   );
 });
