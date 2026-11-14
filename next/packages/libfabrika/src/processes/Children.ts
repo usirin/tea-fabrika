@@ -33,8 +33,8 @@ export const INPUT_BYTES = ROW_BYTES;
 export const StartGrant = Schema.Struct({ source: Text, to: Text });
 
 /**
- * Schema for one start request. A retry of a saved `id` answers that start's `started`, whatever
- * happened since.
+ * Schema for one request to start a child under a registered name. A retry of a saved `id`
+ * answers that start's `started`, whatever happened since.
  *
  * @stability unstable
  * @category schemas

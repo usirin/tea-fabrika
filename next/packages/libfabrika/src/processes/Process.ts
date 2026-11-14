@@ -63,8 +63,8 @@ export {
    */
   signalId,
   /**
-   * Schema for one start request: `first` for a name's first process, or `again` for a restart
-   * after a named process.
+   * Schema for one start request: `first` for a name's first process, or `again` to restart the
+   * name after the process its `after` field gives.
    *
    * @stability unstable
    * @category schemas
