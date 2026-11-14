@@ -975,6 +975,35 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
       }).pipe(Effect.provide(world(sql)));
     }),
   );
+
+  it("a failure whose reason is tagged keeps the reason's tag in content, never its message or cause", async () => {
+    const word = fc.stringMatching(/^[A-Z][A-Za-z]{0,15}$/);
+    await fc.assert(
+      fc.asyncProperty(word, word, fc.string({ maxLength: 40 }), (outer, tag, text) => {
+        const reason = Object.assign(new Error(`${NOTE}-${text}`), {
+          _tag: tag,
+          cause: new Error(`${NOTE_TWO}-${text}`),
+        });
+        const error = Object.assign(new Error(`${NOTE}-${text}`), { _tag: outer, reason });
+        return Effect.runPromise(
+          Effect.gen(function* () {
+            const { sql } = yield* home;
+            yield* Effect.gen(function* () {
+              yield* Effect.exit(traced("runner.step", { "fab.process": P1 }, Effect.fail(error)));
+              yield* flush;
+              const [row] = yield* recorded(job(P1));
+              const content = yield* RecordManager.use((records) => records.content(job(P1), row?.spanId ?? ""));
+              const message = Option.isSome(content) && content.value._tag === "kept" ? content.value.message : "";
+              expect(message).toContain(`${outer}: ${tag}`);
+              expect(message).not.toContain(NOTE);
+              expect(message).not.toContain(NOTE_TWO);
+            }).pipe(Effect.provide(world(sql)));
+          }).pipe(Effect.scoped),
+        );
+      }),
+      { seed: SEED, numRuns: 30 },
+    );
+  });
 });
 
 // T705 (0037, 0046): the held and failed flags become one machine, and the public calls keep their

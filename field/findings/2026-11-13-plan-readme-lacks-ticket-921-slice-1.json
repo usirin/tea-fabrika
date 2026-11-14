@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-plan-readme-lacks-ticket-921-slice-1",
+  "date": "2026-11-13",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": "docs/plan/README.md",
+    "line": 1
+  },
+  "says": "The plan for ticket 921 has each slice update docs/plan/README.md's where-we-are-now, but at this head the file does not mention ticket 921 or the layering work.",
+  "proof": "`rg -n '921|layering|next-ledger' docs/plan/README.md` prints nothing at this head, while the plan's Files and ownership table has a row for `next/AGENTS.md .glossary/TERMS.md docs/plan/README.md | build | each slice`, and the diff from 59cb6a311 changes only .glossary/TERMS.md among the three.",
+  "cost": "The plan page that says where the work stands does not show that slice 1 landed, which decision 0013 asks for in the same pull request.",
+  "head": "38aaf7a3d1c9b34a241b32d717f50df49dbf9ab2",
+  "ticket": "kamp-us/tea-fabrika#921",
+  "pr": "kamp-us/tea-fabrika#1189"
+}

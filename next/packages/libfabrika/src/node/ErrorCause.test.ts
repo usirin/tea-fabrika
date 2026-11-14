@@ -67,7 +67,7 @@ RuntimeCauseTest.suite(law, {
   LedgerError,
 });
 
-GatewayCauseTest.suite(law, { fresh, LedgerError });
+GatewayCauseTest.suite(law, { fresh });
 
 const failures: fc.Arbitrary<object> = fc.oneof(
   fc.string().map((message) => new Error(message)),
