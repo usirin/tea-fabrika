@@ -195,6 +195,14 @@ is a model and not code, so "start a session for brief X" is a request it follow
 call. Its container is reclaimed when idle, so it must be resumed by a message. And how many
 children it may start, and how fast, was not measured.
 
+The way back has one gate (ran). When this session first sent its report to the lead session on
+the laptop, `send_message` was refused with `elevated_session_untrusted_device`: a cloud session
+may message a session on the owner's own computer only once the owner allows it, in person, on a
+trusted device. The owner allowed it from a card in the Claude app, and the second send was
+delivered. That yes cannot be undone, and it limits that cloud session to the owner's trusted
+devices from then on. So each coordinator cloud session needs one tap from the owner before it can
+report to the laptop. Messages from the laptop to the cloud session needed no such step.
+
 If code with no model in the middle must create the session, the candidates are, in order:
 
 1. `claude --cloud` driven through a pseudo-terminal on the laptop, with the owner's login.
