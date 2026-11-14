@@ -65,6 +65,34 @@ Use `unsupported Effect` in that comment for a generator Effect cannot make. Thi
 
 Ticket 325, 2026-11-08, at [PR 532](https://github.com/usirin/tea-fabrika/pull/532)'s `1af180f6` next-test tree: the first scan found one false hit, `data/sink.test.ts:738`, where `Redacted.make` is not a schema. The match now excludes Effect modules other than Schema. The narrowed scan found 0 hits: 0 useful, 0 false and 0 unknown. Zero hits gives no false-alarm rate. The next-test files are unchanged in this tests commit, so its final-head count is the same. A separate parser scan found 189 named data constructors in 19 next-test files, including multiline calls. One useful miss is `data/log.test.ts:34`, checked through `parents(50).every(is)` at line 316. That helper flow needs review; it is outside the rule's direct binding matches. Effect 4.1.1 generated 10 valid `ParentText` values at seed 119120. Other constructor families exercise operation orders, invalid input or extra fields without direct schema evidence. These counts cannot show that every untyped generator should stay, or that Effect supports every domain schema.
 
+## Effect modules imported by path
+
+A library in `next/packages` imports each Effect module by its path (E7, [0023](../.decisions/0023-next-follows-effects-code-style.md)). This is not an oxlint rule: it is Effect's own type check, `preferNamespaceImport` in `@effect/tsgo` 0.63.0, turned on by one override in `tsconfig.base.json`, so `pnpm typecheck` is what fails. An oxlint ignore comment does not reach it.
+
+```ts
+import { Effect, Schema } from "effect";   // error in a listed folder: two names imported by name
+import * as Effect from "effect/Effect";    // passes, and so does `import type * as Effect from "effect/Effect"`
+import * as Schema from "effect/Schema";
+```
+
+The override sets `namespaceImportPackages: ["effect"]` and `preferNamespaceImport` to `error` for a list of folders, tests included. Its message names the module path for each name. Plan B of the Effect rules ([`docs/plan/effect-rules-big.md`](../docs/plan/effect-rules-big.md), B3) closes the list folder by folder: each slice fixes one group of modules and adds its folders in the same pull request, so there is no list of known breaks (0168). The last slice, `runtime/`, replaces the list with `next/packages/**/*.ts` and `next/packages/**/*.tsx`.
+
+Listed today: `next/packages/libfabrika/src/ci/` and `next/packages/libfabrika/src/codehost/`, from B3.0 (ticket 912). `namespace-imports.test.ts` keeps the saved list and fails when a listed folder leaves the override before the whole tree replaces it (law 6). Each slice adds its folders to that list too.
+
+Tools looked at: the same check's quick fix in an editor, one import at a time; its oxlint form, `effecttsgo/prefer-namespace-import`, run by `effect-tsgo oxlint --type-aware`, which needs `oxlint-tsgolint` (not in the lockfile), and which B3.0 tries once in a scratch copy; ast-grep and jscodeshift, neither in the lockfile.
+
+Count by module on `origin/main` at `9276a9606`, by the check through an inline config: 1,353 names in 299 files of `next/packages`, 125 product files and 174 tests.
+
+| Module | Names | Module | Names | Module | Names |
+|---|---|---|---|---|---|
+| `node` | 309 | `ledger` | 85 | top files | 32 |
+| `runtime` | 287 | `telemetry` | 72 | `packs` | 28 |
+| `processes` | 129 | `access` | 52 | `jobs` | 20 |
+| `cloudflare` | 119 | `transport` | 51 | `presence` | 8 |
+| `settings` | 92 | `gateway` | 47 | `repositories`, `schedules`, `ci`, `codehost` | 6, 6, 5, 5 |
+
+B3.0 fixed the 10 names of `ci` and `codehost`, all in their two shared test suites, `CiTest.ts` and `CodeHostTest.ts`. A run of `effect-tsgo diagnostics` on libfabrika's project then gave 0 errors. A planted `import { Option } from "effect"` in `ci/Ci.ts` and in `codehost/CodeHost.test.ts` each gave one error, and the same line in `schedules/ScheduledJob.ts`, not listed, gave none.
+
 ## Law shape advice
 
 `law-shape` asks of every test in `next/**/*.test.{ts,tsx}`, a shared suite `next/**/*Test.ts` and `.agents/**/*.test.ts` what [0093](../.decisions/0093-laws-walk-plants-run-once.md) asks: is it a property, or is it labeled `vector:`, `format:`, `pinned:` or `scenario:` with its reason? The label starts the title, or comes right after one ticket or law id: one token of letters, digits and dots, then a space (`T652 scenario: ...`, `R3 format: ...`; the lead, 2026-11-11). A label deeper in the title, or only in a comment above the test, does not count.
