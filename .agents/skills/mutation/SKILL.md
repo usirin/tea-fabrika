@@ -1,6 +1,6 @@
 ---
 name: mutation
-description: Run the hourly mutation check on what merged to tea-fabrika's main with StrykerJS, changed lines first, and file each real gap as a tracker ticket. It is no step of a pull request (decision 0066). Use when a brief says "use the mutation skill" for the hourly run, or for a lane parked inside its mutation step before 0066.
+description: Run the hourly mutation check on what merged to main with StrykerJS, and file each real gap as a tracker ticket. Use when a brief says "use the mutation skill", for the hourly run or for a lane parked inside a mutation step.
 ---
 
 # The mutation run
@@ -71,14 +71,11 @@ the sample is drawn from every changed product file in the diff (`PRODUCT` in `s
 `chain.ts`, `drive.ts` and the lead's `flow/` folder, 0089), each file's cheapest
 range first, round-robin, so every changed file gets a mutant before any gets a second (ticket
 655). For arm a, name the base's test file a moved or changed law came from too: arm a runs only
-the related tests the base has. `--plan` is the approved plan; drive passes it. Ticket 520's proof uses
-`.agents/skills/mutation/scripts/sample.test.ts`, the new TypeScript sampler's adjacent laws.
-This does not grade plancheck's shell or Python. Those rely on properties and planted breaks.
+the related tests the base has. `--plan` is the approved plan; drive passes it.
 The executable inside the container is `scripts/run.sh`, from the build commit. There it mutates
-the container's own copy in place (`IN_PLACE=1`): Stryker's sandbox links each package's
-`node_modules` back to the checkout, so a test that reaches a file by its package name, such as
-`@tea-fabrika/tracker`, loaded the unmutated file, and a lane read 0 kills of 61 (ticket 457).
-A lane built before that fix samples with the old `run.sh` until it merges main.
+the container's own copy in place (`IN_PLACE=1`); its header says why (ticket 457: without it a
+lane read 0 kills of 61). A lane built before that fix samples with the old `run.sh` until it
+merges main.
 
 **The run happens in a container, never on the host and never in an agent's sandbox**
 ([0045](../../../.decisions/0045-test-steps-run-in-containers.md)). Stryker starts a logging
@@ -154,13 +151,9 @@ range's base as arm a, and the tests beside the changed files as `--related`.
 A run with survivors passes. The job fails only when mutbox says `stuck`: the run broke. The next
 run's base is the `build` in this run's `mutbox.json`.
 
-`scripts/heartbeat.ts` exits 1 when a merge on main has waited more than two hours for a passing
-run: the scheduler session stopped dispatching, or every run since failed. It starts no run, and
-nothing runs it on a schedule yet.
-
-Each arm's test and hook limit is the fast check's 10 s, raised to three times the slowest test or
-file set-up in that arm's plain run in the box, and at most 60 s (`scripts/limit.ts`, ticket 605).
-A fixed 10 s stopped the dry run on one slow law, and then no mutant ran.
+`scripts/heartbeat.ts` says when a merge on main has waited too long for a passing run, and
+`scripts/limit.ts` sets each arm's test and hook limit; each header holds its numbers. Nothing runs
+the heartbeat on a schedule yet.
 
 ## A gap's category
 
@@ -186,10 +179,8 @@ record: keep no other file. No script holds this yet, so do these steps by hand.
 
 ## Outside your task
 
-Something wrong that your task does not cover is one finding row with proof, then keep going:
-never a fix, a ticket or only a mention, and never a security hole.
-[A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
-counts as proof.
+Something wrong outside your task is one finding row, never a fix:
+[A finding](../../../field/README.md#a-finding) has the rule, the fields and what counts as proof.
 
 A survivor is this step's own answer and stays in its report, never a finding row. Outside
 means anything else you meet that is wrong.

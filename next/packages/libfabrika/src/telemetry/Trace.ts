@@ -8,7 +8,7 @@
  *
  * @stability unstable
  */
-import { Schema } from "effect";
+import { Cause, Schema } from "effect";
 import { ProcessId } from "../ProcessId.ts";
 
 /**
@@ -219,8 +219,16 @@ export const MetricPoint = Schema.TaggedStruct("metric", {
  */
 export type MetricPoint = typeof MetricPoint.Type;
 
-/** A refusal counted instead of keeping the span or its measurement. */
-export { REFUSED } from "../SpanTag.ts";
+export {
+  /**
+   * Tag name for a refusal counted instead of keeping the span or its measurement. Its value is
+   * one of `Refused`; the sink counts any other value as `other`.
+   *
+   * @stability unstable
+   * @category constants
+   */
+  REFUSED,
+} from "../SpanTag.ts";
 
 /**
  * Schema for the closed value a counted refusal is split by. The sink counts any other value of
@@ -319,6 +327,12 @@ export const sinkError = (error: unknown): SinkError =>
  * @category getters
  */
 export const errorClass = (error: unknown): string => (error instanceof Error ? error.name : typeof error);
+
+/** The class of whatever ended a failed span, for `error.type`: its first typed failure, or else the
+ *  first value that was thrown. The one place a cause is squashed, since a thrown value counts too. */
+export const causeClass = (cause: Cause.Cause<unknown>): string =>
+  // oxlint-disable-next-line fabrika/no-cause-squash -- edge: error.type names a thrown value as it names a typed failure
+  errorClass(Cause.squash(cause));
 
 /** The most characters a span tag holds (p95, p99). Text past it is cut, its length kept beside. */
 const MOST_CHARS = 128;

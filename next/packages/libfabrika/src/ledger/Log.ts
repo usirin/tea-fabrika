@@ -11,7 +11,17 @@
 import { DateTime, Effect, Schema } from "effect";
 import { ParentText, Rev } from "../Rev.ts";
 
-export { InputId } from "../Id.ts";
+export {
+  /**
+   * Schema for an input's id, a branded TypeID with the prefix `input` and a UUIDv7 suffix,
+   * re-exported from `Id.ts` so a writer of the log can name a line's `parent` without a second
+   * import.
+   *
+   * @stability unstable
+   * @category schemas
+   */
+  InputId,
+} from "../Id.ts";
 
 /**
  * Schema for a W3C trace id: 32 lowercase hex characters, never all zeros.

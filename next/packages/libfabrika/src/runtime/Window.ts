@@ -11,12 +11,28 @@ import type { Program } from "./Program.ts";
 
 type AnyProgram = Program<any, any, any, any, any>;
 
-/** The data a program's window gets: what its view selector returns. */
+/**
+ * The data a program's window gets: what its view selector returns.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type WindowData<P extends AnyProgram> = Readonly<ReturnType<P["view"]["select"]>>;
-/** The Msgs a program's window may send: the program's own, and nothing else. */
+/**
+ * The Msgs a program's window may send: the program's own, and nothing else.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type WindowMsg<P extends AnyProgram> = P["machine"]["msg"]["Type"];
 
-/** What a program's window is given: its checked data, and `press` for one of its own Msgs. */
+/**
+ * What a program's window is given: its checked data, and `press` for one of its own Msgs. `hint`
+ * and `refusal` are optional extras.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type WindowProps<P extends AnyProgram> = {
   readonly data: WindowData<P>;
   readonly press: (m: WindowMsg<P>) => void;
@@ -25,12 +41,24 @@ export type WindowProps<P extends AnyProgram> = {
   readonly refusal?: string | null;
 };
 
-/** A pure child machine stepped by a window parent. Its only output is a program press. */
+/**
+ * A pure child machine stepped by a window parent. Its only output is a program press.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type AnyTile = Machine<any, any, any, any, any> & {
   readonly model: Schema.Schema<any>;
   readonly msg: Schema.Schema<any>;
 };
 
+/**
+ * What a window's view is given for its tile machine: the tile's model and `send` for its own Msgs.
+ * With no tile machine (`never`), it is `unknown`, which adds nothing to the window's props.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type TileProps<T extends AnyTile = never> = [T] extends [never]
   ? unknown
   : {
@@ -48,11 +76,21 @@ type CheckedTile<P extends AnyProgram, T extends AnyTile> =
     ? T
     : never;
 
-/** A command name for one of the program's inputs, such as `counter.inc`. */
+/**
+ * A command name for one of the program's inputs, such as `counter.inc`.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type WindowCommand<P extends AnyProgram> = `${string}.${keyof P["inputs"] & string}`;
 
-/** How a window is registered: the decoder its data must pass at runtime, the view, and the
- *  default key rows for its inputs. */
+/**
+ * How a window is registered: the decoder its data must pass at runtime, the view, and the default
+ * key rows for its inputs. A tile machine and a `refused` message writer are optional.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type WindowRegistration<P extends AnyProgram, View = unknown, T extends AnyTile = never> = {
   readonly data: Schema.Decoder<WindowData<P>>;
   readonly View: (props: WindowProps<P> & TileProps<T>) => View;
@@ -61,14 +99,26 @@ export type WindowRegistration<P extends AnyProgram, View = unknown, T extends A
   readonly refused?: (m: WindowMsg<P>, reason: string) => string;
 };
 
-/** Checks a window against its program at compile time, and hands the registration back. The
- *  registration is typed as the contract itself, not inferred, so a key row the program lacks is refused. */
+/**
+ * Checks a window against its program at compile time, and hands the registration back. The
+ * registration is typed as the contract itself, not inferred, so a key row the program lacks is
+ * refused.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const defineWindow = <P extends AnyProgram, View, T extends AnyTile = never>(
   _program: P,
   registration: WindowRegistration<NoInfer<P>, View, NoInfer<T>> & { readonly tile?: T },
 ): WindowRegistration<P, View, T> => registration;
 
-/** The Msg a key command sends: the input named after the program's dot, with no fields. */
+/**
+ * Returns the Msg a key command sends: the input named after the program's dot, with no fields.
+ * Returns `null` when the command has no dot, starts with one, or ends with one.
+ *
+ * @stability unstable
+ * @category combinators
+ */
 export const commandMsg = (command: string): { readonly type: string } | null => {
   const dot = command.indexOf(".");
   return dot <= 0 || dot === command.length - 1 ? null : { type: command.slice(dot + 1) };

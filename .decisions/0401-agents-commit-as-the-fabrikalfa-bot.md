@@ -1,7 +1,7 @@
 ---
 id: 0401
 title: An agent commits and pushes as the fabrikalfa[bot] GitHub App identity, never as the person's account, and the person it works for rides along in a Co-authored-by trailer
-status: accepted
+status: amended-in-part by [0187](0187-a-commit-may-credit-its-agent.md)
 date: 2026-11-05
 tags: [agents, git, github, identity]
 ---
@@ -34,6 +34,8 @@ commits as Copilot, with the person who asked as co-author.
 - The person the agent works for is named in a `Co-authored-by` trailer, so the commit still shows
   as theirs too.
 - The agent never names itself: the host stamps who did what.
+  ([0187](0187-a-commit-may-credit-its-agent.md) allows a credit line for the agent beside the
+  owner. The host's stamp stays the record.)
 
 ## Consequences
 
