@@ -990,6 +990,7 @@
           {
             "src": "next/packages/libfabrika/src",
             "modules": [
+              "desktop",
               "codehost",
               "ci",
               "telemetry",
@@ -1004,8 +1005,7 @@
               "access",
               "runtime",
               "gateway",
-              "schedules",
-              "desktop"
+              "schedules"
             ],
             "folders": ["node", "cloudflare", "coordination"],
             "files": ["index", "Id", "Testing", "ProcessId", "Sql", "Rev", "SpanTag"],
@@ -1780,6 +1780,10 @@
           }
         ]
       }
+    },
+    {
+      "files": ["next/packages/libfabrika/src/desktop/**"],
+      "rules": { "fabrika/service-contract": "error" }
     },
     {
       "files": ["next/packages/libfabrika/src/schedules/**"],

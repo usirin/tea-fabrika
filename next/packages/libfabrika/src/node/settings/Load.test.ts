@@ -390,3 +390,39 @@ it.effect.prop(
     }),
   { arbitrary: { seed: SEED, runs: 100 } },
 );
+
+// P19 L14: this is the actual loader boundary. No brain, file write or build follows a bad timing.
+it.effect.prop(
+  "P19 L14 every timing is strict through real loading before start",
+  [
+    Schema.Literals(["brain-throttle", "brain-poll", "brain-start-timeout", "brain-stop-timeout"]),
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100_000 })),
+    Schema.Boolean,
+  ],
+  ([key, value, invalid]) =>
+    Effect.gen(function* () {
+      const path = `desktop.${key}`;
+      const body = `[desktop]\n${key} = ${invalid ? 0 : value}\n`;
+      const places = yield* lay(text(""), text(body));
+      let starts = 0;
+      const exit = yield* Load.load({ ...places, flags: {}, env: {}, version: "0.0.0" }).pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            starts++;
+          }),
+        ),
+        Effect.exit,
+      );
+      expect(Exit.isSuccess(exit)).toBe(!invalid);
+      expect(starts).toBe(invalid ? 0 : 1);
+
+      if (Exit.isSuccess(exit)) {
+        expect(exit.value.snapshot.values[path]).toBe(value);
+
+        for (const d of Declarations.all.declarations) {
+          expect(exit.value.snapshot.values[d.path]).toBeDefined();
+        }
+      }
+    }).pipe(Effect.provide(services)),
+  { arbitrary: { seed: 119120, runs: 100 } },
+);

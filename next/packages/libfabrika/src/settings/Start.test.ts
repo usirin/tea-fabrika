@@ -15,6 +15,10 @@ describe("instance start envelope, next/", () => {
     ([recipe, cap]) =>
       Effect.gen(function* () {
         expect(Declarations.all.declarations.map((setting) => setting.path).sort()).toEqual([
+          "desktop.brain-poll",
+          "desktop.brain-start-timeout",
+          "desktop.brain-stop-timeout",
+          "desktop.brain-throttle",
           "desktop.link-ttl",
           "fabrika-version",
           "gateway.limit",

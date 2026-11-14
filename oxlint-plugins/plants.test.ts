@@ -369,6 +369,7 @@ describe("each rule refuses what it is there to refuse", () => {
       "outside-input-constructor",
       // T737's rule reads only libfabrika's src, so service-id.test.ts plants it there.
       "service-id",
+      "service-contract", // P19 plants the three desktop contracts and a native import below.
       // T518's retired module is planted in one-id-module.test.ts.
       "one-id-module",
       // Generated files and their fix in padding-line-between-statements.test.ts.
@@ -798,6 +799,22 @@ it("format: P21 desktop is admitted as a module and keeps the front-file naming 
   expect(result("unicorn(filename-case)", bad)).toEqual([1]);
   expect(result("eslint(no-restricted-imports)", contract)).toEqual([]);
   expect(result("eslint(no-restricted-imports)", layer)).toEqual([]);
+});
+
+// L12 kept lint inputs. These copies exercise the actual desktop config.
+it("scenario: P19 a Layer on the service class is refused", async () => {
+  const path = "next/packages/libfabrika/src/desktop/BrainService.ts";
+  const result = await lintCopies({
+    [path]:
+      'import {Context, Layer} from "effect";\nexport class BrainService extends Context.Service<BrainService, {}>()("@kampus/libfabrika/desktop/BrainService") { static layer = Layer.empty; }\n',
+  });
+  expect(result("fabrika(service-contract)", path)).toEqual([2]);
+});
+
+it("scenario: P19 desktop-core refuses a native import through the real config", async () => {
+  const path = "next/packages/libfabrika/src/desktop/BrainServiceManaged.ts";
+  const result = await lintCopies({ [path]: 'import { readFile } from "node:fs";\nexport const read = readFile;\n' });
+  expect(result("fabrika(service-contract)", path)).toEqual([1]);
 });
 
 // scenario: L12 checks the real config at the new module's paths, including both filename rules.

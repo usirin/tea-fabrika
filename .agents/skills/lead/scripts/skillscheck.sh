@@ -122,10 +122,10 @@ answer = (
     "End with exactly one answer: line, as the last line.",
 )
 cleanup = (
-    "After a successful merge, retain the checked head under refs/keep/pr/<pr> in MAIN.",
-    "Remove the registered catchup-<pr> worktree, exact-branch boxes through box.sh rm, and the driver's linked MAIN worktree on that exact branch. Never remove MAIN itself.",
+    "After the merge, the lead closes the tickets the description names and starts one box cleanup sweep.",
+    "The sweep removes the lane's boxes and its clean, idle linked worktree. Never remove MAIN itself.",
     "Use git worktree remove without force. Keep dirty, locked, ambiguous or unreadable candidates and any box that fails its guard.",
-    "Print one line per retained item and continue. Cleanup never changes a landed merge's success.",
+    "Print one line per retained item and continue.",
     "Saved plans, reports, logs and state/ remain.",
 )
 rules = {
@@ -198,7 +198,7 @@ for path, sections in rules.items():
         # refuses a subagent the lead key, so a lane that is told to sign as lead stops (0056).
         # stepcommit.sh --commit-only lead stays allowed: it commits and signs nothing.
         lead_only = (
-            r"commits\s+sign", r"step-keys", r"botpush", r"catchup\.sh", r"land\.ts\s+run",
+            r"commits\s+sign", r"step-keys", r"botpush", r"land\.ts\s+(?:run|queue|merged)",
             r"stepcommit\.sh\s+lead",
         )
         for title in re.findall(r"^#{1,6} (.*brief template.*?)\s*$", text, re.M | re.I):

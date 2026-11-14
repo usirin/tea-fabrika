@@ -77,6 +77,10 @@ describe("shared Worker settings reader, next/", () => {
               version: "0.0.0",
               gatewayLimit: StartsTest.rateLimit.limit,
               gatewayWindow: StartsTest.rateLimit.window,
+              brainThrottle: current.settings.values["desktop.brain-throttle"],
+              brainPoll: current.settings.values["desktop.brain-poll"],
+              brainStartTimeout: current.settings.values["desktop.brain-start-timeout"],
+              brainStopTimeout: current.settings.values["desktop.brain-stop-timeout"],
               desktopLinkTtl: current.settings.values["desktop.link-ttl"],
             });
             StartsTest.exclude(exit.value, secret);

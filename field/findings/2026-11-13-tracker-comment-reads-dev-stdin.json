@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-tracker-comment-reads-dev-stdin",
+  "date": "2026-11-13",
+  "by": "build",
+  "model": "claude-fable-5-2",
+  "rule": "bug",
+  "location": {
+    "path": ".agents/skills/lead/scripts/pr/TicketsCli.ts",
+    "line": 52
+  },
+  "says": "The tracker comment is passed as --body-file /dev/stdin to a Node child whose stdin is a socket, and Linux refuses to open /dev/stdin on a socket, so a comment made by land.ts merged fails on Linux; macOS allows it.",
+  "proof": "In a Linux container on Node 26.13.0, a child spawned with a piped stdin that runs readFileSync('/dev/stdin','utf8') exits 1 with 'ENXIO: no such device or address, open /dev/stdin'; the same on macOS prints the text. The same cause turned three land.test.ts tests red in CI run 43540705745 through leakgrep.sh --text /dev/stdin.",
+  "cost": "On a Linux machine, the queue's settle step cannot write its comment on a ticket; no test covers the real tracker call, so CI stays green.",
+  "head": "cec5cc3916d30de8975b9c6cfd257ea76d92818c",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1136"
+}

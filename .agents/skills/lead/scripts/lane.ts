@@ -98,20 +98,22 @@ const stuckIn = (out: string) =>
   });
 
 /**
- * The commits check's stuck answers that hold the step back. A stale link counts only for a step
- * the lane itself has signed: a step it has not reached yet (lead, before catch-up) may hold a newer
- * link from an older pull request on the same ticket, and CI judges that on the pull request
- * (themes tests, 2026-11-09: PR 565's lead link on ticket 343). Lines that are not answers are left
- * to the caller, which reads the exit code too.
+ * The commits check's stuck answers that hold the step back. A missing signature never does: a
+ * hand-run commit is plain (0161). A stale link counts only for a step the lane itself has signed:
+ * a step it has not reached yet (lead, before catch-up) may hold a newer link from an older pull
+ * request on the same ticket, and CI judges that on the pull request (themes tests, 2026-11-09:
+ * PR 565's lead link on ticket 343). Lines that are not answers are left to the caller, which
+ * reads the exit code too.
  */
 export const laneStuck = (out: string, laneSteps: ReadonlySet<string>): string[] =>
   stuckIn(out)
+    .filter(({ reason }) => reason !== "unsigned_commit")
     .filter(({ reason, step }) => !(reason === "stale_link" && !(typeof step === "string" && laneSteps.has(step))))
     .map((a) => a.line);
 
 /**
  * Each stuck answer that holds the step, as `<rule> <commit> [step <s>] [paths]`: the rule
- * (stale_link, broken_chain, unsigned_commit, ...) and the commit, so the lead can send the step to
+ * (stale_link, broken_chain, build_touched_exam, ...) and the commit, so the lead can send the step to
  * the right place (ticket 429: 18 fetches on 2026-11-09 said only "commits check failed").
  */
 export const heldRules = (out: string, laneSteps: ReadonlySet<string>): string[] =>

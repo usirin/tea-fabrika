@@ -272,6 +272,36 @@ describe("T325 K6 leakgrep, today's tooling", () => {
       options,
     );
   });
+
+  // PushesProcess.leakText feeds a pull request's words this way. `-` is cat's name for stdin; the
+  // path /dev/stdin does not open on Linux when stdin is the socket Node gives a child.
+  // Plant: read the draft from /dev/stdin, which exits 2 on Linux for every draft.
+  it("property: --text - reads the whole draft from a piped stdin, clean or leaking", () => {
+    fc.assert(
+      fc.property(fc.record({ word, leaks: fc.boolean() }), ({ word, leaks }) => {
+        const dir = mkdtempSync(join(tmpdir(), "lg-stdin-"));
+
+        try {
+          const repo = join(dir, "repo");
+          mkdirSync(repo);
+          spawnSync("git", ["init", "-q", repo]);
+          const words = join(dir, "words");
+          writeFileSync(words, word);
+          const ran = spawnSync("sh", [script, "--text", "-"], {
+            cwd: repo,
+            input: `# Plan\n${leaks ? word : "nothing private"}\n`,
+            encoding: "utf8",
+            env: { ...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined },
+          });
+          expect(ran.status, ran.stderr).toBe(leaks ? 1 : 0);
+          expect(ran.stdout + ran.stderr).not.toContain(word);
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      }),
+      options,
+    );
+  });
 });
 
 describe("T325 R5 leakgrep defaults and token lengths, today's tooling", () => {

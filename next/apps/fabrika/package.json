@@ -42,7 +42,8 @@
     "typescript": "catalog:",
     "vitest": "catalog:",
     "@types/react": "catalog:",
-    "@types/react-dom": "catalog:"
+    "@types/react-dom": "catalog:",
+    "electron": "45.2.1"
   },
   "volta": {
     "extends": "../../../package.json"

@@ -6,14 +6,17 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
 // Today's tooling (ticket 652). Git and the leak grep are real, on disposable repos. The signer,
-// botpush, gh and catchup.sh are stubs that say what they were asked. The stub signer adds a real
+// botpush and gh are stubs that say what they were asked. The stub signer adds a real
 // note to HEAD, so a rollback can be seen in refs/notes/fabrika.
 const script = join(import.meta.dirname, "land.ts");
 const planted = "plantedleakword652";
 
 const node = `#!/bin/sh
 case "$1" in
-*botpush.mjs) echo "push $3 $4" >>"$LAND_CALLS"; exit "\${LAND_PUSH:-0}" ;;
+*botpush.mjs)
+  echo "push $3 $4" >>"$LAND_CALLS"
+  # The fixture's origin takes the push, as GitHub would, so the queue step can fetch the head.
+  git -C "$2" push -q origin "$4:refs/heads/$3" ;;
 *commits.ts)
   echo "sign $(git rev-parse HEAD) $*" >>"$LAND_CALLS"
   [ "\${LAND_SIGN:-0}" = 0 ] || exit 1
@@ -23,20 +26,17 @@ case "$1" in
 esac
 `;
 
+// GitHub as the queue step reads it: the pull request at the lane's pushed head, ready and into
+// main, and \`ci-required\` at that head as LAND_REQUIRED says (success unless a law sets it).
 const gh = `#!/bin/sh
 echo "gh $*" >>"$LAND_CALLS"
+head=$(git -C "$LAND_LANE" rev-parse HEAD)
 case "$1 $2" in
 "pr list") echo "\${LAND_OPEN:-}" ;;
 "pr create") echo "https://github.com/owner/repo/pull/77" ;;
+"pr view") printf '{"number":%s,"headRefName":"fabrikalfa/t652-fixture","headRefOid":"%s","baseRefName":"main","state":"%s","isDraft":false,"title":"%s","body":"What the lane did.","mergeCommit":null}\\n' "$3" "$head" "\${LAND_STATE:-OPEN}" "\${LAND_TITLE:-T652 fixture: one lane}" ;;
+"api -i") printf 'HTTP/2.0 200 OK\\n\\r\\n{"check_runs":[{"id":1,"status":"completed","conclusion":"%s","app":{"slug":"github-actions"}}]}' "\${LAND_REQUIRED:-success}" ;;
 esac
-`;
-
-// Only catch-up is stubbed; env.sh, leakgrep.sh and plancheck.sh run in the real shell.
-const sh = `#!/bin/sh
-case "$1" in
-*catchup.sh) shift; echo "catchup $*" >>"$LAND_CALLS"; exit 0 ;;
-esac
-exec /bin/sh "$@"
 `;
 
 const plancheck = `#!/bin/sh
@@ -58,6 +58,8 @@ type World = {
   readonly leadCommit: boolean;
   readonly open?: string;
   readonly wip?: boolean;
+  /** `ci-required` failed at the pushed head. */
+  readonly red?: boolean;
 };
 
 const land = (world: World) => {
@@ -89,6 +91,8 @@ const land = (world: World) => {
       LAND_CALLS: join(dir, "calls"),
       LAND_SIGN: world.signFails ? "1" : "0",
       LAND_OPEN: world.open ?? "",
+      LAND_LANE: join(dir, "lane"),
+      LAND_REQUIRED: world.red ? "failure" : "success",
       TYPESAFE_API_KEY: undefined,
     };
     const git = (at: string, ...args: string[]) => {
@@ -111,13 +115,14 @@ const land = (world: World) => {
 
     writeFileSync(join(dir, "bin/node"), node, { mode: 0o755 });
     writeFileSync(join(dir, "bin/gh"), gh, { mode: 0o755 });
-    writeFileSync(join(dir, "bin/sh"), sh, { mode: 0o755 });
     writeFileSync(join(dir, "main/.agents/skills/plan/scripts/plancheck.sh"), plancheck, { mode: 0o755 });
     writeFileSync(join(dir, "words"), `${planted}\n`);
     git(origin, "init", "-q", "--initial-branch=main");
     writeFileSync(join(origin, "lane.txt"), "base\n");
     git(origin, "add", ".");
     git(origin, "commit", "-qm", "base");
+    // GitHub serves a commit by its sha; a plain repo does only when told to.
+    git(origin, "config", "uploadpack.allowAnySHA1InWant", "true");
     git(dir, "clone", "-q", origin, lane);
     git(lane, "checkout", "-q", "-b", "fabrikalfa/t652-fixture");
     writeFileSync(join(lane, "lane.txt"), world.leak ? `the lane, with ${planted}\n` : "the lane\n");
@@ -218,13 +223,15 @@ describe("land.ts, today's tooling", () => {
           const signs = world.behind || world.conflict || world.leadCommit;
           const faulted = world.dirty || world.conflict || world.leak || (world.signFails && signs);
 
-          const sent = got.calls.filter((c) => /^(push|gh|catchup)/.test(c));
+          const sent = got.calls.filter((c) => /^(push|gh)/.test(c));
           expect(got.code === 0, got.err).toBe(!faulted);
           // A refused run leaves HEAD and the notes as they were, and sends nothing anywhere.
           expect(faulted ? got.after : got.before).toEqual(got.before);
           expect(faulted ? sent : []).toEqual([]);
-          // A clean one ends in catch-up.
-          expect(faulted ? "catchup 77 652" : got.calls.at(-1)).toBe("catchup 77 652");
+          // A clean one ends in the one pinned squash that adds it to the queue.
+          const queued = `gh pr merge 77 -R owner/repo --squash --match-head-commit ${got.head}`;
+          expect(faulted ? queued : got.calls.at(-1)).toBe(queued);
+          expect(got.calls.filter((c) => c.startsWith("gh pr merge"))).toHaveLength(faulted ? 0 : 1);
         },
       ),
       { seed: 652, numRuns: 10 },
@@ -246,10 +253,16 @@ describe("land.ts, today's tooling", () => {
       expect.stringMatching(
         /^gh pr create -R owner\/repo --head fabrikalfa\/t652-fixture --title T652 fixture: one lane --body-file /,
       ),
-      "catchup 77 652",
+      "gh pr view 77 -R owner/repo --json number,headRefName,headRefOid,state,isDraft,baseRefName,title,body,mergeCommit",
+      expect.stringMatching(
+        /^gh api -i repos\/owner\/repo\/commits\/[0-9a-f]{40}\/check-runs .*check_name=ci-required/,
+      ),
+      `gh pr merge 77 -R owner/repo --squash --match-head-commit ${got.head}`,
     ]);
     expect(got.state).toContain("lane agent: ready to land");
-    expect(got.state).toContain("land.ts: landed PR 77");
+    // It says queued, never merged or landed: GitHub's queue merges it later.
+    expect(got.state).toContain(`land.ts: pr 77: queued at ${got.head}`);
+    expect(got.state).not.toMatch(/landed|merged PR/);
   });
 
   it("T652 scenario: a conflict with main stops, names each file and its owning step, and leaves the tree as it was", () => {
@@ -293,10 +306,18 @@ describe("land.ts, today's tooling", () => {
     expect(got.calls).toContainEqual(
       expect.stringMatching(/^gh api -X PATCH repos\/owner\/repo\/pulls\/41 -f title=T652 fixture: one lane -F body=@/),
     );
-    expect(got.calls.at(-1)).toBe("catchup 41 652");
+    expect(got.calls.at(-1)).toBe(`gh pr merge 41 -R owner/repo --squash --match-head-commit ${got.head}`);
   });
 
-  it("T652 scenario: a mid-lane handover (no PR files) merges main, signs and pushes the -wip backup, then stops with no PR and no catch-up", () => {
+  // Plant: ask the merge on a head whose required check is not green, which arms auto-merge.
+  it("scenario: a red ci-required at the pushed head refuses at the queue check, and no merge is asked", () => {
+    const got = land({ ...fine, red: true });
+    expect(got.code).toBe(1);
+    expect(got.err).toContain("refused at the queue check: pr 77: ci-required is failure at");
+    expect(got.calls.filter((c) => c.startsWith("gh pr merge"))).toEqual([]);
+  });
+
+  it("T652 scenario: a mid-lane handover (no PR files) merges main, signs and pushes the -wip backup, then stops with no PR and nothing queued", () => {
     const got = land({ ...fine, behind: true, wip: true });
     expect(got.code, got.err).toBe(0);
     expect(got.calls.filter((c) => !c.startsWith("sign "))).toEqual(["push fabrikalfa/t652-fixture-wip HEAD"]);
