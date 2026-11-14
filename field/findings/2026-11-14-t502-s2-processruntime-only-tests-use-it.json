@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-t502-s2-processruntime-only-tests-use-it",
+  "date": "2026-11-14",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "dead_code",
+  "location": {
+    "path": "next/packages/libfabrika/src/cloudflare/runtime.ts",
+    "line": 1615
+  },
+  "says": "In next/, since T502 S2 no product code builds a Process service with `processRuntime`: the object builds `processLayer` through `ObjectService.make` with the app's checked read, while seven test files (readers.laws, alarm.laws A1, error-cause, IsolateUsage, checklist-instance.laws, runtime-recovery.laws) still drive `processRuntime`, which reads the setting by the library's own path and skips `settingsWire`.",
+  "proof": "`rg -n \"processRuntime|processLayer\" next -g '*.ts'` at this head lists `processRuntime` only at runtime.ts:1615-1616 and in those seven .test.ts files; the one product user of a Process service is ProcessObject.ts:74, which calls `processLayer`. `pnpm lint:dead` does not flag it, because test files count as users.",
+  "cost": "The recovery and reader laws keep driving a composition the instance no longer runs, so a change to how the object builds its service (the checked read, settingsWire's failure shape) can pass them unseen; the export stays only for tests.",
+  "head": "1e5d367072468ae3a9e1f543d3d294903ec47af3",
+  "ticket": "usirin/tea-fabrika#502",
+  "pr": "kamp-us/tea-fabrika#1187"
+}
