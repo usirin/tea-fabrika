@@ -28,6 +28,7 @@ import {
 } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
+import { SessionManagerError, Storage } from "../access/SessionManager.ts";
 import { type Envelope, type NotGranted, SessionManager, SignRequest, Writer } from "../coordination/index.ts";
 import { processId, processIds } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -46,6 +47,7 @@ import { type Update as WatcherUpdate } from "./Entry.ts";
 import type { Execution } from "./Execution.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Input, Program, ProgramDown } from "./Program.ts";
+import type { RecoveryStoreError } from "./RecoveryStore.ts";
 import type { WatchersError } from "./Watchers.ts";
 
 const SEED = 119120;
@@ -240,7 +242,12 @@ type Incoming = {
   readonly span: { readonly traceId: string; readonly spanId: string };
 };
 
-type Failure = { readonly _tag: string; readonly reason: string } | NotGranted | WatchersError;
+type Failure =
+  | { readonly _tag: string; readonly reason: string }
+  | NotGranted
+  | WatchersError
+  | RecoveryStoreError
+  | SessionManagerError;
 
 type Sent =
   | { readonly _tag: "accepted"; readonly rev: number; readonly pos: number }
@@ -510,7 +517,7 @@ const worldOn = async (
 
               if (fault.sign) {
                 fault.sign = false;
-                return yield* new LedgerError({ reason: "unreachable" });
+                return yield* new SessionManagerError({ reason: new Storage({ cause: new Error("unreachable") }) });
               }
 
               return session;
