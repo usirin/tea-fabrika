@@ -1,5 +1,12 @@
-// The settings fabrika itself declares (docs/direction/settings.md, "Is this a setting?"). A
-// schema's title and description are the words a refused value is explained with (S5).
+/**
+ * The settings fabrika itself declares: `instance.port`, `fabrika-version`, `gateway.limit` and `gateway.window`, and `all`, the group of the four.
+ *
+ * **Details**
+ *
+ * A schema's title and description are the words a refused value is explained with. Every setting here is `since` release 0.0.0 and reloads on restart. See docs/direction/settings.md, "Is this a setting?", for how a choice becomes one.
+ *
+ * @stability unstable
+ */
 import { Schema } from "effect";
 import * as Setting from "./Setting.ts";
 
@@ -14,6 +21,16 @@ const Version = Schema.String.check(Schema.isPattern(/^\d+\.\d+\.\d+$/u)).annota
   description: "A version is three whole numbers, as 1.2.3.",
 });
 
+/**
+ * Setting for the port the local instance listens on.
+ *
+ * **Details**
+ *
+ * The value is a whole number from 1 to 65535. The default is 18787. It is set in a person's file only.
+ *
+ * @stability unstable
+ * @category settings
+ */
 export const port = Setting.make("instance.port", {
   schema: Port,
   default: 18787,
@@ -23,7 +40,16 @@ export const port = Setting.make("instance.port", {
   since: "0.0.0",
 });
 
-// The first version that reads settings. A later release never raises this default by itself.
+/**
+ * Setting for the oldest fabrika release a repo works with.
+ *
+ * **Details**
+ *
+ * The value is three whole numbers, as `1.2.3`. It is set in the repo's file only, and it is read before every other setting. The default is 0.0.0, the first release that reads settings, and a later release never raises it by itself.
+ *
+ * @stability unstable
+ * @category settings
+ */
 export const version = Setting.make("fabrika-version", {
   schema: Version,
   default: "0.0.0",
@@ -65,4 +91,14 @@ export const gatewayWindow = Setting.make("gateway.window", {
   since: "0.0.0",
 });
 
+/**
+ * Group of every setting fabrika declares, ready to load, validate and print.
+ *
+ * **Details**
+ *
+ * Holds `port`, `version`, `gatewayLimit` and `gatewayWindow`. Making the group checked their paths, environment names and defaults together.
+ *
+ * @stability unstable
+ * @category settings
+ */
 export const all = Setting.group({ port, version, gatewayLimit, gatewayWindow });
