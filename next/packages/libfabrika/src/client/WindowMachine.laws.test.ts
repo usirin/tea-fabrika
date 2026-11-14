@@ -1941,7 +1941,7 @@ describe("P18 L10: every frame family the parent reads decodes or reaches its ty
 // Desk S2a, next/ (the desk program fabrika/tezgah, ticket named by its title): law L10 of the
 // approved plan. Written before the window has a desk. The shape it holds `WindowMachine.ts` to,
 // from the plan (the build may add more):
-// - The ctx may carry `desk: {workspace}`. A window started with a desk shows no tile of
+// - The ctx may carry `tezgah: {workspace}` (never `desk`). A window started with it shows no tile of
 //   `ctx.tiles`: once its hello is admitted, it reads `processes/tezgah:<person>`, the person from
 //   the door's admission (`Handshake`'s `admitted` keeps it), opens that pid's view and decodes it
 //   as `TezgahView` itself, never through `checks.decode`. Its tiles are then the tiles of its
@@ -2045,7 +2045,7 @@ const deskStep = (w: DeskWorld, m: WindowMsg, machine: typeof deskWindow, each: 
 };
 
 /** The hello exchange on dial 1, as the door runs it: a challenge, a hello, the admission. */
-const goOnline = (w: DeskWorld, machine: typeof deskWindow, each: (e: DeskEvent) => void) => {
+const goOnline = (w: DeskWorld, machine: typeof deskWindow, each: (e: DeskEvent) => void, dial = 1) => {
   const key = w.waiting.find((c) => c.type === "key");
 
   if (key !== undefined) {
@@ -2057,20 +2057,20 @@ const goOnline = (w: DeskWorld, machine: typeof deskWindow, each: (e: DeskEvent)
     );
   }
 
-  deskStep(w, { type: "socket_opened", dial: 1, at: 0 } as WindowMsg, machine, each);
+  deskStep(w, { type: "socket_opened", dial, at: 0 } as WindowMsg, machine, each);
   deskStep(
     w,
-    { type: "frame", dial: 1, text: rpc({ method: "challenge", params: { nonce: "n0nce1" } }), at: 1 } as WindowMsg,
+    { type: "frame", dial, text: rpc({ method: "challenge", params: { nonce: `n0nce${dial}` } }), at: 1 } as WindowMsg,
     machine,
     each,
   );
-  const hello = w.waiting.find((c) => c.type === "hello");
+  const hello = w.waiting.find((c) => c.type === "hello" && c["dial"] === dial);
 
   if (hello !== undefined) {
     deskStep(w, { type: "hello_ok", cmd: hello, value: null } as WindowMsg, machine, each);
     deskStep(
       w,
-      { type: "frame", dial: 1, text: rpc({ id: hello["id"], result: DESK_ADMITTED }), at: 2 } as WindowMsg,
+      { type: "frame", dial, text: rpc({ id: hello["id"], result: DESK_ADMITTED }), at: 2 } as WindowMsg,
       machine,
       each,
     );
@@ -2145,6 +2145,25 @@ const deskMoves = (w: DeskWorld, c: DeskPick): ReadonlyArray<() => WindowMsg | n
     );
   }
 
+  // The socket drops while online: the brain sends nothing more to it, and the Link retries.
+  if (s.link._tag === "online") {
+    const dial = s.link.dial;
+    out.push(() => {
+      w.subscribed = false;
+      return { type: "socket_closed", dial, code: 1006, at: 3 } as WindowMsg;
+    });
+  }
+
+  const timer = linkTimer(s.link);
+
+  if (timer !== null && s.link._tag === "retrying") {
+    out.push(
+      () => timer.msg,
+      () => timer.msg,
+      () => timer.msg,
+    );
+  }
+
   // tezgah's edits: a tile joins or leaves workspace 1, or workspace 2, which this window never shows.
   for (const n of [1, 1, 2]) {
     out.push(() => {
@@ -2188,13 +2207,20 @@ const deskFold = (
     shows: new Map([[typeId("tile", 1), "checklist:1"]]),
     next: 2,
   };
-  const ctx = withDesk ? { tiles: GIVEN, desk: { workspace: 1 } } : { tiles: GIVEN };
+  const ctx = withDesk ? { tiles: GIVEN, tezgah: { workspace: 1 } } : { tiles: GIVEN };
   const [s0, cmds0] = machine.init(null, ctx as never);
   const w: DeskWorld = { s: s0, waiting: [...cmds0], desk, shown: null, subscribed: false };
   each({ prev: s0, m: { type: "seen", rev: 0 } as WindowMsg, next: s0, cmds: cmds0, w });
   goOnline(w, machine, each);
+  const dialed = new Set([1]);
 
   for (const c of picks) {
+    if (w.s.link._tag === "dialing" && !dialed.has(w.s.link.dial)) {
+      dialed.add(w.s.link.dial);
+      goOnline(w, machine, each, w.s.link.dial);
+      continue;
+    }
+
     const options = deskMoves(w, c);
     const m = options[c.move % options.length]!();
 
@@ -2210,12 +2236,17 @@ const reads = (cmds: ReadonlyArray<Cmd>) =>
   cmds.filter(isWrite).flatMap((c) => (c.call._tag === "read" ? [String(c.call["stream"])] : []));
 
 describe("Desk S2a L10: a window with a desk takes its tiles from tezgah", () => {
-  it("L10: a window started with a desk takes its tiles only from tezgah's view: a view change adds and removes tiles and opens each new one's process view", () => {
+  it("L10: a window started with the tezgah option takes its tiles only from tezgah's view: a view change adds and removes tiles and opens each new one's process view, after a redial too", () => {
     let online = 0;
+    let redials = 0;
     fc.assert(
       fc.property(arbMsgSequence(DeskPick, { minLength: 10, maxLength: 120, size: "max" }), (picks) => {
         deskFold(picks, deskWindow, true, ({ prev, m, next, cmds, w }) => {
           online += m.type === "frame" && next.link._tag === "online" && prev.link._tag !== "online" ? 1 : 0;
+          redials +=
+            m.type === "frame" && next.link._tag === "online" && prev.link._tag !== "online" && next.link.dial > 1
+              ? 1
+              : 0;
           const want = w.shown ?? [];
           const got = next.tiles.map((t) => ({ id: t.id, name: t.name }));
           expect(
@@ -2232,7 +2263,7 @@ describe("Desk S2a L10: a window with a desk takes its tiles from tezgah", () =>
           if (next.link._tag === "online" && prev.link._tag !== "online") {
             expect(
               reads(cmds).filter((r) => r.startsWith("processes/tezgah:")),
-              "L10: going online reads the admitted person's tezgah once",
+              "L10: going online, the first time or after a redial, reads the admitted person's tezgah once",
             ).toHaveLength(1);
           }
 
@@ -2259,9 +2290,10 @@ describe("Desk S2a L10: a window with a desk takes its tiles from tezgah", () =>
       { seed: SEED, numRuns: 200 },
     );
     expect(online, "L10: the walks go online").toBeGreaterThan(0);
+    expect(redials, "L10: the walks drop the link and go online again on a later dial").toBeGreaterThan(0);
   });
 
-  it("L10: with no desk the given tiles stay, and the window never reads a tezgah stream", () => {
+  it("L10: with no tezgah option the given tiles stay, and the window never reads a tezgah stream", () => {
     let opened = 0;
     fc.assert(
       fc.property(arbMsgSequence(DeskPick, { minLength: 10, maxLength: 120, size: "max" }), (picks) => {

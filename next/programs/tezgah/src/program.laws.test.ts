@@ -237,6 +237,7 @@ const started = (cmd: Cmd, kind: "started" | "already_started", w: World) => {
 type Kind =
   | "attach"
   | "reattach"
+  | "attach_reused"
   | "split_right"
   | "split_down"
   | "close"
@@ -368,6 +369,27 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
           ? { type: "stop_child_err", cmd, error: { _tag: "noproc" }, at: w.at }
           : { type: "stop_child_ok", cmd, value: null, at: w.at };
       return { move: `stop answer ${String(cmd["name"])}`, ...take(p, w, msg, true) };
+    }
+
+    case "attach_reused": {
+      // An attach of a new workspace whose first tile id is already a live tile's, or a waiting
+      // start's: a reused id, which would put one tile on two workspaces.
+      const free = [1, 2, 3, 4].filter(
+        (n) =>
+          !w.view.workspaces.some((s) => s.n === n) && !w.waiting.some((x) => x._tag === "attach" && x.workspace === n),
+      );
+      const n = free[pick % Math.max(free.length, 1)];
+      const known = pick % 2 === 0 ? tiles : w.waiting.map((x) => x.tile);
+      const reused = known[(pick >> 1) % Math.max(known.length, 1)];
+
+      if (n === undefined || reused === undefined) {
+        return null;
+      }
+
+      return {
+        move: `attach ${n} reusing ${pick % 2 === 0 ? "live" : "waiting"} ${reused}`,
+        ...take(p, w, { type: "attach", workspace: n, tile: reused }, false),
+      };
     }
 
     case "reused": {
@@ -657,6 +679,8 @@ const Pick = fc.record({
     "attach",
     "reattach",
     "reattach",
+    "attach_reused",
+    "attach_reused",
     "split_right",
     "split_down",
     "answer",
@@ -672,7 +696,14 @@ const Pick = fc.record({
 describe("Desk S2a L9: tezgah refuses what names nothing", () => {
   it("L9: a reused tile id, an unknown from or a missing workspace is refused with its reason and writes nothing", async () => {
     const p = await loaded();
-    const seen: Record<string, number> = { no_workspace: 0, id_reused: 0, missing: 0, reattach: 0 };
+    const seen: Record<string, number> = {
+      no_workspace: 0,
+      id_reused: 0,
+      missing: 0,
+      reattach: 0,
+      attach_live: 0,
+      attach_waiting: 0,
+    };
     fc.assert(
       fc.property(
         fc.boolean(),
@@ -696,6 +727,16 @@ describe("Desk S2a L9: tezgah refuses what names nothing", () => {
               expect(e.after, `L9: ${e.move} changes no view`).toEqual(e.before);
               expect(JSON.stringify(w.model), `L9: ${e.move} changes no model`).toBe(model);
               expect(e.cmds, `L9: ${e.move} starts nothing`).toEqual([]);
+              continue;
+            }
+
+            if (e !== null && kind === "attach_reused") {
+              const which = e.move.includes("reusing live") ? "attach_live" : "attach_waiting";
+              seen[which] = (seen[which] ?? 0) + 1;
+              expect(e.result, `L9: ${e.move}`).toEqual({ _tag: "refused", reason: "id_reused" });
+              expect(e.after, "L9: a refused attach changes no view").toEqual(e.before);
+              expect(JSON.stringify(w.model), "L9: a refused attach writes nothing to the model").toBe(model);
+              expect(e.cmds, "L9: a refused attach starts nothing").toEqual([]);
               continue;
             }
 

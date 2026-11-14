@@ -16,6 +16,7 @@ import * as Audit from "@kampus/libfabrika/runtime/Audit";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
+import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
 import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
@@ -168,6 +169,8 @@ const world = async (
   table.programs["fabrika/counter"] = { hash: "counter-a", source: "counter" };
   // P14 slice 2: the app boots `checklist:1` after `counter:1`, so the table holds its program too.
   table.programs["fabrika/checklist"] = { hash: "checklist-a", source: "checklist" };
+  // Desk S2a: the founder's tezgah boots from the boot list, so the table holds its program too.
+  table.programs["fabrika/tezgah"] = { hash: "tezgah-a", source: "tezgah" };
   table.programs.approvals = { hash: "approvals-a", source: "approvals" };
   const home = mkdtempSync(join(tmpdir(), "p12-r-")),
     key = identity();
@@ -481,15 +484,20 @@ const bends: ReadonlyArray<(name: string) => string> = [
 // registered name, or tries a current name bent into a slashed one, which is refused.
 const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<number>) => {
   const names = ["counter:1"];
-  // P14 slice 2: the boot's second entry. The walk starts only the counter's code, so this stays
-  // the one process of another program, under its own name.
-  const other = { name: "checklist:1", program: "fabrika/checklist" };
+  // P14 slice 2: the boot's second entry, and Desk S2a's third, the founder's tezgah. The walk
+  // starts only the counter's code, so these stay the only processes of other programs.
+  const boots = [
+    { name: "checklist:1", program: "fabrika/checklist" },
+    { name: tezgahName(PERSON), program: "fabrika/tezgah" },
+  ];
+  const byName = (list: ReadonlyArray<{ readonly name: string }>) =>
+    [...list].sort((a, b) => (a.name < b.name ? -1 : 1));
   const others = (list: ReadonlyArray<{ readonly name: string; readonly program: string }>) =>
     list.filter((p) => p.program !== "fabrika/counter").map((p) => ({ name: p.name, program: p.program }));
   let refused = 0;
   expect(w.configured.map((d) => ({ name: d.name, program: d.program }))).toEqual([
     { name: "counter:1", program: "fabrika/counter" },
-    other,
+    ...boots,
   ]);
   const [started] = await w.run(w.p.read("processes/counter:1", 0, "audit"));
   expect(JSON.stringify(started)).toContain('"fabrika/counter"');
@@ -511,9 +519,9 @@ const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<nu
     }
 
     const info = await w.run(w.p.info);
-    expect(info.map((p) => p.name).sort()).toEqual([...names, other.name].sort());
-    expect(others(info)).toEqual([other]);
-    expect(others(w.configured)).toEqual([other]);
+    expect(info.map((p) => p.name).sort()).toEqual([...names, ...boots.map((b) => b.name)].sort());
+    expect(byName(others(info))).toEqual(byName(boots));
+    expect(byName(others(w.configured))).toEqual(byName(boots));
     expect(w.configured.every((d) => !d.name.includes("/"))).toBe(true);
   }
 
@@ -703,6 +711,7 @@ describe("P12 Project authority", () => {
     expect(w.statuses, "each boot entry's configure saw the Project answer its status").toMatchObject([
       { _tag: "ok", value: { name: "counter:1", state: { process: w.p.boot.process } } },
       { _tag: "ok", value: { name: "checklist:1" } },
+      { _tag: "ok", value: { name: tezgahName(PERSON) } },
     ]);
   }, 15_000);
 

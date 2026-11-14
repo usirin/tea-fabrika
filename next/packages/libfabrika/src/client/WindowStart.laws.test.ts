@@ -1267,14 +1267,14 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
 });
 
 // Desk S2a, next/ (the desk program fabrika/tezgah, ticket named by its title): law L10's start half.
-// `start` takes `desk: {workspace}` and hands it to the window parent as its ctx, so a window with
-// a desk, once the door admits its hello, reads the admitted person's tezgah,
+// `start` takes `tezgah: {workspace}` (plan amendment after S2a's first review: never `desk`) and
+// hands it to the window parent as its ctx, so a window with it, once the door admits its hello, reads the admitted person's tezgah,
 // `processes/tezgah:<person>`, and reads none of the given tiles. How a person's id is spelled in
 // a process name is the build's; the law asks only that two people never share one tezgah.
-describe("Desk S2a L10: a start with a desk", () => {
+describe("Desk S2a L10: a start with the tezgah option", () => {
   const byStream = new Map<string, string>();
   it.effect.prop(
-    "L10: a start given a desk reads the admitted person's tezgah once online, and none of the given tiles",
+    "L10: a start given the tezgah option reads the admitted person's tezgah once online, and none of the given tiles",
     {
       person: Schema.String.check(Schema.isPattern(/^person_[0-7][0-9a-hjkmnp-tv-z]{25}$/)),
       workspace: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 9 })),
@@ -1289,7 +1289,7 @@ describe("Desk S2a L10: a start with a desk", () => {
           build: BUILD,
           origin: ORIGIN,
           client: BROWSER,
-          desk: { workspace },
+          tezgah: { workspace },
         }).pipe(Effect.provide(services(door.socket, [])), Scope.provide(scope));
         const run = yield* booting.ready;
 
@@ -1304,7 +1304,9 @@ describe("Desk S2a L10: a start with a desk", () => {
           .filter((frame) => frame.method === "ledger.read")
           .map((frame) => String(Reflect.get(Object(frame.params), "stream")));
         expect(streams[0], "L10: the first read is the person's tezgah").toMatch(/^processes\/tezgah:/);
-        expect(streams, "L10: a desk window reads none of the given tiles").not.toContain("processes/checklist:1");
+        expect(streams, "L10: a window with the tezgah option reads none of the given tiles").not.toContain(
+          "processes/checklist:1",
+        );
         const owner = byStream.get(streams[0] ?? "");
         expect(owner ?? person, `L10: ${streams[0]} is one person's tezgah`).toBe(person);
         byStream.set(streams[0] ?? "", person);

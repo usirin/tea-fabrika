@@ -15,6 +15,7 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Schema } from "effect";
+import { diff } from "../runtime/Patch.ts";
 import { TezgahView } from "../tezgah/Workspace.ts";
 import { optimisticState, tezgahMachine } from "./Tezgah.ts";
 
@@ -71,6 +72,114 @@ describe("Desk S2a L11: tezgah's view in the window", () => {
         const kept: { readonly serverState: unknown } = step(after, { type: "server", rev: rev + 1, view: dropped });
         expect(kept.serverState, "L11: a view without child changes nothing").toEqual(same);
       }
+    },
+    { arbitrary: { seed: SEED, runs: 200 } },
+  );
+});
+
+// Desk S2a, first review: a view patch in the window's tezgah child, as a program client takes one
+// (`runtime/Client.ts`). A patch whose base is the shown revision and whose revision is one past it
+// moves the server state to the patched view; any other patch past the shown revision keeps the
+// shown view and asks for a whole one (one `ask` Cmd); a patch at or before the shown revision is
+// old and changes nothing, asking for nothing. The walk folds the real machine from its real init:
+// each step reads the revision it reached and makes a patch of one of those three kinds, or a whole
+// view, from generated views and the real `diff`.
+const Kind = Schema.Literals(["next", "next", "gap_base", "gap_rev", "old", "whole"]);
+
+const PatchStep = Schema.Struct({
+  kind: Kind,
+  skew: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 5 })),
+  to: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000 })),
+});
+
+const both = (
+  m: unknown,
+  msg: unknown,
+): readonly [{ readonly serverState: unknown; readonly rev: number }, ReadonlyArray<{ readonly type: string }>] =>
+  applyCell(tezgahMachine as never, m as never, msg as never) as never;
+
+/** A view as the wire carries it, JSON. */
+const onWire = (view: typeof TezgahView.Type): unknown =>
+  Schema.decodeSync(Json)(Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(view)));
+
+const text = (state: unknown) =>
+  state === null ? "null" : Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(state as never));
+
+describe("Desk S2a L11: a tezgah view patch in the window", () => {
+  it.prop(
+    "L11: a patch from the shown rev to one past it applies, a gap asks for a whole view and keeps the shown one, an old rev changes nothing",
+    {
+      // One view from the schema; the walk's other views are cut from it (tiles and workspaces dropped,
+      // reordered, or none), since two independent draws of tezgah's view exhaust fast-check's discards.
+      first: Arbitrary.schema(TezgahView),
+      steps: Arbitrary.array(Arbitrary.schema(PatchStep), { minLength: 4, maxLength: 16 }),
+      start: Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 6, maximum: 1_000_000 }))),
+    },
+    ({ first, steps, start }) => {
+      const wires = [
+        first,
+        { workspaces: first.workspaces.slice(1), tiles: first.tiles.slice(1) },
+        { workspaces: [...first.workspaces].reverse(), tiles: [...first.tiles].reverse() },
+        { workspaces: [], tiles: [] },
+      ].map(onWire);
+      const [fresh] = tezgahMachine.init(null, { workspace: 1 });
+      let [m] = both(fresh, { type: "server", rev: start, view: wires[0] });
+      let shown = wires[0];
+      expect(text(m.serverState), "L11: the first whole view is shown").toBe(
+        text(Schema.decodeUnknownSync(TezgahView)(shown)),
+      );
+      const seen = { applied: 0, asked: 0, old: 0 };
+
+      // Each walk takes every kind once first, so each is walked; then the generated steps.
+      const walk = [
+        { kind: "next" as const, skew: 1, to: 1 },
+        { kind: "gap_base" as const, skew: 1, to: 0 },
+        { kind: "gap_rev" as const, skew: 2, to: 0 },
+        { kind: "old" as const, skew: 1, to: 0 },
+        ...steps,
+      ];
+
+      for (const { kind, skew, to } of walk) {
+        const target = wires[to % wires.length];
+        const rev = m.rev;
+        const msg =
+          kind === "whole"
+            ? { type: "server", rev: rev + skew, view: target }
+            : kind === "next"
+              ? { type: "patch", base: rev, rev: rev + 1, patch: diff(shown, target) }
+              : kind === "gap_base"
+                ? { type: "patch", base: rev - skew, rev: rev + 1, patch: diff(shown, target) }
+                : kind === "gap_rev"
+                  ? { type: "patch", base: rev, rev: rev + 1 + skew, patch: diff(shown, target) }
+                  : { type: "patch", base: rev - skew - 1, rev: rev - skew + 1, patch: diff(shown, target) };
+        const [next, cmds] = both(m, msg);
+        const asks = cmds.filter((c) => c.type === "ask").length;
+
+        if (kind === "next" || kind === "whole") {
+          seen.applied++;
+          expect(text(next.serverState), `L11: ${kind} shows the new view`).toBe(
+            text(Schema.decodeUnknownSync(TezgahView)(target)),
+          );
+          expect(next.rev, `L11: ${kind} moves the shown rev`).toBe(msg.rev);
+          expect(asks, `L11: ${kind} asks for nothing`).toBe(0);
+          shown = target;
+        } else {
+          seen[kind === "old" ? "old" : "asked"]++;
+          expect(text(next.serverState), `L11: ${kind} keeps the shown view`).toBe(text(m.serverState));
+          expect(next.rev, `L11: ${kind} keeps the shown rev`).toBe(rev);
+          expect(
+            asks,
+            kind === "old" ? "L11: an old patch asks for nothing" : `L11: ${kind} asks for a whole view`,
+          ).toBe(kind === "old" ? 0 : 1);
+        }
+
+        m = next;
+      }
+
+      expect(seen.applied + seen.asked + seen.old, "L11: every step was one of the three").toBe(walk.length);
+      expect(Math.min(seen.applied, seen.asked, seen.old), "L11: the walk applied, asked and ignored").toBeGreaterThan(
+        0,
+      );
     },
     { arbitrary: { seed: SEED, runs: 200 } },
   );

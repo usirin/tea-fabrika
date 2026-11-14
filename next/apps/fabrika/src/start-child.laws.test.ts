@@ -29,6 +29,8 @@ vi.mock("virtual:fabrika-built", () => ({
     "fabrika/counter": { hash: "counter-test", source: "counter" },
     // P14 slice 2: the app boots `checklist:1` after `counter:1`, so the table holds its program too.
     "fabrika/checklist": { hash: "checklist-test", source: "checklist" },
+    // Desk S2a: the founder's tezgah boots from the boot list, so the table holds its program too.
+    "fabrika/tezgah": { hash: "tezgah-test", source: "tezgah" },
     "p42/child": { hash: "child-test", source: "child" },
   },
   assets: {},

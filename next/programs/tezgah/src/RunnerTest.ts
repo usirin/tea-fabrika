@@ -109,7 +109,10 @@ const readView = (live: Live) => Effect.map(live.view, (v) => Schema.decodeUnkno
 /** One move of the walk on workspace `n`: a split from a live tile, or a close of one. */
 type Move = { readonly kind: "split_right" | "split_down" | "close"; readonly pick: number };
 
-const step = Effect.fnUntraced(function* (live: Live, n: number, m: Move) {
+/** How many closes of each kind the walks made: of a tile tezgah started, and of any other. */
+type Seen = { child: number; other: number };
+
+const step = Effect.fnUntraced(function* (live: Live, n: number, m: Move, seen: Seen) {
   const before = yield* readView(live);
   const tiles = tilesOn(before, n);
   const from = tiles[m.pick % tiles.length];
@@ -141,6 +144,8 @@ const step = Effect.fnUntraced(function* (live: Live, n: number, m: Move) {
   expect(answer._tag).toBe("accepted");
   yield* until(`the close of ${from.id}`, readView(live), (v) => !tilesOn(v, n).some((t) => t.id === from.id));
   const others = before.tiles.filter((t) => t.id !== from.id);
+
+  seen[from.child ? "child" : "other"]++;
 
   if (from.child) {
     const ended = yield* until(`${from.shows} ends`, live.process(from.shows), (p) => !p.live);
@@ -180,6 +185,8 @@ export const suite = (open: Open) =>
           Effect.gen(function* () {
             const live = yield* open;
 
+            const seen: Seen = { child: 0, other: 0 };
+
             for (const [i, moves] of fc.sample(Moves, { seed: SEED, numRuns: RUNS }).entries()) {
               const n = i + 1;
               expect(answered(yield* live.send({ type: "attach", workspace: n, tile: fresh() }))._tag).toBe("accepted");
@@ -191,13 +198,23 @@ export const suite = (open: Open) =>
                 ]);
               }
 
-              // Each walk splits once first, so a close has a tile to take.
-              yield* step(live, n, { kind: "split_right", pick: 0 });
+              // Each walk splits once first, so a close has a tile to take; the first walk then closes
+              // the boot list's checklist:1, so a tile tezgah did not start is closed at least once.
+              yield* step(live, n, { kind: "split_right", pick: 0 }, seen);
+
+              if (n === 1) {
+                yield* step(live, n, { kind: "close", pick: 0 }, seen);
+              }
 
               for (const m of moves) {
-                yield* step(live, n, m);
+                yield* step(live, n, m, seen);
               }
             }
+
+            expect(
+              seen.child > 0 && seen.other > 0,
+              `L8: the walks closed a tile tezgah started and one it did not ${JSON.stringify(seen)}`,
+            ).toBe(true);
           }),
         ),
       { timeout: 900_000 },

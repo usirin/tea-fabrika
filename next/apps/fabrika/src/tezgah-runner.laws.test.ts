@@ -14,7 +14,7 @@
 // - Workspace 1's first tile shows the boot list's `checklist:1`; a split's new tile shows a new
 //   process tezgah starts; a close of a tile tezgah started stops its process with `shutdown`
 //   through the Worker's `stop_child` (plan amendment, 2026-11-14).
-// - `Headless.start` takes `desk: {workspace}`. A window started with a desk reads
+// - `Headless.start` takes `tezgah: {workspace}`. A window started with it reads
 //   `processes/tezgah:<person>` once admitted, with the person from the door's admission, opens
 //   tezgah's view, attaches its workspace itself, and shows the workspace's tiles, each tile's
 //   process view opened, in place of a fixed list.
@@ -304,7 +304,7 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
           });
           const booting = yield* Headless.start({
             tiles: [],
-            desk: { workspace: 1 },
+            tezgah: { workspace: 1 },
             window,
             origin: String(instance.url),
             build: "desk-s2a",
