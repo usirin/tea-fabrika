@@ -277,7 +277,28 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 
 export class ConnectionService extends Context.Service<
   ConnectionService,
-  Effect.Success<ReturnType<typeof gatewayLogic>>
+  {
+    readonly fetch: (request: Request) => Effect.Effect<Response, LedgerError>;
+    // `connection` gives `wait` and `call` one error type, so a frame's type carries the wait's refused answer.
+    readonly message: (
+      ws: WebSocket,
+      text: string | ArrayBuffer,
+    ) => Effect.Effect<void, LedgerError | SinkError | typeof Answer.cases.refused.Type>;
+    readonly close: (ws: WebSocket) => Effect.Effect<void, LedgerError | SinkError>;
+    // A ring fails with a wait's error only when it is the rate count failure, so the type joins the two.
+    readonly ring: (
+      stream: string,
+      rev: number,
+    ) => Effect.Effect<
+      void,
+      | LedgerError
+      | SinkError
+      | Cause.NoSuchElementError
+      | (typeof Answer.cases.refused.Type & typeof RateCountFailure.Type)
+    >;
+    readonly probe: (session: string) => Effect.Effect<number | null, LedgerError | SinkError>;
+    readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError | SinkError>;
+  }
 >()("@kampus/libfabrika/cloudflare/connection.ConnectionService") {}
 
 export const connectionLayer = (ctx: DurableObjectState, env: Env, config: BrainOptions) =>

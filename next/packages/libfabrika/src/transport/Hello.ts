@@ -39,7 +39,11 @@ export const sameOrigin = (a: {
   );
 };
 
-const CheckedHello = Schema.TaggedUnion({
+/** What `checkHello` fails with when WebCrypto rejects the key's digest. */
+export type WebCryptoError = import("./internal/binary.ts").WebCryptoError;
+
+/** What `checkHello` answers: the admitted hello, or the refusal with its reason. */
+export const CheckedHello = Schema.TaggedUnion({
   online: { identity: Who, version: Schema.Int, ping: Schema.Number, hello: Hello },
   refused: { reason: Schema.String, fingerprint: Schema.optionalKey(Schema.String) },
 });
