@@ -186,10 +186,8 @@ record: keep no other file. No script holds this yet, so do these steps by hand.
 
 ## Outside your task
 
-Something wrong that your task does not cover is one finding row with proof, then keep going:
-never a fix, a ticket or only a mention, and never a security hole.
-[A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
-counts as proof.
+Something wrong outside your task is one finding row, never a fix:
+[A finding](../../../field/README.md#a-finding) has the rule, the fields and what counts as proof.
 
 A survivor is this step's own answer and stays in its report, never a finding row. Outside
 means anything else you meet that is wrong.

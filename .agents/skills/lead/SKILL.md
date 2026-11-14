@@ -73,27 +73,8 @@ Decided notes: <every decided note the PR builds>
 Last fixes: <commit range and report, or none>
 ```
 
-Sweep, do not sample. For each law in the plan's table, list every way in: each public call,
-each cut point, and each saved or binding state. Check each one.
-A finding names its class and every case of it.
-A law written as examples over a class the plan names is a defect when a found case escapes
-those examples.
-On a re-review, read every line the last fixes changed and what calls them first. Then finish
-the remaining checks.
-Read every decided note the PR builds, following the plan's references and the change itself.
-Block only on a broken decision in docs/direction or AGENTS.md, lost data, or a broken law.
-Each blocker cites that source and shows the missed case.
-
-Start with merge-ready; findings: <m> or changes: <n>; findings: <m>.
-n counts blocking classes. Each class lists every affected case. m counts the finding rows in
-this answer.
-Give every finding in that answer, grouped by class, most serious first.
-Name each checked decided note and say where the change follows or breaks it.
-Any other actionable finding is one finding row with proof: never a ticket, a fix or only a
-mention, and never a security hole.
-Give each row as one JSON line in the answer. The lead saves it unchanged as its own file in
-field/findings/. Do not start another review round for it.
-End with exactly one answer: line, as the last line.
+[The review skill](../review/SKILL.md#steps) holds what to check and how to answer, so the brief
+repeats none of it.
 Keep the four reason labels in the review skill. A missed case in a named class checks the law;
 it does not reopen every test's merits.
 
@@ -600,11 +581,8 @@ visible, and never weaken the rules to hide this message.
    [the pr skill](../pr/SKILL.md) gives.
 9. **Land it** by [the plan's rule](../../../docs/plan/README.md#how-a-change-lands): the review says
    `merge-ready`, CI is green (e2e included), and you read the diff and run the leak grep.
-   Every new or changed law is a property, or an example labeled vector, format, pinned or
-   scenario with its reason.
-   Zero hits from loosening.sh mean no owner read is needed.
-   The lead records its output in the PR. A hit goes to the lead's hand check, with the hit list
-   in the PR. Only real loosening waits on the owner.
+   [The tests skill](../tests/SKILL.md#new-and-changed-laws) holds the rule for a new or changed
+   law and for a loosening.sh hit.
    Did this PR change a row in docs/direction/follows/? It updates that row in the same PR ([0017](../../../.decisions/0017-each-model-we-follow-has-one-table.md)).
    Then the lead merges, product code included; a new design call is the only other wait ([0014](../../../.decisions/0014-the-lead-merges-when-every-step-passed.md)).
    Apply the labels rule and the zero-hit check together. These are proper property tests.

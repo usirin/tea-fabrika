@@ -36,8 +36,12 @@ const answer = [
 
 const sections: Record<string, Record<string, string[]>> = {
   ".agents/skills/review/SKILL.md": { "3. **Check:**": check, "4. **Answer**": answer },
+  // One home a clause (0130, experiment 283): the exam clauses are the tests skill's alone.
+  ".agents/skills/tests/SKILL.md": { "## New and changed laws": exam },
   ".agents/skills/lead/SKILL.md": {
     "## Review brief template": [
+      // The brief names the review clauses' one home and repeats none of them.
+      "Use the review skill",
       "Ticket:",
       "Version:",
       "Approved plan:",
@@ -45,8 +49,6 @@ const sections: Record<string, Record<string, string[]>> = {
       "Reviewed head:",
       "Decided notes:",
       "Last fixes:",
-      ...check,
-      ...answer,
     ],
     "9. **Land it**": [
       "After the merge, the lead closes the tickets the description names and starts one box cleanup sweep.",
@@ -54,12 +56,8 @@ const sections: Record<string, Record<string, string[]>> = {
       "Use git worktree remove without force. Keep dirty, locked, ambiguous or unreadable candidates and any box that fails its guard.",
       "Print one line per retained item and continue.",
       "Saved plans, reports, logs and state/ remain.",
-      ...exam,
     ],
     "## Lane brief template": ["End with `node .agents/skills/lead/scripts/land.ts ready <lane> --tree <path>`."],
-  },
-  "AGENTS.md": {
-    "- **Every pull request, next/ or today's, goes through the pipeline's steps:**": exam,
   },
 };
 
@@ -79,20 +77,18 @@ const tree = (dir: string, whitespace = " ", omit?: [string, string, number], ou
 
     mkdirSync(join(dir, file, ".."), { recursive: true });
     // A skill file also holds slice 1a's clauses, so both checks read one whole tree.
-    const own = file === "AGENTS.md" ? "" : `\n${mainText(file.split("/")[2]!)}`;
-    writeFileSync(join(dir, file), chunks.join("\n") + own);
-
-    if (file !== "AGENTS.md") {
-      const skill = file.split("/")[2]!;
-      mkdirSync(join(dir, ".claude/skills"), { recursive: true });
-      const alias = join(dir, ".claude/skills", skill);
-      rmSync(alias, { recursive: true, force: true });
-      symlinkSync(`../../.agents/skills/${skill}`, alias);
-    }
+    const skill = file.split("/")[2]!;
+    writeFileSync(join(dir, file), `${chunks.join("\n")}\n${mainText(skill)}`);
+    mkdirSync(join(dir, ".claude/skills"), { recursive: true });
+    const alias = join(dir, ".claude/skills", skill);
+    rmSync(alias, { recursive: true, force: true });
+    symlinkSync(`../../.agents/skills/${skill}`, alias);
   }
 
   // The other clause sources hold only the slice 1a and 1b clauses.
-  for (const skill of new Set(allClauses.map(([s]) => s).filter((s) => s !== "lead"))) {
+  const written = new Set(Object.keys(sections).map((file) => file.split("/")[2]!));
+
+  for (const skill of new Set(allClauses.map(([s]) => s).filter((s) => !written.has(s)))) {
     mkdirSync(join(dir, ".agents/skills", skill), { recursive: true });
     writeFileSync(join(dir, ".agents/skills", skill, "SKILL.md"), mainText(skill));
     rmSync(join(dir, ".claude/skills", skill), { recursive: true, force: true });
@@ -122,7 +118,7 @@ describe("skillscheck, today's tooling", () => {
           tree(dir, space);
           expect(run(dir).status).toBe(0);
 
-          for (const file of [".agents/skills/lead/SKILL.md", "AGENTS.md"]) {
+          for (const file of [".agents/skills/tests/SKILL.md"]) {
             for (const substitute of ["The lead records both outputs in the PR. Any hit waits on the owner.", ""]) {
               tree(dir, space);
               const path = join(dir, file);
@@ -422,16 +418,13 @@ const slice1bClauses = [
     "K20",
     "For a new property, use `@effect/vitest`'s `it.prop` or `it.effect.prop` with an existing Schema, or its own Effect Arbitrary exported beside it; write fast-check data only where Effect has nothing or to push edge cases.",
   ],
-  // Ticket 523, decision 0035: each step skill and the lead skill say the finding rule once.
-  ...["plan", "tests", "build", "mutation", "lead"].map(
-    (skill) =>
-      [
-        skill,
-        "Outside your task",
-        "K21",
-        "Something wrong that your task does not cover is one finding row with proof, then keep going: never a fix, a ticket or only a mention, and never a security hole.",
-      ] as const,
-  ),
+  // Ticket 523, decision 0035: the finding rule has one home, the lead skill (0130, experiment 283).
+  [
+    "lead",
+    "Outside your task",
+    "K21",
+    "Something wrong that your task does not cover is one finding row with proof, then keep going: never a fix, a ticket or only a mention, and never a security hole.",
+  ],
 ] as const;
 
 const allClauses = [...clauses, ...slice1bClauses];
@@ -463,7 +456,7 @@ const clauseTree = (f: (dir: string) => void, program = script) => {
   const dir = mkdtempSync(join(tmpdir(), "clauses-"));
 
   try {
-    // T318's files (review, AGENTS.md) come from its own tree.
+    // T318's files (review, tests) come from its own tree.
     tree(dir);
 
     // Every clause source exists, so one table covers both slices (1b review round 2, finding 5).
@@ -592,7 +585,7 @@ describe("T325 slice 1b required clauses, today's tooling", () => {
           const dir = mkdtempSync(join(tmpdir(), "clauses-"));
 
           try {
-            // T318's files (review, AGENTS.md) come from its own tree.
+            // T318's files (review, tests) come from its own tree.
             tree(dir);
             const sources = join(dir, ".agents/skills"),
               aliases = join(dir, ".claude/skills");

@@ -92,12 +92,18 @@ this skill for the law. The reviewer reads that law on its recheck.
    red that is a sandbox limit. Your answer's JSON object lists the plants under `plants`, each
    `{law, plant, result}` with `result` `red` or `green`, so they land on your field row.
 
+## New and changed laws
+
+Every new or changed law is a property, or an example labeled vector, format, pinned or scenario
+with its reason.
+Zero hits from loosening.sh mean no owner read is needed.
+The lead records its output in the PR. A hit goes to the lead's hand check, with the hit list in
+the PR. Only real loosening waits on the owner.
+
 ## Outside your task
 
-Something wrong that your task does not cover is one finding row with proof, then keep going:
-never a fix, a ticket or only a mention, and never a security hole.
-[A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
-counts as proof.
+Something wrong outside your task is one finding row, never a fix:
+[A finding](../../../field/README.md#a-finding) has the rule, the fields and what counts as proof.
 
 Outside means no law in the approved plan covers it. Something wrong in the plan is not a
 finding: it goes back to plan (step 6).

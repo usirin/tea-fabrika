@@ -39,10 +39,8 @@ for the product code.
 
 ## Outside your task
 
-Something wrong that your task does not cover is one finding row with proof, then keep going:
-never a fix, a ticket or only a mention, and never a security hole.
-[A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
-counts as proof.
+Something wrong outside your task is one finding row, never a fix:
+[A finding](../../../field/README.md#a-finding) has the rule, the fields and what counts as proof.
 
 Outside means the approved plan does not name it. A red law the plan names is your work, and a
 file you need but may not touch goes in your report (step 6): neither is a finding.
