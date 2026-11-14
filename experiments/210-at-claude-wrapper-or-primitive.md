@@ -1,3 +1,9 @@
+---
+date: "2026-11-05"
+scripts: "none"
+summary: "Today's version; reading with file and line for each job, plus one check of tsh's word splitter. A wrapper, for an agent the host starts: `@claude hi` is `tell %n prompt \"hi\"` to an `acp` job, or the `acp ... &` line that starts one. Of 17 jobs, 4 exist, 11 are small changes, 0 are new; signing waits on the envelope build, and another person's agent is out of today's version. The desk's `agents` map is already a one-per-name registry; it gains the job. `@` must be read before the shell words, which drop `#7 twice?`, open a quote at `don't` and make `|` an operator, so it is a line prefix, not an alias or a built-in. Not a wrapper for a Claude Code the person started: reaching it needs a push into its session, and Claude Code's channels are a research preview that drops events silently and skips `-p` and the SDK. Erlang, IRC, Slack, another chat tool and POSIX agree the name form is sugar; a primitive comes only from what the layer below cannot do. No lost fact if the envelope wraps the line as typed, and the lookup and the cost line are written from day one. Lean 80%; the doubt is letting the `acp` harness out of its scratch folder into the repo, the owner's call. No model, $0."
+---
+
 # Is `@claude <words>` in tsh a wrapper over what exists, or a new primitive?
 
 Read 2026-11-05. **This is reading, plus one small check run.** The check ran tsh's word splitter

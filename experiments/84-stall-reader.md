@@ -1,3 +1,9 @@
+---
+date: "2026-10-18"
+scripts: "`84-stall-reader.ts`, `84-readings.json`, `results/84-stall-reader.json`, `lib/review-rounds.ts`"
+summary: "No, for both calls with Jev. Over experiment 58's 106 stalls (a round whose list did not get shorter), Jev and Claude (sonnet) each asked \"is the next change a different approach or a repeat?\" and \"why did it stall?\". Call 1 is useless for any reader: \"different\" steps got shorter next round 83% of the time, the same as every step, and the 2 or 3 \"repeats\" all got shorter; code's \"no new commit\" plus the second-stall rule does the job. Call 2: Jev says builder_stuck for nearly all (92 of 101), agrees with Claude on 50% (kappa 0.17) and with 19 hand readings on 11. Claude matches 12 of 16 hand readings but over-calls reviewer_wrong. The four kinds miss the commonest stall, a real finding the first review could have raised, which should go back to the builder, not the owner; no reader ever chose criterion_wrong. Jev $0.00015 and 0.11 s a call; Claude $0.035 and 3.9 s. About $5.00. Confidence 85% (call 1), 80% (call 2)."
+---
+
 # 84. Can a cheap reader judge a stall?
 
 A design for the build and review loop: a **stall** is a round where the list

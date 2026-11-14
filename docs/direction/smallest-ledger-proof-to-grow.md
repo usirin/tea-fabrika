@@ -1,3 +1,8 @@
+---
+state: "decided"
+summary: "Tickets, criteria, questions, review results, who is on it, lanes. Priority, types, labels and links wait for a run that needed them."
+---
+
 # The smallest ledger, and proof before it grows
 
 Decided 2026-10-12, written down 2026-10-18.

@@ -1,3 +1,9 @@
+---
+date: "2026-11-07"
+scripts: "none"
+summary: "About `next/`'s text line; reading only, not a measurement, from vendor docs. VS Code deprecated its `@participant` and `#` split; Claude Code, Cursor and Zed use one `@` and tell kinds apart by the picked item. Lean: one `@`, the first `@name` is who answers, every later one a reference (75%). Decided by the owner the same day in [summon guidelines](../docs/direction/summon-guidelines.md#the--line-decided-2026-11-07). No model, $0."
+---
+
 # 227. Should one `@` both pick who a line talks to and point at things?
 
 Read 2026-11-07. This is reading, not a measurement. About `next/`'s text line (fabsh and the

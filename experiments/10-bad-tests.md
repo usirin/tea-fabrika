@@ -1,3 +1,8 @@
+---
+date: "2026-10-04"
+summary: "0 of 168 bad tests accepted at floors 0.80, 0.85 and 0.90. The highest \"checks\" on a bad test was 0.79."
+---
+
 # 10. Bad tests written to fool the judge
 
 `10-bad-tests.ts`. The 0.85 floor was picked after seeing the data, so it needed

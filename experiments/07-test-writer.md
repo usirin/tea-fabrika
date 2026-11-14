@@ -1,3 +1,8 @@
+---
+date: "2026-10-04"
+summary: "27 of 27 criteria got a good test. At a 0.9 floor the judge let 17 through and was unsure on 10, all of them good."
+---
+
 # 7. Can an agent write the tests first?
 
 `07-test-writer.ts`. Claude got the starting code and the criteria, and wrote

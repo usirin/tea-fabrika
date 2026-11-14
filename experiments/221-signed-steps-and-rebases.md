@@ -1,3 +1,8 @@
+---
+date: "2026-11-06"
+summary: "`next/`, Tier 1's P32; reading of Gerrit, Chromium, AOSP, GitLab, GitHub, SLSA, gittuf, in-toto, gitsign, Sapling, ghstack, Phabricator, Graphite and Google, plus one local test. Nobody reuses a signature over bytes that changed: each binds its proof to an exact thing and reruns a check. The common one is Gerrit's trivial rebase (replay the old change onto the new parent, compare trees, a conflict carries nothing); gittuf binds to the merge tree. Locally the replay kept every commit across a cascading rebase and a bottom squash-merge, and caught an added line and a dropped commit. GitHub served all 28 force-pushed-away heads on this repo by sha (14 days, undocumented). Native stacks: conflict handling, signing key (its docs contradict themselves), notes and \"linear\" are unknown. Lean, 70%: sign the link (step, from tree, to tree), carry by replay, keep old heads; merge-only until then. Found: an older signed commit passes P32 as planned; the plan's \"rebase\" line contradicts the merge rule. No model, $0."
+---
+
 # Who signs each step of a change and still survives a rebase or a stack, and how?
 
 This is reading, plus one local test. Read 2026-11-06 from primary sources: docs sources, code,

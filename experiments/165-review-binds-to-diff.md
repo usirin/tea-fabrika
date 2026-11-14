@@ -1,3 +1,8 @@
+---
+date: "2026-10-28"
+summary: "Bind to the diff, yes, but not with plain `git patch-id --stable`: it drops whitespace, so a force push that moves a YAML key by its indent or drops a space in a string keeps the review. The head sha threw away all 13 real force-push reviews in this repo; the diff stayed the same in 2 (both rebases), and 4 more changed only context (a newer row above the PR's own row in this README, a git conflict). 30 made-up cases: sha right 12, `--stable` 24, `-U0 --verbatim` 29 (it misses a moved line), a `git merge-tree` replay 28 with no wrong \"same\". 113 of 114 squash commits keep the PR's id, all 31 merge commits. A break main brings in keeps every id; only checks at the final head catch it. 2000 generated cases (fast-check, seed 165): the replay made no wrong answer in 1281 scored, `-U0 --verbatim` kept 31 moved lines, `--stable` 10 whitespace changes. Stacked PRs (600 generated): read against main, no id survives the parent's squash-merge and a restack that undoes the parent's new commit keeps every id; read against the PR's base branch, no wrong \"same\" in 53 and 122 to 129 of 129 kept. Lean: diff against the PR's base branch; keep on a clean replay, a glance on a `-U0 --verbatim` match, else review again. $0."
+---
+
 # 165. A review bound to the diff, not the commit
 
 The question: the owner keeps PR branches current by rebasing onto main and force-pushing.

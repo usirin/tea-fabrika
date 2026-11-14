@@ -1,3 +1,9 @@
+---
+date: "2026-11-02"
+scripts: "none; reading, plus a look build on a local branch, shot at five layouts, not kept"
+summary: "Reading, not a measurement. Material, Apple, Primer, Atlassian, Carbon, Polaris, Geist, Radix, Chakra, Linear, NN/g, Butterick, WCAG, the FAA's flight display guide and road signs agree: a few named text styles, each size, weight and color at once, rank by size then weight, few loud things. Manti's scale at base 13 gives 12, 13, 15 and 22, the steps of macOS's text styles and Linear's app (whose title is 24). Today's version sets 105 sizes by hand in 13 sizes, and uses Manti's `Text` and `Heading` nowhere. On the ask desk's round 6 card five things shout and the rec is the smallest; six text styles alone fix it, with the rec at 15/600 and the question at 13/500. The build found `themes.test.ts` reads colors from CSS selectors and Manti's `primary` text is orange. A read of Manti's repo during the owner's walk found no description list and a level 1 `Heading` at 29.25px with no size. No screen reader was run; 13 for long prose is unchecked. $0."
+---
+
 # Which text styles should fabrika's programs share, and what does the ask desk's card teach?
 
 Read 2026-11-02. **This is reading, not a measurement.** One look build ran on a local branch in

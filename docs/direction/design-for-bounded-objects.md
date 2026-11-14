@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-07"
+summary: "`next/`. fabrika is built on Durable Objects the way Elixir is built on processes: each object is small and bounded at 10 GB, storage across many is unlimited. No object grows forever; every object that grows names its cap and what it does there, roll to a new part or seal an old stretch into its own object; nothing is dropped to stay under a cap. A full disk fails the step loudly; every span is kept forever, and spans outside any process go to their own record objects, in parts. Proposed leans from [experiment 225](../../experiments/225-ledger-past-one-object.md): a process's JobRecord rolls to `job/<pid>/<part>` with a `rolled` fact (80%), big bodies go to `Blobs` by hash in Tier 2 (80%), old ledger stretches are sealed into read-only objects before Tier 5 or at the first 50% size line (70%), no sharding by stream (85%)."
+---
+
 # Design for bounded objects
 
 **Decided 2026-11-07 (owner): the principle, five calls from P37's questions and after, and the

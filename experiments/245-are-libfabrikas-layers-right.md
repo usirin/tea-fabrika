@@ -1,3 +1,8 @@
+---
+date: "2026-11-09"
+summary: "`next/`, `next/packages/libfabrika/src` only. Reading plus counts (imports, exports, 121 commits over four days), code-graph, `structure-sweep score` and one redacted sweep, $0.007. The order of the layers holds; three walls do not. `coordination/` holds four subjects, and three of its files (`process-store.ts`, `recovery.ts`, `recovery-store.ts`) are read only by the app layer. `data/` is two halves, the ledger and the span records. \"The app layer never imports data\" holds only because `coordination/index.ts` re-exports 11 of data's names. 0034's three context folders would put about 3,100 of 9,800 lines in a context the glossary does not give them. Lean, 60%: keep the ladder and move the walls to where the subjects end (ticket 488). Nothing moved."
+---
+
 # 245. Are libfabrika's layers the right abstractions?
 
 Read and counted 2026-11-09 on origin/main at `b865c421`. **All claims are about `next/`**, and

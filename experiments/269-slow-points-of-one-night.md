@@ -1,3 +1,9 @@
+---
+date: "2026-11-11"
+scripts: "none; a count of our own logs, not an experiment run"
+summary: "Today's lead tooling, 2026-11-10 21:00 to 11-11 10:00. 16 ranked slow points: apt outage 38 PR-hours, the serial merge line about 28 PR-hours before the outage, overnight parks 10.7 lane-hours, box setup 10.9, the gc Docker hang 8.4, a needless plan-writer lock 7.2 h, lead pickup 6.0, a plan table missing a file about 5.5 plus $42, 15 typecheck reds only CI found, 10 conflict aborts, a checkout 36 commits stale (12 fixes never ran), the askdesk7 loop 6 h and $15, Codex no-progress $5.40, 48 red `commits` runs. Per-lane table for 26 lanes. Seven items are told at length in 260. One night. No model, $0."
+---
+
 # 269. Where did the time go on the night of 2026-11-10, ranked, and what is the smallest fix for each?
 
 Counted on 2026-11-11, on main. **This is a count of our own logs, not an experiment run.** The

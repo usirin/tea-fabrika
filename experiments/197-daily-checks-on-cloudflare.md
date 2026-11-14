@@ -1,3 +1,9 @@
+---
+date: "2026-11-02"
+scripts: "none; reading only"
+summary: "Reading, `next/`, not a measurement. Each batch of a daily check gets its own box object by id, Cloudflare's shape (each container \"is managed and proxied by a Durable Object\") and OTP's; the brain's alarm keeps only the queue and offers each batch to a laptop's idle hands first, for free. Both run the same batch program and schemas. On the Workers Paid plan we have, a busy `standard-4` box (4 vCPU, 12 GiB) is about $0.40 an hour past the plan; at most 375 at once. Mutation first pass about $5 to $10 once (range $2.40 to $19), daily about $6 to $42 a month at the last 14 days' pace, or at most about $12 with a 1 box hour daily cap. The PR watcher, the stale lane check and TLA+ step reading run in the brain's object; Vitest's Node side, Stryker's child processes, native tools, Java and Chromium need a box. Walks back the \"no copy of the code on Cloudflare\" cost line in scheduled jobs, pending the owner. Lean 70%; the doubt is vCPU speed and box setup time, which one live run of 181's 150-mutant sample settles for under $0.50. $0."
+---
+
 # 197. Daily checks on Cloudflare: the long jobs run as hands in a box
 
 Everything here is about `next/`. Reading only: nothing was deployed, nothing ran on Cloudflare,

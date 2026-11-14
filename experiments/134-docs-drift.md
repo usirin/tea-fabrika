@@ -1,3 +1,9 @@
+---
+date: "2026-10-24"
+scripts: "`134-docs-drift.ts`, `134-truth.json`, `results/134-docs-drift.json`"
+summary: "Rarely, and it was caught fast. 30 doc lines that merged kamp-us/demlik PRs wrote (9 from experiment 86's tickets, 21 from a seeded draw of PRs merged a week or more before), read against main 12 to 47 days later, median 27: 19 hold, 0 drifted, 11 gone (8 left in one README rewrite, #592, two of which would have drifted had they stayed; 3 edited by the PR that changed their code). Closed tickets of the shape \"the doc says X, the code does Y\", by a title regex read by hand: demlik 18 of 392 (4.6 per 100; drift 2.6, born wrong 6, unclear 2), phoenix about 186 of 6,412 from a draw of 80 (2.9 per 100; drift 2.6). demlik's drift tickets were all filed the same day as the change that broke the doc, mostly a door closed or moved; 17 of 18 fixed; phoenix closed 3 of 11 as not planned. A sonnet reader agreed with me on 27 of 30 lines but said `drifted` on none of 3 known-false controls (1 of 3 with whole code files), so it cannot be the check. tea's code blocks already have lasting checks; prose has none. Recommendation: no agent docs check now; a code-only grep for removed names, advising. $2.29, reader only. Confidence 70%."
+---
+
 # 134. Docs drift: how often a true doc line goes false, and who notices
 
 The question: a pull request adds a doc line that is true on the day it merges. How often does a

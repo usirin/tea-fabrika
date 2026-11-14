@@ -1,3 +1,9 @@
+---
+date: "2026-11-10"
+scripts: "none on main; the counting script is not kept, and the write-up says what it counts"
+summary: "Today's lead tooling. Reading (SRE retry and error budgets, gRPC A6, OTP restart intensity, Shape Up, agent SDK caps) plus a replay over `field/runs.jsonl` from 2026-11-01: 84 lanes by ticket, median 6 steps, max 93, $1,067 at list price. Not alone. A flat 2x the median lane stops 29, 24 of which landed later; 2x the plan's hours stops 2 of 38, since plans give hours, not steps or dollars. OTP's 3 stuck in 5 steps stops 7, the worst two at their first burst. On the five longest lanes about 35 of 41 stuck steps were tool faults (an agent's sort). Tooling and field merges rose to 56% on 2026-11-09. Lean, about 65%: a typed `tool` or `work` cause on stuck, intensity on work, a shared tool budget, 0076's 2x as a backstop, a weekly plumbing share. For 0076 and 0072, tracker ticket 675. Ten days of data; the lane cut moves every number. No model, agent time only."
+---
+
 # 254. When should a lane stop and ask a person, and would twice the plan's estimate have been the right line?
 
 Read and counted on 2026-11-10, on main. Both: reading on how others stop runaway work, plus a

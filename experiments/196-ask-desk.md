@@ -1,3 +1,9 @@
+---
+date: "2026-11-02"
+scripts: "none; reading, plus Chromium checks of the page's demo"
+summary: "Reading, not a measurement. The makers agree: one item, one decision, then the next (Linear triage, Superhuman, GitHub); a suggestion is shown with its why and taken with one press (Linear Triage Intelligence, Superhuman drafts); autonomy is switched on per kind by a person (Gmail's filter from one message, Linear's auto-apply), with no measured count; and a shown suggestion is followed even when wrong (automation bias, NN/g defaults), so agreement on a shown rec is weak evidence. 19 of 20 still allows about a 22% disagree rate; 30 blind in a row allows about 10% (rule of three). Ticket 117 (today's version): three asks, each one line, answered in 71 to 121 s by the ledger; the plan's leans exist but no ask has a rec field; the asks list cannot answer; the note is optional on `no`; all three answers hash the ticket's text, not the plan or the diff; the `no_review` stop never reached the asks list. Six principles for the note, A1 to A6, decided 2026-11-02, with leans 70% to 90%. Round 2, after the owner's review: one asks program, today's popup as its glance and a list-and-detail tile from \"open all\"; today's popup shot from the built app; 132 click and key checks pass on the demo; eight patterns for opening a tile with content (open or focus 90%, where it lands 65%, the way back 60%, which clashes with the tile guidelines' heir rule), four flagged for a note or a line of their own. Round 3, the look step, ran six rounds of app shots beside today and Linear: a full-row fill, sans meta, one quiet box, the rec as a labeled row, two text grays (a third failed contrast). Feeds [the ask desk](../docs/direction/ask-desk.md). $0."
+---
+
 # 196. How should fabrika show a person its asks, so most take one key, and learn from the answers?
 
 Read 2026-11-02, in three rounds. **This is reading, not a measurement.** No model was called. Round

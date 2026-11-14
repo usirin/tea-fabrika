@@ -1,3 +1,9 @@
+---
+date: "2026-11-05"
+scripts: "none"
+summary: "Both versions; reading GitHub's and git's docs, today's key walls with file and line, and public Copilot commits. It works free with no second server: each person's host keeps its own key of the one shared app in the keychain, mints a 1-hour token pinned to its own installation, one repo, `contents` and `pull_requests` write, and builds each commit through GitHub's API with no author, so GitHub signs it as the bot (Verified); a `git push` would be unsigned. The bot's email uses the bot user's id, not the app's (`github-actions`: app 15368, bot 41898282), which fixes the note's sketch. The shared app is public and owned by a free org both people own, so each makes their own key (up to 25 per app). Any key mints for any installation and GitHub cannot tie a key to one: the host pins its own, each person picks repos, keys revoke alone, the ledger records the key's fingerprint. The bot can never approve its own pull requests; the host has no review or merge call. The person meets setup once, then nothing. One `Fabrika-Input` line per input; git allows the repeat. Lean 75%; the doubts are how the co-author shows, whether an app manager can make a key, and file modes through the API, each settled by one test commit. No model, $0. 2026-11-06, the first real app, `fabrikalfa`: the bot pushes only its own branches under the repo's rules, an unsigned commit shows no badge, one signed with a step key shows \"Unverified\", and a step's signature in a git note checks from a fresh clone."
+---
+
 # How should agents commit and push as the fabrika bot, with the person as co-author?
 
 Read 2026-11-05. **This is reading only.** No GitHub App was made, no key, no setting changed, no

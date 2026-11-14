@@ -1,3 +1,8 @@
+---
+date: "2026-11-01"
+summary: "Today's version. Six runs on a toy repo, real Codex and Claude, a local host and no real person. The first showed fake agents had hidden real bugs: a real plan stuck in 1m23s with no words. After two rounds of fixes, two tickets merged with no patch in about 5 minutes each, and a person's decision reached every later step. The review agreed in the last slugify run, so \"review disagrees, ask the person\" has only a stand-in test. Real GitHub, a real person and the app did not run. A mutation run on the pull request, cut short on purpose, killed 68 of 129, a low estimate, and three of its survivors became tests"
+---
+
 # 178. A lane on a throwaway repo, with real models
 
 **On 9af7b272, with no patch, both tickets ran from ticket to merge in about 5 minutes each, and the person's decision reached every step that writes or judges. But review agreed with the decision this time, so the new "review disagrees" path did not run on real models.**

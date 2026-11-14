@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-28"
+summary: "No tabs. A container runs horizontal or vertical, and nested containers alternate, as in AeroSpace. Any tile folds into a thin strip that keeps its place (Ctrl-B f, or a click on its title bar); a container whose tiles are all folded draws as one strip. The last open tile cannot fold."
+---
+
 # Fold, not tabs
 
 **Decided 2026-10-28.** The desk has no tabs. A container in the layout tree

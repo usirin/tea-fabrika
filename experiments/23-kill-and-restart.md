@@ -1,3 +1,9 @@
+---
+date: "2026-10-04"
+scripts: "none"
+summary: "The second run resumed the same Claude conversation and sent the build again. The restart works with real agents."
+---
+
 # 23. Kill a real build, start it again
 
 `src/restart.test.ts` kills the lane after every step with scripted agents.

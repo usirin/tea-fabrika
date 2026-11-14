@@ -1,3 +1,8 @@
+---
+date: "2026-10-23"
+summary: "Most are sound; four are not. A false alarm is a fire where the code stayed and an ignore, allowlist or limit changed (Google's \"effective false positive\"; its blocking checks allow about 0, advice up to 10%, CACM 2018). vitest's 5 s default, never chosen, caused 6 of the 10 red pushes to main (of 64), 0 of them a bug, each fixed by a longer limit; 89 per-test limits work around it. Of 40 plugin ignores, all read: `no-node-sqlite-test-backing` 8 of 8 wrong (phoenix's D1 rule; here `node:sqlite` is the real driver); `no-effect-promise` 8 kept their code, 7 for the case Effect's docs give `Effect.promise`; `no-raw-try-catch` 21 kept their code, 18 in experiments; `no-type-assertions` 3, each a real cast, the rule working. The ten phoenix rules came copied unchanged, eight registered there at warn; `--error-on-warnings` made them all block. Layer allowlist: 32 entries, one deliberate fence, none added to dodge a fire. The laws test looks at 16 of 28 `defineMachine(` calls in shipped folders. The promises gate has never fired. PR 44's `lint:dead`, not on main: 11 of 12 wrong. Recommendation: one chosen test limit; drop the sqlite rule; narrow `no-effect-promise` and `no-raw-try-catch`; fix the \"nudge\" comment; say what the laws test skips; keep `lint:dead` out of the gate. $0. Confidence 80% in the counts, 70% in the verdicts."
+---
+
 # 125. Every check that can turn main red: where it came from, and how often it was wrong
 
 The question: every check on main that can fail a pull request. Where did its rule and its

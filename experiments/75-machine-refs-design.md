@@ -1,3 +1,9 @@
+---
+date: "2026-10-17"
+scripts: "none (design only; the build is 75b)"
+summary: "Partly. Durable Objects, Akka, Orleans, Restate, Temporal and Dapr all address an instance by kind and id, getting the ref does nothing, and no addressing call says \"saved\". None lets the caller say \"resume\": the instance reacts to its own load (Akka `RecoveryCompleted`, Orleans `OnActivateAsync`). Wrong part of the guess: the workflow systems do keep start and attach apart, and Temporal fails a second start by default. Who carries on unfinished work splits: Temporal and Restate do it by themselves; the actor systems only through a remembered entity, a reminder or an alarm. Proposed: each machine's run declared once on `defineProgram`; `machines.<kind>.get(id).start(msg)` in `main`; the resume Msg declared on the kind; a live copy shared by id (Effect `RcMap`); `until` dropped; `left` reduced to a `parent` checked when `main` ends. Confidence 65%."
+---
+
 # 75. Machine refs: what the durable-entity systems do, and the shape it points to
 
 Design only. No code changed. The build is experiment 75b, after 73 lands.

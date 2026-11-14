@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-03, 2026-11-04 and 2026-11-07"
+summary: "Today's version first. An area is a person's data on the project's ledger: made, renamed and merged in the app or tsh, never a list in the program, never read from folders; the app suggests, a person picks the first ones in the tracker's onboarding (A1, decided 2026-11-04). A ticket holds an area's number; its area is a guess (the filer's, or its source's through `from`) until a person picks, and the guess says so (A2, decided 2026-11-04). The list narrows by one filter with three doors, `--area`, the chip and `f`, plus view tabs, with \"No area yet\" one of its values (A3, decided 2026-11-03); grouping is a Display option (A4, decided 2026-11-03). Decided 2026-11-07: don't say the area twice (a guessed row keeps a small \"?\"), the picker is a menu, a saved view is a named filter; an area can be deleted as well as merged, its tickets going to \"No area yet\"; a guess may come from Judge (Jev), a project setting off by default. Round 3 of design B3 ships with two fixes: the status bar follows the filter, and the menu reads the ledger. From experiment 205."
+---
+
 # Areas: what an area is, and how the tracker narrows to one
 
 **Decided 2026-11-07.** Every principle and smaller call is now decided; the owner's walks:

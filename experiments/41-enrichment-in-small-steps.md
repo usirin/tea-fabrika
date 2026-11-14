@@ -1,3 +1,9 @@
+---
+date: "2026-10-10"
+scripts: "`41-vet-probe.ts`, `41-facts-probe.ts`"
+summary: "A redesign. Vetting would have sent run 2's draft back at once: 6 of its 7 examples do not typecheck on today's code and the 7th holds already."
+---
+
 # 41. Enrichment in small steps: facts, a draft, vetting
 
 Not an experiment, a redesign, step 1 of it. The same end result as before (a

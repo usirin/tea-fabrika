@@ -1,3 +1,9 @@
+---
+date: "2026-10-18"
+scripts: "`src/program/outbox.ts`, `src/program/program.ts`, `src/program/storage.ts`, `src/program/shape.ts`, `src/stages/queue.ts`, `src/stages/ship/program.ts`, `src/stages/review/program.ts`, their tests, `docs/direction/tea-program.md`"
+summary: "Yes, scripted. An input can say `{ack: \"manual\"}` (AMQP's mode): `main` reads `{value, ack}` and acks once saved. A pipe into it keeps each value in the sender's run record until the ack, and sends it again at the next start: Effect cluster's `MessageStorage` design (kept before delivery, a reply marks it done, the rest handed back), kept by the sender since there may be two storages and no transaction. At most 5 values wait on their ack; the sender then waits, like a full Unix pipe. Ship's `pr` acks once its kept queue has it. Killed before every one of 85 writes in turn, `review | ship` over three pull requests lost none; before, 26 of 79 kill points lost one. Dedup stays in ship by head: half the repeats are fresh sends a pipe cannot tell from new work. A second enqueue remains only where the kill follows ship's own `enqueue`, which GitHub's read-first absorbs. Cost: 2 record writes per value. Confidence 85%."
+---
+
 # 75d. An ack on the pipe: a pass review sent is never lost to a kill
 
 Scripted runs only: fake GitHub, a scripted reviewer, no agent, $0.

@@ -1,3 +1,9 @@
+---
+date: "2026-10-10"
+scripts: "none"
+summary: "A change. The audience question is gone. The enricher answers a typed `open_decision` and code routes on it."
+---
+
 # 39. Jev stops deciding who picks an issue up
 
 Not an experiment, a change the runs forced. The first real ticket,

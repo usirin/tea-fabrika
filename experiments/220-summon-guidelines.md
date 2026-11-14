@@ -1,3 +1,9 @@
+---
+date: "2026-11-06"
+scripts: "none"
+summary: "Today's version first; reading about 16 makers (POSIX, fish, Nushell, zsh, tmux, IRC, Slack, another chat tool, Claude Code, Codex, `llm`, Warp, WCAG, a radio call-up, a kitchen pass), plus one run of tsh's word splitter and parser on eight lines. Names are checked tokens refused on clash; an addressed line's rest is read by other rules; one parse feeds highlighting, completion and errors; model and effort are the harness's own words. Today `@claude ... #7 twice?` loses `#7 twice?` to the comment rule and is refused at its second word; `summon` is refused at its second word. Feeds the proposed summon guidelines note. $0."
+---
+
 # How should a shell summon agents by name, and what grammar does that need?
 
 Read 2026-11-06. **This is reading, plus one small check run.** The check ran today's tsh word

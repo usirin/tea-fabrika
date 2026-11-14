@@ -1,3 +1,9 @@
+---
+date: "2026-11-07"
+scripts: "none; reading only"
+summary: "Reading, not a measurement; `next/`. tea 0.23.0's `./otel` traces agent runs only, so steps, Msgs and Cmds get spans from Effect's own `withSpan`. Alchemy's local instance has no trace viewer, so we keep our own sink. Cloudflare's tracing keeps 7 days on the paid plan, and a span with no I/O reads 0 ms. Three facts were being lost: each throw's error before `dead`, `down`'s retry `until`, and a failed Cmd's reason. The study sized P37 at 450 to 600 lines, and the whole job at 700 to 1,000 lines, 1.2 to 1.7 agent hours, 60%. Built: about 3,500 lines, 2,130 of them tests (PR 475), about six times the guess. Wrong and kept: each object pruning its own spans at 7 days. A decided note keeps a job's spans forever; corrected the same day. 0016 dropped `until`. No model, $0."
+---
+
 # 273. What must Tier 1 record to be observable, where do the spans land, and how big is the work?
 
 Read on 2026-11-07; moved here on 2026-11-11. **This is reading, not a measurement.** Nothing ran:

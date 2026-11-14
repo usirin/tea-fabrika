@@ -1,3 +1,8 @@
+---
+date: "2026-11-08"
+summary: "`next/`, P33 step 1 (ticket 252); Miniflare 4.20260730.0, workerd 1.20260730.1, with `next/`'s own `recoverActivity`. Yes when the marker is on disk: 16 cases, 13 pass. The constructor ran on every wake, idle ones too (evict, 15 s idle, idle abort, both restarts), so \"constructor ran, so it crashed\" was wrong 7 times. A `stepping` marker survived a mid-step abort, a 10 ms gap, `storage.sync()` and a SIGKILL of workerd, and woke as `interrupted`. Lost twice: `ctx.abort()` right after an awaited put, or in the same turn, woke as `idle`. A thrown step does not rebuild the object. Evict let a 30 s step finish (my `interrupted` guess was wrong). Not P33's code but the plan's assumption: P11 must `sync()` the marker before the step works (85%). Cloudflare untested. No model, $0."
+---
+
 # 231. When a program's object is built again, does its saved marker tell sleep from interrupted work?
 
 Run 2026-11-08 on the laptop: Miniflare 4.20260730.0 with workerd 1.20260730.1, Node v26.13.0,

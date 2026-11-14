@@ -1,3 +1,8 @@
+---
+date: "2026-10-11"
+summary: "Experiment 54's 58% does not hold. Of 60 of its 181 \"there before, not raised\" findings, drawn at random and read against the code at both commits, 32 were really missed, 18 were new since the earlier review, 3 had been raised before and 7 were not problems. That makes \"already there and missed\" about 31% of placed later-round findings (24% to 38%). Half of the 181 have no quote in any file. 20 of the 32 missed were in a place an earlier review says it read, and 16 were the same kind of fault as an earlier finding, in a new place. Jev's first choice matched the reading in 33 of 60, for $0.0023."
+---
+
 # 57. The repeat findings, read by hand: was it really there before?
 
 Experiment 54 said that 181 of 312 placed later-round findings (58%) quote

@@ -1,3 +1,9 @@
+---
+date: "2026-10-04"
+scripts: "none"
+summary: "Two real duration runs. One was done in 2 attempts. The other ended at the frozen round 3 with both late findings filed, one of them a real bug that did not block."
+---
+
 # 30. Freeze the list of findings at the last round
 
 Fabrika's answer to experiment 29, copied: the last round the budget allows

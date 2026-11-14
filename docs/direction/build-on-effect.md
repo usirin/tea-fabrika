@@ -1,3 +1,8 @@
+---
+state: "decided; the host's clock breaks it, fixed in the core sweep"
+summary: "Effect's own modules first; Node only at a thin edge, named in a comment. Check Effect before building our own. Types come from inference, not by hand."
+---
+
 # Build on Effect; let types be inferred
 
 Decided 2026-10-17. Type inference: 2026-10-13.

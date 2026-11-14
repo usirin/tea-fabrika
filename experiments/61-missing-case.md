@@ -1,3 +1,8 @@
+---
+date: "2026-10-12"
+summary: "Two parts. 106 criterion lines from the 17 tickets that demlik's 12 newest merged pull requests closed, sorted by written rules: 77 are recipes code could decide, 16 hold a recipe and a reading part, 13 need reading, and 12 claim every or never with no case named. Then a reviewer agent on the review stage's own settings, handed six merged pull requests with a known untested case each and asked which case the tests do not try: it named the known case in 6 of 12 runs, both runs on three cases and neither run on the other three. Somebody had already seen all six gaps before the merge, so that is not a fair test; on the one gap nobody had seen it missed, in one run. Beside the known case it named 38 others, 35 real by an agent's reading, 11 of them wrong code as read. $11.82 for 13 runs. Three runs' tool lists also held connector tools; none was called."
+---
+
 # 61. Can a reviewer find the case the tests left out?
 
 A ticket's acceptance criteria get marked "met". A split for how is on the

@@ -1,70 +1,32 @@
-// The exam's thin end-to-end runner (docs/plan/tier-1-detail.md, the exam's item 10). Each landing
-// adds its own file to `e2e/`, as `e2e/<name>.test.ts`, and this runs them all through vitest, one
-// file at a time, since they start a brain, Chromium or Electron. It passes while there are none.
-// The runner is the exam's; a builder never edits it.
+// The exam's thin end-to-end runner (docs/plan/tier-1-detail.md, the exam's item 10). Each landing adds
+// its own file to `e2e/`. This runs them in one Vitest run with the repo's end-to-end config, one file at
+// a time (vitest.e2e.config.ts). Its arguments go to Vitest as they are: a file name selects, `--shard
+// k/n` keeps one leg. The runner is the exam's; a builder never edits it.
 //
-//   node next/apps/fabrika/e2e.ts
+//   node next/apps/fabrika/e2e.ts [vitest arguments]
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, Path, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 class E2eFailed extends Schema.TaggedError<E2eFailed>()("E2eFailed", {
   exitCode: Schema.Number,
 }) {}
 
-// A test that starts a brain waits on it, so the limits are vitest's own times 24: two minutes.
-const LIMIT = "120000";
-
 const run = Effect.gen(function* () {
-  const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const folder = path.join(import.meta.dirname, "e2e");
-  const names = (yield* fs.exists(folder)) ? yield* fs.readDirectory(folder) : [];
-  const files = [
-    ...names
-      .filter((name) => name.endsWith(".test.ts"))
-      .sort()
-      .map((name) => path.join(folder, name)),
-    path.resolve(import.meta.dirname, "../../packages/tuval/src/browser/key.laws.test.ts"),
-  ];
-  const selected = process.argv.slice(2);
-  const targets = selected.length === 0 ? files : files.filter((file) => selected.includes(path.basename(file)));
-
-  if (selected.length > 0 && targets.length !== selected.length) {
-    return yield* new E2eFailed({ exitCode: 2 });
-  }
-
-  if (targets.length === 0) {
-    yield* Console.log("e2e: no e2e/*.test.ts yet, nothing to run");
-    return;
-  }
-
-  yield* Console.log(`e2e: ${targets.length} file(s): ${targets.map((file) => path.basename(file)).join(", ")}`);
+  const config = path.resolve(import.meta.dirname, "../../../vitest.e2e.config.ts");
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const exitCode = yield* spawner.exitCode(
+    ChildProcess.make("pnpm", ["exec", "vitest", "run", "--config", config, ...process.argv.slice(2)], {
+      cwd: import.meta.dirname, // unchanged; no end-to-end file reads its cwd
+      stdin: "ignore",
+      stdout: "inherit",
+      stderr: "inherit",
+    }),
+  );
 
-  for (const file of targets) {
-    const exitCode = yield* spawner.exitCode(
-      ChildProcess.make(
-        "pnpm",
-        [
-          "exec",
-          "vitest",
-          "run",
-          "--maxWorkers=1",
-          "--root",
-          path.dirname(file),
-          path.basename(file),
-          "--fileParallelism=false",
-          `--testTimeout=${LIMIT}`,
-          `--hookTimeout=${LIMIT}`,
-        ],
-        { cwd: import.meta.dirname, stdin: "ignore", stdout: "inherit", stderr: "inherit" },
-      ),
-    );
-
-    if (exitCode !== 0) {
-      return yield* new E2eFailed({ exitCode });
-    }
+  if (exitCode !== 0) {
+    return yield* new E2eFailed({ exitCode });
   }
 });
 

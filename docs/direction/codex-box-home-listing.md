@@ -1,3 +1,8 @@
+---
+state: "decided in pieces, see the note"
+summary: "Today's version. Denying home whole stops every Node script under it, so a listing of home is denied entry by entry. Names can be listed, and an entry made later is open unless it is on the login list."
+---
+
 # Codex's box closes what is in home, not home itself
 
 **Decided, in pieces:**

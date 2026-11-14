@@ -1,3 +1,8 @@
+---
+date: "2026-10-16"
+summary: "A program is now a name, a description, typed flags (argv, once), inputs (stdin, told at any time with `tell`) and outputs, the machines it shows, and `main`, an Effect that runs machines on tea's Effect engine and asks for its services through Effect's context. It is not a machine. `start` answers a run handle: id, `stop`, `ended`, `listen` (late listeners too), each machine's state and changes; no `dispatch`. The ship stage is one, with no change to `@demlik/tea` or the ship machine: a fresh machine per pull request told, and `run.ts` is a launcher that tells it each url. On 10 real pull requests, read only, old and new `run.ts` printed the same bytes. Started once from code with fake services and told six pull requests in two batches, it said `done`, `send:builder:checks_red`, `ask:owner:approval`, `stuck:enqueue_failed`, `stuck:read_failed` and `done:part`, in order, and kept running until stopped. A first version took its inputs once at start; it was changed because a desktop host keeps feeding a running program. What hurt: a one-shot caller must stop the run itself; outputs are kept forever for late listeners; one union of services for every mode; a listing cannot name the services. **Late listeners and the counting were replaced in 64.**"
+---
+
 # 63. The ship stage as the first real program
 
 ```ts

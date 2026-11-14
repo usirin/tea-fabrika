@@ -1,3 +1,8 @@
+---
+state: "proposed, direction decided 2026-11-05, the rest 2026-11-06; walked at Tier 5"
+summary: "Both versions. An agent's commit is authored by a GitHub App's bot identity, never the person's account, and the person rides as `Co-authored-by`. One shared bot for everyone. The host writes which agent and the input that caused it; the agent never names itself, and pushes with the app's token, not the person's login. The bot is `fabrikalfa`, one for every project its owner runs fabrika on; its one key sits in the brain, and invited people get tokens through it. In the box a stand-in token is swapped at the network edge, so agents keep plain `git push` and `gh`. Verified on main through GitHub's squash; step proofs in git notes. Pull requests open as the person or the bot. The bot may change CI files; which folders an agent may edit is a `fabrika.toml` setting. Open: the edge to a remote brain, who writes the trailers."
+---
+
 # Agents commit as a bot, with the person as co-author
 
 **Proposed 2026-11-05.** Walked when Tier 5 starts (owner, 2026-11-08): agent commits, token swaps and trailers. The owner decided the direction on 2026-11-05, marked decided below:

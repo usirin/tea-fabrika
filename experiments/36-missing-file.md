@@ -1,3 +1,8 @@
+---
+date: "2026-10-05"
+summary: "Over a whole package the hidden file ranked first in 22 of 28 trials, with no flag on the 9 complete changes. That run cost about $20."
+---
+
 # 36. Jev finds the file a change forgot
 
 `36-missing-probe.ts`. Can Jev spot a file the change should have touched and did

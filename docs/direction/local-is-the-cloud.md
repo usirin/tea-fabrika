@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-25; the lint check that enforces it is planned in Tier 1's P12; walked 2026-11-08; 0042 added 2026-11-09, its lint rule is ticket 506"
+summary: "Everything on Cloudflare also runs on the laptop from the same code and Alchemy stack: ledger server, a project's host, the key relay, the key store. One command moves a project. A cloud piece lands with its local twin in the same pull request, and tests run on the local one. In `next/`, whatever starts or talks to the local runtime goes through Alchemy, never Miniflare or workerd directly ([0042](../../.decisions/0042-platform-pieces-go-through-alchemy.md))."
+---
+
 # The laptop runs the same setup as Cloudflare, one command apart
 
 **Decided 2026-10-25.** Walked at Tier 1's start (owner, 2026-11-08): checking local and cloud setup together; nothing new to decide, and the check is planned in Tier 1's P12. Everything fabrika runs on Cloudflare also runs on the

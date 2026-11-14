@@ -1,3 +1,8 @@
+---
+state: "decided (2026-10-31); first pass approved 2026-11-01, not built"
+summary: "Each pass in `next/` goes through all five layers, thin but real, and ends with something a person can use. The first pass, in six pull requests: door and plumbing, the app, Cloudflare, notes, backup, chaos. Replaces ticket 115's first plan."
+---
+
 # Every update builds every layer
 
 **Decided 2026-10-31. The first pass was updated 2026-11-01.** This is about `next/`.

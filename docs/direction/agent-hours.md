@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-01"
+summary: "Today's tracker first, then `next/`'s. A ticket's size is an `estimate` in agent hours on a doubling scale (0.25 to 8, more means split), written by the planner before the build and never overwritten. Its `spent` is folded from the ticket's run facts, never typed. An agent hour is one agent's wall clock, summed, failed runs in, drivers out. The rate comes from what merged, per model, starting at experiment 187's 602 lines an hour. Runs record the ticket and the PR as two fields, a start and end, and their parent. Eight principles, each held to Linear's way and to Elm's and OTP's where they have one. Wall clock with waits for now, active time beside it; cap at 8 and split; the rate from the last ten merged tickets, one per model; Tier 1 and the self-fix plan restated at the measured rate; the field log's `lane` split into `ticket` and `pr`."
+---
+
 # Agent hours
 
 **Decided 2026-11-01.** The owner approved every lean: the names `estimate` and `spent`, the

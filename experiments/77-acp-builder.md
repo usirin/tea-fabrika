@@ -1,3 +1,9 @@
+---
+date: "2026-10-18"
+scripts: "`src/stages/build/builder-acp.ts`, `src/stages/build/check.ts`, `src/stages/build/check-hook.ts`, `src/stages/build/report.ts`, `src/stages/build/program.ts`, `experiments/77-fence.ts`, `experiments/77-structured.ts`"
+summary: "Yes, behind `build --harness acp`; the SDK path stays the default. Asks alone are not the fence: in `default` mode a sandboxed Bash call never asks, so a `git push`, a write by redirect and a request to leave the sandbox met only the OS sandbox. A Claude Code command hook crosses ACP as plain settings, runs the builder's own check (one function, shared with the SDK path) before every call, and fails closed; with it, and Bash made to ask, the ACP fence refused exactly what the SDK hooks refuse across 16 cases. The typed form comes back through a `report_build` MCP tool the client serves; the SDK's `outputFormat` also comes back through the adapter's raw result, which 76 said it could not. The adapter runs under 71's guard: a held copy refuses the start, a `kill -9` of the parent frees it. Live on twin sandbox tickets (sonnet): all five builds done, the same review verdict, about the same time (54 s against 48 s), about a third more cost ($0.090 against $0.067), likely the adapter's system prompt. Two holes on both paths: a Glob pattern and a `cat` that read outside the copy. About $1.55. Confidence 80%."
+---
+
 # 77. The builder over ACP, with the same fence
 
 ```

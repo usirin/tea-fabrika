@@ -1,3 +1,9 @@
+---
+date: "2026-11-02"
+scripts: "none; reading only"
+summary: "Reading, not a measurement, built on 191. The makers agree: a person accepts a new picture, never the run (Playwright fails a test that writes a missing baseline; Chromatic alone lets an author approve their own); a picture holds only where it was made; fail and \"needs review\" are two answers (axe's incomplete, Storybook's todo); automation finds about half. Tickets 143 and 144 (today's version, on their branches) had five UI bugs, all found by a person or a model looking at shots, and each had a cheaper layer: two token laws, one machine law on real wasm, one Tab walk, one layout law at 1024x700; none needed a golden. Info mode's \"tab to it\" was never tested: e2e reached the button with `.focus()`. Seven principles for the proposed note, U1 to U7, with leans 70% to 85%. Linear and Figma publish nothing on UI tests. $0."
+---
+
 # How should fabrika check that a window looks and behaves right, and what did tonight's two tickets teach?
 
 Read 2026-11-02. **This is reading, not a measurement.** Nothing was built, run or tested, and no

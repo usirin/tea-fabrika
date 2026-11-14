@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-08, the five principles; other candidates proposed"
+summary: "Both versions. A first draft of the principles page: multiplayer work with agents (agents sign their own work in your tiles), spend the person's attention well, talk where people are and then bring them in, and one shape, two readers (agent accessibility, a running list of rules each with its WCAG twin: tool parity for 2.1.1, the screen never the only place for 1.4.1), and unsure is a setting (a choice short of sure goes in `fabrika.toml` with a safe default and its use recorded, so data decides and nobody's belief is forced; an experiment flag comes out once decided, a preference stays, and a wall is never a setting an agent can turn off)."
+---
+
 # Principles: what fabrika is for, in five lines
 
 **Decided 2026-11-08 (owner): the five principles, as written.** The principles page the design

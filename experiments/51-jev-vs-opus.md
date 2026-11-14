@@ -1,3 +1,9 @@
+---
+date: "2026-10-10"
+scripts: "`51-jev-vs-opus.ts`"
+summary: "On 66 real next-step choices, Jev at 0.8 and up gave Opus's answer on the same small text 38 of 38 times, and 20 of 28 under it. It matched what the operator agent did 35 of 57 times, where Opus on the small text matched 41. $0.000023 an answer against $0.0052."
+---
+
 # 51. Does Jev pick what Opus picked?
 
 Jev is small, cheap and fast. Nobody here expects it to out-think Opus. The

@@ -1,3 +1,9 @@
+---
+date: "2026-10-18"
+scripts: "`88-sort-routing.ts`, `lib/sort.ts`, `88-truth.json`, `results/88-sort-routing.json`"
+summary: "Yes for the route; the \"no\" is weak. Sort (sonnet, no tools) read 40 closed demlik tickets from their first title and body (GitHub's oldest revision) and answered yes with `plan`, `ruling` or `research`, no with a reason, or a duplicate. On the 33 that really were a yes it picked the step they really took 56 of 66 times (85%), 58 of 66 (88%) with the reporter's suggested next step cut; 37 of 40 the same both runs. It sent the bug that was really a decision to ruling and the investigation that became a PR to research. Every miss was ruling against plan-with-a-question, or history it could not see; none needed a fact a kind label carries, and triage's own labels were wrong as often. It said no once in 160 answers and never on the 3 triage closed as not worth it: sort's brief needs the repo's value bar. $3.40. Confidence 80%, up from 65%."
+---
+
 # 88. Sort routes a "yes" with no ticket-kind label
 
 The question: can sort's "yes" also say what the ticket needs next, so the

@@ -1,3 +1,9 @@
+---
+date: "2026-10-21"
+scripts: "`packages/fabrika/{package.json,rslib.config.ts,tsconfig.build.json,pnpm-only.ts}`, `packages/fabrika/src/{tsh.ts,host/beside.ts}`"
+summary: "Yes. `@kampus/fabrika` built with rslib 1.0.3 (bundleless, ESM, `.d.ts`): 195 `.js` and 195 `.d.ts`. In the repo `exports` and `bin` name `src/*.ts`, so tsc, vitest and a plain `node` read source with no build: 2029 tests, as on main, and the tutorial ledger starts with no `dist/`. `publishConfig.exports` and `.bin` name `dist/`, swapped in by `pnpm pack`; `npm pack` and `npm publish` are refused by a `prepack`/`prepublishOnly` check. A custom export condition was tried first and dropped: a `node` without `-C` silently read a stale `dist/`. `effect` and tea are peers; Miniflare, the Agent SDK, ACP and OpenTelemetry optional peers. Packed with `private` lifted in a copy, installed outside the repo with npm 11 and pnpm 10: no peer warning; two-hosts 20/20/20 under `kill -9` and agents 8/8 with real haiku, both twice; `tsc` with `skipLibCheck: false` 0 errors on the tutorials and all 137 exports; the `tsh` bin answers, or names missing peers in one line; the top level's browser bundle from `dist/` has 0 Node modules. No optional peer: top level and `/memory` load, `/local` fails with one Miniflare line. Fixed on the way: rslib copying `new URL` targets, `.ts` names at runtime (`beside.ts`), Miniflare's types failing `skipLibCheck: false`. Not publishable yet: no LICENSE (owner's call), pipeline reads repo paths at runtime, no changesets or release workflow. $0.008. Confidence 85%."
+---
+
 # 108. Install from a tarball
 
 The question: can `@kampus/fabrika` be built, packed, and installed by a

@@ -1,3 +1,9 @@
+---
+date: "2026-11-07"
+scripts: "none"
+summary: "About the CLIs, not either version of fabrika; reading only, not a measurement: Claude Code 2.1.319, Agent SDK 0.3.316, Codex CLI 0.165.0 and openai/codex `57a808a`, with file and line. Both CLIs already pass on the server's percent of the limit: Claude's `rate_limit_event` (`utilization` 0 to 1, `resetsAt`) and Codex's `token_count` snapshot (`used_percent` 0 to 100, `window_minutes`, `resets_at`); token counts, OpenTelemetry and dollars have no limit to divide by. Subscription or key per run: Claude's `apiKeySource` on `system/init` plus `subscriptionType`, Codex's auth mode plus `plan_type`. A key in the environment quietly wins on both CLIs. Every percent source a program can read is experimental or undocumented. Feeds the owner's decision of the same day, [the meter on subscriptions](../docs/direction/one-ask-and-one-meter.md#the-meter-on-subscriptions). 85%; the doubt is how often the fields arrive on headless runs. No model, $0."
+---
+
 # How full is a subscription's limit, and is a run on one at all? Claude Code and Codex, read from a program
 
 Read 2026-11-07. **This is reading, not a measurement.** No paid run, no agent on a ticket. What was
