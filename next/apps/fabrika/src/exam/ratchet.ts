@@ -206,6 +206,9 @@ if (import.meta.main) {
       Effect.tapError((e) => Console.error(`ratchet: ${JSON.stringify(e)}`)),
       Effect.provide(NodeServices.layer),
     ),
-    { disableErrorReporting: true, teardown: (exit, onExit) => onExit(Exit.isSuccess(exit) ? exit.value : 2) },
+    {
+      disableErrorReporting: true,
+      teardown: (exit, onExit) => onExit(Exit.isSuccess(exit) && typeof exit.value === "number" ? exit.value : 2),
+    },
   );
 }
