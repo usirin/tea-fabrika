@@ -106,3 +106,11 @@ a reason (owner, 2026-11-13).**
 - Not decided here:
   - `fabrika/service-id`, the sixth advice rule, which its own pull request makes block.
   - Whether `AGENTS.md`'s false-alarm rule changes for other new rules.
+
+## Amendments
+
+- 2026-11-13: the docs rule takes the five's shape, as the owner's "same for the docs rule" asks.
+  `fabrika/jsdocs` is `"error"` for `next/packages/*/src/**`, so a new folder blocks from its first
+  file. A folder that is not at zero advises through one warn line until its fill deletes it, in
+  place of staying off. That replaces the docs rule bullet's "stays off". Tracker ticket 948 built
+  it in https://github.com/kamp-us/tea-fabrika/pull/1209.
