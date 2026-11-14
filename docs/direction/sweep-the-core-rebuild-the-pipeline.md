@@ -1,3 +1,8 @@
+---
+state: "decided; dead code blocks in `pnpm lint` (2026-10-30; 32 of 36 findings wrong with code-graph 0.11.0, 0 of 4 with 0.12.0), file size dropped (2026-10-24), public names not built; checked 2026-11-01: sweeping the core and rebuilding on it is replaced by `next/`, and the checks stand"
+summary: "The core (program, host, shell, agents, ledger) is swept in place, then copied to `kamp-us/fabrika`. The pipeline is not swept: it is rebuilt small on the swept core, with the old one as a map, so no cleanup goes into the old one. Checks from `@demlik/code-graph` keep the repo clean: dead code and public names. No limit on file size: its 400 lines was a tool default, and research finds no line count where defects jump."
+---
+
 # Sweep the core; rebuild the pipeline small
 
 Decided 2026-10-22. Written down the same day, after a cleanup was proposed

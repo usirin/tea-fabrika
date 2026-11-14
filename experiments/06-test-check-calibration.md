@@ -1,3 +1,8 @@
+---
+date: "2026-10-04"
+summary: "At 0.9 and up, right 200 of 200. All 4 confident misses sat at 0.80 to 0.81."
+---
+
 # 6. Can Jev tell whether a test checks a criterion?
 
 `06-test-check-calibration.ts`, 54 hand-built tests, 324 answers. New question:

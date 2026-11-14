@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-24, replacing \"build on the second use\" from the same day"
+summary: "No new move. Four new combos from the six moves: Rate (advise or block from ratings), Controls (red where it must fail, green where it must pass), Brief (one typed view per role; checkers get no chat), Poll (a fact only on change). Two grow: `ask` keeps a hash of what it saw; the CODEOWNERS reader says which files are the exam. All six are built now, before a stage needs them."
+---
+
 # Four new combos and two that grow, built now
 
 Decided 2026-10-24: all six are built now, before any stage needs them. This

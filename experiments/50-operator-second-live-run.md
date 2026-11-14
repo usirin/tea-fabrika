@@ -1,3 +1,9 @@
+---
+date: "2026-10-10"
+scripts: "none"
+summary: "kamp-us/demlik#625 failed review, was repaired, and merged in 40.2 minutes for $7.68. Three builders in a row were recorded dead when each had done its work."
+---
+
 # 50. The second live run: a failed review, a repair, and three shells that left early
 
 The first live run (section 49) went straight through. This one was picked

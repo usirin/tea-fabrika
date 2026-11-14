@@ -1,3 +1,8 @@
+---
+where: "next/"
+when: "Doing something differently from Effect's own module or guide"
+---
+
 # Where we differ from Effect on purpose, the reason sits beside the code
 
 ```mermaid

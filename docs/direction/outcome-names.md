@@ -1,3 +1,8 @@
+---
+state: "decided; every stage built on it"
+summary: "`done`, `send`, `ask`, `skip`, `stuck`. Passing it on is `verb:who:why`, ending here is `verb:why`. The data is the truth, the name is its spelling."
+---
+
 # Every stage answers in the same five verbs, spelled one way
 
 Decided 2026-10-11. Built for the ship machine first; the other stages are

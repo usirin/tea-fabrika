@@ -1,3 +1,8 @@
+---
+where: "next/"
+when: "Reaching for `Effect.ignore`, a catch-all, or a finalizer"
+---
+
 # A failure we swallow still leaves a trace
 
 ```mermaid

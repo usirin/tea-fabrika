@@ -1,3 +1,8 @@
+---
+date: "2026-10-15"
+summary: "Yes, apart from the tell that never waits. `defineProgram` with typed inputs and outputs, wiring with an exact fit check, a must-arrive value through a Cmd whose handler calls `tell`, both engines and replay all sit on `@demlik/tea` 0.20.0 with no change; 35 tests, both engines, nothing locks up when two programs tell each other from inside Cmd handlers. `tell` answers its four words at once, but says `queued` for a run tea stopped by itself, and `no_cell` can be wrong when a Msg ahead changes the state: tea needs a sync `offer` or a public status. Fit misses checks Effect 4.0.0 leaves out of its JSON Schema: patterns are dropped, and `isMinLength(5)` is written as 3. **The shape was dropped in 63**, and its code removed apart from the shape check."
+---
+
 # 62. Can a program layer sit on unchanged @demlik/tea?
 
 > **Dropped in [experiment 63](./63-ship-as-a-program.md).** The shape below

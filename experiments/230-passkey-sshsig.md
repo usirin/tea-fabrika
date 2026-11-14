@@ -1,3 +1,8 @@
+---
+date: "2026-11-07"
+summary: "`next/`, P10. Yes: real Chromium 156.0.8078.4 assertion passes WebCrypto and OpenSSH_9.4p1, including BE/BS and counter zero. All 29 changed-byte and policy-control cases match expectations. OpenSSH runs inside the sandbox; browser capture needed the lead outside it. UV and backup policy require our own checks. The process-id prerequisite is resolved on main; P10 owns its generator's laws. No model called by the scripts, $0."
+---
+
 # Passkey SSHSIG: capture outside the sandbox
 
 `next/`, Tier 1 P10, ticket 248. Started on 2026-11-07. **The real Chromium

@@ -1,3 +1,8 @@
+---
+state: "proposed 2026-11-06; walked at Tier 5"
+summary: "A vision: fabsh lines like `summon claude haiku as scout on cloud` already have a grammar, so highlighting and completion come from it and from the desk's searchable rows. Saved, not planned."
+---
+
 # fabsh grows into a language
 
 **Proposed 2026-11-06, a vision note.** Walked when Tier 5 starts (owner, 2026-11-08): summon's grammar, completion and highlighting. Nothing here is planned for a tier. It is saved so it is not

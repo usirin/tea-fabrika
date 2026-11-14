@@ -1,3 +1,8 @@
+---
+state: "proposed; where packs live is decided; walked at Tier 7"
+summary: "A small core plus packs. A pack is programs in a package, enabled by one config line; it listens and answers, fills a slot, or provides a service. The core never knows it exists."
+---
+
 # Add-on packs are programs
 
 Proposed 2026-10-18. Walked when Tier 7 starts (owner, 2026-11-08): add-on packs and other people's programs.

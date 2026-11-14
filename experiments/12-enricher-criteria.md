@@ -1,3 +1,8 @@
+---
+date: "2026-10-04"
+summary: "All 43 tests were sound and caught 27 of 33 broken versions. The enricher dropped two real rules, and a bug-shaped ticket title lowered the judge's confidence."
+---
+
 # 12. The enricher's own criteria
 
 `12-enricher-criteria.ts`. Every run so far used criteria written by hand. Here

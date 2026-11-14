@@ -1,3 +1,8 @@
+---
+date: "2026-10-23"
+summary: "No, on ship. StrykerJS 9.6.1 (installed outside the workspace, command runner, in place) made 569 mutants of `stages/ship/machine.ts` and `gate.ts`. Each ran both arms at today's bounds, nothing changed: our checker (`explore` at depth 30 and the world search at depth 200 on the 9 real-reducer worlds of `world.test.ts`) and 118's property walks on the same laws and worlds (the suite as one property, 5 seeds of 10 s, swarm where plain missed, then each broken check alone). Both 161 (87 by a law, 69 where our checker crashed and the walk said \"update throws\", 5 that stop the module loading), only ours 0, only the walks 0, neither 408. Not counting a crash as our kill: 0 only ours, 69 only the walks. 46 of the crashes are one gap in `explore.ts` (a handler that returns nothing). Under 11 workers the walks ran a third fewer walks (median 18,200 a seed against 28,500 alone); a quiet fixed-count rerun had no \"only ours\" mutant to run, and gave no answer on the three where seeds disagreed, since arm A crashed in the same process. A hand check of 12 \"neither\": 11 real changes no law covers (outcomes not checked, no \"a ready pull request lands\" law, saved state and Listens outside the model). Stopped after ship by the owner; the planned 150-mutant loop sample was not run. Recommendation: property tests for new laws, nothing new on our checkers; the laws are what is thin. $0, about 80 minutes. Confidence 75%."
+---
+
 # 119. On mutants nobody wrote, does our checker catch any that property tests miss?
 
 The question: experiment 118 measured our two checkers against property tests

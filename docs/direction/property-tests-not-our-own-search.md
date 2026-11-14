@@ -1,3 +1,8 @@
+---
+state: "decided; ship ported (experiments 120, 121), gaps filed as demlik#744 to #750; stopped 2026-10-24 for the pipeline's own checks (experiment 122); decided 2026-10-25: a TLA+ spec kept after its code exists is checked against real runs, in the drift job, and Stryker with the repo's tests stays the mutation grader (experiment 139)"
+summary: "We use the industry's test tools and build none of our own: tea's `@demlik/tea/pbt` for one machine, StrykerJS for mutants, TLA+ only before code. Our every-order search is an experiment, fenced in `layer-rules.json` so nothing new imports it, and it leaves in stages: ship now, the host in the core sweep, the rest with the old pipeline. Gaps in tea's pbt go to demlik as issues."
+---
+
 # Property tests, not our own search engine
 
 Decided 2026-10-23.

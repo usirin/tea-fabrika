@@ -1,3 +1,8 @@
+---
+date: "2026-10-04"
+summary: "No. \"Cannot tell\" gets a share of about 0, so the answer is one number. Bad tests accepted at 0.85: 0 of 273, the closest at 0.83."
+---
+
 # 14. Is there more in the answer than one confidence number?
 
 `14-decision-rule.ts`. Jev gives every option a share: checks, does_not_check,

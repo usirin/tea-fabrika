@@ -1,3 +1,8 @@
+---
+date: "2026-10-17"
+summary: "Yes. With `TSH_TRACE=1`, each tsh line is one trace in Jaeger (`pnpm trace:up`): the line as root, `run <program>` per run with the run id, pipe links both ways, told and sent values as events, and per pull request `machine <name>` with `cmd` and `sub` child spans and `msg` events. A kept run's trace is `runTraceId(<run id>)`, so `attach` after a kill goes on in the same trace. Export is `@effect/opentelemetry` over one OpenTelemetry provider, OTLP/HTTP; off, no exporter is built and spans are no-ops. The bridge to tea's `agentSpans` works: same provider, agent spans reparented under the Effect span through a wrapped tracer, since `agentSpans` takes no parent. The live reviewer (Claude Agent SDK) gets agent spans through a fold of SDK messages into tea's `AgentEvent`s; proved on scripted queries, not a paid run. Values never reach a span. Live: 597, 596, 675 read only, 15 spans in Jaeger, the draft under review and not under ship. Findings: review reads PRs one at a time; `agentSpans` needs a parent option. Holes: Jaeger warns on each root's made-up parent, the line's text is the root's name, machine spans are opt-in (`runTraced`). `@demlik/tea` unchanged."
+---
+
 # 68. Tracing: one tsh line, one trace
 
 ```sh

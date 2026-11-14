@@ -1,3 +1,8 @@
+---
+where: "next/ platform edges"
+when: "Calling a Promise, callback or throwing API from a platform or a library"
+---
+
 # A platform API is wrapped once, at its edge, and its errors keep their cause
 
 ```mermaid

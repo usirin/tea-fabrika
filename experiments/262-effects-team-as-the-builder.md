@@ -1,3 +1,9 @@
+---
+date: "2026-11-11"
+scripts: "none; the checker ran in a scratch worktree that is not kept"
+summary: "`next/`, at `5eb5fd0ee`. Reading, plus one run of `@effect/tsgo` 0.63.0 with all 135 checks on. Four reads of every library and app file beside `effect` 4.1.2's source found nine principles; `runtime/Runner.ts` breaks six. Effect's checker covers one of the audit's ten main gaps fully (raw `fetch`) and one in part (`instanceof`); 17 off checks find 0 hits and can block now, about 20 more after sweeps of about 125 hits. Hand guards, dropped causes (about 113), hand crypto, copy-paste wrappers, fixed retries, docs, long closures and static layers need our own rules or pattern docs. Feeds [Effect code guidelines](../docs/direction/effect-code-guidelines.md). No paid API call; the agents' tokens were not recorded."
+---
+
 # How would Effect's own team build `next/`'s code, and which of their habits can a check hold?
 
 Read 2026-11-11, on `origin/main` at `5eb5fd0ee`. **This is reading, plus one run of Effect's own

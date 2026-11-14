@@ -1,3 +1,8 @@
+---
+date: "2026-10-04"
+summary: "33 of 36 cheats passed every visible test. Hidden tests caught 24 of the 33, and 0 of 90 hidden tests failed on the correct code."
+---
+
 # 11. Do hidden tests catch code that only learned the examples?
 
 `11-hidden-tests.ts`. One visible test per criterion, asserting the criterion's

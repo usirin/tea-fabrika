@@ -1,3 +1,8 @@
+---
+date: "2026-10-11"
+summary: "540 of 961 shipper runs on kamp-us/phoenix end in a way that is one outcome kind. Of the 421 that do not, 325 are \"queued\", where the machine waits instead of ending. 63 parked with no cause on the line, 30 parked on a branch behind main, which no outcome fits, and 3 were merged by hand. The logs test the list of outcomes. They cannot test the gate's order."
+---
+
 # 55. The ship machine's seven outcomes, set beside 961 recorded shipper runs
 
 *Added 2026-10-11, later the same day: the outcome names below are the ones

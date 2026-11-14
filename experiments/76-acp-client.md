@@ -1,3 +1,9 @@
+---
+date: "2026-10-17"
+scripts: "`src/agents/acp/`, `adapters/`, `src/tsh/launch.ts`, `experiments/76-acp-live.ts`"
+summary: "Yes, for runs that need no guard. `acp` drives the official Claude adapter (0.85.1, pinned, contained with the builder's env and OS sandbox through `_meta`) and a scripted fake agent; only `--agent` changes, and the three-turn task gives the same turn shapes on both. A `kill -9` mid turn plus `attach` opens the same session again and resends the cut prompt, no retyping. At 32 turns, `session/load` and `session/resume` both open in about 0.8 s on Claude; load brings the transcript back. Asks are refused by default and allowed once only when told. ACP lacks a guard on every tool call (auto mode asked nothing for a shell write or an edit), a typed final answer, containment words, and a key per prompt (a resend duplicated a turn the harness had kept); a `_meta.tea` namespace plus `_tea/tool_check` and `_tea/turns` would carry them. codex-acp could not be contained and was skipped. Under $1 live. Confidence 70%."
+---
+
 # 76. A tea program as an ACP client: one flag swaps the harness
 
 ```

@@ -1,3 +1,9 @@
+---
+date: "2026-10-04"
+scripts: "none"
+summary: "A person's sort carried the duration ticket on. The builder then passed the hidden tests by reading expected values off the failure report."
+---
+
 # 25. Duration through a person's answer
 
 Parks take typed answers now, triage's as well as the lane's. The duration run

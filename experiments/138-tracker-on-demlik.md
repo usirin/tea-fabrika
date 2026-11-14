@@ -1,3 +1,9 @@
+---
+date: "2026-10-24"
+scripts: "`138-tracker-on-demlik.ts`, `138-truth.json`, `results/138-tracker-on-demlik.json`"
+summary: "Every kamp-us/demlik issue (447) and pull request (305), read through `gh`, read-only. Part 1: 2 member accounts wrote every issue and all 1,463 comments, no outsider ever; built tickets lean on title, body (98% carry criteria), links (90%), labels (100%) and milestones (98%), which are today's fabrika's stage state; assignees 1%, images and reactions 0. 40 findings or rulings on built tickets lived only in a comment. Part 2: after the first `ready-for:agent` label (291 tickets), a hash of the whole body would ask a new yes on 32%, of the title and prose (criteria, plans and rulings as their own facts) on 8%, meaningful edits more than an hour later 1%; 2 of 3 renames changed the ask, so the title is hashed. Part 3: 76% of merged pull requests close one issue; GitHub's auto-close closed 261 of 351 done tickets; today's fabrika's review, ship, build and heal-ci and this repo's `ticketIn` read the link, demlik's CI does not; `demlik-1` does not parse. Part 4: today's sort brief and Check, opus at medium, no tools, on the 20 of 345 triaged tickets with a comment before triage, with and without it: 3 differ in two runs of two, and the comments' answer matched what happened each time. Part 5: `filed`, `edited`, `approved` as Effect Schemas and `covers` in the script; a fast-check test passes 2,000 runs. Lean: v1 ticket is id, title, body, filer (75%); hash title and body as a JSON pair, not criteria (80%); the rebuild reads its ticket from the lane's fact and puts the approved text in the PR body, against the note's GitHub copy (65%). $5.57 for 56 sorts."
+---
+
 # 138. The tracker's details, read off demlik's real history
 
 The owner decided that tickets start in our own tracker

@@ -1,3 +1,9 @@
+---
+date: "2026-11-05"
+scripts: "none"
+summary: "`next/`, for the backup note (pull request 404); research, not a measurement, reading the docs, string files and forums of about 20 products (1Password, Bitwarden, Apple, Signal, WhatsApp, Proton, Ente, Keybase, Tailscale, Ledger, Trezor, Google, Microsoft and others). The best ones share five things: they say plainly they cannot help, setup is not done until you prove you have the key, a new one kills the old one, they name where not to keep it (the place it unlocks), and a later check is offline and on demand. A PDF of the whole secret has precedent (Proton's 12-word phrase; Signal and Tailscale accept a password manager), but not 1Password's, whose PDF is half the secret. Waits come only where the proof is weak or another person acts, so the owner's no-wait call fits the strong-key group; flagged: no wait plus a PDF makes a copied file an instant takeover, while Apple and 1Password each add a second factor. To copy: numbered slots, the check code as a public label (Keybase), \"fabrika will never ask for these words\" (Signal), an offline \"Check my sheet\", an end screen that counts what was removed, and telling the old Mac at once. Leans 70% to 85%. No model, $0."
+---
+
 # How do the best products do a recovery kit, and what should fabrika's backup sheet copy?
 
 Read 2026-11-05. **This is research, not a measurement.** Nobody ran a recovery, printed a sheet or

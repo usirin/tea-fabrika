@@ -1,3 +1,8 @@
+---
+date: "2026-10-05"
+summary: "The original ranked 1st in 26 of 30 pairs and in the top 5 in all 30. A 0.7 floor flagged 19 of 30 pairs and 2 of 105 controls."
+---
+
 # 37. Jev spots a duplicate at filing
 
 `37-dup-probe.ts`. When an issue is filed, can Jev tell which open issue it

@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-06"
+summary: "`next/`'s tracker; today's areas unchanged. A label is a person's word for finding work, and six principles say when something must be its own field or fact: nothing decides on a label (L1); state that moves is a fold, never a label (L2); a typed value (a person, ticket, date, number, ordered level) is a field or a link (L3); pick-one is a group fixed at making, and the fold refuses two (L4); a label is a number with a name, people make, rename, merge and apply it, an agent only guesses at filing (L5); a label that grows an owner or a rule graduates to its own concept, keeping its numbers (L6). Area is the first label group, pick-one and guessable, not its own concept. D1 (the label menu in the ticket, Manti's `Combobox` in a `Popover`) and D4 (chips plus a tsh line) are built first; D2, bulk accept of guesses, is the second slice. From experiment 218, with kamp-us/phoenix's labels as the evidence."
+---
+
 # Label guidelines: when something is a label, and when it is its own field or fact
 
 **Decided 2026-11-06.** The owner approved the six principles, the shape and the smaller calls

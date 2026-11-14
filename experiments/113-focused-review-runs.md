@@ -1,3 +1,8 @@
+---
+date: "2026-10-21"
+summary: "No, by the pre-written rule. 112b's 5 heads, each review kind judged by a trio of opus runs (effort medium), each run with its own focus (A a bug sweep, B each criterion's riskiest way, C across files and security); a row fails if any run fails it (rule written first; 3 trios, 90 runs). A trio caught 15 of 112b's 21 known defects on average (15, 13, 17; bar 18), about what three plain runs would if independent; 19 in any trio, 12 in all. One run of focus A alone caught 12.3 (plain opus 9.2, biased up; B 8.3, C 9.7). Fails are real: 1 false in 135 (0.7%); 30 new fails, 29 real, among them five defects 112b's opus barely or never named (cycles through devDependencies, two rows with one target, `..` and absolute paths, a skipped lockfile link). Not steadier: two trios differ on 11.5% of cells, two opus runs 9.8%. Findings went up: 29 in 90 runs, 22 from focus C; 20 drawn: 17 defects, 3 docs. $0.708 a trio (3.47 times one review; the cold first trio 4.05 times), 89 s at once. $22.01 with the pilot. Confidence 75% the trio does no better than plain repeats on the flipping cells; 65% that focus A alone beats a plain run."
+---
+
 # 113. Focused review runs
 
 The question: in 112b, opus flipped 21 cells between pass and fail, and each

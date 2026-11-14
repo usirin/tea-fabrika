@@ -1,3 +1,8 @@
+---
+state: "decided in pieces, see the note"
+summary: "A scheduled job is a program that listens to the clock, on a Durable Object alarm (Cron Triggers do not fire in local dev). It reads and judges, and files a ticket as an agent; it never changes code. Its false alarms are counted before it files anything. Candidates: PR watcher, TLA+ drift, docs drift, mutation sweep, stale lanes."
+---
+
 # Scheduled jobs run on the host's alarms
 
 **Decided, in pieces:**

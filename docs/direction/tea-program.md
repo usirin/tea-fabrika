@@ -1,3 +1,8 @@
+---
+state: "proposed; parts decided; a program's view changed 2026-10-22; one mailbox per run 2026-10-30; today's version; walked if a tryout is picked"
+summary: "tea holds machines; a program is what you start: a name, a description, typed flags, inputs and outputs, and `main`, an Effect that runs machines and asks for services through Effect's context. It uses machines and is not one. Flags are argv, inputs are stdin (told at any time, never waiting, closed by the starter alone; since 2026-10-30 every input shares the run's one mailbox, which `main` serves one handler per input in the order told; it holds the program's `capacity` unread, 1000 unless declared, and a `tell` past it fails `MailboxFull`; a control input like Ctrl-C is forked beside the order, on its own bound), outputs are events: heard once, kept nowhere; whatever a late viewer needs is a machine's state. `start` takes the listeners and answers a run handle; `pipe` is `from | to`; no raw `dispatch`. A host lists, starts, feeds, listens and provides. The first shape, a machine with inputs and outputs, was dropped."
+---
+
 # tea-program: programs between tea and a host
 
 **Proposed** 2026-10-15, changed 2026-10-16, 2026-10-17 (five times), 2026-10-19 and 2026-10-30. Not settled. Today's version; walked if a tryout is picked (owner, 2026-11-08).

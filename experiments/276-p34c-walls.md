@@ -1,3 +1,9 @@
+---
+date: "2026-11-12"
+scripts: "host probes kept outside the repo; full measurement script not yet written"
+summary: "`next/`, P34c slice 3. The first host probe at `3c6238f9c` received 13 of 13 loader RPC tail events, 0 to 11 ms after answers. A later host product check recorded 8 checklist rows, 2 successor rows and 6 spin rows; removing tails made every count 0. All 16 product rows reported CPU and wall time 0. Corrected signed-door U9 passed its row checks on the host, with 1 pass and 1 expected CPU failure; removing the tail made it fail. Full measurement and Node pure-step timings are not yet run; no measured limits proposed yet."
+---
+
 # 276: isolate CPU recording and the first wall measurements
 
 `next/` only, P34c slice 3, tracker ticket 852. The local tail probe received every call's

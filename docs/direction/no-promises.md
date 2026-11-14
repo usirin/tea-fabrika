@@ -1,3 +1,8 @@
+---
+state: "decided (2026-10-31); rules built in Tier 1's P2 and P35; five edges approved 2026-11-08; 0042's ports not built yet"
+summary: "Effect all the way. A Promise appears only in a one-line edge the platform demands. Lint rules refuse the rest. The owner approved five edges on 2026-11-08, the WebCrypto calls in the door's `door.ts` and `door-nonce.ts`, each one `Effect.tryPromise` with a typed error, and a crypto failure gets the `why` `crypto`, not `storage`. From 2026-11-09 a platform call is not an edge we write: every platform piece is used through Alchemy ([0042](../../.decisions/0042-platform-pieces-go-through-alchemy.md))."
+---
+
 # Nothing in `next/` is built on Promises
 
 **Decided 2026-10-31.** This is about `next/`. Today's version does not change.

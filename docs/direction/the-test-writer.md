@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-24, the `noise` answer too (experiment 124's ratings); 2026-10-25: no TLA+ for code that exists (experiment 139); how it writes a spec for a design with no code is open"
+summary: "Its own agent, not the builder. After the owner's approval it writes a test per Property and runs it on the plan's base: new fails, existing passes. A surprise is a box with three choices. Boxed; adds only new files `includes` names in `fabrika.toml`; a local commit, its hash and one `checked` fact per Property on the ledger. Was the verify writer. Each mutant that lives gets `test`, `cannot`, or `noise`; a `noise` is a finding the owner rates."
+---
+
 # The test writer
 
 Decided 2026-10-24. It was called the verify writer in

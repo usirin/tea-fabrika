@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-08"
+summary: "`next/`. A program has no main; the runner owns the loop. The Cmds `init` returns run once per process start, as OTP's `init/1`: each is saved as dispatched, tied to its process id, before it runs, and its answer comes back as a letter. A wake and a hot reload run none; a restart is a new process and runs them again, under the restart brake. Today's stepper drops them."
+---
+
 # init's Cmds run once per process start
 
 **Decided 2026-11-08.** `next/` only.

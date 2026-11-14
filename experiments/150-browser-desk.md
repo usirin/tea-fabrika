@@ -1,3 +1,9 @@
+---
+date: "2026-10-25"
+scripts: "`150-browser-desk.ts`, `150-browser-desk/` (`web/bridge.ts`, `web/door.ts`, `web/desk.html`, `fix4-local-echo.patch`), `results/150-browser-desk.json`"
+summary: "Yes. The same `desk.js` in headless Chromium 156, the host at main's `2a7f305` unchanged. The page's `window.fabrika` over one WebSocket runs the app's own `appWire`; a relay (the door) pipes it to the host's socket file, bytes unread, so the host keeps only its socket file. 36 of the app's e2e checks pass in the tab, including a reload, a second tab and a new browser on the same desk; 4 steps are Electron's alone. Typing, key to the frame after the draw, p50: Electron 15.5 ms, tab 16.4; through a delay proxy 44.9 at 30 ms and 94.8 at 80 ms; with 143's local echo 14 ms at any delay, but tsh's own echo a frame later. On 127.0.0.1 with no guards, a page from any other local server typed into tsh, even with Chromium's Local Network Access on; Origin plus a cookie from a one-time token holds, Host closes DNS rebinding's file read. Login researched only: token url on the own laptop, approval from a signed-in fabrika elsewhere, passkeys once on https (70%). 4 of 34 proxied page loads never attached, cause unknown. Built, the door would be named the relay, since the Door is the ledger's SSH login. No agent, no model, $0. Confidence 85% (works, guards), 70% (typing)."
+---
+
 # 150. Does the desk work in a plain browser tab, with no Electron?
 
 The question: pull request 90 made the host a process of its own, as tmux's server is, and the

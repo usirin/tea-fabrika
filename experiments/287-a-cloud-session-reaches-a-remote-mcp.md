@@ -1,3 +1,8 @@
+---
+date: "2026-11-14"
+summary: "`next/` (the tracker as MCP on a Worker); about $1.5 at list price on the subscription. Partly. Two public servers, Cloudflare's docs and Microsoft Learn's. With the environment at Limited and nothing listed, the session's egress proxy refused both with a 403 on every path; `allow_mcp_servers` covers claude.ai connectors, not `.mcp.json`. With the two hosts allowed: a local agent listed 2 and 3 tools and ran a search on each in 15 s; a new cloud session started on the branch (`create_session` takes `source_revision`) loaded both servers with no approval, but each tool call stopped at a permission prompt (`server_policy_ask_only`), untested whether an allow rule lifts it, and the owner's later yes came after the hosts were removed, so no call returned; this running session did not gain a server added mid-run. Login, read in docs only: a network secret the proxy adds by host, or a claude.ai connector with OAuth"
+---
+
 # 287. Can a Claude cloud session use an MCP server at a public HTTPS address?
 
 Run on 2026-11-14 (UTC) inside one Claude cloud session (Anthropic's own cloud, Linux, Claude Code

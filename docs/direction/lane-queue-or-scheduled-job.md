@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-11; four unclear cases are the lead's leans, not ruled on"
+summary: "Both versions. Where each piece of work in a change lives, by two questions: does it judge this one change or something shared (main, the laptop, the tracker), and must its answer exist before the next step starts? The lane: judges this change and the next step needs it. A queue: one piece of work per event, done once, can wait its turn. A scheduled job, on a timer: shared state, safe to run twice, compares \"should be\" with \"is\". A check that stops lasting harm (a leak, lost work, a builder changing its own exam) never leaves the lane. The picture: a thin lane, one merge queue fabrika provides (0107), the tool checkout brought up to date on the merge (never by a scheduled job), and two scheduled jobs, the laptop cleaner (0101) and a main watcher that files one ticket when main goes red. Every scheduled job writes a \"last ran\" fact and is shown late after two periods; in `next/` one is an alarm that sets the next (0105), with a scheduled job piece under ticket 762. Tests stay on the pull request, in five minutes (0106). From experiment 260; [0108](../../.decisions/0108-a-job-lives-in-a-lane-a-queue-or-a-scheduled-job.md)."
+---
+
 # Lane, queue or scheduled job: where each piece of work in a change lives
 
 **Decided 2026-11-11.** The owner decided the rule, the tie-breaker and the picture after a walk of

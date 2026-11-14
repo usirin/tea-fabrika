@@ -1,3 +1,9 @@
+---
+date: "2026-11-10"
+scripts: "none"
+summary: "Reading, not a measurement; today's version as evidence, for `next/`'s pipeline (decision 0059). Redone on the teams that build coding agents and use them (Anthropic, OpenAI, Google, Cursor, Cognition), checked against Stripe, StrongDM, Ramp, single builders and METR, after the owner turned down the first draft's human-team lens (0059's ticket 645 amendment); that reading stays as background. Agents write most of the code at the labs (company claims), a person's attention is the scarce thing, reading moved to machines with people placed by risk (the biggest split), every miss becomes a check the same day, and the plumbing breaks next. Here, 236 step runs over 24 tickets on 11-09 and 11-10: 50% done, 22% sent back, 22% stuck; 16 of the test writer's 31 stuck runs were the tools' `fetch_failed`; no step asked the owner, and nothing records the owner's time. Ticket 574: about 100 minutes and $19.47, $8.81 on rounds that stalled. The draft's six principles tested, and seven proposed (F1 to F7); its path-based risk tier was wrong by experiment 252. No model, $0."
+---
+
 # 250. How do we get work done, before any pipeline?
 
 Read 2026-11-10. **This is reading, not a measurement.** It is the study that decision

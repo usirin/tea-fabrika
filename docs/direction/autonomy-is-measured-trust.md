@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-03, measures proposed; M5 decided 2026-11-07; walked at Tier 6"
+summary: "Both versions. A merge never waits on the owner; a break is fixed forward and names the step that missed it. Trust is a number our checks earn: one record per merge, one per break, and the change failure rate per step (DORA, Google SRE error budgets). A second measure, M5: asks per step that a person marked as needing them (`needed` on `answered`), against those the agent could have worked out."
+---
+
 # Autonomy is measured trust
 
 **Decided 2026-11-03 by the owner:** the rule in [what was decided](#what-was-decided). The

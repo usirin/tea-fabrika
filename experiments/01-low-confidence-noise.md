@@ -1,3 +1,8 @@
+---
+date: "2026-10-04"
+summary: "No. Low confidence followed bad input every time we looked: a contradicting criterion, one about what stayed the same, a thin ticket."
+---
+
 # 1. Is Jev's low confidence just noise?
 
 `01-criterion-clarity.mjs`

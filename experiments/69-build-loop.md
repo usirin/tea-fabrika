@@ -1,3 +1,8 @@
+---
+date: "2026-10-17"
+summary: "Yes. Build is a stage machine and a program, like review and ship: code copies the sandbox, one Agent SDK builder (opus, a budget per round, traced) changes it, code commits, pushes and opens the pull request. `operate` is a small loop over the build, review and ship machines; review's open criteria feed the next build. It stops when nothing is open, when a round leaves the open list no smaller, or at `--rounds`. It writes to one private sandbox repository only, held twice: the inputs' schemas take only sandbox urls, so a demlik ticket is refused at decode (status 2, tested), and every write service dies on any other url. `gh` found nothing written to demlik. Live, one tsh line on sandbox ticket 1: build opened pull 4, review sent it back on a red API ratchet, the rebuild fixed the changeset, review passed 9 of 9, verdicts posted, ship refused with `stuck:enqueue_failed` (no merge queue); one trace of 148 spans, about $2. `kill -9` in round 2 on ticket 2, then `attach`: it went on at round 2's build, one pull request (5), two commits. The no-progress stop is proved in tests only. Findings: a kill -9 orphans the builder; a job told a value on its line exits 13 when the loop ends; a Listen can move a loaded machine before resume, so starters read the kept state first; a build that changed nothing now says why. `@demlik/tea` unchanged."
+---
+
 # 69. The build loop: build, review, build, review, ship
 
 ```sh

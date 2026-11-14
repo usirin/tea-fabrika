@@ -1,3 +1,9 @@
+---
+date: "2026-11-09"
+scripts: "none"
+summary: "`next/`, P33 and P34, reading against OTP's own docs, not a measurement: C5's owed check. Of 24 OTP features, 7 are the same, 12 differ, 1 is added (dead letters) and 4 are missing (links, trap exit, three strategies, restart types), each missing one deferred to Tier 4 with its reason. 6 differences have no written reason: five need one line in C5 (ticket 405), and `exited`'s free-text reason loses OTP's normal, shutdown and kill (ticket 406, 65%). Past the brake a name never gives up: arithmetic from the defaults gives about one restart a second, about 276,000 ledger entries a day for one always-throwing program; lean: a wait that grows like Kubernetes', 70%, the owner's call (ticket 404). Supervision is not on on the Worker path yet (`workers/runtime.ts:712`). No model, $0."
+---
+
 # 239. Does `next/`'s supervision match OTP, and where it differs, is the reason written?
 
 Read 2026-11-09, on origin/main at `db4c173a`. **This is reading, not a measurement.** Nothing

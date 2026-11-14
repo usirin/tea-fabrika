@@ -1,3 +1,8 @@
+---
+date: "2026-10-10"
+summary: "On #558 both doc pages get their twin tests. The brief went from 3117 to 5087 characters and the gathering from 5.4 s to 8.1 s."
+---
+
 # 42. Facts read the doc pages a report names
 
 Run 3 of #558 (`runs/558-3`) missed two things fabrika's own enricher found,

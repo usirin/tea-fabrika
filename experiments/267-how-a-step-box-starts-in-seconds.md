@@ -1,3 +1,9 @@
+---
+date: "2026-11-10"
+scripts: "none; reading plus a count of our own timestamps, nothing ran"
+summary: "Today's lead tooling. Stripe's 10 s is a pool of devboxes made ahead (Minions parts 1 and 2, quoted); Ramp, Cursor, Devin, Firecracker, Cloudflare Containers compared. Our step took 1.5 to 3 min from start to first tool call (Claude median 103 s on clean drive logs, 178 s from lane state files; Codex 152 s). Clone, checkout and install were 6 to 9 s, the model's start 3 to 7 s; the other 90 to 150 s went to `box.sh gc` and the start checks before the clone. Three cuts: gc on a timer (taken as 0101), a warm shared-ticket index, a small pool with early reads. Snapshot restore not worth it at a 6 s build. Per-phase split not timed. No model, $0."
+---
+
 # 267. How does a devbox start in seconds, and where do our step's first minutes go?
 
 Read and counted on 2026-11-10, landed 2026-11-11. **This is reading plus a count of our own

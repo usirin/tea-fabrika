@@ -1,3 +1,9 @@
+---
+date: "2026-10-20"
+scripts: "`packages/tea-host/src/{monitor,supervisor}.ts`, `99-monitors-supervisor.ts`, `99-monitors-supervisor/`, `results/99-monitors-supervisor.json`"
+summary: "Yes. OTP's `erlang:monitor`, `link/1`, `trap_exit` and a `one_for_one` supervisor (plus `DynamicSupervisor.start_child` as a cast) on the ledger, one transaction per exit. Down = the program's run (incarnation) ended: `crash`, `normal`, `shutdown`; a host takeover is not down, nor a lease running out with no host (Orleans). The supervisor is a tea program under a registered name with OTP intensity/period and escalation. Poison message: OTP intensity alone only stops the loop by taking the tree down (escalate run: 4 crashes, gave up in 57 ms, poison still in the inbox), so the ledger sets a message aside after 3 crashes in a row on it (SQS redrive, RabbitMQ delivery-limit), and a spec with intensity below that is refused. Found OTP's monitor gap (a fast crash loop ends runs between a DOWN and the next monitor); closed with incarnation-gap detection. 3 hosts, a supervisor, 3 children, a watcher; SIGKILLs, a SIGSTOP, planted crashes, one poison: 4 of 4 runs pass (3 small, 1 large), 24 of 24 crashes restarted (p50 6 / p99 8 ms), 24 of 24 deaths reported once, 0 DOWN for 54 takeovers, counts exact, 0 writer breaks. Laws: ledger 21–24, host 18, supervisor 11, monitor 9; 67 of 67 planted mistakes caught. Naming: fabrika's \"supervisor\" is a scheduler with admission control, not OTP's supervisor. Not yet: `one_for_all`, `rest_for_one`, restart backoff, reading dead letters. Confidence 80%. $0."
+---
+
 # 99. Monitors, links and a supervisor on tea-host
 
 The question: can `packages/tea-host` gain OTP's monitors, links and a

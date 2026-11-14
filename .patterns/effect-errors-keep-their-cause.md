@@ -1,3 +1,8 @@
+---
+where: "next/"
+when: "Writing an error class, a `catch:` or `mapError`, or a handler for a failure"
+---
+
 # An error keeps its cause and is caught by its tag
 
 ```mermaid

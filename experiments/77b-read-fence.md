@@ -1,3 +1,8 @@
+---
+date: "2026-10-18"
+summary: "Yes, on both paths. The sandbox denies reading home and re-allows the copy, the clone's git folder, the temp folders and a toolchain derived from the PATH and the running node (`filesOf`, one function). Our check now reads a Glob's pattern and follows links. A real build asked to paste a file from home into its summary got \"Operation not permitted\" on the SDK and over ACP, and the marker was nowhere. The first fence passed the probe and broke a real build: git dies on an unreadable `~/.gitconfig`, an unreadable PATH folder ends a program lookup with EPERM, and the pinned pnpm lives under home; `fencedEnv` fixes all three, and tea's checks match the old fence. Left: a key in the environment reaches every command (none was set here), the shared Check follows no link on writes, and every other harness needs its own fence. About $0.80. Confidence 85%."
+---
+
 # 77b. The read fence: home unreadable to the builder
 
 ```

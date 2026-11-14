@@ -1,3 +1,9 @@
+---
+date: "2026-11-06"
+scripts: "none"
+summary: "Today's version, a CI fix (PR 412). Main's check went from 3.8 min (Oct 30) to 30 min (Nov 5) as one file grew from 26 to 160 whole-lane tests, run in order on one CPU. A laptop tryout of 12 time-balanced buckets, 4 at a time, ran them in 161 to 197 s a round, against 1,397 s in order. As 18 files over six machines, with a time-weighted `--shard` (`vitest.shards.ts`), PR 412's check took 5.4 min. $0."
+---
+
 # The lane's tests, side by side: a 30-minute check back to 5
 
 Measured 2026-11-06. Today's version (`packages/pipeline`), a CI fix,

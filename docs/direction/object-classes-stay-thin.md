@@ -1,3 +1,8 @@
+---
+state: "decided (2026-10-31), built as plain classes in Tier 1's P12; amended 2026-11-09 by 0041, whose port is ticket 502 and not built yet; from 0042 the same day, what a class holds from the platform comes from Alchemy's services"
+summary: "In `next/`, a Durable Object class holds only what the platform gives it and a one-line handoff into Effect. The logic is plain code that also runs on Node in tests, so the mutation step can reach it. The brain stays on workerd. From 2026-11-09 the class itself is an Alchemy Effect Durable Object, a class plus a `.make()` Layer ([0041](../../.decisions/0041-object-classes-are-effect-objects.md))."
+---
+
 # An object class stays thin
 
 **Decided 2026-10-31,** from the plan for ticket 115. This is about `next/`.

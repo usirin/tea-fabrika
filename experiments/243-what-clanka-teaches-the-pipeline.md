@@ -1,3 +1,9 @@
+---
+date: "2026-11-09"
+scripts: "none"
+summary: "`next/`, reading [clanka](https://github.com/Effectful-Tech/clanka) v0.24.4, not a measurement. clanka is one agent, not a factory: no plan, tests, review, ledger, asks or signing. It shows the inside of one Draft. Top leans: keep the loop and the model call outside the box and only the hands inside, over Effect RPC (65%, walks back part of programs run in a box); drive Claude Code one model step at a time with its tool parked (55%, walks back the Tier 5 resume law); transcripts leave as history events (70%); limits as `Context.Reference` and one named `Schedule` (75%); executor state as a value the caller holds (80%). Not taken: loop state outside tea, history outside the ledger, free-text done, 20 retries, `bash` and `gh` from the agent, tokens with no dollars. Two owner questions for the Tier 5 walk, both answered no ([0026](../.decisions/0026-fabrika-never-owns-the-agent-loop.md)); borrows 3 to 5 decided ([0030](../.decisions/0030-copy-clankas-shapes-where-better.md))."
+---
+
 # 243. What clanka teaches `next/`'s pipeline
 
 Read 2026-11-09. **This is reading, not a measurement.** Nothing ran. It reads

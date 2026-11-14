@@ -1,3 +1,8 @@
+---
+date: "2026-10-21"
+summary: "Opus is not steadier, but its noise is real defects. 112 again with opus at effort medium, the product default (rule written first; 112's haiku and sonnet runs reused, sonnet was at effort low). On the same 5 pairs opus flipped 19.5% of cells (pass/fail 16.4%), haiku 22.7%, sonnet 9.4%; opus steady 8 of 10 groups: the rule picks sonnet. But all 21 cells where opus went between pass and fail, read against the code, sit on a real defect it saw in some runs (target-package importers not rewritten, a lockfile merge that drops unquoted entries, bare-name importers left behind, a partial write); sonnet passed 16 of those 21 every time. Findings of its own stay rare (9 in 60, all true: 6 docs, 2 scope, 1 defect); opus hangs defects on wide existing criteria instead. 10 fails drawn: 10 real. Opus and sonnet both pass a `move apply` criterion where no command exists; only haiku fails it. $0.204 a review (4.2 times sonnet), 59 s. $13.63 with the pilot. Confidence 80% that the flips are real defects, 70% that opus is the better reviewer despite them."
+---
+
 # 112b. The reviewer's noise, with opus
 
 The question: experiment 112 measured how noisy the reviewer is on its own,

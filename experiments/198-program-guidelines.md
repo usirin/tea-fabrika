@@ -1,3 +1,9 @@
+---
+date: "2026-11-02"
+scripts: "none; reading only"
+summary: "Reading, not a measurement, built on 196's patterns. The makers agree: the caller names the data, a router places it (Plan 9, Android, Emacs); open or focus is one named step (Emacs, Vim, OTP, i3); the way back works because the move wrote down where you were (Emacs, Vim, tmux, i3, Android); commands as data give the shared pieces for nothing (VS Code, Linear, Ableton, a cockpit's soft keys); focus moves only on a press (WCAG, i3, the dark cockpit). Today's asks popup follows the last, and the frame, not the desk, picks a tile; no program can open one. New: tmux and i3 return focus to the tile focused before on a close, where today's close goes by reading order. Seven principles, G1 to G7, leans 65% to 85%. $0."
+---
+
 # 198. How should a fabrika program be built, and how do programs fit together?
 
 Read 2026-11-02. **This is reading, not a measurement.** It feeds the note

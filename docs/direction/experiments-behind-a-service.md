@@ -1,3 +1,8 @@
+---
+state: "proposed 2026-10-29; today's version; walked if a tryout is picked"
+summary: "Experiment 170 builds the smallest version of fabrika's experiment platform: small programs (`experiments`, `experiment 170`, `compare`, a generic `markdown`) over an `Experiments` service in MLflow's and Langfuse's words. The ledger is the first implementation; a hosted platform can plug in later. Its own facts, not folded into the tracker. A paid run is estimate, ask, try 5, then the rest, under the limit the approval set. Three goals: agents do the experiment work, the blocks work in any project, built only from blocks we have."
+---
+
 # Experiments: a bare-bones experiment platform, behind a service
 
 Proposed 2026-10-29. Today's version; walked if a tryout is picked (owner, 2026-11-08). Experiment 170 builds the smallest version of fabrika's

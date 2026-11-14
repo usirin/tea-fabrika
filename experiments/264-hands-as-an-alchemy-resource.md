@@ -1,3 +1,8 @@
+---
+date: "2026-11-11"
+summary: "`next/`, `alchemy` 2.0.0-beta.85, local state in a temp folder, no account. Yes for setting hands up: two made-up resources (`HandsGrant`, a stand-in grant file; `HandsProcess`, a detached, unref'd child through Effect's `ChildProcess`) created, updated, replaced and destroyed in 22 to 40 ms. No for keeping them alive: a deploy after the child was killed made no provider call and still printed the dead pid; only `Drift.detect` saw it `missing`, and a `diff` that checks the pid caught it. Alchemy's own `Command.Dev` does nothing at deploy. A replace with the record keyed by logical id deleted the new grant; keyed by instance id it was right. Browser hands, by reading: the page is deploy-time, the grant is an enrollment after the tab makes its key; beta.85 has a Browser Rendering binding, not a resource. Lean, about 70%: install a launchd or systemd unit, let the cloud keep cloud hands, grant after the key exists. No unit was installed. No model, $0."
+---
+
 # 264. Can one Alchemy stack, owned by the library, provision hands through custom resources of our own?
 
 Run on 2026-11-11 against `alchemy` 2.0.0-beta.85 and `effect` 4.1.2, the installed versions. No

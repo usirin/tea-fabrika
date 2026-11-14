@@ -1,3 +1,8 @@
+---
+date: "2026-10-18"
+summary: "Started, not merged. `operate ticket=https://github.com/kamp-us/demlik/issues/710` ran from one line once `tsh.toml` named `own`, `rubrics`, `ship = \"write\"` and a budget; no code fix was needed. The build took 2.5 minutes and $0.70, opened [demlik#713](https://github.com/kamp-us/demlik/pull/713), and CI went green first time. The review waited 7.7 minutes on CI, then code refused the reviewer's form (`stuck:draft_failed`) and the loop ended `stuck:review` after 1 round: $1.15, 11.6 minutes. The reason was dropped by the step, the span and the tidy-up. A read-only second review of the same head was clean: 5 of 5 criteria met, plus a real `.js`/`allowJs` regression no criterion named ($0.43). Of #710's fields only state, title, body and the `ready-for:agent` label were used; type, priority, `class:`, status and milestone were not. Ship and the merge queue were never reached. $1.58 in all. Confidence 85%. **Second run, merged:** with a refused form now tried again and its problems kept on the step, the round and the span, and the builder and reviewer reading the repo's `CLAUDE.md`/`AGENTS.md` from the base branch, the same line picked up #713 (no second pull request). Round 1's builder added the changeset, round 1's review sent back the `allowJs` regression, round 2 fixed it, and ship merged it through demlik's merge queue: 2 rounds, $1.80, 32.2 minutes. No form was refused, so the retry is proven by tests only. The reviewer's notes are still dropped under operate."
+---
+
 # 85. The first real lane: operate on a demlik ticket, through tsh
 
 ```toml

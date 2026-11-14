@@ -1,3 +1,8 @@
+---
+date: "2026-10-09"
+summary: "paths + uses kept all 28 forgotten files and all 22 Jev wins at about a twelfth of the list: $0.065 a review at the median, against $0.82."
+---
+
 # 38. A free filter before the missing-file check
 
 `38-name-filter.ts`. The missing-file check of experiment 36 asks Jev about every

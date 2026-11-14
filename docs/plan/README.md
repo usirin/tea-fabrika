@@ -391,7 +391,7 @@ much as `next/` work and run beside Tier 1, never held back for it (owner, 2026-
 | Fix today's version | [AGENTS.md](../../AGENTS.md), the [package list](../../README.md#what-is-in-this-repository), then that part's own README |
 | Build in `next/` | [Tier 1](./tier-1.md), [its pull requests and waves](./tier-1.md#the-pull-requests-one-at-a-time) and [ticket 115's plan](./ticket-115.md), [the steps](../direction/next-is-a-pipeline-pre-run.md), the [Start here list](../direction/README.md#start-here). No builder starts before an approved plan and tests that exist |
 | Run a real ticket | [Run a ticket through the pipeline](../how-to/run-a-pipeline-ticket.md), [its rules](../how-to/run-a-pipeline-ticket.md#the-rules-for-a-live-run), then [field/](../../field/README.md) for what past runs hit |
-| Write down a decision | A note in [docs/direction](../direction/README.md), the same day, plus its row. Mark it **proposed** until it is settled |
+| Write down a decision | A note in [docs/direction](../direction/README.md), the same day, with its own frontmatter (no index row, 0522). Mark it **proposed** until it is settled |
 | Log a run | [field/README.md](../../field/README.md) for the schema: one row per agent run, one note per thing that broke, cost too much, needed a person or worked well |
 
 ## Who decides what

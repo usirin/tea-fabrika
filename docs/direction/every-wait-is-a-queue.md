@@ -1,3 +1,8 @@
+---
+state: "proposed; walked at Tier 6"
+summary: "Each state where work waits for someone is a queue with one kind of reader: a view on the ledger, worked through the kept work queue. The owner's desk is the view of every queue a person reads."
+---
+
 # Every wait is a queue
 
 Proposed 2026-10-18. Walked when Tier 6 starts (owner, 2026-11-08): pipeline queues and stage capacity.
