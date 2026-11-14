@@ -51,7 +51,8 @@ const load = (sql: Sql, name: string) => {
  * `open` saves the client and then sends it the whole view; `publish` reads the saved clients and
  * sends the patch to each, one after another. A client the manager reports `Gone` has its watch
  * ended; one reported `Unreachable` keeps it. Each membership transaction finishes synchronously
- * before the next delivery starts, so no transaction stays open across a delivery.
+ * before the next delivery starts, so no transaction stays open across a delivery. Each span and
+ * saved row reads `descriptor.build` when it is written, so it names the code the process runs then.
  *
  * @stability unstable
  * @category layers
@@ -82,11 +83,16 @@ export const layer = (
         const held = new Set(next._tag === "empty" ? [] : next.clients.map((c) => c.client));
         return before._tag === "watching" ? before.clients.filter((c) => !held.has(c.client)).map((c) => c.client) : [];
       };
-      const attributes = { name: descriptor.name, build: descriptor.build, process: descriptor.id ?? descriptor.name };
+      // Read at each call: `build` is the code the process runs now, which a swap or an open moves.
+      const attributes = () => ({
+        name: descriptor.name,
+        build: descriptor.build,
+        process: descriptor.id ?? descriptor.name,
+      });
       const end = Effect.fn("watchers.end")(function* (client: string, position: number) {
         const at = yield* Clock.currentTimeMillis;
         yield* stored(() => sql.transaction(() => step({ type: "end", client })));
-        yield* Effect.annotateCurrentSpan({ ...attributes, client, position, at, reason: "gone" });
+        yield* Effect.annotateCurrentSpan({ ...attributes(), client, position, at, reason: "gone" });
       });
       const deliver = Effect.fnUntraced(function* (client: string, update: Update) {
         return yield* manager.publish(client, update).pipe(
@@ -106,7 +112,7 @@ export const layer = (
           );
           const outcome = yield* deliver(client, whole);
           yield* Effect.annotateCurrentSpan({
-            ...attributes,
+            ...attributes(),
             client,
             position: whole.rev,
             at,
@@ -140,7 +146,7 @@ export const layer = (
           }
 
           yield* Effect.annotateCurrentSpan({
-            ...attributes,
+            ...attributes(),
             position: patch.rev,
             fanout: clients.length,
             sent,

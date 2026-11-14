@@ -431,7 +431,15 @@ export class ProgramRunner extends Context.Service<
         let woke = false;
         const mailbox = yield* Mailbox;
         const checked = yield* CheckedWriter;
-        const watches = yield* Watchers.pipe(Effect.provide(WatchersSql.layer(options.recovery.sql, initial)));
+        // The watchers name the build the process runs now, which a load or a swap moves.
+        const watched = {
+          name: initial.name,
+          id: initial.id,
+          get build() {
+            return process.build;
+          },
+        };
+        const watches = yield* Watchers.pipe(Effect.provide(WatchersSql.layer(options.recovery.sql, watched)));
         const alarm = yield* Alarm;
         const recording = yield* Recording;
         const sessions = yield* Effect.serviceOption(SessionManager);
@@ -1098,8 +1106,11 @@ export class ProgramRunner extends Context.Service<
         /** Loads the program and its checkpoint, climbing saved state through its upgrades. */
         const load = Effect.fnUntraced(function* () {
           const saved = yield* store.load;
-          const build = saved?.saved.build ?? process.build;
-          const loaded = yield* loader.load(process.program, build);
+          const recorded = saved?.saved.build ?? process.build;
+          const loaded = yield* loader.load(process.program, recorded);
+          // The Worker's loader names the hash it loaded: for a build a home never kept, the code
+          // that took its place at an open, so every record from here names that code (0293).
+          const build = "hash" in loaded && typeof loaded.hash === "string" ? loaded.hash : recorded;
           process = { ...process, build };
 
           if (supervision?.journal._tag === "idle" && supervision.build !== build) {

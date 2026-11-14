@@ -864,22 +864,74 @@ const projectLogic = Effect.fn("project.init")(function* (
     yield* codes.put(built);
   }
 
-  const code = (hash: string) => codes.get(hash).pipe(Effect.map(Option.getOrNull));
+  // A build a home ran but never kept, mapped to this build's code that took its place at an open.
+  const moved = new Map<string, string>();
+  const code = (hash: string) => codes.get(moved.get(hash) ?? hash).pipe(Effect.map(Option.getOrNull));
   const loader = workerLoader(env.LOADER, programs, code);
+  const from = Effect.fn(function* (parent: string | null = null) {
+    return yield* fromHere({ by, for: config.person, seen: 0, parent, build: config.build }).pipe(Effect.orDie);
+  });
   let selected: typeof Selected.Type = codeMachine.init(null, {})[0];
   const folded = yield* Stream.runCollect(ledger.read("gateway/code", 0));
   const decodeCode = Schema.decodeUnknownOption(CodeEvent);
+  const select = (fact: (typeof CodeEvent.cases)["code.loaded"]["Type"], id: string) => {
+    selected = applyCell(codeMachine, selected, { type: "loaded", id, program: fact.program, hash: fact.hash })[0];
+
+    // A boot fact names the code it replaced only for a move at an open; an ordinary boot accept
+    // is a program's first selection, with `was: null`.
+    if (fact.from === "boot" && fact.was !== null) {
+      moved.set(fact.was, fact.hash);
+    }
+  };
 
   for (const entry of folded) {
     const fact = decodeCode(valueFor(entry));
 
     if (Option.isSome(fact) && fact.value._tag === "code.loaded") {
-      selected = applyCell(codeMachine, selected, {
-        type: "loaded",
-        id: entry.id,
-        program: fact.value.program,
-        hash: fact.value.hash,
-      })[0];
+      select(fact.value, entry.id);
+    }
+  }
+
+  // A home with no code fact at all was saved before the code store, so the builds its processes
+  // recorded have no code here. Decided once, at this open: each such process moves to this build's
+  // code of its program, recorded as one `code.loaded` from `boot` with `was` set, before anything
+  // loads, so every record it writes from now on names that code (0293). In any other home every
+  // load stays strict, and a lost build is a `ProgramDown` with reason `no_program`.
+  if (folded.length === 0) {
+    sql.exec(
+      "CREATE TABLE IF NOT EXISTS dev_descriptors (process TEXT PRIMARY KEY, value TEXT NOT NULL, pending INTEGER NOT NULL DEFAULT 0)",
+    );
+
+    for (const process of yield* processes.info) {
+      const [row] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", process.process);
+      const recorded =
+        row === undefined
+          ? undefined
+          : (yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(row.value).pipe(
+              Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+            )).build;
+      const target = Object.hasOwn(programs, process.program) ? programs[process.program] : undefined;
+
+      for (const was of new Set([process.build, ...(recorded === undefined ? [] : [recorded])])) {
+        if (target === undefined || moved.has(was) || Option.isSome(yield* codes.get(was))) {
+          continue;
+        }
+
+        const id = `code.boot:${process.program}:${target.hash}:${was}`;
+        const fact = CodeEvent.cases["code.loaded"].make({
+          program: process.program,
+          hash: target.hash,
+          was,
+          from: "boot",
+        });
+        const placed = yield* ledger.append("gateway/code", id, lineFor(yield* from(), fact));
+
+        if (placed._tag === "refused") {
+          return yield* new LedgerError({ reason: "refused" });
+        }
+
+        select(fact, id);
+      }
     }
   }
 
@@ -990,9 +1042,11 @@ const projectLogic = Effect.fn("project.init")(function* (
     // A start not yet delivered has no descriptor in its object: its saved row is what it will get.
     // It also cannot take a swap yet, so its delivery below brings it to the selected code.
     const undelivered = yield* decodePending(process.process);
-    const descriptor =
+    const recorded =
       undelivered?.descriptor ??
       (yield* rpc(ProcessClient.make(processStub(env, name, process.name)).descriptor(process.process)));
+    // A process moved at an open runs the code that took its build's place.
+    const descriptor = { ...recorded, build: moved.get(recorded.build) ?? recorded.build };
 
     if (undelivered === undefined) {
       bootProcesses.push(descriptor);
@@ -1001,7 +1055,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     const tail = yield* bindTail(ctx, { project: name, name: process.name, process: process.process }).pipe(
       Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
     );
-    const program = yield* loader.recorded(process.program, process.process, tail, descriptor.build);
+    const program = yield* loader.load(process.program, process.process, tail, descriptor.build);
     remember(process.name, program.declaration);
 
     sql.exec(
@@ -1025,7 +1079,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
     );
     const program = yield* loader
-      .recorded(life.state.code.program, life.state.process, tail, descriptor.build)
+      .load(life.state.code.program, life.state.process, tail, descriptor.build)
       .pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
     return remember(life.name, program.declaration);
   });
@@ -1055,7 +1109,7 @@ const projectLogic = Effect.fn("project.init")(function* (
             saved === undefined
               ? undefined
               : (yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(saved.value)).build;
-          return yield* loader.recorded(life.state.code.program, life.state.process, tail, running);
+          return yield* loader.load(life.state.code.program, life.state.process, tail, running);
         }).pipe(
           Effect.mapError(
             (cause) => new Audit.AuditError({ reason: new Audit.Transport({ cause: Redacted.make(cause) }) }),
@@ -1107,9 +1161,6 @@ const projectLogic = Effect.fn("project.init")(function* (
     ),
     Effect.provideContext(services),
   );
-  const from = Effect.fn(function* (parent: string | null = null) {
-    return yield* fromHere({ by, for: config.person, seen: 0, parent, build: config.build }).pipe(Effect.orDie);
-  });
   sql.exec("CREATE TABLE IF NOT EXISTS dev_starts (id TEXT PRIMARY KEY, request TEXT NOT NULL, hash TEXT NOT NULL)");
   /** Places the process and records its descriptor; a first start's row stays pending until delivered. */
   const place = Effect.fnUntraced(function* (raw: Start, origin: From) {
@@ -2092,10 +2143,7 @@ const processLogic = Effect.fnUntraced(function* (
           const tail = yield* bindTail(ctx, { project, name: saved.name, process }).pipe(
             Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
           );
-          // The build this object opened on is the one it runs; any other hash is a swap's candidate.
-          return yield* hash !== undefined && hash === saved.build
-            ? loader.recorded(name, process, tail, hash)
-            : loader.load(name, process, tail, hash);
+          return yield* loader.load(name, process, tail, hash);
         }),
     },
     { policy: defaultPolicy, recovery: { sql, name: saved.name, capacity: 1024 ** 3 } },
