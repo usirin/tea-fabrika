@@ -36,8 +36,9 @@ const answer = [
 
 const sections: Record<string, Record<string, string[]>> = {
   ".agents/skills/review/SKILL.md": { "3. **Check:**": check, "4. **Answer**": answer },
-  // One home a clause (0130, experiment 283): the exam clauses are the tests skill's alone.
-  ".agents/skills/tests/SKILL.md": { "## New and changed laws": exam },
+  // One home a clause (0130, experiment 283): what a law must be is the tests skill's, and what a
+  // loosening.sh hit means is the lead's landing step's.
+  ".agents/skills/tests/SKILL.md": { "## New and changed laws": [exam[0]!] },
   ".agents/skills/lead/SKILL.md": {
     "## Review brief template": [
       // The brief names the review clauses' one home and repeats none of them.
@@ -56,6 +57,8 @@ const sections: Record<string, Record<string, string[]>> = {
       "Use git worktree remove without force. Keep dirty, locked, ambiguous or unreadable candidates and any box that fails its guard.",
       "Print one line per retained item and continue.",
       "Saved plans, reports, logs and state/ remain.",
+      exam[1]!,
+      exam[2]!,
     ],
     "## Lane brief template": ["End with `node .agents/skills/lead/scripts/land.ts ready <lane> --tree <path>`."],
   },
@@ -118,7 +121,7 @@ describe("skillscheck, today's tooling", () => {
           tree(dir, space);
           expect(run(dir).status).toBe(0);
 
-          for (const file of [".agents/skills/tests/SKILL.md"]) {
+          for (const file of [".agents/skills/lead/SKILL.md"]) {
             for (const substitute of ["The lead records both outputs in the PR. Any hit waits on the owner.", ""]) {
               tree(dir, space);
               const path = join(dir, file);

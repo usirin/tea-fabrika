@@ -77,6 +77,8 @@
 // at most. A refused push or draft is stuck:push_failed. A mutation brief with no `RELATED=` line
 // is a usage error, and a container run that is stuck gives a reason that starts `mutbox:`. A kept
 // box ends the reason with `(box kept: ...)`, saying what is left in it.
+// A review that leaves a changed file or moves the head is stuck:review_committed, and a plan that
+// fails `plancheck.sh --draft` is sent back to plan, with what the check said.
 
 import { spawnSync } from "node:child_process";
 import {

@@ -417,8 +417,10 @@ visible, and never weaken the rules to hide this message.
    [the pr skill](../pr/SKILL.md) gives.
 9. **Land it** by [the plan's rule](../../../docs/plan/README.md#how-a-change-lands): the review says
    `merge-ready`, CI is green (e2e included), and you read the diff and run the leak grep.
-   [The tests skill](../tests/SKILL.md#new-and-changed-laws) holds the rule for a new or changed
-   law and for a loosening.sh hit.
+   [The tests skill](../tests/SKILL.md#new-and-changed-laws) says what a new or changed law must be.
+   Zero hits from loosening.sh mean no owner read is needed.
+   The lead records its output in the PR. A hit goes to the lead's hand check, with the hit list
+   in the PR. Only real loosening waits on the owner.
    Did this PR change a row in docs/direction/follows/? It updates that row in the same PR ([0017](../../../.decisions/0017-each-model-we-follow-has-one-table.md)).
    Then the lead merges, product code included; a new design call is the only other wait ([0014](../../../.decisions/0014-the-lead-merges-when-every-step-passed.md)).
    Apply the labels rule and the zero-hit check together. These are proper property tests.

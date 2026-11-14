@@ -96,9 +96,7 @@ this skill for the law. The reviewer reads that law on its recheck.
 
 Every new or changed law is a property, or an example labeled vector, format, pinned or scenario
 with its reason.
-Zero hits from loosening.sh mean no owner read is needed.
-The lead records its output in the PR. A hit goes to the lead's hand check, with the hit list in
-the PR. Only real loosening waits on the owner.
+[The lead skill's "Land it" step](../lead/SKILL.md#steps) says what a `loosening.sh` hit on one means.
 
 ## Outside your task
 

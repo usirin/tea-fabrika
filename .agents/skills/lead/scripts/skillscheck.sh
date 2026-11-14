@@ -99,6 +99,9 @@ for source in sorted(sources.iterdir()) if sources.is_dir() else []:
 # that a future reviewer followed them.
 exam = (
     "Every new or changed law is a property, or an example labeled vector, format, pinned or scenario with its reason.",
+)
+# The lead's landing duty, in the lead skill's "Land it" step.
+landing = (
     # 0066: mutation left the pull request's steps, so loosening.sh alone is the zero-hit check.
     "Zero hits from loosening.sh mean no owner read is needed.",
     "The lead records its output in the PR. A hit goes to the lead's hand check, with the hit list in the PR. Only real loosening waits on the owner.",
@@ -127,9 +130,9 @@ cleanup = (
     "Print one line per retained item and continue.",
     "Saved plans, reports, logs and state/ remain.",
 )
-# One home a clause: the review skill holds what a review checks and answers, and the tests skill
-# holds the rule for a new or changed law. The lead's brief names the review skill and repeats none
-# of it; the lead skill's landing step and AGENTS.md link the tests skill.
+# One home a clause: the review skill holds what a review checks and answers, the tests skill
+# what a new or changed law must be, and the lead skill's landing step what a loosening.sh hit
+# means. The lead's brief names the review skill and repeats none of it; AGENTS.md links both.
 rules = {
     ".agents/skills/review/SKILL.md": {
         "step:Check": review, "step:Answer": answer,
@@ -140,7 +143,7 @@ rules = {
             "Use the review skill", "Ticket:", "Version:", "Approved plan:", "Parent base:",
             "Reviewed head:", "Decided notes:", "Last fixes:",
         ),
-        "step:Land it": cleanup,
+        "step:Land it": (*cleanup, *landing),
         # Ticket 652: a lane agent's last act is land.ts ready; the lead session lands.
         "heading:Lane brief template": ("land.ts ready",),
     },

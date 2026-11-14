@@ -8,8 +8,10 @@
 # usage: loosening.sh <base> <head> [mapping.md]. The mapping file is the PR's table with `Removed`
 # and `Replacement` columns, exact test titles, one row for every renamed or replaced law.
 # A renamed or copied file is not an added file: it is read as before.
-# Hits: a removed law with no replacement, a muted test, a removed expect, fewer numRuns, a tighter
-# fast-check bound. Exit 0: no hits; 1: hits; 2: operating error or bad arguments.
+# Hits: a removed law with no replacement, a moved law (one moved to another file, even with a
+# mapping row), a muted test, a removed expect, fewer numRuns, a tighter fast-check bound, and an
+# unrecognized change (any other change to an existing exam file).
+# Exit 0: no hits; 1: hits; 2: operating error or bad arguments.
 set -eu
 [ "$#" -ge 2 ] && [ "$#" -le 3 ] || {
     cat >&2 <<'HELP'

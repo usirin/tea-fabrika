@@ -133,8 +133,9 @@ For every agent, whatever its step. A step's skill adds its own rules and its ow
   the steps by hand, each logged in `field/`, and the lead reads every diff, CI and the leak grep
   before a merge. [The lead skill](./.agents/skills/lead/SKILL.md) says how, and
   [the plan](./docs/plan/README.md#how-a-change-lands) says how a change lands.
-  [The tests skill](./.agents/skills/tests/SKILL.md#new-and-changed-laws) holds the rule for a new or
-  changed law and for a loosening.sh hit.
+  [The tests skill](./.agents/skills/tests/SKILL.md#new-and-changed-laws) says what a new or changed
+  law must be, and [the lead skill's "Land it" step](./.agents/skills/lead/SKILL.md#steps) what a
+  loosening.sh hit on one means.
 - **The decisions that shape the steps,** each read when you are at that point: mutation runs hourly
   on main, never as a step ([0066](./.decisions/0066-mutation-runs-on-a-schedule.md)); one fresh
   agent per step, which reads the lane's state file, does its one step and writes it back, driven by
