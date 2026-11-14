@@ -22,6 +22,13 @@ import { devRecording } from "./dev-recording.ts";
 import { address, devLife, latest, pending, target } from "./DevLife.ts";
 import { brainOutbox, checkMemory } from "./local-dev.ts";
 
+/**
+ * Error for a call on the local runtime that failed: its `reason` names how, such as `offline`,
+ * `unreachable`, `bad_row`, `start_timeout` or `install`.
+ *
+ * @stability unstable
+ * @category errors
+ */
 export class ControlError extends Schema.TaggedError<ControlError>()("ControlError", {
   reason: Schema.String,
   /** The failure this error translates, kept in memory for diagnosis. */

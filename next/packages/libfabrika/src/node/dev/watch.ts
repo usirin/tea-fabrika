@@ -1,3 +1,9 @@
+/**
+ * Hot reload on Node: one Rolldown watcher per selected program, which rebuilds the program after
+ * each save and hands the checked build to the brain.
+ *
+ * @stability unstable
+ */
 import { run } from "@demlik/tea/effect";
 import type { Scope } from "effect";
 import { Clock, Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
@@ -58,6 +64,23 @@ const details = (raw: unknown, root: string, path: Path.Path) => {
   return { path: relative, ...(line === undefined ? {} : { line }) };
 };
 
+/**
+ * Watches each selected program's sources and returns a stream of one answer per rebuild.
+ *
+ * **Details**
+ *
+ * After each round of saves, the program is built again from its current inputs with
+ * `buildPrograms`. A failed build sends a `code.failed` fact (reason `compiler` or `bundle`, with
+ * the error's `path` relative to `root` and its `line` when known) through `failed`, and the stream
+ * gives that failure. A build that fails on the same inputs as the last failed one gives nothing. A
+ * good build goes to `install`, from `boot` for the first attempt and `watch` after, and the stream
+ * gives its
+ * `Installed` answer with the program and hash; an install that fails gives `failed` with reason
+ * `load`. Each watcher is closed with the scope.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const watchPrograms = (options: {
   readonly root: string;
   readonly entry: string;

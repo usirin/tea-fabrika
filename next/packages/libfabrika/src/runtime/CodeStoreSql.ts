@@ -1,3 +1,8 @@
+/**
+ * The SQL layer for `CodeStore`: one `code` table of hash and source, made on first use.
+ *
+ * @stability unstable
+ */
 import { Effect, Layer, Option, Schema } from "effect";
 import type { Sql } from "../Sql.ts";
 import { BuiltProgram } from "./Built.ts";
@@ -6,6 +11,17 @@ import { BadRow, CodeStore, CodeStoreError, Storage } from "./CodeStore.ts";
 const stored = <A>(step: () => A) =>
   Effect.try({ try: step, catch: (cause) => new CodeStoreError({ reason: new Storage({ cause }) }) });
 
+/**
+ * Layer that provides `CodeStore` over the given SQL handle.
+ *
+ * **Details**
+ *
+ * A failed statement fails with the `Storage` reason; a row that does not decode as a `BuiltProgram`,
+ * its hash checked, fails with the `BadRow` reason.
+ *
+ * @stability unstable
+ * @category layers
+ */
 export const layer = (sql: Sql): Layer.Layer<CodeStore> =>
   Layer.succeed(CodeStore, {
     put: Effect.fn("code.put")(function* (code: BuiltProgram) {

@@ -18,7 +18,23 @@ import {
 import { BuildError, hash } from "../../runtime/Built.ts";
 import type { ProgramSource } from "../../runtime/Execution.ts";
 
-export { BuildError, hash } from "../../runtime/Built.ts";
+export {
+  /**
+   * Error for a build that stopped, re-exported from the runtime's build tables.
+   *
+   * @stability unstable
+   * @category errors
+   */
+  BuildError,
+  /**
+   * Computes the SHA-256 of a text's UTF-8 bytes as lowercase hex, re-exported from the runtime's
+   * build tables.
+   *
+   * @stability unstable
+   * @category combinators
+   */
+  hash,
+} from "../../runtime/Built.ts";
 
 /**
  * Which bundle of a build this is. It is recorded on the bundle's span, with no path or content,

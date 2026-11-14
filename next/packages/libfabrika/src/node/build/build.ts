@@ -17,7 +17,15 @@ import { bundle, bundlePrograms } from "./bundle.ts";
 import { check, compile, Row } from "./compiler.ts";
 import { inlineStylesheet } from "./css.ts";
 
-export { BuildError } from "../../runtime/Built.ts";
+export {
+  /**
+   * Error for a build that stopped, re-exported from the runtime's build tables.
+   *
+   * @stability unstable
+   * @category errors
+   */
+  BuildError,
+} from "../../runtime/Built.ts";
 
 /**
  * One program an app selects for its build: its `pack/program` name, its package, and the export
@@ -390,7 +398,21 @@ const publish = Effect.fn("build.emit")(function* (
   return digest;
 });
 
-/** The sealed program build shared by a start and every saved-file rebuild. */
+/**
+ * Builds every selected program as a sealed Worker Loader module, the same bundles a start and
+ * every saved-file rebuild use, and returns each program's built source by name.
+ *
+ * **Details**
+ *
+ * Every `.tsx` file a bundle reaches goes through the React Compiler check, against
+ * `options.ledger` or the root's `compiler-ledger.json` when one exists. A finding fails with a
+ * `BuildError` of reason `compiler` whose cause lists each finding's path and line. When given,
+ * `inputs` receives every module's text by its id, and `reached`, once the check passes, each
+ * checked `.tsx` file's text by its path from the root.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const buildPrograms = Effect.fn("build.programs")(function* (
   options: Pick<Options, "root" | "entry" | "programs" | "ledger">,
   reached?: Map<string, string>,
