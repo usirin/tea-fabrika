@@ -113,7 +113,8 @@ export {
 /**
  * Schema for what a swap answers: `same` when the process already runs that build, `swapped` with
  * the build it ran before, `refused` with that build and why (`shape`, `newer` or `load`), or
- * `not_now` with the tag of the recovery job still under way, which keeps the swap from running yet.
+ * `not_now` with the supervision journal's current tag (such as `stepping` or `writing_reply`)
+ * while a recovery job is unfinished, which keeps the swap from running yet.
  *
  * @stability unstable
  * @category schemas
