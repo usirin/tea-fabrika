@@ -330,7 +330,7 @@ export class ProgramRunner extends Context.Service<
      */
     readonly restart: (request: { readonly id: string; readonly build: string }) => Effect.Effect<void, RunnerFailure>;
   }
->()("@kampus/libfabrika/ProgramRunner") {
+>()("@kampus/libfabrika/runtime/Runner.ProgramRunner") {
   /** Load in process, keeping the pure stepper available to callers of ProgramLoader. */
   static readonly layer = (
     initial: Descriptor,
