@@ -886,7 +886,7 @@ const Tile = ({run, id, shows, folded}: {run: DeskRun; id: TileId; shows: Shows;
 - Why: the probe gave 1 tile render per patch against 16, and dispatch to DOM at p95 0.3 ms on a tiny model. It is the Elm answer. Cost: one selector per tile; the hook is tea's. Sure: 90% on the hook, 85% on `<Activity>`, whose memory with many hidden tiles is not measured.
 - **Not decided:** native `<dialog>` and `popover` against Zag. Tier 1 needs neither, so it is left out and stays open for later.
 
-**New dependency:** `@effect/platform-browser` in the catalog. Not installed today; I read it by `npm pack`, outside the repo. Why: rely on Effect, not a handwritten socket. One gotcha from its source: every close fails the socket's reader with `SocketError`, so the Sub maps that to the `closed` Msg, which today's handwritten Stream does by hand.
+**New dependency:** `@effect/platform-browser` in the catalog, at 4.1.2 since 2026-11-14, held at effect's own version. The page now starts on its `runMain`, re-exported by `@kampus/tuval/browser` (`next/apps/fabrika/src/entry/browser.tsx`); the socket half below still waits. It was first read by `npm pack`, outside the repo. Why: rely on Effect, not a handwritten socket. One gotcha from its source: every close fails the socket's reader with `SocketError`, so the Sub maps that to the `closed` Msg, which today's handwritten Stream does by hand.
 
 ## Electron window
 

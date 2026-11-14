@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "The new fabrika's window: the parent machine, the page boot and its one tile, and the browser's key, socket and row store (Tier 1, P14).",
+  "description": "The new fabrika's window: the parent machine, the page boot and its one tile, and the browser's key, socket and row store, and the page's runner (Tier 1, P14).",
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@demlik/tea": "catalog:",
+    "@effect/platform-browser": "catalog:",
     "@kampus/fabrika-design": "workspace:*",
     "@kampus/libfabrika": "workspace:*",
     "@manti-ui/react": "catalog:",

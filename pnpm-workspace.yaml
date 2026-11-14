@@ -30,6 +30,8 @@ catalog:
   '@demlik/structure-sweep': 0.4.1
   '@demlik/tea': 0.25.0
   '@effect/opentelemetry': 4.1.2
+  # Held at effect's own version: the browser runner for the page (next/apps/fabrika/src/entry/browser.tsx).
+  '@effect/platform-browser': 4.1.2
   '@effect/platform-node': 4.1.2
   '@effect/tsgo': 0.63.0
   '@effect/vitest': 4.1.2
