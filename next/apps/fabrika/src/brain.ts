@@ -6,24 +6,14 @@
  */
 import { makeDurableObjectBridge, makeWorkerBridge } from "@alchemy.run/cloudflare/Bridge";
 import type { SettingsStart } from "@kampus/libfabrika";
-import { type Descriptor, type Incoming } from "@kampus/libfabrika";
+import { type Incoming } from "@kampus/libfabrika";
 import type { Child } from "@kampus/libfabrika/processes/Children";
 import type { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import type { Activity, Start } from "@kampus/libfabrika/processes/Process";
+import type { Start } from "@kampus/libfabrika/processes/Process";
 import { fetch } from "@kampus/libfabrika/workers";
 import { control } from "@kampus/libfabrika/workers/control";
-import {
-  processRuntime,
-  ProcessService,
-  ProjectService,
-  configureProcess,
-  savedAlarm,
-  processDescriptor,
-  signingReply,
-  commitReply,
-  settingsWire,
-} from "@kampus/libfabrika/workers/runtime";
+import { ProjectService, signingReply, commitReply, settingsWire } from "@kampus/libfabrika/workers/runtime";
 import { DurableObject, WorkerEntrypoint, env } from "cloudflare:workers";
 import { Effect, Redacted, Schema } from "effect";
 import { assets, programs } from "virtual:fabrika-built";
@@ -255,86 +245,6 @@ export class Project extends DurableObject<Env> {
 
 type ContextProject = (typeof ProjectService)["Service"];
 
-/**
- * Durable Object for one registered name's processes: each RPC method runs the matching
- * `ProcessService` call, or its configuration, descriptor or alarm call.
- *
- * @stability unstable
- * @category objects
- */
-export class Process extends DurableObject<Env> {
-  readonly runtime = settingsWire(processRuntime(this.ctx, this.env, programs).contextEffect);
-
-  usage(rows: unknown) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object usage delivery returns a Promise
-    return this.runtime.runPromise(ProcessService.use((p) => p.usage(rows)));
-  }
-
-  configure(descriptor: Descriptor, drain?: boolean) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object configuration returns a Promise
-    return Effect.runPromise(configureProcess(this.ctx, descriptor, this.runtime, drain));
-  }
-
-  descriptor(process?: string) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object descriptor lookup returns a Promise
-    return Effect.runPromise(processDescriptor(this.ctx, process));
-  }
-
-  msg(input: unknown) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return this.runtime.runPromise(ProcessService.use((p) => p.msg(input)));
-  }
-
-  open(client: string) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return this.runtime.runPromise(ProcessService.use((p) => p.open(client)));
-  }
-
-  swap(request: Parameters<ProcessService["Service"]["swap"]>[0]) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return this.runtime.runPromise(ProcessService.use((p) => p.swap(request)));
-  }
-
-  mailed(trace?: { traceId: string; spanId: string }) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return this.runtime.runPromise(ProcessService.use((p) => p.mailed(trace)));
-  }
-
-  due(at: number) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return this.runtime.runPromise(ProcessService.use((p) => p.due(at)));
-  }
-
-  restart(request: { id: string; build: string }) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return this.runtime.runPromise(ProcessService.use((p) => p.restart(request)));
-  }
-
-  alarm() {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the platform alarm enters the runner
-    return this.runtime.runPromise(ProcessService.use((p) => p.alarm()));
-  }
-
-  activity(value: typeof Activity.Type) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return this.runtime.runPromise(ProcessService.use((p) => p.activity(value)));
-  }
-
-  recover() {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return this.runtime.runPromise(ProcessService.use((p) => p.recover()));
-  }
-
-  savedAlarm() {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object alarm inspection returns a Promise
-    return Effect.runPromise(savedAlarm(this.ctx));
-  }
-
-  abort() {
-    this.ctx.abort("storage wake");
-  }
-}
-
 const deployment = Schema.decodeUnknownSync(
   // oxlint-disable-next-line fabrika/no-stage-word -- edge: these are Alchemy's own runtime binding names
   Schema.Struct({ ALCHEMY_STACK_NAME: Schema.NonEmptyString, ALCHEMY_STAGE: Schema.NonEmptyString }),
@@ -364,6 +274,14 @@ export class RecordPart extends Bridge("RecordPart") {}
  * @category objects
  */
 export class Connection extends Bridge("Connection") {}
+
+/**
+ * Durable Object for one registered name's processes, bridged to Alchemy's object of that name.
+ *
+ * @stability unstable
+ * @category objects
+ */
+export class Process extends Bridge("Process") {}
 
 /**
  * Worker entrypoint that receives the program isolates' tail events, bridged to Alchemy's Worker.

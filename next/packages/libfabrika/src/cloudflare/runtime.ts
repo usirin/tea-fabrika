@@ -2235,6 +2235,27 @@ export class ProcessService extends Context.Service<
 >()("@kampus/libfabrika/cloudflare/runtime.ProcessService") {}
 
 /**
+ * Layer that provides one Process object's `ProcessService`, its start recorded with the Project.
+ *
+ * **Details**
+ *
+ * `input` is the instance's checked settings, read as the app reads them. Without it the layer
+ * reads the `INSTANCE` binding itself, and a bad setting fails with `StartsError`.
+ *
+ * @stability unstable
+ * @category layers
+ */
+export const processLayer = (
+  ctx: DurableObjectState,
+  env: Env,
+  programs: Readonly<Record<string, ProgramSource>>,
+  input?: ProjectOptions["input"],
+) =>
+  Layer.effect(ProcessService, processLogic(ctx, env, programs)).pipe(
+    Layer.provide(input === undefined ? recordedLayer(env) : recordedLayer(env, input)),
+  );
+
+/**
  * Creates a Process object's runtime: `ProcessService` over its built-in programs, with the start
  * recorded with the Project.
  *
@@ -2242,6 +2263,4 @@ export class ProcessService extends Context.Service<
  * @category constructors
  */
 export const processRuntime = (ctx: DurableObjectState, env: Env, programs: Readonly<Record<string, ProgramSource>>) =>
-  SettingsRuntime.runtime(
-    Layer.effect(ProcessService, processLogic(ctx, env, programs)).pipe(Layer.provide(recordedLayer(env))),
-  );
+  SettingsRuntime.runtime(processLayer(ctx, env, programs));

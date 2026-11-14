@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-open-move-skips-a-third-checkpoint-build",
+  "date": "2026-11-14",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/cloudflare/runtime.ts",
+    "line": 900
+  },
+  "says": "In next/, the open-time move of a home saved before the code store moves only the builds named by the process table and dev_descriptors, so a Process checkpoint whose saved build is a third build with no code still fails the open with ProgramDown no_program.",
+  "proof": "On pull request 1012 at e9fbc9949, the move loop takes `new Set([process.build, ...recorded])`, where recorded comes from dev_descriptors only, and Runner.ts load then looks up `saved?.saved.build ?? process.build` strictly. Main's restart bookkeeping (Runner.ts about line 783, `next.save({ ...checkpoint, cmds: [] })`) copies a predecessor's checkpoint to its successor with its build, so a home opened by two builds before the code store with a Restart in the second can hold such a checkpoint. The descriptor call the open already makes returns the checkpoint's build (runtime.ts:605), so the move could include it.",
+  "cost": "Such a home fails to open, loudly and with no wrong record written, until the move takes the checkpoint's build too.",
+  "head": "e9fbc99494ef01a4772ce8b19e59a94e86aa5d23",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1012"
+}

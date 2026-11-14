@@ -14,7 +14,7 @@ import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { LedgerError } from "../ledger/Ledger.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import type { ConnectionBinding, ProcessBinding, ProjectBinding } from "./bindings.ts";
-import type { ConnectionShape, RecordShape } from "./objects.ts";
+import type { ConnectionShape, ProcessShape, RecordShape } from "./objects.ts";
 import { reach } from "./reach.ts";
 
 /**
@@ -60,6 +60,13 @@ const unreachable = (cause: unknown) => new LedgerError({ reason: "unreachable",
 /** A call the typed stub could not make. Its RpcCallError is the cause, and the message names what
  *  the platform threw inside it, in the form `unreachable` writes. */
 const lost = (cause: RpcCallError) => new LedgerError({ reason: "unreachable", message: thrown(cause.cause), cause });
+
+/** An object's contract as its callers see it: each call needs nothing, and fails with `LedgerError`. */
+type Calls<S> = {
+  readonly [K in keyof S]: S[K] extends (...args: infer A) => Effect.Effect<infer B, infer _E, infer _R>
+    ? (...args: A) => Effect.Effect<B, LedgerError>
+    : never;
+};
 
 /**
  * Returns the thrown value behind an `unreachable` `LedgerError`, rebuilt from its message with its
@@ -230,64 +237,36 @@ export class ProjectClient extends Context.Service<
 }
 
 /**
- * Service for calls on a Process Durable Object, one Effect per RPC method of its binding.
+ * Service for calls on a Process Durable Object, one Effect per call of its contract.
  *
  * **Details**
  *
- * `ProcessClient.make` wraps a stub. A rejected call fails with a `LedgerError` of reason
- * `unreachable` that keeps the thrown value as its cause.
+ * `ProcessClient.make` wraps a stub. The object's own `LedgerError` crosses as itself, and a call
+ * that got no answer fails with reason `unreachable`, keeping Alchemy's `RpcCallError` as its cause.
  *
  * @stability unstable
  * @category services
  */
-export class ProcessClient extends Context.Service<
-  ProcessClient,
-  Client<Omit<ProcessBinding, keyof Rpc.DurableObjectBranded>>
->()("@kampus/libfabrika/cloudflare/platform.ProcessClient") {
+export class ProcessClient extends Context.Service<ProcessClient, Calls<Omit<ProcessShape, "alarm">>>()(
+  "@kampus/libfabrika/cloudflare/platform.ProcessClient",
+) {
   static make(stub: ProcessBinding): ProcessClient["Service"] {
+    // The object's own LedgerError crosses as itself; a call that got no answer is `unreachable`.
+    const process = makeRpcStub<ProcessClient["Service"]>(stub, { errors: [LedgerError] });
     return {
-      swap: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process swap RPC enters Effect
-        Effect.tryPromise({ try: () => stub.swap(...args), catch: unreachable }),
-      usage: (...args) =>
-        makeRpcStub<{
-          usage: (...input: Parameters<ProcessBinding["usage"]>) => Effect.Effect<void, RpcCallError>;
-        }>(stub)
-          .usage(...args)
-          .pipe(Effect.mapError((error) => unreachable(error.cause))),
-      mailed: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process mailed RPC enters Effect
-        Effect.tryPromise({ try: () => stub.mailed(...args), catch: unreachable }),
-      configure: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process configure RPC enters Effect
-        Effect.tryPromise({ try: () => stub.configure(...args), catch: unreachable }),
-      descriptor: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process descriptor RPC enters Effect
-        Effect.tryPromise({ try: () => stub.descriptor(...args), catch: unreachable }),
-      msg: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process msg RPC enters Effect
-        Effect.tryPromise({ try: () => stub.msg(...args), catch: unreachable }),
-      open: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process open RPC enters Effect
-        Effect.tryPromise({ try: () => stub.open(...args), catch: unreachable }),
-      due: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process due RPC enters Effect
-        Effect.tryPromise({ try: () => stub.due(...args), catch: unreachable }),
-      restart: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process restart RPC enters Effect
-        Effect.tryPromise({ try: () => stub.restart(...args), catch: unreachable }),
-      activity: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process activity RPC enters Effect
-        Effect.tryPromise({ try: () => stub.activity(...args), catch: unreachable }),
-      recover: () =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process recover RPC enters Effect
-        Effect.tryPromise({ try: () => stub.recover(), catch: unreachable }),
-      savedAlarm: () =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process savedAlarm RPC enters Effect
-        Effect.tryPromise({ try: () => stub.savedAlarm(), catch: unreachable }),
-      abort: () =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Process abort RPC enters Effect
-        Effect.tryPromise({ try: () => stub.abort(), catch: unreachable }),
+      swap: (...args) => reach(process.swap(...args), lost),
+      usage: (...args) => reach(process.usage(...args), lost),
+      mailed: (...args) => reach(process.mailed(...args), lost),
+      configure: (...args) => reach(process.configure(...args), lost),
+      descriptor: (...args) => reach(process.descriptor(...args), lost),
+      msg: (...args) => reach(process.msg(...args), lost),
+      open: (...args) => reach(process.open(...args), lost),
+      due: (...args) => reach(process.due(...args), lost),
+      restart: (...args) => reach(process.restart(...args), lost),
+      activity: (...args) => reach(process.activity(...args), lost),
+      recover: () => reach(process.recover(), lost),
+      savedAlarm: () => reach(process.savedAlarm(), lost),
+      abort: () => reach(process.abort(), lost),
     };
   }
 }

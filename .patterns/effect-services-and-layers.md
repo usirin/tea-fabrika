@@ -123,12 +123,15 @@ Rules:
   comment (`next/apps/fabrika/src/brain.ts:30-33`,
   [an object class stays thin](../docs/direction/object-classes-stay-thin.md)). A bare
   `Effect.runPromise` there gets none of the runtime's Layers, tracer included. An object already
-  on Alchemy's Effect form has no method of its own: its class is one bridge line
-  (`export class Connection extends Bridge("Connection") {}` in `next/apps/fabrika/src/brain.ts`),
-  and its Layer is a sibling file read through its module, as `ConnectionObject.layer(...)`
-  (`next/packages/libfabrika/src/cloudflare/ConnectionObject.ts`). That Layer builds its service
-  with `ObjectService.make`, which builds on the first call and tries a failed build again, and
-  returns an Effect for each slot and call of the contract in `cloudflare/objects.ts`.
+  on Alchemy's Effect form has no method of its own: its class is one bridge line, as
+  `export class Connection extends Bridge("Connection") {}` and `export class Process extends
+  Bridge("Process") {}` in `next/apps/fabrika/src/brain.ts`, and its Layer is a sibling file read
+  through its module, as `ConnectionObject.layer({ input })` and `ProcessObject.layer({ programs,
+  input })` (`next/packages/libfabrika/src/cloudflare/ConnectionObject.ts`, `ProcessObject.ts`),
+  made in the app's `runtime.ts` with its checked read of the setting and provided once in its
+  `objects.ts`. Each Layer builds its service with `ObjectService.make`, which builds on the first
+  call and tries a failed build again. Each Layer returns an Effect for
+  each slot and call of the contract in `cloudflare/objects.ts`, and Alchemy's bridge runs them.
 
 ## Where it applies
 

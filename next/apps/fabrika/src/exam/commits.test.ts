@@ -865,6 +865,7 @@ describe("trusted config files", () => {
         { "glob": "stylelint.config.ts", "why": "the CSS lint rules and their known lists" },
         { "glob": "oxlint-plugins/**", "why": "the custom lint rules and the lint runner" },
         { "glob": "vitest.config.ts", "why": "which tests run, and their time limit" },
+        { "glob": "vitest.e2e.config.ts", "why": "which end-to-end tests run, and their time limit" },
         {
           "glob": ".agents/skills/*/scripts/*.test.ts",
           "why": "the step scripts' laws and planted breaks"

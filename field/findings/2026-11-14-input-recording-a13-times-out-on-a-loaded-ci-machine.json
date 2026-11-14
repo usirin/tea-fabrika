@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-input-recording-a13-times-out-on-a-loaded-ci-machine",
+  "date": "2026-11-14",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/apps/fabrika/src/input-recording.test.ts",
+    "line": 1
+  },
+  "says": "The A13 law (built boxes and the real instance record selected metadata across refusal, unknown types, lost answers and reconnect) timed out at 60 s on CI shard next (6) and passed when the failed jobs were rerun on the same head.",
+  "proof": "Run 43582610548 attempt 1, next (6): 'Error: Test timed out in 60000ms' on A13; attempt 2 of the same run on head d25a79625: next (6) success. PR 1208 does not touch the file or what it imports.",
+  "cost": "A red ci-required on an unrelated PR and an 18 minute rerun before the lane can go on.",
+  "head": "d25a7962556e5e400d3b95dec0eee17a5fae30d5",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1208"
+}

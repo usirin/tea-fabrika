@@ -68,6 +68,23 @@ const calls = Object.entries(clients(null)).flatMap(([client, made]) =>
   Object.keys(made).map((method) => ({ client, method })),
 );
 
+// Ticket 502 slices S1 and S2: a ProcessClient call and a Connection call other than `fetch` go
+// through Alchemy's typed stub inside `reach`, so the cause is the stub's RpcCallError, and that
+// error holds the rejection. A typed stub serves `fetch` through Alchemy's fetcher, not as a call:
+// the fetcher fails typed with the rejection as its cause. Plant: `unreachable(error.cause)`.
+const throughStub = (client: string, method: string) =>
+  client === "process" || (client === "gateway" && method !== "fetch");
+
+/** The rejection a client's `unreachable` kept: its cause, or what the stub's RpcCallError holds. */
+const kept = (client: string, method: string, cause: unknown) => {
+  if (!throughStub(client, method)) {
+    return cause;
+  }
+
+  expect(cause, `${client}.${method} keeps Alchemy's RpcCallError`).toBeInstanceOf(RpcCallError);
+  return cause instanceof RpcCallError ? cause.cause : undefined;
+};
+
 describe("T695, the platform clients keep what the platform rejected with", () => {
   // C5, platform.ts:12, every `catch: unreachable` in that file. Plant: the zero-argument callback.
   it("vector: the shared callback serves at least every client method the adapters call", () => {
@@ -96,18 +113,9 @@ describe("T695, the platform clients keep what the platform rejected with", () =
           );
           expect(error).toBeInstanceOf(LedgerError);
           expect(error.reason).toBe("unreachable");
-          const cause: unknown = error.cause;
-
-          if (call.client !== "gateway" || call.method === "fetch") {
-            // T502 S1. A typed stub serves `fetch` through Alchemy's fetcher, not as a call: the
-            // fetcher fails typed with the rejection as its cause, and the client keeps that value.
-            expect(cause, `${call.client}.${call.method} keeps the rejection`).toBe(failure);
-          } else {
-            // T502 S1. A Connection call goes through Alchemy's typed stub and `reach`: the cause
-            // is the stub's RpcCallError, and that error holds the very value the platform threw.
-            expect(cause, `gateway.${call.method} keeps the stub's own error`).toBeInstanceOf(RpcCallError);
-            expect(Reflect.get(Object(cause), "cause"), `gateway.${call.method} keeps the rejection`).toBe(failure);
-          }
+          expect(kept(call.client, call.method, error.cause), `${call.client}.${call.method} keeps the rejection`).toBe(
+            failure,
+          );
         }
       }),
   );
