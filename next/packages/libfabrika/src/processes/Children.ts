@@ -15,13 +15,30 @@ import { Code, Recipient, Text } from "./internal/processTable.ts";
 import type { From } from "./Mailbox.ts";
 import { ProcessName } from "./Process.ts";
 
-/** The most bytes a first letter's row may hold: the ledger's row limit. */
+/**
+ * The most bytes a first letter's row may hold: the ledger's row limit.
+ *
+ * @stability unstable
+ * @category constants
+ */
 export const INPUT_BYTES = ROW_BYTES;
 
-/** A host right, by program: a process of `source` may start a process of `to`. Read as a set. */
+/**
+ * Schema for a host right, by program: a process of `source` may start a process of `to`. Read as
+ * a set.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const StartGrant = Schema.Struct({ source: Text, to: Text });
 
-/** One start. A retry of a saved `id` answers that start's `started`, whatever happened since. */
+/**
+ * Schema for one start request. A retry of a saved `id` answers that start's `started`, whatever
+ * happened since.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const Child = Schema.Struct({
   id: Text,
   /** The whereis key: the child's registered name. */
@@ -41,7 +58,13 @@ export const Child = Schema.Struct({
  */
 export type Child = typeof Child.Type;
 
-/** OTP's answers: `{ok, Pid}`, `{error, {already_started, Pid}}` and `{error, already_present}`. */
+/**
+ * Schema for the answer to a start, in OTP's three answers: `{ok, Pid}`,
+ * `{error, {already_started, Pid}}` and `{error, already_present}`.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const Started = Schema.TaggedUnion({
   started: { process: ProcessId, name: Text, rev: Rev },
   already_started: { process: ProcessId, name: Text },

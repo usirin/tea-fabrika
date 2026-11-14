@@ -1,5 +1,6 @@
 /**
  * Bounded inbox and public restart history, without message content.
+ *
  * @stability unstable
  */
 import * as Context from "effect/Context";
@@ -8,21 +9,25 @@ import * as Schema from "effect/Schema";
 import type { ProcessId } from "../ProcessId.ts";
 
 /**
- * History could not reach storage.
+ * History could not reach storage, because the ledger answered `unreachable`.
+ *
  * @stability unstable
  * @category errors
  */
 export class Unreachable extends Schema.TaggedError<Unreachable>()("Unreachable", { cause: Schema.Defect() }) {}
 
 /**
- * A known history row or its position is invalid.
+ * A history row or its position is invalid: the ledger answered `bad_row`, a position is not a
+ * positive safe integer, or a `send` body or `restarted` event does not decode.
+ *
  * @stability unstable
  * @category errors
  */
 export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Schema.Defect() }) {}
 
 /**
- * Storage failed before the bounded read completed.
+ * Any other ledger failure, which stopped the bounded read before it completed.
+ *
  * @stability unstable
  * @category errors
  */
@@ -30,6 +35,7 @@ export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: S
 
 /**
  * The history service's failure, retaining the lower cause.
+ *
  * @stability unstable
  * @category errors
  */
@@ -39,6 +45,7 @@ export class ProcessHistoryError extends Schema.TaggedError<ProcessHistoryError>
 
 /**
  * Two separately captured stream boundaries and the facts read through them.
+ *
  * @stability unstable
  * @category models
  */
@@ -60,6 +67,7 @@ export type Snapshot = {
 
 /**
  * Reads one registered name's inbox and public process history to fixed heads.
+ *
  * @stability unstable
  * @category services
  */
