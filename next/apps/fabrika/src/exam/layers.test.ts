@@ -219,7 +219,8 @@ const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
   data: ["id"],
   coordination: ["data", "id"],
   app: ["coordination", "id"],
-  node: ["app", "coordination", "data", "id"],
+  node: ["app", "coordination", "data", "id", "desktop-core"],
+  "desktop-core": ["app", "data", "id"],
   workers: ["app", "coordination", "data", "transport", "id"],
   door: ["app", "coordination", "data", "transport", "id"], // P17a: the library's door composes all four
   mcp: ["app", "transport", "id"], // the named exception: the bridge is a client, as a window is
@@ -259,6 +260,7 @@ const rowParts: Readonly<Record<string, string>> = {
   "next-runtime": "app",
   "next-mcp": "mcp",
   "next-door": "door",
+  "next-desktop-core": "desktop-core",
   "next-schedules": "door", // T762: layer 6 beside the door; it imports only tea and effect today
   "next-node": "node",
   "next-workers": "workers",
@@ -1220,6 +1222,7 @@ describe("layers", () => {
       "next-workers": 8,
       "next-libfabrika-entry": 7,
       "next-door": 6,
+      "next-desktop-core": 6,
       "next-schedules": 6,
       "next-runtime": 5,
       "next-access": 4,

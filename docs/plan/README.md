@@ -103,6 +103,12 @@ before `fabsh` is built, and S2 to S7 before `summon`; say yes after reading `al
 the first cloud deploy. The other open calls are listed in
 [the section](./tier-1.md#the-owners-walks-and-decisions-by-step), each tied to its step.
 
+*2026-11-12:* P19 slice 1, tracker ticket 881, is built on its branch in `next/`, awaiting
+review: the brain-service contracts, lifecycle machine and launchd adapter. The box checks only controlled services;
+the real launchd and Electron restart and cleanup check remains with the host lead.
+P19 stays open. Slice 2 adds sealed identities and founding storage, then slice 3 builds
+the Electron client and recovery with both windows.
+
 *2026-11-12:* ticket 893 slice 1 in `next/` saves process view watchers across object sleep
 and removes a watch on publish after its Project route leaves. Unknown delivery failures retain
 membership. [The storage pattern](../../.patterns/durable-objects-sleep.md). This finishes no
