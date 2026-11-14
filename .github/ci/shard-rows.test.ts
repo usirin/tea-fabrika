@@ -9,33 +9,47 @@ import * as fc from "fast-check";
 import { createVitest } from "vitest/node";
 import { testConfig } from "../../vitest.config.ts";
 import { measured } from "../../vitest.shards.ts";
-import { main, nextFiles, unmeasured } from "./shard-rows.ts";
+import { main, nextFiles, stale } from "./shard-rows.ts";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const options = { seed: 119120, numRuns: 100 };
 
 // fast-check supplies dependent subarrays and unique strings; no domain schema describes paths here.
 const rows = fc
-  .uniqueArray(fc.string(), { maxLength: 50 })
-  .chain((files) => fc.subarray(files).map((present) => ({ files, present })));
+  .uniqueArray(
+    fc.oneof(
+      fc.string(),
+      fc.string().map((name) => `next/${name}`),
+    ),
+    { maxLength: 50 },
+  )
+  .chain((paths) =>
+    fc
+      .tuple(fc.subarray(paths), fc.subarray(paths))
+      .map(([keys, files]) => ({ table: Object.fromEntries(keys.map((path) => [path, 0])), files })),
+  );
 
-// L2. Plants, each run once on shard-rows.ts and restored: return [] always (red); test the key
-// with `in`, so `constructor` passes as a row (red).
-it("L2: missing rows are exactly absent own keys, sorted in either input order", () => {
+// L2. Plants, each run once on shard-rows.ts and restored: return [] always (red); list the
+// selected files with no row, as the old check did (red); drop the next/ prefix test, so a row of
+// today's version counts as stale (red).
+it("L2: stale rows are exactly next/ rows whose file Vitest does not select, sorted in either input order", () => {
   fc.assert(
-    fc.property(rows, ({ files, present }) => {
-      const table = Object.fromEntries(present.map((path) => [path, 0]));
-      const expected = files.filter((path) => !present.includes(path)).toSorted();
-      expect(unmeasured(table, files)).toEqual(expected);
-      expect(unmeasured(table, files.toReversed())).toEqual(expected);
-      expect(unmeasured(table, ["constructor", "toString"])).toEqual(
-        ["constructor", "toString"].filter((path) => !present.includes(path)),
-      );
-      // A stale row is not a missing row, and 0.0 is present.
-      expect(unmeasured({ stale: 0, zero: 0.0 }, ["zero"])).toEqual([]);
+    fc.property(rows, ({ table, files }) => {
+      const expected = Object.keys(table)
+        .filter((path) => path.startsWith("next/") && !files.includes(path))
+        .toSorted();
+      expect(stale(table, files)).toEqual(expected);
+      expect(stale(table, files.toReversed())).toEqual(expected);
     }),
     options,
   );
+  // A selected next/ file with no row is not stale: assign places it by its fallback.
+  expect(stale({ "next/a.test.ts": 1 }, ["next/a.test.ts", "next/new.test.ts"])).toEqual([]);
+  // A row for a file gone from the selection is stale; a row outside next/ is not this check's.
+  expect(stale({ "next/gone.test.ts": 4, "next/a.test.ts": 0.0, "apps/x.test.ts": 2 }, ["next/a.test.ts"])).toEqual([
+    "next/gone.test.ts",
+  ]);
+  expect(stale({ "next/constructor": 0 }, [])).toEqual(["next/constructor"]);
 });
 
 // L3. Plants, each run once on shard-rows.ts and restored: narrow the next/ globs to `*.test.ts`,
@@ -172,7 +186,7 @@ it("L3: next files equal Vitest's own selection on generated trees, new excludes
 
 // L4. Plants, each run once on shard-rows.ts and restored: exit 0 always (red); print only the
 // first path (red).
-it("format: L4 one diagnostic per missing path, exit 1 for missing rows and 0 otherwise", () => {
+it("format: L4 one diagnostic naming each stale row, exit 1 for stale rows and 0 otherwise", () => {
   // The CLI's line format is consumed by lint. Keep generated paths on one line.
   fc.assert(
     fc.property(
@@ -180,10 +194,15 @@ it("format: L4 one diagnostic per missing path, exit 1 for missing rows and 0 ot
         fc.string().filter((path) => !/[\r\n\u2028\u2029]/u.test(path)),
         { maxLength: 20 },
       ),
-      (missing) => {
+      (rows) => {
         const lines: string[] = [];
-        expect(main(missing, (line) => lines.push(line))).toBe(missing.length === 0 ? 0 : 1);
-        expect(lines).toEqual(missing.map((path) => `no shard row: ${path}`));
+        expect(main(rows, (line) => lines.push(line))).toBe(rows.length === 0 ? 0 : 1);
+        expect(lines).toEqual(
+          rows.map(
+            (path) =>
+              `stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in vitest.shards.ts`,
+          ),
+        );
         const silent: string[] = [];
         expect(main([], (line) => silent.push(line))).toBe(0);
         expect(silent).toEqual([]);
@@ -195,10 +214,17 @@ it("format: L4 one diagnostic per missing path, exit 1 for missing rows and 0 ot
 
 it("scenario: L4 the Node entry passes the real table and file set to the reporter", async () => {
   // Spawn the real CLI so import.meta.main and its exit status are covered too.
-  const missing = unmeasured(measured, await nextFiles(root));
+  const rows = stale(measured, await nextFiles(root));
   const result = spawnSync(process.execPath, [".github/ci/shard-rows.ts"], { cwd: root, encoding: "utf8" });
   expect(result.error).toBeUndefined();
-  expect(result.status).toBe(missing.length === 0 ? 0 : 1);
+  expect(result.status).toBe(rows.length === 0 ? 0 : 1);
   expect(result.stdout).toBe("");
-  expect(result.stderr).toBe(missing.map((path) => `no shard row: ${path}\n`).join(""));
+  expect(result.stderr).toBe(
+    rows
+      .map(
+        (path) =>
+          `stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in vitest.shards.ts\n`,
+      )
+      .join(""),
+  );
 });

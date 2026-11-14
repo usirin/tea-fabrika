@@ -19,7 +19,8 @@ const LANE = "packages/pipeline/src/stages/pipeline/lane";
  * group) and 43556494864 (push to main), rounded to one decimal: the median of the three samples,
  * or the larger of those in hand when a run did not hold the file. The samples and their jobs are
  * in vitest.shards.test.ts.
- * A file not measured counts 1 s.
+ * A file with no row is placed by `assign`'s fallback; CI's `shard-times` step prints its seconds
+ * for a later row.
  */
 export const measured: Record<string, number> = {
   ".agents/skills/lead/scripts/box.test.ts": 348.7,
@@ -717,25 +718,33 @@ export const measured: Record<string, number> = {
 };
 
 /**
- * Each file's machine, `0` to `count - 1`, in the order the files came. Each file, heaviest first
- * (ties by path), goes to the machine with the least seconds so far (ties: the first). The same
- * files in any order get the same machines, so every machine computes the same split.
+ * Each file's machine, `0` to `count - 1`, in the order the files came. Each measured file,
+ * heaviest first (ties by path), goes to the machine with the least seconds so far (ties: the
+ * first). Then each file with no seconds, in path order, goes to the machine with the least
+ * measured seconds (ties: the first): it adds no seconds, since none were measured. The same files
+ * in any order get the same machines, so every machine computes the same split.
  */
 export const assign = (
-  files: readonly { readonly path: string; readonly seconds: number }[],
+  files: readonly { readonly path: string; readonly seconds?: number | undefined }[],
   count: number,
   start: readonly number[] = [],
 ): number[] => {
+  const byPath = (x: { readonly path: string }, y: { readonly path: string }) =>
+    x.path < y.path ? -1 : x.path > y.path ? 1 : 0;
   const order = files
-    .map((file, at) => ({ ...file, at }))
-    .toSorted((x, y) => y.seconds - x.seconds || (x.path < y.path ? -1 : x.path > y.path ? 1 : 0));
+    .map((file, at) => ({ path: file.path, seconds: file.seconds, at }))
+    .toSorted((x, y) =>
+      x.seconds === undefined || y.seconds === undefined
+        ? Number(x.seconds === undefined) - Number(y.seconds === undefined) || byPath(x, y)
+        : y.seconds - x.seconds || byPath(x, y),
+    );
   const load = Array.from({ length: count }, (_, i) => start[i] ?? 0);
   const machines = files.map(() => 0);
 
   for (const file of order) {
     const least = load.indexOf(Math.min(...load));
     machines[file.at] = least;
-    load[least] = (load[least] ?? 0) + file.seconds;
+    load[least] = (load[least] ?? 0) + (file.seconds ?? 0);
   }
 
   return machines;
@@ -773,7 +782,7 @@ export class Shards extends BaseSequencer {
     const machines = assign(
       files.map((spec) => {
         const path = relative(root, spec.moduleId);
-        return { path, seconds: measured[path] ?? 1 };
+        return { path, seconds: Object.hasOwn(measured, path) ? measured[path] : undefined };
       }),
       shard.count,
       files.every((spec) => inLaneStep(relative(root, spec.moduleId))) ? restLoads(shard.count) : [],

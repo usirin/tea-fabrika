@@ -5,9 +5,16 @@ import { createVitest } from "vitest/node";
 import { testConfig } from "../../vitest.config.ts";
 import { measured } from "../../vitest.shards.ts";
 
-/** Missing own keys, in path order. Zero seconds still counts as a row. */
-export const unmeasured = (table: Readonly<Record<string, number>>, files: readonly string[]): string[] =>
-  files.filter((path) => !Object.hasOwn(table, path)).toSorted();
+/**
+ * next/ rows whose file is not among `files`, in path order. A file with no row is not listed:
+ * `assign` places it by its fallback until CI's `shard-times` step gives it a row.
+ */
+export const stale = (table: Readonly<Record<string, number>>, files: readonly string[]): string[] => {
+  const selected = new Set(files);
+  return Object.keys(table)
+    .filter((path) => path.startsWith("next/") && !selected.has(path))
+    .toSorted();
+};
 
 /**
  * next/'s test files as Vitest itself selects them, from the config's next/ includes and every
@@ -32,20 +39,21 @@ export const nextFiles = async (root: string): Promise<string[]> => {
   }
 };
 
-/** Write the lint diagnostic for each missing file and return its exit code. */
-export const main = (missing: readonly string[], write: (line: string) => void): number => {
-  for (const path of missing) {
-    write(`no shard row: ${path}`);
+/** Write the lint diagnostic for each stale row and return its exit code. */
+export const main = (rows: readonly string[], write: (line: string) => void): number => {
+  for (const path of rows) {
+    write(`stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in vitest.shards.ts`);
   }
 
-  return missing.length === 0 ? 0 : 1;
+  return rows.length === 0 ? 0 : 1;
 };
 
-// L1, run by `pnpm lint`. Plant, run once on a filled copy of the table and restored: delete the
-// chaos.laws row. The check printed `no shard row: next/apps/fabrika/src/chaos.laws.test.ts` and
-// exited 1; restored, it printed nothing and exited 0.
+// L1, run by `pnpm lint`. Plant, run once on the table and restored: add a row for
+// next/apps/fabrika/src/gone.test.ts. The check printed its stale shard row line and exited 1;
+// restored, it printed nothing and exited 0. On the same tree the old check, which refused a file
+// with no row, printed `no shard row: next/apps/fabrika/src/exam/effect-checks.test.ts` and exited 1.
 // Under Vitest `import.meta.main` is false, so a test that imports this file never runs the check.
 if (import.meta.main) {
   const files = await nextFiles(fileURLToPath(new URL("../../", import.meta.url)));
-  process.exitCode = main(unmeasured(measured, files), (line) => console.error(line));
+  process.exitCode = main(stale(measured, files), (line) => console.error(line));
 }
