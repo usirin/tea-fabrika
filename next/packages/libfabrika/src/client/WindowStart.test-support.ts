@@ -63,6 +63,11 @@ export class MemorySocket implements Socket.WebSocketLike {
     return (this.listeners.get(type) ?? []).length;
   }
 
+  /** The listeners of `type` attached now, so a law can tell whose each one is. */
+  attached(type: Kind): ReadonlyArray<Listener> {
+    return (this.listeners.get(type) ?? []).map((l) => l.fn);
+  }
+
   send(data: string | Uint8Array<ArrayBuffer>): void {
     if (this.readyState === 0) {
       throw new DOMException("still connecting", "InvalidStateError");

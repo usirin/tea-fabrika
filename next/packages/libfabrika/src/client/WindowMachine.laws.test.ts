@@ -1277,7 +1277,13 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
     );
   }
 
-  if (timer !== null && c.aux % 4 === 0) {
+  // A live link's timer is offered now and then, so dials live long enough to go online. A retrying
+  // link waits on nothing but its retry, so the retry is always offered, and favored, like the
+  // door's next move below: no walk sits in `retrying` for good.
+  if (timer !== null && s.link._tag === "retrying") {
+    const retry = (): readonly [WindowMsg, Expect] => [timer.msg, none];
+    out.push(retry, retry, retry);
+  } else if (timer !== null && c.aux % 4 === 0) {
     out.push(() => [timer.msg, none]);
   }
 
@@ -1304,10 +1310,34 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
       ],
       () => [frame(w, d, "pong"), { _tag: "owner", owner: { type: "pong", dial: d } }],
       () => [frame(w, d, JUNK[c.aux % JUNK.length]!), nothing],
-      () => [{ type: "socket_closed", dial: d, code: c.code, at: w.at } as WindowMsg, none],
     );
 
-    // Favor the door's answer to the handshake's live request, so walks go online.
+    // The live socket closes now and then, like its timer, so a dial lives long enough to go online.
+    if (c.aux % 4 === 0) {
+      out.push(() => [{ type: "socket_closed", dial: d, code: c.code, at: w.at } as WindowMsg, none]);
+    }
+
+    // Favor the door's next move for the handshake's own state, so walks go online: a challenge to
+    // a dial not challenged yet, an admission of the live hello, a code for the live knock, and a
+    // grant to a waiting dial.
+    if (hs.dial === d) {
+      const next =
+        hs._tag === "opened"
+          ? rpc({ method: "challenge", params: { nonce } })
+          : hs._tag === "initializing"
+            ? rpc({ id: hs.id, result: ADMITTED })
+            : hs._tag === "knocking"
+              ? rpc({ id: hs.id, result: { code: c.word, until: c.ms } })
+              : hs._tag === "waiting"
+                ? rpc({ method: "client.granted", params: { nonce } })
+                : null;
+
+      if (next !== null) {
+        const move = (): readonly [WindowMsg, Expect] => [frame(w, d, next), { _tag: "handshake" }];
+        out.push(move, move, move);
+      }
+    }
+
     if (hs.id !== undefined && hs.dial === d) {
       const id = hs.id;
       const answers = [
@@ -1393,6 +1423,12 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
     if (late.length > 0) {
       const f = late[c.aux % late.length]!;
       out.push(() => [frame(w, f.dial, rpc({ id: f.id, result: goodAnswer(f, c).result }), c.ms), nothing]);
+    }
+
+    // A live flight's own id and a good answer, on a past dial: the id alone never settles it.
+    if (s.flight.length > 0) {
+      const f = s.flight[c.aux % s.flight.length]!;
+      out.push(() => [frame(w, d, rpc({ id: f.id, result: goodAnswer(f, c).result }), c.ms), nothing]);
     }
   }
 
@@ -1510,7 +1546,8 @@ describe("P18 L3: each frame reaches exactly one owner", () => {
     { list: Arbitrary.array(Arbitrary.schema(Picks), { minLength: 20, maxLength: 20 }) },
     ({ list }) => {
       // A knock's answer settles only once a grant wait renews, which few walks reach: not counted.
-      const seen: Record<string, number> = { owner: 0, nothing: 0, handshake: 0, online: 0, old: 0 };
+      // `stolen` is a live flight's id on a past dial, the frame only the dial check stops.
+      const seen: Record<string, number> = { owner: 0, nothing: 0, handshake: 0, online: 0, old: 0, stolen: 0 };
 
       for (const walk of list) {
         foldFrames(walk, ({ prev, m, next, expect: e }) => {
@@ -1518,6 +1555,8 @@ describe("P18 L3: each frame reaches exactly one owner", () => {
             const dial = m.dial;
             const route = dial === socketDial(prev) ? e._tag : "old";
             seen[route] = (seen[route] ?? 0) + 1;
+            const named = Option.getOrUndefined(answerId(m.text))?.id;
+            seen.stolen += route === "old" && prev.flight.some((f) => f.id === named) ? 1 : 0;
           }
 
           seen.online += prev.link._tag !== "online" && next.link._tag === "online" ? 1 : 0;
@@ -1525,7 +1564,7 @@ describe("P18 L3: each frame reaches exactly one owner", () => {
       }
 
       expect(
-        ["owner", "nothing", "handshake", "online", "old"].every((k) => (seen[k] ?? 0) > 0),
+        ["owner", "nothing", "handshake", "online", "old", "stolen"].every((k) => (seen[k] ?? 0) > 0),
         JSON.stringify(seen),
       ).toBe(true);
       return true;
@@ -1796,12 +1835,18 @@ const mutations = (family: Family, sent: Record<string, unknown>) => [
   ...Object.entries(family.wrong).map(([k, v]) => ({ ...sent, [k]: v })),
 ];
 
+/** JSON text, the only form a frame's value takes on the wire. */
+const Json = Schema.fromJsonString(Schema.Unknown);
+
 describe("P18 L10: every frame family the parent reads decodes or reaches its typed failure", () => {
   for (const [name, family] of Object.entries(FAMILIES)) {
     it.prop(
       `format: ${name}, from its schema, reaches its handler, and with one field dropped or mistyped changes nothing`,
-      { value: Arbitrary.schema(family.schema) },
-      ({ value }) => {
+      { generated: Arbitrary.schema(family.schema) },
+      ({ generated }) => {
+        // The value as the window reads it after the wire: JSON cannot carry what a schema's
+        // Arbitrary may make, such as `-0`, so the owner's Msg is built from the value JSON carries.
+        const value = Schema.decodeSync(Json)(Schema.encodeSync(Json)(generated));
         const prev = family.from();
         const sent = (family.sent ?? ((v) => v))(value as Record<string, unknown>);
         const [text, ms] = family.text(prev, sent);
