@@ -6,10 +6,13 @@ import { describe, expect, it } from "vitest";
 import { BaseSequencer, createVitest } from "vitest/node";
 import { nextFiles } from "./.github/ci/shard-rows.ts";
 import { inLaneStep, vitestLegs } from "./.github/ci/workflow-lint.ts";
-import { assign, measured, Shards, wall, WORKERS, restLoads } from "./vitest.shards.ts";
+import { assign, measured, median, Shards, wall, WORKERS, restLoads } from "./vitest.shards.ts";
 
 /** A file's row, or undefined when the table has none, as `Shards` reads it. */
 const rowOf = (path: string): number | undefined => (Object.hasOwn(measured, path) ? measured[path] : undefined);
+
+/** What a file with no row counts as in `assign` by default: the median of every row. */
+const noRow = median(Object.values(measured));
 
 /** A row from its samples: the median of three, or the larger of the one or two in hand. */
 const row = (samples: readonly number[]): number =>
@@ -58,10 +61,10 @@ it("scenario: L6 the five measured heaviest next files occupy the five vitest ma
   const placed = assign(files, machines);
   expect(new Set(heaviest.map((path) => placed[files.findIndex((file) => file.path === path)]))).toHaveLength(machines);
   const loads = Array.from({ length: machines }, (_, machine) =>
-    files.reduce((sum, file, index) => sum + (placed[index] === machine ? (file.seconds ?? 0) : 0), 0),
+    files.reduce((sum, file, index) => sum + (placed[index] === machine ? (file.seconds ?? noRow) : 0), 0),
   );
   const mean = loads.reduce((sum, load) => sum + load, 0) / machines;
-  expect(Math.max(...loads)).toBeLessThanOrEqual(mean + Math.max(...files.map((file) => file.seconds ?? 0)));
+  expect(Math.max(...loads)).toBeLessThanOrEqual(mean + Math.max(...files.map((file) => file.seconds ?? noRow)));
 });
 
 // Today's CI, next/. Each file's samples in run order A, B, C, attempt 1 of each:
@@ -666,7 +669,7 @@ it("vector: real CI medians include the previously unweighted scripts", () => {
 it("vector: the four build files carry their refreshed main-run times", () => {
   // T502, next/ (A9, A10), refreshed by T890. Samples and jobs are recorded in nextSamples.
   // Attempt 1 of runs 43544589151, 43551626086 and 43556494864; each row is the median of its three.
-  // Plant: drop these rows, so all four have none, add nothing and the heavy build files stack on one machine.
+  // Plant: drop these rows, so all four count the median row and the heavy build files can stack on one machine.
   for (const path of [
     "next/apps/fabrika/src/build.test.ts",
     "next/apps/fabrika/src/exam/bytes.test.ts",
@@ -753,13 +756,28 @@ describe("assign", () => {
 });
 
 // T890, today's CI. A file with no row is placed, not refused: after every measured file, in
-// path order, on the machine with the least measured seconds (ties: the first), adding nothing.
-// Plants, each run once on vitest.shards.ts and restored: count a file with no row as 1 s, as the
-// old fallback did (red: z.new lands on machine 1); place files with no row first (red: they land
-// on machine 0); give Shards `measured[path] ?? 1` again (red in the Shards scenario).
+// path order, on the machine with the least seconds so far (ties: the first), counting the median
+// row, so several new files spread over the machines.
+// Plants, each run once on vitest.shards.ts and restored: a file with no row adds 0 s (red: the new
+// files pile onto one machine); place files with no row first (red in the vectors and L14); give
+// Shards `measured[path] ?? 0` (red in the Shards scenario).
+describe("median", () => {
+  it("vector: takes the middle, the lower middle of an even count, and 1 s of nothing", () => {
+    expect(median([3, 1, 2])).toBe(2);
+    expect(median([4, 1, 3, 2])).toBe(2);
+    expect(median([0.3])).toBe(0.3);
+    expect(median([])).toBe(1);
+  });
+
+  it("vector: a file with no row counts the median of every row by default", () => {
+    const files = [{ path: "a.test.ts", seconds: 9 }, { path: "x.new.test.ts" }, { path: "y.new.test.ts" }];
+    expect(assign(files, 3)).toEqual(assign(files, 3, [], median(Object.values(measured))));
+  });
+});
+
 describe("assign, for a file with no row", () => {
-  it("vector: puts each file with no row on the least measured machine, whatever their order", () => {
-    // Made up. Measured: a 10 -> 0, b 6 -> 1, c 5 -> 2, so machine 2 holds the least.
+  it("vector: places files with no row after the measured ones, each counting the median", () => {
+    // Made up, median 2. a 10 -> 0, b 6 -> 1, c 5 -> 2 (10, 6, 5); m.new -> 2 (7); z.new -> 1 (8).
     const files = [
       { path: "z.new.test.ts", seconds: undefined },
       { path: "a.test.ts", seconds: 10 },
@@ -767,36 +785,39 @@ describe("assign, for a file with no row", () => {
       { path: "c.test.ts", seconds: 5 },
       { path: "b.test.ts", seconds: 6 },
     ];
-    const want = { "a.test.ts": 0, "b.test.ts": 1, "c.test.ts": 2, "m.new.test.ts": 2, "z.new.test.ts": 2 };
-    expect(byPath(files, assign(files, 3))).toEqual(want);
-    expect(byPath(files.toReversed(), assign(files.toReversed(), 3))).toEqual(want);
+    const want = { "a.test.ts": 0, "b.test.ts": 1, "c.test.ts": 2, "m.new.test.ts": 2, "z.new.test.ts": 1 };
+    expect(byPath(files, assign(files, 3, [], 2))).toEqual(want);
+    expect(byPath(files.toReversed(), assign(files.toReversed(), 3, [], 2))).toEqual(want);
   });
 
-  it("vector: breaks a tie of measured machines by the first, and keeps a 0 s row measured", () => {
-    // Made up. a 5 -> 0, b 5 -> 1, zero 0 -> 0: machines tie at 5, so the new file goes to 0.
+  it("vector: breaks a tie by the first machine, keeps a 0 s row measured, and spreads new files", () => {
+    // Made up, median 3. a 5 -> 0, b 5 -> 1, zero 0 -> 0 (5, 5); new -> 0 (8); new2 -> 1 (8).
     const files = [
+      { path: "new2.test.ts" },
       { path: "new.test.ts" },
       { path: "zero.test.ts", seconds: 0 },
       { path: "b.test.ts", seconds: 5 },
       { path: "a.test.ts", seconds: 5 },
     ];
-    expect(byPath(files, assign(files, 2))).toEqual({
+    expect(byPath(files, assign(files, 2, [], 3))).toEqual({
       "a.test.ts": 0,
       "b.test.ts": 1,
       "zero.test.ts": 0,
       "new.test.ts": 0,
+      "new2.test.ts": 1,
     });
-    // Starting loads count as measured: machine 0 starts at 8, a and b take machine 1 to 10, so
-    // zero and the new file go to machine 0.
-    expect(byPath(files, assign(files, 2, [8]))).toEqual({
+    // Starting loads count too: machine 0 starts at 8. a and b take machine 1 to 10, zero goes to
+    // 0 (8), new to 0 (11), new2 to 1 (13).
+    expect(byPath(files, assign(files, 2, [8], 3))).toEqual({
       "a.test.ts": 1,
       "b.test.ts": 1,
       "zero.test.ts": 0,
       "new.test.ts": 0,
+      "new2.test.ts": 1,
     });
   });
 
-  it("L14: files with no row move no measured file, and all go to the least measured machine", () => {
+  it("L14: files with no row move no measured file, and each goes to the least load counting the median", () => {
     fc.assert(
       fc.property(
         fc.uniqueArray(
@@ -808,28 +829,59 @@ describe("assign, for a file with no row", () => {
         ),
         fc.integer({ min: 1, max: 12 }),
         fc.array(fc.integer({ min: 0, max: 2000 }), { maxLength: 12 }),
-        (files, count, start) => {
-          const machines = assign(files, count, start);
+        fc.integer({ min: 0, max: 50 }),
+        (files, count, start, unmeasured) => {
+          const machines = assign(files, count, start, unmeasured);
           const known = files.filter((file) => file.seconds !== undefined);
-          const alone = assign(known, count, start);
+          const alone = assign(known, count, start, unmeasured);
           expect(known.map((file) => machines[files.indexOf(file)])).toEqual(alone);
           const load = Array.from({ length: count }, (_, m) =>
             known.reduce((sum, file, i) => sum + (alone[i] === m ? file.seconds! : 0), start[m] ?? 0),
           );
-          const least = load.indexOf(Math.min(...load));
-          expect(
-            files.filter((file) => file.seconds === undefined).map((file) => machines[files.indexOf(file)]),
-          ).toEqual(files.filter((file) => file.seconds === undefined).map(() => least));
+
+          for (const file of files
+            .filter((file) => file.seconds === undefined)
+            .toSorted((x, y) => (x.path < y.path ? -1 : x.path > y.path ? 1 : 0))) {
+            const least = load.indexOf(Math.min(...load));
+            expect(machines[files.indexOf(file)]).toBe(least);
+            load[least] = load[least]! + unmeasured;
+          }
         },
       ),
       { seed: 119120, numRuns: 100 },
     );
   });
 
-  it("scenario: Shards puts two new next/ files with no row together, on the first of two tied machines", async () => {
-    // Today's CI. clock and compiler have rows of 0.0 s, so both machines stay tied at 0 and every
-    // file goes to the first, shard 1/2; the new files add nothing. Counted as 1 s each, as the old
-    // fallback did, the new files would split over the two.
+  it("L15: new files with no row spread evenly over machines that start level", () => {
+    // Nine new files, as one pull request can add, never pile onto one machine.
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 20 }),
+        fc.integer({ min: 1, max: 12 }),
+        fc.integer({ min: 0, max: 2000 }),
+        fc.double({ min: 0.1, max: 600, noNaN: true }),
+        (files, count, level, unmeasured) => {
+          const fresh = Array.from({ length: files }, (_, i) => ({ path: `next/new.${i}.test.ts` }));
+          const per = perMachine(
+            assign(
+              fresh,
+              count,
+              Array.from({ length: count }, () => level),
+              unmeasured,
+            ),
+            count,
+          );
+          expect(Math.max(...per) - Math.min(...per)).toBeLessThanOrEqual(1);
+        },
+      ),
+      { seed: 119120, numRuns: 100 },
+    );
+  });
+
+  it("scenario: Shards spreads two new next/ files with no row over two machines", async () => {
+    // Today's CI. clock and compiler have rows of 0.0 s, so both stay on shard 1/2 with the
+    // machines tied at 0. The first new file counts the median and goes to shard 1/2, which leaves
+    // shard 2/2 the least for the second.
     const paths = [
       "next/apps/fabrika/src/exam/clock.test.ts",
       "next/apps/fabrika/src/exam/compiler.test.ts",
@@ -837,6 +889,7 @@ describe("assign, for a file with no row", () => {
       "next/apps/toy/src/b.new.test.ts",
     ];
     expect(paths.map(rowOf)).toEqual([0, 0, undefined, undefined]);
+    expect(noRow).toBeGreaterThan(0);
     const kept: string[][] = [];
 
     for (const index of [1, 2]) {
@@ -851,7 +904,7 @@ describe("assign, for a file with no row", () => {
       }
     }
 
-    expect(kept).toEqual([paths, []]);
+    expect(kept).toEqual([paths.slice(0, 3), [paths[3]]]);
   });
 });
 
@@ -908,8 +961,8 @@ describe("Shards", () => {
       wall(rest.filter((_, j) => placed[j] === i).map((file) => file.seconds)),
     );
     expect(restLoads(6)).toEqual(loads);
-    const seconds = kept.map((paths, i) => paths.reduce((sum, p) => sum + (rowOf(p) ?? 0), loads[i]!));
-    const heaviestLane = Math.max(...lanes.map((path) => rowOf(path) ?? 0));
+    const seconds = kept.map((paths, i) => paths.reduce((sum, p) => sum + (rowOf(p) ?? noRow), loads[i]!));
+    const heaviestLane = Math.max(...lanes.map((path) => rowOf(path) ?? noRow));
     const biggest = Math.max(
       ...Object.entries(measured)
         .filter(([path]) => !path.startsWith("next/"))
@@ -961,7 +1014,7 @@ it("L9: wall equals the largest file or the shared worker load", () => {
 });
 
 it("vector: L12 stale non-lane rows hold the three T554 run medians", () => {
-  // Runs 42803733957, 42807559589, 42801440878. Gap >20 s; a file with no row adds no seconds.
+  // Runs 42803733957, 42807559589, 42801440878. Gap >20 s; a file with no row counts the median row.
   // The last four rows (box, boxrm, loosening, program-package-layout) come from PR 757's
   // check run 42874119130, attempts 5 to 14, a median of 10.
   // Plant: restore plancheck's older median. Lane rows await the PR's own run.

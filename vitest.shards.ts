@@ -19,8 +19,8 @@ const LANE = "packages/pipeline/src/stages/pipeline/lane";
  * group) and 43556494864 (push to main), rounded to one decimal: the median of the three samples,
  * or the larger of those in hand when a run did not hold the file. The samples and their jobs are
  * in vitest.shards.test.ts.
- * A file with no row is placed by `assign`'s fallback; CI's `shard-times` step prints its seconds
- * for a later row.
+ * A file with no row is placed by the fallback at the median measured time; CI's `shard-times`
+ * step prints its real seconds for a later row.
  */
 export const measured: Record<string, number> = {
   ".agents/skills/lead/scripts/box.test.ts": 348.7,
@@ -718,16 +718,28 @@ export const measured: Record<string, number> = {
 };
 
 /**
+ * The middle of `seconds` once sorted; of an even count, the lower middle, so no two rows are
+ * averaged into a number nobody measured. With no seconds at all there is no middle, so 1 s.
+ */
+export const median = (seconds: readonly number[]): number =>
+  seconds.toSorted((a, b) => a - b)[Math.floor((seconds.length - 1) / 2)] ?? 1;
+
+/** What a file with no row counts as: the median of every row, read once. */
+const guess = median(Object.values(measured));
+
+/**
  * Each file's machine, `0` to `count - 1`, in the order the files came. Each measured file,
  * heaviest first (ties by path), goes to the machine with the least seconds so far (ties: the
- * first). Then each file with no seconds, in path order, goes to the machine with the least
- * measured seconds (ties: the first): it adds no seconds, since none were measured. The same files
- * in any order get the same machines, so every machine computes the same split.
+ * first). Then each file with no seconds, in path order, goes the same way and counts as
+ * `unmeasured` seconds, the table's median by default, so several new files spread over the
+ * machines. The same files in any order get the same machines, so every machine computes the same
+ * split.
  */
 export const assign = (
   files: readonly { readonly path: string; readonly seconds?: number | undefined }[],
   count: number,
   start: readonly number[] = [],
+  unmeasured: number = guess,
 ): number[] => {
   const byPath = (x: { readonly path: string }, y: { readonly path: string }) =>
     x.path < y.path ? -1 : x.path > y.path ? 1 : 0;
@@ -744,7 +756,7 @@ export const assign = (
   for (const file of order) {
     const least = load.indexOf(Math.min(...load));
     machines[file.at] = least;
-    load[least] = (load[least] ?? 0) + (file.seconds ?? 0);
+    load[least] = (load[least] ?? 0) + (file.seconds ?? unmeasured);
   }
 
   return machines;
