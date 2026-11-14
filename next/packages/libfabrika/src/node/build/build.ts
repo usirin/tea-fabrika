@@ -1,8 +1,13 @@
-// The one-file build (Tier 1, P12 and P16): every selected program as a sealed Worker Loader module,
-// every window script, chunk and stylesheet, the tab's script and page (P14), and the brain that
-// carries them all as text. Nothing is published until every bundle and the Compiler check pass; a
-// failure keeps the last good file.
-// Disk and paths go through Effect's FileSystem and Path, which the caller provides.
+/**
+ * The one-file build: every selected program as a sealed Worker Loader module, every window
+ * script, chunk and stylesheet, the tab's script and page, and the brain that carries them all as
+ * text. Nothing is published until every bundle and the Compiler check pass; a failure keeps the
+ * last good file.
+ *
+ * Disk and paths go through Effect's `FileSystem` and `Path`, which the caller provides.
+ *
+ * @stability unstable
+ */
 import { unreachableChunksPlugin } from "alchemy/Bundle/UnreachableChunksPlugin";
 import { Context, Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
 import type { OutputAsset, OutputChunk, Plugin } from "rolldown";
@@ -14,18 +19,40 @@ import { inlineStylesheet } from "./css.ts";
 
 export { BuildError } from "../../runtime/Built.ts";
 
-/** One program the client selects: its `pack/program` name, its package, and the export that holds its declaration. */
+/**
+ * One program an app selects for its build: its `pack/program` name, its package, and the export
+ * that holds its declaration.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Selection = { readonly name: string; readonly package: string; readonly export: string };
 
+/**
+ * What a finished build answers: the published brain file and its hash, and the tables that file
+ * carries, each program's compiled source by name and each window file by route.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Built = {
   /** The SHA-256 of the brain file's bytes. */
   readonly build: string;
+  /** The published brain file, `<out>/brain.mjs`. */
   readonly brain: string;
   readonly programs: Readonly<Record<string, BuiltProgram>>;
   readonly assets: Readonly<Record<string, Asset>>;
 };
 
+/**
+ * What a build is given: where to publish, the repo root, the brain's entry module, the selected
+ * programs and, when there is one, the tab's window.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Options = {
+  /** The folder the build is swapped into. The brain is published as `<out>/brain.mjs`. */
   readonly out: string;
   /** Where the Compiler ledger lives, and what its paths and the bundles' module ids are relative to. */
   readonly root: string;
@@ -36,8 +63,9 @@ export type Options = {
   readonly files?: ReadonlyArray<string>;
   /** The Compiler ledger. Read from `<root>/compiler-ledger.json` when absent. */
   readonly ledger?: ReadonlyArray<Row>;
+  /** Recorded on the build's span. The build reads it nowhere else. */
   readonly chaos: boolean;
-  /** The tab's window (P14): its entry module, built as one script at `/window.js`, and its
+  /** The tab's window: its entry module, built as one script at `/window.js`, and its
    *  stylesheets in the order the page at `/index.html` applies them. Without it neither route exists. */
   readonly tab?: { readonly entry: string; readonly styles: ReadonlyArray<string> };
 };
@@ -362,6 +390,28 @@ const publish = Effect.fn("build.emit")(function* (
   return digest;
 });
 
+/**
+ * Builds one brain file: bundles every selected program as a sealed Worker Loader module, every
+ * window's scripts and stylesheets, and the tab's script and page when a tab is given, then bundles
+ * the brain with all of them embedded as text.
+ *
+ * **Details**
+ *
+ * Nothing is published until every bundle and the React Compiler check pass. The new folder is
+ * written beside `out` and swapped in, and a failure or an interruption at any point of the swap
+ * puts the last good one back. It fails with a `BuildError` whose `reason` names the step: `table`
+ * (a repeated program name, a name that is not `pack/program`, or a bad export name), `read`,
+ * `bundle`, `compiler` or `publish`.
+ *
+ * **Gotchas**
+ *
+ * The Compiler check covers every `.tsx` file a bundle reached and every file in `options.files`.
+ * One finding fails the whole build as `compiler`, and the error does not list the findings: run
+ * the check alone to read them.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const build = Effect.fn("build.build")(function* (options: Options) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;

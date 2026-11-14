@@ -66,6 +66,21 @@ export const gatewayWindow = Setting.make("gateway.window", {
 });
 
 /**
+ * Setting for a one-time browser link's lifetime in whole milliseconds.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const desktopLinkTtl = Setting.make("desktop.link-ttl", {
+  schema: Positive,
+  default: 60_000,
+  doc: "How long a one-time browser link lives in milliseconds.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+/**
  * Setting for the delay in whole seconds that the service manager waits between crash restarts
  * of the local brain.
  *
@@ -138,4 +153,5 @@ export const all = Setting.group({
   brainPoll,
   brainStartTimeout,
   brainStopTimeout,
+  desktopLinkTtl,
 });

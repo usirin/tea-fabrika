@@ -437,3 +437,26 @@ describe("T737 D1 origin acceptance equals the old check, next/", () => {
     }
   });
 });
+
+it.effect.prop(
+  "A3: checked hands hello keeps its own build and capabilities; an old window may omit build",
+  { build: Schema.NonEmptyString, has: Schema.Array(Schema.NonEmptyString) },
+  ({ build, has }) =>
+    Effect.gen(function* () {
+      const x = yield* setup();
+      const identity = { ...x.identity, as: "hands" as const };
+      const result = yield* checkHello({
+        ...x.trusted,
+        hello: { ...x.hello, has, build },
+        admit: () => Effect.succeed(Admission.cases.admitted.make({ identity })),
+      });
+      expect(result).toMatchObject({ _tag: "online", identity, hello: { has, build } });
+      const old = yield* setup();
+      expect(yield* checkHello({ ...old.trusted, hello: old.hello })).toMatchObject({ _tag: "online" });
+      const bad = yield* setup();
+      expect(yield* checkHello({ ...bad.trusted, hello: { ...bad.hello, build: 42 } })).toMatchObject({
+        _tag: "refused",
+      });
+    }),
+  { arbitrary: { seed: 119120, runs: 100 } },
+);

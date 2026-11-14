@@ -9,6 +9,7 @@ import { Clock, Effect, Fiber, FileSystem, Layer, Path, Queue, Schema, Stream } 
 import { SecureRandom } from "effect/crypto";
 import { localInstance } from "../src/local-instance.ts";
 import { heldPort } from "../src/port.test-support.ts";
+import * as RecordWireTest from "../src/record-wire.test-support.ts";
 import { programs } from "../src/table.ts";
 
 import { Outcome } from "@demlik/tea";
@@ -291,7 +292,8 @@ const served = Effect.gen(function* () {
     root: repo,
     entry: path.join(app, "e2e/chaos-revoke.worker.test-support.ts"),
     out: path.join(home, "dist"),
-    programs: [...programs, { name: "fabrika/checklist", package: "@kampus/checklist", export: "checklist" }],
+    // P14 slice 2: the app's table lists `fabrika/checklist` itself.
+    programs,
     files: [],
     ledger: [],
     chaos: false,
@@ -301,15 +303,17 @@ const served = Effect.gen(function* () {
     catch: (cause) => new WireFailure({ cause }),
   });
   const { port } = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
-  const instance = yield* localInstance(built, {
-    home,
-    name: PROJECT,
-    person: PERSON,
-    founder: root.line,
-    window: old.raw,
-    port,
-    rateLimit: { limit: 100_000, window: 60_000 },
-  }).pipe(Effect.provide(SecureRandom.layerWebCrypto), Effect.provide(localState()));
+  const instance = yield* localInstance(
+    built,
+    RecordWireTest.settingsFixture({
+      home,
+      name: PROJECT,
+      person: PERSON,
+      founder: root.line,
+      window: old.raw,
+      port,
+    }),
+  ).pipe(Effect.provide(SecureRandom.layerWebCrypto), Effect.provide(localState()));
   const from = {
     by: root.fingerprint,
     for: PERSON,
@@ -328,7 +332,9 @@ const served = Effect.gen(function* () {
   const started = yield* invoke(instance.project(PROJECT), "start", [
     Start.cases.first.make({
       id: "checklist-start",
-      name: "checklist:1",
+      // P14 slice 2: the real entry boots `checklist:1` itself, so the proof starts its own target
+      // under the next name, owned by this test's root key.
+      name: "checklist:2",
       code: { program: "fabrika/checklist", hash: source.hash },
     }),
     from,
@@ -362,7 +368,7 @@ const until = Effect.fn("RevokeTest.until")(function* <A, E, R>(
 const RevokeTest = { PERSON, PROJECT, SENT, served, connect, invoke, until };
 
 const NAME = "chaos:revoke";
-const TARGET = "checklist:1";
+const TARGET = "checklist:2";
 const SEED = 119120;
 
 it.live(
@@ -558,9 +564,12 @@ it.live(
         // The checklist runner stamps its own timer letters with the program owner's key.
         for (const row of sends.filter((entry) => !clientKeys.has(entry.by))) {
           const { m } = Schema.decodeUnknownSync(
-            Schema.Struct({ m: Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int }) }),
+            Schema.Struct({
+              m: Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int, arrivedAt: Schema.Int }),
+            }),
           )(row.body);
-          expect(row.id).toBe(`${pid}/due/${m.at}`);
+          // The timer follows the inbox position whose model asked for this wake.
+          expect(row.id).toBe(`${pid}/due/${m.at}/${row.pos - 1}`);
           expect(row).toMatchObject({ by: root.fingerprint, for: RevokeTest.PERSON, parent: null });
           expect(row.body).toEqual({ m });
         }
