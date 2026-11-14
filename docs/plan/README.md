@@ -298,6 +298,17 @@ application, so one program past its restart limit stops alone. Isolation gets h
 ([0020](../../.decisions/0020-programs-get-hard-walls.md)): quotas per program, each program's
 supervisor in its own object, and a CPU limit per isolate, all in P34c's plan.
 
+*2026-11-13:* the layering debt has its plan, a draft ([the plan](./layering-debt.md), ticket 921).
+`runtime/`, `access/` and `gateway/` stop importing `ledger/`, as rule 11 of
+[0043](../../.decisions/0043-rooms-on-floors.md) asks, and the 71 import rows of `next-ledger.json`
+go to zero in seven slices ([0168](../../.decisions/0168-old-lint-breaks-are-fixed.md)). Nothing of
+it is on main yet. The lead approved slices 1 to 3, which only build 0043,
+[0055](../../.decisions/0055-errors-named-by-their-service.md),
+[0062](../../.decisions/0062-test-files-keep-the-floors.md) and
+[0119](../../.decisions/0119-an-errors-reason-is-a-tagged-error.md). Slices 4 to 7 wait on the
+plan's open question 1: may `processes/` get one small service for a named stream?
+→ the owner answers question 1; slice 1, stores name their own faults, is in its steps.
+
 *2026-11-10:* P8, the notes small exam, is in (ticket 274): saved notes letters frozen in
 `fixtures/next/notes-letters.jsonl`, and the notes, drawing, agent and bytes laws that P13, P22 and P25
 must pass. 55 run green now; 25 wait, marked `not built`, until those rows add their code. → P13's
