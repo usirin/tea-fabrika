@@ -14,7 +14,18 @@ import type { Rev } from "../Rev.ts";
 import { short } from "../telemetry/Trace.ts";
 import { brainOnly, inRunnerSpace } from "./Process.ts";
 
-/** Internal permission for a runner to save its own answers and alarm letters. */
+/**
+ * Service that marks a call as a runner's own, so it may save its own answers and alarm letters.
+ *
+ * **Details**
+ *
+ * It holds the runner's `process` id and its registered `name`. `Mailbox.send` reads it to lift the
+ * brain-only check on a runner id space id, when the id starts with `<process>/` and the letter
+ * goes to that same `name`.
+ *
+ * @stability unstable
+ * @category services
+ */
 export class RunnerMail extends Context.Service<RunnerMail, { readonly process: string; readonly name: string }>()(
   "@kampus/libfabrika/processes/Mailbox.RunnerMail",
 ) {}
@@ -36,7 +47,12 @@ export const From = Line.mapFields(({ _tag, body: _body, ...fields }) => fields)
  */
 export type From = Omit<Line, "_tag" | "body">;
 
-/** A letter as it comes out of an inbox: what was asked, by whom, for whom, and where it sits. */
+/**
+ * A letter as it comes out of an inbox: what was asked, by whom, for whom, and where it sits.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Letter = {
   readonly id: string;
   readonly m: unknown;
@@ -75,13 +91,29 @@ const Send = Schema.TaggedStruct(SEND, Sent.fields);
 const decodeJson = Schema.decodeUnknownOption(Schema.Json);
 const decodeSent = Schema.decodeUnknownOption(Sent);
 
-/** A name's inbox stream. */
+/**
+ * Returns the ledger stream that holds a name's inbox, `<name>/inbox`.
+ *
+ * @stability unstable
+ * @category getters
+ */
 export const inbox = (name: string): string => `${name}/inbox`;
 
-/** A letter's line, as `send` writes it, for a writer that appends it inside its own ledger turn. */
+/**
+ * Makes a letter's ledger line, as `send` writes it, for a writer that appends it inside its own
+ * ledger turn.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const letterLine = (from: From, m: Schema.Json) => lineFor(from, Send.make({ m }));
 
-/** A message as a letter's JSON, or none when it is not JSON. */
+/**
+ * Decodes a message as a letter's JSON, and answers none when it is not JSON.
+ *
+ * @stability unstable
+ * @category decoding
+ */
 export const letterBody = decodeJson;
 
 /** A `send` entry as its History; any other case is none, and kept in the log. */
@@ -115,7 +147,13 @@ const history = Effect.fnUntraced(function* (entry: Entry) {
 /** A History as the Letter `receive` answers: the same entry, without what only the runner reads. */
 const letter = ({ build: _build, seen: _seen, arrivedAt: _arrivedAt, ...plain }: History): Letter => plain;
 
-/** Tags an answer on the current span: placed or refused, and why. */
+/**
+ * Tags an answer on the current span: placed with its `rev` and `pos`, or refused with its reason.
+ * `word` builds each tag key from a short name.
+ *
+ * @stability unstable
+ * @category tracing
+ */
 export const answered = Effect.fnUntraced(function* (word: (name: string) => string, answer: Appended) {
   yield* Effect.annotateCurrentSpan(
     Appended.match(answer, {
@@ -129,7 +167,13 @@ export const answered = Effect.fnUntraced(function* (word: (name: string) => str
   );
 });
 
-/** Tags a failure's reason on the current span. */
+/**
+ * Makes a handler that tags a ledger failure's reason on the current span. `word` builds the tag
+ * key from a short name.
+ *
+ * @stability unstable
+ * @category tracing
+ */
 export const failed = (word: (name: string) => string) =>
   Effect.fnUntraced(function* (error: LedgerError) {
     yield* Effect.annotateCurrentSpan(word("reason"), error.reason);

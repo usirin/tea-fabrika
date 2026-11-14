@@ -32,6 +32,9 @@ const testEnv = {
   BASE: `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`,
 };
 
+// 0524, ticket 933 (L7): the check job's one ratchet step, which holds every list file to shrinking.
+const ratchet = 'node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"';
+
 const toolingExcludes = "--exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**'";
 const fieldIf = "steps.diff.outputs.field == 'true'";
 const name = fc.string({ maxLength: 20 });
@@ -74,6 +77,7 @@ const valid = (label: string, extra: string) => ({
         { run: "pnpm lint" },
         { name: "promises", if: build, run: "pnpm promises gate" },
         { run: "pnpm build", if: build },
+        { name: "lists only shrink", env: testEnv, run: ratchet },
       ] as Record<string, unknown>[],
     },
     typecheck: {
@@ -826,6 +830,43 @@ const plants: [string, (workflow: Workflow) => void][] = [
       );
     },
   ],
+  // 0524, ticket 933 (L7): a pull request that drops or mutes the ratchet would pass with a grown list.
+  [
+    "L7: the ratchet step is deleted",
+    (w) => {
+      w.jobs.check.steps = w.jobs.check.steps.filter((s) => s["run"] !== ratchet);
+    },
+  ],
+  [
+    "L7: the ratchet step skips on a condition",
+    (w) => {
+      w.jobs.check.steps[3]!["if"] = build;
+    },
+  ],
+  [
+    "L7: the ratchet step's failure does not block",
+    (w) => {
+      w.jobs.check.steps[3]!["continue-on-error"] = true;
+    },
+  ],
+  [
+    "L7: the ratchet step takes a base that keeps a first push's zeros",
+    (w) => {
+      w.jobs.check.steps[3]!["env"] = { BASE: env.BASE };
+    },
+  ],
+  [
+    "L7: the ratchet step runs twice, once muted",
+    (w) => {
+      w.jobs.check.steps.push({ ...w.jobs.check.steps[3]!, "continue-on-error": true });
+    },
+  ],
+  [
+    "L7: the ratchet command swallows its exit",
+    (w) => {
+      w.jobs.check.steps[3]!["run"] = `${ratchet} || true`;
+    },
+  ],
 ];
 
 it("accepts generated valid wiring", () => {
@@ -860,6 +901,40 @@ it("names the next command whose step or condition is wrong", () => {
     }),
     options,
   );
+});
+
+it("L7: a check job without its ratchet step is named by that one error", () => {
+  fc.assert(
+    fc.property(wiring, (broken) => {
+      broken.jobs.check.steps = broken.jobs.check.steps.filter((s) => s["run"] !== ratchet);
+      const errors = lint(JSON.stringify(broken));
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain("ratchet.ts");
+    }),
+    options,
+  );
+});
+
+it("L7 scenario: the checked-in check.yaml fails with its ratchet step deleted, given an if, or given another base", () => {
+  const real = () => parse(readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8"));
+  const step = (w: Workflow) => w.jobs.check.steps.find((s) => s["run"] === ratchet)!;
+  expect(lint(JSON.stringify(real()))).toEqual([]);
+
+  for (const mutate of [
+    (w: Workflow) => {
+      w.jobs.check.steps = w.jobs.check.steps.filter((s) => s["run"] !== ratchet);
+    },
+    (w: Workflow) => {
+      step(w)["if"] = build;
+    },
+    (w: Workflow) => {
+      step(w)["env"] = { BASE: env.BASE };
+    },
+  ]) {
+    const broken = real();
+    mutate(broken);
+    expect(lint(JSON.stringify(broken))).not.toEqual([]);
+  }
 });
 
 it("format: the checked-in workflow passes the same wiring lint", () => {

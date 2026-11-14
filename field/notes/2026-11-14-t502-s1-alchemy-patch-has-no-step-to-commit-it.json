@@ -1,0 +1,18 @@
+{
+  "id": "2026-11-14-t502-s1-alchemy-patch-has-no-step-to-commit-it",
+  "date": "2026-11-14",
+  "lanes": [
+    "kamp-us/tea-fabrika#1188"
+  ],
+  "stage": "build",
+  "kind": "person",
+  "what": "next/ version. T502 S1's first review sent the lane back on two faults. The fix round fixed the stored-frame cut and committed it. Its fix for GatewayClient.fetch, which moves the call onto Alchemy's typed stub and drops a false no-promises disable line, needs a pnpm patch to @alchemy.run/cloudflare, because Alchemy's fetcher turns a rejected platform fetch into a defect. The patch file and pnpm-lock.yaml are exam paths (exam-paths.json: patches/** and pnpm-lock.yaml). step-commit refused them in a build commit, and the permission system denied a tests commit of them from the fix agent. The three files (platform.ts, the patch and the lockfile) stay uncommitted in the lane's worktree, and the pushed head carries the new fetch law red.",
+  "cause": "A fix round is one agent that does the tests and build steps together (0177), but a product fix that needs a patch to a package we do not own lands in exam paths, and no rule says which step commits a patch file, so the step that owns it is the one the fix agent may not take.",
+  "person": true,
+  "primitive": "Check",
+  "fix": "A rule, in the plan's files table or the lead skill, that names the step that commits a pnpm patch and its lockfile change, so step-commit and the permission check agree before a fix round needs it.",
+  "test": "Scenario: a fix round whose fix needs a pnpm patch commits it under the named step with no refusal.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1188"
+  ]
+}

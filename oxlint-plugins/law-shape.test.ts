@@ -13,6 +13,9 @@
 //   `SinkTest.suite(...)` holds no test.
 // - A body that calls a function this file declares is read through it; an imported helper is not.
 // - `fast-check` under any local name, and `@demlik/tea/pbt`'s runners named or through a namespace.
+// - The shared runner, `property` from a `Testing.test-support.ts` module, named, renamed or through
+//   a namespace. A `property` from any other module, another name from that module, a type-only
+//   import, and a local `property` that calls no `assert` still fire.
 // - Not tests: `/x/.test(s)`, `it(title)` with no body.
 // - A label is one of four lowercase words at the start of the title, with text after its colon.
 //   One ticket or law id may stand before it (`T652 scenario: ...`): letters, digits and dots, then
@@ -159,6 +162,48 @@ it("fires on exactly the tests that are neither a property nor labeled, in any o
       },
     ),
     runs,
+  );
+});
+
+/** Where a law's `property` comes from, the call that names it, and whether the law fires. */
+const sources: readonly (readonly [string, string, boolean])[] = [
+  ['import { property } from "../Testing.test-support.ts";', "property", false],
+  ['import { property } from "./Testing.test-support.ts";', "property", false],
+  ['import { property as shared } from "../../src/Testing.test-support.ts";', "shared", false],
+  ['import * as Testing from "../Testing.test-support.ts";', "Testing.property", false],
+  ["const property = () => fc.assert(fc.property(fc.nat(), () => true));", "property", false],
+  ['import { property } from "../Testing.ts";', "property", true],
+  ['import { property } from "../MyTesting.test-support.ts";', "property", true],
+  ['import { property } from "./helper.ts";', "property", true],
+  ['import { property } from "fast-check";', "property", true],
+  ['import { property } from "@demlik/tea/pbt";', "property", true],
+  ['import * as Testing from "../Testing.ts";', "Testing.property", true],
+  ['import { other as property } from "../Testing.test-support.ts";', "property", true],
+  ['import type { property } from "../Testing.test-support.ts";', "property", true],
+  ["const property = (a: unknown, law: unknown, p: unknown) => 1;", "property", true],
+];
+
+it("counts the shared runner, property from Testing.test-support.ts, as a property, and no other property", async () => {
+  await fc.assert(
+    fc.asyncProperty(fc.record({ title: words, nested: fc.boolean() }), async ({ title, nested }) => {
+      const files = sources.map(([source, call, fires], i) => {
+        const run = `${call}(fc.nat(), () => Effect.void, { numRuns: 1 })`;
+        const body = nested ? `Effect.gen(function* () { yield* ${run}; })` : run;
+        const text = [
+          'import { it } from "@effect/vitest";',
+          'import { Effect } from "effect";',
+          'import * as fc from "fast-check";',
+          source,
+          `it.effect("${title}", () => ${body});`,
+        ].join("\n");
+        return { source, path: `next/packages/libfabrika/src/processes/Shared${i}Test.ts`, text, fires };
+      });
+      const result = await plant(Object.fromEntries(files.map(({ path, text }) => [path, text])));
+      const fired = Object.fromEntries(files.map(({ source, path }) => [source, result(CODE, path)]));
+      const expected = Object.fromEntries(files.map(({ source, fires }) => [source, fires ? [5] : []]));
+      expect(fired, files[0]?.text).toEqual(expected);
+    }),
+    { ...runs, numRuns: 2 },
   );
 });
 

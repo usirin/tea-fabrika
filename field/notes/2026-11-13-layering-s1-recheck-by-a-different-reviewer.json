@@ -1,0 +1,19 @@
+{
+  "id": "2026-11-13-layering-s1-recheck-by-a-different-reviewer",
+  "date": "2026-11-13",
+  "lanes": [
+    "kamp-us/tea-fabrika#1189"
+  ],
+  "stage": "review",
+  "kind": "friction",
+  "what": "next/ version. Decision 0177 says the same reviewer rechecks. Pull request 1189 (layering debt slice 1, stores name their own faults) passed its review and recheck. Main then gained pull request 1186, so main was merged in (d3a862142), with one product-code conflict in Runner.ts's drain retry check and a RunnerFailure union copy fixed so the merge compiles, and the Gateway service type 1186 wrote out was set to each method's inferred errors (6c9108144). The lead asked for the same reviewer to read both. That reviewer ran under a laptop lane coordinator that had ended and could not be reached, so a fresh reviewer on claude-opus-5-5 got the narrow recheck: the retry check, the union copy, the Gateway type, and whether any law pins which drain failures retry.",
+  "cause": "A same-reviewer rule assumes the reviewer outlives its lane's coordinator. Here the reviewer was a subagent of a coordinator session that ended, and the merge session that needed the recheck had no way to reach it.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "A review step's verdict and full report live in the lane's state file or the pull request, not only in the coordinator's memory, so any session can brief a recheck from it. A recheck by a different reviewer is narrow and gets the first review's report whole.",
+  "test": "Replay: after a lane's coordinator ends, a recheck brief can be built from the lane's stored first review alone, and the lane's field rows show both reviewers.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1189",
+    "https://github.com/kamp-us/tea-fabrika/pull/1186"
+  ]
+}

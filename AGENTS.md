@@ -133,10 +133,9 @@ For every agent, whatever its step. A step's skill adds its own rules and its ow
   the steps by hand, each logged in `field/`, and the lead reads every diff, CI and the leak grep
   before a merge. [The lead skill](./.agents/skills/lead/SKILL.md) says how, and
   [the plan](./docs/plan/README.md#how-a-change-lands) says how a change lands.
-  Every new or changed law is a property, or an example labeled vector, format, pinned or scenario
-  with its reason. Zero hits from loosening.sh mean no owner read is needed. The lead records its
-  output in the PR. A hit goes to the lead's hand check, with the hit list in the PR. Only real
-  loosening waits on the owner.
+  [The tests skill](./.agents/skills/tests/SKILL.md#new-and-changed-laws) says what a new or changed
+  law must be, and [the lead skill's "Land it" step](./.agents/skills/lead/SKILL.md#steps) what a
+  loosening.sh hit on one means.
 - **The decisions that shape the steps,** each read when you are at that point: mutation runs hourly
   on main, never as a step ([0066](./.decisions/0066-mutation-runs-on-a-schedule.md)); one fresh
   agent per step, which reads the lane's state file, does its one step and writes it back, driven by
@@ -298,8 +297,8 @@ agents. This table adds no rule, and `pnpm format` comes first in every row.
   [0006](./.decisions/0006-no-unused-exports.md)). Check each finding
   by hand. If it is right, delete the code or drop its `export`. If it is wrong, stop and tell the
   owner: that is a code-graph bug to file. `unreachable-ledger.json` only shrinks, the run prunes
-  it, and CI fails until that is committed. Adding an entry is the owner's call, in a change of its
-  own ([nobody writes their own exam](./docs/direction/nobody-writes-their-own-exam.md)).
+  it, and CI fails until that is committed. No entry is added: its last ones are fixed, then the
+  file is deleted ([0524](./.decisions/0524-no-list-lets-broken-code-pass.md)).
 - **A check on the shape of code is a lint rule, never a test:** oxlint's own rule where one exists
   (`no-restricted-imports`), else ours in `oxlint-plugins/`. A plan asks "lint, type or test?" of
   every law.

@@ -1,7 +1,7 @@
 ---
 id: 0003
 title: The repo is cut down to what today's app needs, then lint and format checks keep it clean, never discipline
-status: accepted
+status: amended-in-part by [0525](0525-todays-version-is-frozen.md)
 date: 2026-11-09
 tags: [cleanup, lint, format, repo]
 ---

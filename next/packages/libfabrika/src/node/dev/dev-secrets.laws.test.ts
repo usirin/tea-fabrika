@@ -25,6 +25,7 @@ import * as StartsTest from "../../settings/StartsTest.ts";
 import { recordPart } from "../../telemetry/Records.ts";
 import { Chain, SpanRow } from "../../telemetry/Trace.ts";
 import { Attached } from "../../transport/Wire.ts";
+import { bodyText, fetchClient } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
 import { brainOutbox } from "./local-dev.ts";
@@ -168,9 +169,13 @@ const flow = async (sample: Flow) => {
           args: Schema.Array(Schema.Unknown),
         }),
       ),
-    )(String(options?.body));
+    )(bodyText(options));
     // The platform send is allowed to hold the bearer; persistent outputs are checked below.
-    expect(new Headers(options?.headers).get("authorization")).toBe(`Bearer ${bearer}`);
+    // It holds no other header but the content type: no trace header rides along.
+    expect(Object.fromEntries(new Headers(options?.headers))).toEqual({
+      authorization: `Bearer ${bearer}`,
+      "content-type": "application/json",
+    });
 
     if (call.method === "write") {
       return Response.json({ value: await delivered(`node/${call.name}`, call.args) });
@@ -389,6 +394,7 @@ const flow = async (sample: Flow) => {
           outputs.outbox.push(yield* outbox.pending);
         }),
       ).pipe(
+        Effect.provide(fetchClient),
         Effect.provide(ProcessIdGenerator.layer),
         Effect.provide(random),
         Effect.provide(rssLayer(() => 0)),

@@ -1,4 +1,5 @@
-import { DurableObject } from "@alchemy.run/cloudflare/Workers/DurableObject";
+import type * as Cloudflare from "@alchemy.run/cloudflare";
+import { DurableObject, type DurableObjectShape } from "@alchemy.run/cloudflare/Workers/DurableObject";
 import { Worker } from "@alchemy.run/cloudflare/Workers/Worker";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type { Effect } from "effect";
@@ -6,7 +7,7 @@ import type { LedgerError } from "../ledger/Ledger.ts";
 import type { Activity } from "../processes/Process.ts";
 import type { Descriptor, Opened, Sent } from "../runtime/Runner.ts";
 import type { Failure } from "../settings/Start.ts";
-import type { ProjectBinding, ConnectionBinding } from "./bindings.ts";
+import type { ProjectBinding } from "./bindings.ts";
 import type { recordWrite } from "./record.ts";
 
 type Part = ReturnType<typeof import("../telemetry/Records.ts").recordPart>;
@@ -47,9 +48,23 @@ export type ProcessShape = {
   readonly abort: () => Effect.Effect<void, never, RuntimeContext>;
 };
 
-export type ConnectionShape = ConnectionBinding;
+/**
+ * The Connection object's contract: the platform's request and socket slots, and the three calls
+ * another object makes. A call fails with `LedgerError` only; a slot has no failure, as Alchemy
+ * types it.
+ */
+export type ConnectionShape = {
+  readonly fetch: NonNullable<DurableObjectShape["fetch"]>;
+  readonly webSocketMessage: (socket: Cloudflare.WebSocket, text: string | ArrayBuffer) => Effect.Effect<void>;
+  readonly webSocketClose: (socket: Cloudflare.WebSocket, code: number) => Effect.Effect<void>;
+  readonly webSocketError: (socket: Cloudflare.WebSocket) => Effect.Effect<void>;
+  readonly ring: (stream: string, rev: number) => Effect.Effect<void, LedgerError>;
+  readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError>;
+  readonly probe: (session: string) => Effect.Effect<number | null, LedgerError>;
+};
+
 export class Project extends DurableObject<Project, ProjectShape>()("Project") {}
 export class Process extends DurableObject<Process, ProcessShape>()("Process") {}
 export class Connection extends DurableObject<Connection, ConnectionShape>()("Connection") {}
 export class RecordPart extends DurableObject<RecordPart, RecordShape>()("RecordPart") {}
-export class Brain extends Worker<Brain, Record<never, never>, RecordPart | Process>()("Brain") {}
+export class Brain extends Worker<Brain, Record<never, never>, RecordPart | Connection | Process>()("Brain") {}

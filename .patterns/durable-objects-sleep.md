@@ -61,7 +61,10 @@ wait. The platform hands the alarm to the Process object's Layer through Alchemy
 (`next/packages/libfabrika/src/cloudflare/ProcessObject.ts`). The Layer builds the service on the
 first call that needs it and starts no timer or fiber of its own, so an idle Process object sleeps. The Connection accepts hibernatable sockets, installs an automatic ping response, and keeps
 identity in attachments (`next/packages/libfabrika/src/cloudflare/connection.ts:247`). The socket
-cache is rebuilt by decoding those attachments (`connection.ts:45`).
+cache is rebuilt by decoding those attachments (`connection.ts:45`). Alchemy wraps the platform's
+socket anew for each event, so the Connection's Layer hands the service the platform socket inside
+the wrapper, the one the cache is keyed by (`cloudflare/ConnectionObject.ts`). That Layer starts
+no timer and no fiber, and builds the service only when a slot or call arrives.
 
 The Process alarm handler still propagates a failed due call without catch-and-re-arm
 (`cloudflare/runtime.ts:1399`). The `alarm` slot's type has no failure, so the Layer lets that

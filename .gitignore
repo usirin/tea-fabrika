@@ -11,6 +11,9 @@ runs
 .wrangler
 # Alchemy's state for a deploy (packages/ledger-server). It names a real account, so it stays local.
 .alchemy
+# Law 5's saved home (T502) is a local run's whole folder, its local Alchemy storage and state included.
+# Its account is the local all-zero one, and its writer refuses any machine path before it saves.
+!/fixtures/next/port-home/*/.alchemy/
 .claude/worktrees
 # Plant copies door.laws.test.ts leaves when a run is killed before it cleans up.
 packages/fabrika/src/host/.door-laws-plant-*

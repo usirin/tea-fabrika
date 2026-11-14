@@ -41,8 +41,8 @@ import { type Ended, held, machine } from "./internal/sink.ts";
 import { RecordManager } from "./Records.ts";
 import {
   Chain,
+  causeClass,
   chainName,
-  errorClass,
   OBJECT,
   PROCESS,
   REFUSED,
@@ -55,7 +55,16 @@ import {
   type Tag,
 } from "./Trace.ts";
 
-export { SinkError } from "./Trace.ts";
+export {
+  /**
+   * Error for a sink, record or archive call that failed: the call never answered, a row or an
+   * answer did not decode, or storage threw.
+   *
+   * @stability unstable
+   * @category errors
+   */
+  SinkError,
+} from "./Trace.ts";
 
 const ERROR = "error.type";
 const DROPPED = "fab.sink.dropped";
@@ -126,15 +135,85 @@ const largestLag = (tags: Readonly<Record<string, Tag>>): number | null => {
   return lags.length === 0 ? null : Math.max(...lags);
 };
 
+/** A reason as a fixed word from code: a string reason itself, or a tagged reason's tag. */
+const reasonWord = (reason: unknown): string =>
+  Predicate.isString(reason)
+    ? reason
+    : Predicate.hasProperty(reason, "_tag") && Predicate.isString(reason._tag)
+      ? reason._tag
+      : "";
+
 /** A typed failure as code wrote it: its tag and reason. Its message and the cause it keeps may hold
- *  input, so they stay in memory and out of stored content. A thrown value keeps its own text. */
+ *  input, so they stay in memory and out of stored content, and so do a tagged reason's own message
+ *  and cause. A thrown value keeps its own text. */
 const summary = (error: unknown): unknown =>
   error instanceof Error && Predicate.hasProperty(error, "_tag") && Predicate.isString(error._tag)
     ? {
         name: error._tag,
-        message: Predicate.hasProperty(error, "reason") && Predicate.isString(error.reason) ? error.reason : "",
+        message: Predicate.hasProperty(error, "reason") ? reasonWord(error.reason) : "",
       }
     : error;
+
+/** A location without its folder: the file name with its line and column. A `node:` location is a
+ *  module name and stays whole. A URL's query and fragment come after its file name and can hold a
+ *  folder, so they go with the folder. */
+const place = (location: string): string => {
+  if (location.startsWith("node:")) {
+    return location;
+  }
+
+  const position = /(?::\d+){1,2}$/.exec(location)?.[0] ?? "";
+  const path = location.slice(0, location.length - position.length);
+  const file = /^[a-z][a-z\d+.-]*:\/\//i.test(path) ? (path.split(/[?#]/)[0] ?? path) : path;
+  return `${file.slice(Math.max(file.lastIndexOf("/"), file.lastIndexOf("\\")) + 1)}${position}`;
+};
+
+/** Where the parenthesized group that ends `text` opens, counting the pairs inside it; -1 if none. */
+const opening = (text: string): number => {
+  let depth = 0;
+
+  for (let at = text.length - 1; at >= 0; at -= 1) {
+    depth += text[at] === ")" ? 1 : text[at] === "(" ? -1 : 0;
+
+    if (depth <= 0) {
+      return depth === 0 && text[at] === "(" ? at : -1;
+    }
+  }
+
+  return -1;
+};
+
+/** A frame's location without folders. An eval origin, `eval at <name> (<location>), <location>`,
+ *  keeps its name and loses the folder of each location inside it, however deep the origins nest. */
+const located = (location: string): string => {
+  const origin = location.startsWith("eval at ") ? location.lastIndexOf("), ") : -1;
+  const open = origin === -1 ? -1 : opening(location.slice(0, origin + 1));
+  return open === -1
+    ? place(location)
+    : `${location.slice(0, open)}(${located(location.slice(open + 1, origin))}), ${place(location.slice(origin + 3))}`;
+};
+
+/** Only frame locations lose folders: a frame's name stays whole, as do messages and Effect's frame
+ *  markers. The location is the parenthesized group that ends the frame, so a name may hold spaces,
+ *  slashes and its own parentheses, as Effect's `(definition)` does. A frame with no such group is a
+ *  bare location when it reads as one, or else a bare name. */
+const portable = (line: string): string => {
+  const frame = /^(\s*at )(.*?)( \{)?$/.exec(line);
+
+  if (frame === null) {
+    return line;
+  }
+
+  const [, at = "", body = "", ending = ""] = frame;
+  const open = opening(body);
+
+  if (open > 0) {
+    return `${at}${body.slice(0, open)}(${located(body.slice(open + 1, -1))})${ending}`;
+  }
+
+  const bare = /^(async )?((?:[a-z][a-z\d+.-]*:|[/\\]).*|.*(?::\d+){1,2})$/i.exec(body);
+  return bare === null ? line : `${at}${bare[1] ?? ""}${place(bare[2] ?? "")}${ending}`;
+};
 
 const cutContent = (text: string): string =>
   text.length <= MOST_CONTENT ? text : `${text.slice(0, MOST_CONTENT)}\n[cut: ${text.length} characters]`;
@@ -157,7 +236,7 @@ const ended = (span: Tracer.NativeSpan, endTime: bigint, exit: Exit.Exit<unknown
   const failure = Exit.isFailure(exit) ? Option.some(exit.cause) : Option.none();
   const error = Option.map(failure, (cause) => {
     const named = own.tags[ERROR];
-    return typeof named === "string" ? named : errorClass(Cause.squash(cause));
+    return typeof named === "string" ? named : causeClass(cause);
   });
   const tags: Record<string, Tag> = {
     ...own.tags,
@@ -201,7 +280,11 @@ const ended = (span: Tracer.NativeSpan, endTime: bigint, exit: Exit.Exit<unknown
       onSome: (process) => Chain.cases.job.make({ process }),
     }),
     row,
-    content: Option.getOrNull(Option.map(failure, (cause) => cutContent(Cause.pretty(Cause.map(cause, summary))))),
+    content: Option.getOrNull(
+      Option.map(failure, (cause) =>
+        cutContent(Cause.pretty(Cause.map(cause, summary)).split("\n").map(portable).join("\n")),
+      ),
+    ),
   };
 };
 

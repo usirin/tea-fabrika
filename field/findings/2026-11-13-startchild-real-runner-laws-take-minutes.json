@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-startchild-real-runner-laws-take-minutes",
+  "date": "2026-11-13",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/StartChildTest.ts",
+    "line": 1454
+  },
+  "says": "The P42 start_child laws on real runners, run from next/packages/libfabrika/src/node/StartChild.test.ts, each take tens of seconds to minutes on one CI shard, so the shard sits close to its limits.",
+  "proof": "CI run 43553536844, attempt 1, job 132321971161 (pull request 1146 at c6e94784c), verbose reporter: L5 102198 ms, L6 86137 ms, L7 45790 ms, and the three L7 exit-order cases 13544, 12664 and 15186 ms, all passing. The lead read 244 s and 50 s for L6 in another job of the same run.",
+  "cost": "One shard carries several minutes of a single file, so any slice that adds work to a start turns that shard red on time, not on a broken law, and every pull request that touches next/ waits on it.",
+  "head": "48460bdaa583aa193bdb86bf5b16cb27e793c324",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1146"
+}

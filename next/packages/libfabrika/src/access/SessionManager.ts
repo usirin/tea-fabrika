@@ -10,8 +10,7 @@
  * @stability unstable
  */
 import { Context, Effect, Layer, Result, Schema } from "effect";
-import { LedgerError } from "../ledger/Ledger.ts";
-import { type InputId } from "../ledger/Log.ts";
+import { type InputId } from "../Id.ts";
 import { inNoticeSpace, inRunnerSpace, inSignalSpace } from "../processes/Process.ts";
 import { ProcessId } from "../ProcessId.ts";
 import { ParentText } from "../Rev.ts";
@@ -108,6 +107,49 @@ export class SigningRefused extends Schema.TaggedError<SigningRefused>()("Signin
 export class NotGranted extends Schema.TaggedError<NotGranted>()("NotGranted", {}) {}
 
 /**
+ * Reason for a session table that could not be read or written: the `Sql` threw. The throw is
+ * kept as `cause`.
+ *
+ * @stability unstable
+ * @category errors
+ */
+export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
+
+/**
+ * Reason for a saved input or receipt that does not decode. The decoder's failure is kept as
+ * `cause`.
+ *
+ * @stability unstable
+ * @category errors
+ */
+export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Schema.Defect() }) {}
+
+/**
+ * Reason for a membership check that failed for any cause but `NotGranted`, such as the access
+ * store below it. That failure is kept as `cause`.
+ *
+ * @stability unstable
+ * @category errors
+ */
+export class Membership extends Schema.TaggedError<Membership>()("Membership", { cause: Schema.Defect() }) {}
+
+/**
+ * Error for a session call that failed below the session rules: in its own tables, or in the
+ * membership check it was given. A refusal by the rules is `SigningRefused` or `NotGranted`
+ * instead.
+ *
+ * @stability unstable
+ * @category errors
+ */
+export class SessionManagerError extends Schema.TaggedError<SessionManagerError>()("SessionManagerError", {
+  reason: Schema.Union([Storage, BadRow, Membership]),
+}) {}
+
+/** The manager's own error for a throw in a stored step: a decoder's failure is a bad row. */
+const storageFault = (cause: unknown) =>
+  new SessionManagerError({ reason: Schema.isSchemaError(cause) ? new BadRow({ cause }) : new Storage({ cause }) });
+
+/**
  * Service that carries the id of one signing request.
  *
  * **Details**
@@ -201,30 +243,31 @@ const decodeSession = Schema.decodeUnknownSync(Schema.fromJsonString(Session));
 export class SessionManager extends Context.Service<
   SessionManager,
   {
-    readonly record: (input: InputRecord) => Effect.Effect<void, LedgerError | SigningRefused>;
-    readonly delivered: (parent: string, process: string) => Effect.Effect<void, LedgerError | SigningRefused>;
-    readonly end: (process: string) => Effect.Effect<void, LedgerError>;
+    readonly record: (input: InputRecord) => Effect.Effect<void, SessionManagerError | SigningRefused>;
+    readonly delivered: (parent: string, process: string) => Effect.Effect<void, SessionManagerError | SigningRefused>;
+    readonly end: (process: string) => Effect.Effect<void, SessionManagerError>;
     readonly signer: (
       parent: string,
       process: string,
       kind: string,
-    ) => Effect.Effect<Session, SigningRefused | NotGranted | LedgerError, SignRequest>;
+    ) => Effect.Effect<Session, SigningRefused | NotGranted | SessionManagerError, SignRequest>;
     readonly receipt: (
       id: string,
       parent: string,
       process: string,
       kind: string,
-    ) => Effect.Effect<Session, SigningRefused | NotGranted | LedgerError>;
+    ) => Effect.Effect<Session, SigningRefused | NotGranted | SessionManagerError>;
   }
 >()("@kampus/libfabrika/access/SessionManager") {
   /**
-   * Builds the service on a `Sql` store. `membership` turns a client key into its `Writer` or fails
-   * with `NotGranted`. `policy.input` says whether an input of that name may be person-only, and
-   * `policy.event` says whether an event of that kind needs a person writer.
+   * Builds the service on a `Sql` store. `membership` turns a client key into its `Writer`. Its
+   * `NotGranted` passes through as it is, and any other failure becomes a `SessionManagerError`
+   * with reason `Membership`. `policy.input` says whether an input of that name may be
+   * person-only, and `policy.event` says whether an event of that kind needs a person writer.
    */
-  static readonly layer = <R>(
+  static readonly layer = <E, R>(
     sql: Sql,
-    membership: (key: string) => Effect.Effect<Writer, NotGranted | LedgerError, R>,
+    membership: (key: string) => Effect.Effect<Writer, E, R>,
     policy: { readonly input: (name: string) => boolean; readonly event: (kind: string) => boolean },
   ): Layer.Layer<SessionManager, never, R> =>
     Layer.effect(
@@ -239,7 +282,7 @@ export class SessionManager extends Context.Service<
           );
         };
         const stored = Effect.fnUntraced(function* <A>(step: () => A) {
-          return yield* Effect.try({ try: step, catch: (cause) => new LedgerError({ reason: "storage", cause }) });
+          return yield* Effect.try({ try: step, catch: storageFault });
         });
         const ended = (process: string) =>
           sql.exec("SELECT process FROM gateway_ended WHERE process=?", process).length > 0;
@@ -262,7 +305,12 @@ export class SessionManager extends Context.Service<
           });
 
           if (saved !== null) {
-            yield* membership(saved.input.client).pipe(Effect.provideContext(context));
+            yield* membership(saved.input.client).pipe(
+              Effect.provideContext(context),
+              Effect.mapError((cause) =>
+                Schema.is(NotGranted)(cause) ? cause : new SessionManagerError({ reason: new Membership({ cause }) }),
+              ),
+            );
           }
 
           return yield* stored(() =>

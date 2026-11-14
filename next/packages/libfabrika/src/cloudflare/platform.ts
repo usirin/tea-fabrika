@@ -1,11 +1,13 @@
 import type { RpcCallError } from "@alchemy.run/cloudflare/Bridge";
 import { makeRpcStub } from "@alchemy.run/cloudflare/Bridge";
+import type { Fetcher } from "@alchemy.run/cloudflare/Fetcher";
 import type { WorkerEvent } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Context, Effect, Predicate, Schema } from "effect";
+import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { LedgerError } from "../ledger/Ledger.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import type { ConnectionBinding, ProcessBinding, ProjectBinding } from "./bindings.ts";
-import type { ProcessShape, RecordShape } from "./objects.ts";
+import type { ConnectionShape, ProcessShape, RecordShape } from "./objects.ts";
 import { reach } from "./reach.ts";
 
 /**
@@ -43,16 +45,14 @@ type Client<S> = {
 /** A rejected platform call. It keeps the thrown value as its cause (ticket 695), and its message keeps
  *  that value's class and text as `<class>: <text>`. Both stay in memory: a sink stores a typed
  *  failure's tag and reason only, and never puts its text in a tag. */
-const unreachable = (cause: unknown, thrown: unknown = cause) =>
-  new LedgerError({
-    reason: "unreachable",
-    message: thrown instanceof Error ? `${thrown.name}: ${thrown.message}` : `${typeof thrown}: ${String(thrown)}`,
-    cause,
-  });
+const thrown = (cause: unknown) =>
+  cause instanceof Error ? `${cause.name}: ${cause.message}` : `${typeof cause}: ${String(cause)}`;
 
-/** A call through a typed stub that got no answer. Its message names what the platform threw, and
- *  its cause is Alchemy's RpcCallError, which holds that thrown value. */
-const lost = (error: RpcCallError) => unreachable(error, error.cause);
+const unreachable = (cause: unknown) => new LedgerError({ reason: "unreachable", message: thrown(cause), cause });
+
+/** A call the typed stub could not make. Its RpcCallError is the cause, and the message names what
+ *  the platform threw inside it, in the form `unreachable` writes. */
+const lost = (cause: RpcCallError) => new LedgerError({ reason: "unreachable", message: thrown(cause.cause), cause });
 
 /** A call through a typed stub, inside `reach`, with no span of its own. `reach` opens one, and a
  *  lost call's message holds what the platform threw, which can be a letter's text: the caller's
@@ -232,19 +232,25 @@ export class GatewayClient extends Context.Service<
   Client<Omit<ConnectionBinding, keyof Rpc.DurableObjectBranded>>
 >()("@kampus/libfabrika/cloudflare/platform.GatewayClient") {
   static make(stub: ConnectionBinding): GatewayClient["Service"] {
+    // The object's own contract: a LedgerError it fails with crosses as itself. Its `fetch` is
+    // Alchemy's fetcher, which keeps a socket upgrade's own Response (a 101 is a raw body).
+    const calls = makeRpcStub<Pick<ConnectionShape, "ring" | "notify" | "probe"> & Pick<Fetcher, "fetch">>(stub, {
+      errors: [LedgerError],
+    });
     return {
-      fetch: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Connection fetch RPC enters Effect
-        Effect.tryPromise({ try: () => stub.fetch(...args), catch: unreachable }),
-      ring: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Connection ring RPC enters Effect
-        Effect.tryPromise({ try: () => stub.ring(...args), catch: unreachable }),
-      notify: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Connection notify RPC enters Effect
-        Effect.tryPromise({ try: () => stub.notify(...args), catch: unreachable }),
-      probe: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Connection probe RPC enters Effect
-        Effect.tryPromise({ try: () => stub.probe(...args), catch: unreachable }),
+      // A lost object is `unreachable` with what the platform threw as its cause. Alchemy's fetcher
+      // made a rejected platform fetch a defect; our Alchemy patch makes it fail typed, as an
+      // HttpServerError that keeps the rejection as its cause.
+      fetch: (request) =>
+        calls.fetch(HttpServerRequest.fromWeb(request)).pipe(
+          Effect.flatMap((response) =>
+            Effect.map(Effect.context<never>(), (context) => HttpServerResponse.toWeb(response, { context })),
+          ),
+          Effect.mapError((error) => unreachable(error.cause)),
+        ),
+      ring: (stream, rev) => reach(calls.ring(stream, rev), lost),
+      notify: (client, news) => reach(calls.notify(client, news), lost),
+      probe: (session) => reach(calls.probe(session), lost),
     };
   }
 }

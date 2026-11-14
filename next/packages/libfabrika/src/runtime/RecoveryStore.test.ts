@@ -2,20 +2,27 @@
 // load/save keep the versioned supervisor snapshot: from P34c slice 2, version 2 with one `journal`.
 // input and receipt are name+letter lookups.
 // No test implements recovery or supplies a fake store. SQL corruption is planted after save.
+// Ticket 921 slice 1: the store fails with its own `RecoveryStoreError`, whose tagged reason keeps
+// the fault from below (0043 rule 12, 0055, 0119). This file names no ledger file.
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
 import { type Context, Effect, Exit, type Layer, Schema } from "effect";
 import * as fc from "fast-check";
-import type { LedgerError } from "../ledger/Ledger.ts";
 import { A, B, from, storage } from "../processes/Process.test-support.ts";
 import type { Sql } from "../Sql.ts";
 import { Supervision } from "./internal/supervisor.ts";
 
+/** The store's own error as these laws read it: its tag, and a tagged reason with the fault it kept. */
+type Fault = {
+  readonly _tag: "RecoveryStoreError";
+  readonly reason: { readonly _tag: "Storage" | "BadRow"; readonly cause: unknown };
+};
+
 type Store = {
-  readonly load: Effect.Effect<unknown, LedgerError>;
-  readonly save: (value: unknown) => Effect.Effect<void, LedgerError>;
-  readonly input: (letter: string) => Effect.Effect<unknown, LedgerError>;
-  readonly receipt: (letter: string) => Effect.Effect<unknown, LedgerError>;
+  readonly load: Effect.Effect<unknown, Fault>;
+  readonly save: (value: unknown) => Effect.Effect<void, Fault>;
+  readonly input: (letter: string) => Effect.Effect<unknown, Fault>;
+  readonly receipt: (letter: string) => Effect.Effect<unknown, Fault>;
 };
 
 type Subject = {
@@ -171,7 +178,10 @@ describe("P34 recovery storage", () => {
                     { ...terminal, letter: "other", input: { ...input, padding: "x".repeat(value) } },
                   ],
                 };
-                expect(yield* Effect.flip(s.save(full))).toMatchObject({ reason: "storage" });
+                expect(yield* Effect.flip(s.save(full))).toMatchObject({
+                  _tag: "RecoveryStoreError",
+                  reason: { _tag: "Storage" },
+                });
                 expect(yield* s.load).toEqual(snapshot);
               }).pipe(Effect.provide(layer())),
             );
@@ -190,7 +200,7 @@ describe("P34 recovery storage", () => {
   );
 
   it.effect.prop(
-    "wake probe plant, reset corrupt state: malformed durable snapshot fails closed with bad_row",
+    "wake probe plant, reset corrupt state: malformed durable snapshot fails closed with BadRow",
     { generated: Schema.String },
     ({ generated }) =>
       Effect.forEach(
@@ -233,7 +243,10 @@ describe("P34 recovery storage", () => {
             disk.reopen();
             await Effect.runPromise(
               Effect.gen(function* () {
-                expect(yield* Effect.flip((yield* S).load)).toMatchObject({ reason: "bad_row" });
+                expect(yield* Effect.flip((yield* S).load)).toMatchObject({
+                  _tag: "RecoveryStoreError",
+                  reason: { _tag: "BadRow" },
+                });
               }).pipe(Effect.provide(layer())),
             );
           }),
@@ -246,11 +259,12 @@ describe("P34 recovery storage", () => {
     const { RecoveryStore: S } = await subject();
     const disk = storage();
     let fail = false;
+    const full = new Error("SQLITE_FULL");
     const sql: Sql = {
       ...disk.sql,
       exec: (q, ...args) => {
         if (fail && /^\s*(INSERT|UPDATE|REPLACE)/i.test(q)) {
-          throw new Error("SQLITE_FULL");
+          throw full;
         }
 
         return disk.sql.exec(q, ...args);
@@ -264,6 +278,12 @@ describe("P34 recovery storage", () => {
         fail = true;
         const result = yield* Effect.exit(s.save({ ...snapshot, seq: 4 }));
         expect(Exit.isFailure(result)).toBe(true);
+        // Law 8 for `save`: the throw comes back as the store's own error, with SQLite's fault under
+        // its reason. Plant: build the error without `cause`.
+        const fault = yield* Effect.flip(s.save({ ...snapshot, seq: 4 }));
+        expect(fault._tag).toBe("RecoveryStoreError");
+        expect(fault.reason._tag).toBe("Storage");
+        expect(fault.reason.cause).toBe(full);
       }).pipe(Effect.provide(layer())),
     );
     fail = false;
@@ -306,7 +326,9 @@ describe("P34 recovery storage", () => {
       Effect.gen(function* () {
         const s = yield* S;
         yield* s.save(snapshot);
-        expect(yield* Effect.flip(s.save(before))).toMatchObject({ reason: "bad_row" });
+        const refused = yield* Effect.flip(s.save(before));
+        expect(refused).toMatchObject({ _tag: "RecoveryStoreError", reason: { _tag: "BadRow" } });
+        expect(Schema.isSchemaError(refused.reason.cause), "the decoder's own failure").toBe(true);
         expect(yield* s.load).toEqual(snapshot);
       }).pipe(Effect.provide(layer())),
     );

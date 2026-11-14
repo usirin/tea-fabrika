@@ -47,6 +47,7 @@
     "./compiler": "./src/node/build/compiler.ts",
     "./workers": "./src/cloudflare/index.ts",
     "./workers/bindings": "./src/cloudflare/bindings.ts",
+    "./workers/ConnectionObject": "./src/cloudflare/ConnectionObject.ts",
     "./workers/control": "./src/cloudflare/control.ts",
     "./workers/gateway": "./src/cloudflare/connection.ts",
     "./workers/objects": "./src/cloudflare/objects.ts",

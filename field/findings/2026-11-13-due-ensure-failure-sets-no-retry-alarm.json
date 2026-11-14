@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-due-ensure-failure-sets-no-retry-alarm",
+  "date": "2026-11-13",
+  "by": "tests",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/Runner.ts",
+    "line": 1730
+  },
+  "says": "A storage failure in the runner's `ensure(time)` sets no retry alarm, because `ensure` runs in the call wrapper (Runner.ts:1719-1740), outside the drain's `Effect.onExit` retry check (Runner.ts:1894-1904). So a due whose `ensure` fails is never retried.",
+  "proof": "Probe by the agent writing pull request 1189's retry law: a freshly started runner over a warm store, a one-time disk fault on a query reading `process_receipts`, then `due(500)` at clock 1000. The due failed with RecoveryStoreError and the saved alarms stayed `[null, 500]`, with no retry alarm written. Not yet a committed law.",
+  "cost": "A passing storage fault at the wrong moment leaves a process's due work stranded until something else wakes it, with no error a person sees.",
+  "head": "130014b8ab6a86cb3716140f15fe0cba82807dc0",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1189"
+}
