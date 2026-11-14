@@ -20,6 +20,7 @@ import {
   NotGranted,
   type Session,
   SessionManager,
+  type SessionManagerError,
   SigningRefused,
   SignRequest,
   Writer,
@@ -38,6 +39,7 @@ import { ProcessId } from "../ProcessId.ts";
 import * as Audit from "../runtime/Audit.ts";
 import { Incoming } from "../runtime/Entry.ts";
 import { type ProgramDown } from "../runtime/Program.ts";
+import { type RecoveryStoreError } from "../runtime/RecoveryStore.ts";
 import { type RepliesError } from "../runtime/Replies.ts";
 import { type RunnerError, Sent } from "../runtime/Runner.ts";
 import { type WatchersError } from "../runtime/Watchers.ts";
@@ -49,6 +51,7 @@ import { type CheckedHello, checkHello, type WebCryptoError } from "../transport
 import { type Checked, KeyLine, verifySshsig } from "../transport/Sshsig.ts";
 import { PasskeyLine, passkeyRp } from "../transport/Webauthn.ts";
 import { Admission, Answer, Attached, Hello, RateCountFailure, RateRefusal } from "../transport/Wire.ts";
+import { type GatewayError } from "./GatewayError.ts";
 import { gatewayNonce } from "./GatewayNonce.ts";
 import { gatewayStore } from "./GatewayStore.ts";
 import * as Waiting from "./internal/waiting.ts";
@@ -287,6 +290,9 @@ type Options<A, RNext, RDeliver, RNotify> = {
   ) => Effect.Effect<
     Sent | void,
     | LedgerError
+    | SessionManagerError
+    | RecoveryStoreError
+    | GatewayError
     | SinkError
     | SigningRefused
     | NotGranted
@@ -1832,10 +1838,10 @@ export class Gateway extends Context.Service<
       code: string,
     ) => Effect.Effect<
       { key: string; for: string; to: string; code: string; label: string } | null,
-      LedgerError | NotGranted
+      GatewayError | LedgerError | NotGranted
     >;
     readonly connect: () => Effect.Effect<ConnectionId>;
-    readonly challenge: (client: ConnectionId) => Effect.Effect<string, LedgerError>;
+    readonly challenge: (client: ConnectionId) => Effect.Effect<string, GatewayError>;
     /** Answers the checked hello, or the door's own refusal before the hello is checked. */
     readonly initialize: (
       client: ConnectionId,
@@ -1843,19 +1849,22 @@ export class Gateway extends Context.Service<
       trusted: { readonly url: string; readonly tab: string; readonly name: string },
     ) => Effect.Effect<
       typeof Answer.cases.refused.Type | typeof CheckedHello.Type,
-      LedgerError | NotGranted | SinkError | Cause.NoSuchElementError | WebCryptoError
+      GatewayError | LedgerError | NotGranted | SinkError | Cause.NoSuchElementError | WebCryptoError
     >;
     readonly knock: (
       client: ConnectionId,
       params: { readonly label: string; readonly pass?: string | null },
-    ) => Effect.Effect<typeof Answer.cases.ok.Type | typeof Answer.cases.refused.Type, LedgerError>;
-    readonly watch: (client: ConnectionId) => Effect.Effect<typeof WatchReply.Type, LedgerError>;
-    readonly disconnect: (client: ConnectionId) => Effect.Effect<void, LedgerError>;
+    ) => Effect.Effect<typeof Answer.cases.ok.Type | typeof Answer.cases.refused.Type, GatewayError>;
+    readonly watch: (client: ConnectionId) => Effect.Effect<typeof WatchReply.Type, GatewayError>;
+    readonly disconnect: (client: ConnectionId) => Effect.Effect<void, GatewayError>;
     /** Saves a passkey enrollment and answers its nonce. */
-    readonly enrollment: (binding: typeof Enrollment.Type) => Effect.Effect<string, LedgerError>;
+    readonly enrollment: (binding: typeof Enrollment.Type) => Effect.Effect<string, GatewayError>;
     readonly grant: (
       input: unknown,
-    ) => Effect.Effect<typeof GrantReply.Type, LedgerError | NotGranted | SinkError | Cause.NoSuchElementError>;
+    ) => Effect.Effect<
+      typeof GrantReply.Type,
+      GatewayError | LedgerError | NotGranted | SinkError | Cause.NoSuchElementError
+    >;
     readonly deny: (
       client: ConnectionId,
       input: unknown,
@@ -1867,7 +1876,10 @@ export class Gateway extends Context.Service<
       reader?: string,
     ) => Effect.Effect<
       typeof Answer.Type,
+      | GatewayError
       | LedgerError
+      | SessionManagerError
+      | RecoveryStoreError
       | SinkError
       | SigningRefused
       | NotGranted
@@ -1883,18 +1895,18 @@ export class Gateway extends Context.Service<
       parent: string,
       process: string,
       kind: string,
-    ) => Effect.Effect<Session, SigningRefused | NotGranted | LedgerError, SignRequest>;
+    ) => Effect.Effect<Session, SigningRefused | NotGranted | LedgerError | SessionManagerError, SignRequest>;
     readonly sign: (
       process: string,
       id: string,
       parent: string,
       kind: string,
-    ) => Effect.Effect<Session, SigningRefused | NotGranted | LedgerError>;
-    readonly retire: (process: string) => Effect.Effect<void, LedgerError>;
+    ) => Effect.Effect<Session, SigningRefused | NotGranted | LedgerError | SessionManagerError>;
+    readonly retire: (process: string) => Effect.Effect<void, SessionManagerError>;
     readonly checkDelivery: (
       process: string,
       input: Incoming,
-    ) => Effect.Effect<void, LedgerError | SigningRefused | NotGranted>;
+    ) => Effect.Effect<void, GatewayError | LedgerError | SigningRefused | NotGranted>;
     readonly append: (a: {
       readonly id: string;
       readonly parent: string;
@@ -1902,8 +1914,10 @@ export class Gateway extends Context.Service<
       readonly kind: string;
       readonly stream: string;
       readonly event: unknown;
-    }) => Effect.Effect<Appended, LedgerError | SigningRefused | NotGranted>;
-    readonly accept: (input: Incoming) => Effect.Effect<Appended, LedgerError | NotGranted | ProcessError>;
+    }) => Effect.Effect<Appended, GatewayError | LedgerError | SessionManagerError | SigningRefused | NotGranted>;
+    readonly accept: (
+      input: Incoming,
+    ) => Effect.Effect<Appended, GatewayError | LedgerError | NotGranted | ProcessError>;
   }
 >()("@kampus/libfabrika/gateway/Gateway") {
   static readonly layer = <A, RNext, RDeliver, RNotify>(options: Options<A, RNext, RDeliver, RNotify>) =>

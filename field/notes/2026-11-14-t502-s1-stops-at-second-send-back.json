@@ -1,0 +1,18 @@
+{
+  "id": "2026-11-14-t502-s1-stops-at-second-send-back",
+  "date": "2026-11-14",
+  "lanes": [
+    "kamp-us/tea-fabrika#1188"
+  ],
+  "stage": "review",
+  "kind": "friction",
+  "what": "next/ version. T502 S1's recheck at 44ef9ab81 found both first-round faults fixed: GatewayClient.fetch goes through Alchemy's typed stub with no disable line, and the stored-frame cut keeps eval origins, slashed names and URL file names. It sent the lane back once more, because the new cut finds a frame's location by matching parentheses, so a folder whose name holds one unmatched parenthesis is stored whole; the cut at f83e0e9e8 handled that case. That is the lane's second send-back, so the lane stops (0176). What is left does not break the slice's main job (the Connection object as an Alchemy Effect object), and main has no frame cut at all, so the branch is still a strict gain on 0186. The leftover is tracker ticket 955. The recheck's run is counted in field/runs/2026-11-13-t502-s1-review1.json's transcript, so it has no row of its own.",
+  "cause": "The fix round rewrote the frame cut to keep more of each frame, and the law's generator had only matched parentheses in its bracket root, so the new case escaped the law the fix agent wrote itself.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "Ticket 955: find a location by where it starts, not by matching parentheses, and give S1's generator roots with one unmatched parenthesis and a line ending in a carriage return.",
+  "test": "Property: for any generated root holding an unmatched '(' or ')', no stored frame names a folder.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1188"
+  ]
+}

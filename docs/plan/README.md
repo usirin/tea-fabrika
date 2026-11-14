@@ -67,8 +67,9 @@ not written yet.*
 *2026-11-13, later:* the Alchemy port ([0041](../../.decisions/0041-object-classes-are-effect-objects.md),
 ticket 502) is part of this plan and keeps a slot beside the four primitives
 ([0181](../../.decisions/0181-the-alchemy-port-keeps-a-slot.md)). One of its objects, `RecordPart`,
-landed on 2026-11-11; `Project`, `Process`, `Connection` and `Control` are still plain classes. The
-plan for what is left is being written.
+landed on 2026-11-11, and `Connection` follows in slice S1 of
+[its plan](./ticket-502-alchemy-port.md); `Project`, `Process` and `Control` are still plain
+classes. *It said: the plan for what is left is being written.*
 
 *2026-11-13, approved by the owner:* in that section, 30 of Tier 1's 44 rows are marked needed, 2
 help and 12 wait. The build order is the merge line, the window, a person starting a program and
@@ -102,6 +103,10 @@ between 0279 and 0274 before the desk is built, then S1 of the
 before `fabsh` is built, and S2 to S7 before `summon`; say yes after reading `alchemy plan` before
 the first cloud deploy. The other open calls are listed in
 [the section](./tier-1.md#the-owners-walks-and-decisions-by-step), each tied to its step.
+
+*2026-11-13:* ticket 921, the layering debt, slice 1 is in review in `next/`
+([PR 1189](https://github.com/kamp-us/tea-fabrika/pull/1189)): the session manager, the recovery
+store and the gateway each fail with their own error and a tagged reason, in place of the ledger's.
 
 *2026-11-12:* P19 slice 1, tracker ticket 881, is built on its branch in `next/`, awaiting
 review: the brain-service contracts, lifecycle machine and launchd adapter. The box checks only controlled services;

@@ -82,7 +82,12 @@ At the laptop, in the app or a tab, a person can:
   [0278](../../.decisions/0278-each-window-runs-its-own-prefix.md),
   [0272](../../.decisions/0272-a-press-finds-its-command.md)), never a fixed layout first;
 - start a program from `fabsh` and see it in a tile, which follows its `keep` when the process ends
-  ([0276](../../.decisions/0276-a-tile-shows-one-process.md));
+  ([0276](../../.decisions/0276-a-tile-shows-one-process.md)); the brain checks the start against
+  the member whose line caused it, never against `fabsh`'s program
+  ([0170](../../.decisions/0170-a-start-is-checked-against-its-sender.md)). *2026-11-14: not built.
+  The start still checks only program to program, `StartGrant` in
+  `next/packages/libfabrika/src/processes/ChildrenLedger.ts:85`; ticketed. What becomes of
+  `StartGrant` is the owner's open question;*
 - pipe `a | b` between `fabsh`'s built-ins, over saved program mail
   ([0109](../../.decisions/0109-a-pipe-is-saved-program-mail.md));
 - `summon` an agent under a name, talk to it with `@name` in the background, wait on it with

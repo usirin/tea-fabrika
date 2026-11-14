@@ -18,7 +18,13 @@ import * as Redacted from "effect/Redacted";
 import { admitted } from "../access/Access.ts";
 import { ClientManager } from "../access/ClientManager.ts";
 import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
-import { NotGranted, SigningRefused, Writer, type Session } from "../access/SessionManager.ts";
+import {
+  NotGranted,
+  type SessionManagerError,
+  SigningRefused,
+  Writer,
+  type Session,
+} from "../access/SessionManager.ts";
 import * as Id from "../Id.ts";
 import type { Jobs } from "../jobs/Jobs.ts";
 import * as JobsLedger from "../jobs/JobsLedger.ts";
@@ -61,6 +67,7 @@ import type { Declaration } from "../runtime/Execution.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
 import { ProgramDown } from "../runtime/Program.ts";
+import type { RecoveryStoreError } from "../runtime/RecoveryStore.ts";
 import type { RepliesError } from "../runtime/Replies.ts";
 import type { Descriptor, Opened, RunnerError } from "../runtime/Runner.ts";
 import { defaultPolicy, ProgramRunner, Sent } from "../runtime/Runner.ts";
@@ -1557,6 +1564,8 @@ const processLogic = Effect.fnUntraced(function* (
 /** What a runner call fails with: the union `ProgramRunner`'s calls name. */
 type RunnerFailure =
   | LedgerError
+  | RecoveryStoreError
+  | SessionManagerError
   | ProgramDown
   | RunnerError
   | SinkError

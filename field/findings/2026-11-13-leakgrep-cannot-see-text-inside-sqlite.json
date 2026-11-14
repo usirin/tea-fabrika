@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-13-leakgrep-cannot-see-text-inside-sqlite",
+  "date": "2026-11-13",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": ".agents/skills/lead/scripts/leakgrep.sh",
+    "line": 20
+  },
+  "says": "The leak check reads a commit or a diff as git prints it, and git prints a .sqlite file only as a binary file line, so a machine path or a secret inside a committed SQLite file passes the check before every push and every merge. --text on a .sqlite file exits 2 and reads nothing.",
+  "proof": "On T502 S1, law 5's first writer run saved home/brain.records.sqlite, whose unsent table holds a ControlError stack with the full worktree path under the account's home folder in ten frame lines. A commit of that file alone, piped through git show into leakgrep.sh, printed 'added text clean' and exited 0; the diff held only 'Binary files /dev/null and b/a.sqlite differ'. leakgrep.sh --text on the same file exited 2 with 'cannot read check input'. The text of that one table, dumped with sqlite3 and checked with --text, exited 1 with machine_path at lines 3 to 12.",
+  "cost": "Every saved home a later port slice commits (S2, S3, S5, S8) is a public SQLite file, and so is any other fixture database; a leak in one reaches main with the check green. Law 5's writer now refuses a machine path itself, but that guards one writer, not the check every push runs.",
+  "head": "b1e7d2e7eaff164ac111bd43a11f275e1f3f3ea1",
+  "ticket": "kamp-us/tea-fabrika#502",
+  "pr": "kamp-us/tea-fabrika#1188"
+}

@@ -187,7 +187,7 @@ export const measured: Record<string, number> = {
   "next/packages/libfabrika/src/processes/ProcessTextCaps.test.ts": 14.1,
   "next/packages/libfabrika/src/processes/ProcessWindow.test.ts": 1.2,
   "next/packages/libfabrika/src/runtime/RecoveryStore.test.ts": 0.1,
-  "next/packages/libfabrika/src/access/SessionManager.test.ts": 8.8,
+  "next/packages/libfabrika/src/node/access/SessionManager.test.ts": 8.8,
   "next/packages/libfabrika/src/access/AccessSpans.test.ts": 4.9,
   "next/packages/libfabrika/src/access/Text.test.ts": 0.0,
   "next/packages/libfabrika/src/telemetry/ArchiveCryptoFailure.test.ts": 0.0,

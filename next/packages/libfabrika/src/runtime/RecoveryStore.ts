@@ -5,9 +5,39 @@
  * @stability unstable
  */
 import { Context, Effect, Layer, Schema } from "effect";
-import { LedgerError } from "../ledger/Ledger.ts";
 import { type Sql } from "../Sql.ts";
 import { Receipt } from "./internal/recovery.ts";
+
+/**
+ * Reason for a journal that could not be read or written: the `Sql` threw, or a save would grow
+ * the database past its capacity. A throw is kept as `cause`; a full database has none.
+ *
+ * @stability unstable
+ * @category errors
+ */
+export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
+
+/**
+ * Reason for a saved journal or receipt that does not decode, or that is stored under another
+ * name or letter. The decoder's failure is kept as `cause`; a misplaced row has none.
+ *
+ * @stability unstable
+ * @category errors
+ */
+export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Schema.Defect() }) {}
+
+/**
+ * Error for a recovery journal that could not be loaded or saved.
+ *
+ * @stability unstable
+ * @category errors
+ */
+export class RecoveryStoreError extends Schema.TaggedError<RecoveryStoreError>()("RecoveryStoreError", {
+  reason: Schema.Union([Storage, BadRow]),
+}) {}
+
+/** A saved row this store did not write under that name or letter: there is no lower fault to keep. */
+const misplaced = () => new RecoveryStoreError({ reason: new BadRow({ cause: undefined }) });
 
 /** What the store reads of a saved journal: whose it is, and the receipts it keeps apart. */
 const Kept = Schema.Struct({ name: Schema.String, receipts: Schema.Array(Receipt) });
@@ -21,13 +51,13 @@ type Journal<S extends Kept> = Schema.Codec<S, unknown> & {
 
 type Store<S extends Kept> = {
   /** The saved journal with every receipt merged back in, or null before the first save. */
-  readonly load: Effect.Effect<S | null, LedgerError>;
+  readonly load: Effect.Effect<S | null, RecoveryStoreError>;
   /** Checks the whole journal, then writes it and its changed receipts in one transaction. */
-  readonly save: (value: unknown) => Effect.Effect<void, LedgerError>;
+  readonly save: (value: unknown) => Effect.Effect<void, RecoveryStoreError>;
   /** The input one letter's receipt kept, or null. */
-  readonly input: (letter: string) => Effect.Effect<Schema.Json | null, LedgerError>;
+  readonly input: (letter: string) => Effect.Effect<Schema.Json | null, RecoveryStoreError>;
   /** One letter's receipt, or null. */
-  readonly receipt: (letter: string) => Effect.Effect<Receipt | null, LedgerError>;
+  readonly receipt: (letter: string) => Effect.Effect<Receipt | null, RecoveryStoreError>;
 };
 
 const decodeReceipt = Schema.decodeUnknownSync(Schema.fromJsonString(Receipt));
@@ -37,7 +67,7 @@ const receiptFor = (value: unknown, letter: unknown) => {
   const saved = decodeReceipt(value);
 
   if (saved.letter !== letter) {
-    throw new LedgerError({ reason: "bad_row" });
+    throw misplaced();
   }
 
   return saved;
@@ -86,10 +116,13 @@ export const recoveryStore = <S extends Kept>(
 
         return f();
       },
+      // The store's own error, thrown in the step, passes through; anything else is kept under a reason.
       catch: (error) =>
-        error instanceof LedgerError
+        Schema.is(RecoveryStoreError)(error)
           ? error
-          : new LedgerError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", cause: error }),
+          : new RecoveryStoreError({
+              reason: Schema.isSchemaError(error) ? new BadRow({ cause: error }) : new Storage({ cause: error }),
+            }),
     });
   const snapshot = () => {
     const [row] = sql.exec("SELECT value FROM process_recovery WHERE name=?", options.name);
@@ -101,7 +134,7 @@ export const recoveryStore = <S extends Kept>(
     const saved = decode(row.value);
 
     if (saved.name !== options.name) {
-      throw new LedgerError({ reason: "bad_row" });
+      throw misplaced();
     }
 
     return saved;
@@ -142,7 +175,7 @@ export const recoveryStore = <S extends Kept>(
       const saved = check(value);
 
       if (saved.name !== options.name) {
-        throw new LedgerError({ reason: "bad_row" });
+        throw misplaced();
       }
 
       const text = encode({ ...saved, receipts: [] });
@@ -179,7 +212,7 @@ export const recoveryStore = <S extends Kept>(
         }
 
         if (sql.size() + growth > options.capacity) {
-          throw new LedgerError({ reason: "storage" });
+          throw new RecoveryStoreError({ reason: new Storage({ cause: undefined }) });
         }
 
         for (const receipt of changed) {
@@ -221,8 +254,9 @@ export const recoveryStore = <S extends Kept>(
  *
  * **Gotchas**
  *
- * A save that would grow the database past `capacity` fails with `storage` and keeps the old rows.
- * A row that does not decode, or that is stored under another name, fails with `bad_row`.
+ * It fails with `RecoveryStoreError`. A save that would grow the database past `capacity` fails
+ * with reason `Storage` and keeps the old rows. A row that does not decode, or that is stored
+ * under another name, fails with reason `BadRow`.
  *
  * @stability unstable
  * @category services
