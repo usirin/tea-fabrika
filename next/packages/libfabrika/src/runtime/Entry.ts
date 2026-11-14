@@ -37,8 +37,13 @@ type Code<A extends ReadonlyArray<unknown>, R> = { call(...args: A): R }["call"]
  */
 export type View = unknown;
 
-/** What a watcher is sent: the whole view once, then one patch per installed step. `rev` is the
- *  inbox position of the last installed letter, so other streams leave no gaps. */
+/**
+ * What a watcher is sent: the whole view once, then one patch per installed step. `rev` is the inbox
+ * position of the last installed letter, so other streams leave no gaps.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Update =
   | { readonly type: "whole"; readonly rev: number; readonly view: View }
   | {
@@ -76,10 +81,21 @@ export const Incoming = Schema.Struct({
  */
 export type Incoming = typeof Incoming.Type;
 
-/** A Cmd handler: it does the outside work and answers with tea's Outcome. */
+/**
+ * A Cmd handler: it does the outside work and answers with tea's Outcome.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Handler<R> = Code<[cmd: unknown], Effect.Effect<Outcome<unknown, unknown>, unknown, R>>;
 
-/** An in-process program: its pure stepper, runner execution and allowed Cmd handlers. */
+/**
+ * An in-process program: its pure stepper, runner execution, checked declaration and allowed Cmd
+ * handlers.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Loaded = {
   readonly stepper: Stepper;
   readonly execution: Execution;
@@ -166,7 +182,12 @@ export class ProgramLoader extends Context.Service<
     );
 }
 
-/** An event as it travels in a checked write: JSON with its case. */
+/**
+ * An event as it travels in a checked write: JSON with its case.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Event = Schema.JsonObject & Tagged;
 
 /**
@@ -196,14 +217,34 @@ export class CheckedWriter extends Context.Service<
   }
 >()("@kampus/libfabrika/runtime/Entry.CheckedWriter") {}
 
-export { WatcherManager } from "./WatcherManager.ts";
+export {
+  /**
+   * Service that delivers a view update to one client, re-exported so the runner's services come
+   * from one place.
+   *
+   * @stability unstable
+   * @category services
+   */
+  WatcherManager,
+} from "./WatcherManager.ts";
 
-/** The object's one alarm: the program's next wake time, or none. */
+/**
+ * Service for the object's one alarm: `set` takes the program's next wake time, or `null` for none.
+ *
+ * @stability unstable
+ * @category services
+ */
 export class Alarm extends Context.Service<Alarm, { readonly set: (at: number | null) => Effect.Effect<void> }>()(
   "@kampus/libfabrika/runtime/Entry.Alarm",
 ) {}
 
-/** Sends the process's ended spans on to its JobRecord, with its services captured at build time. */
+/**
+ * Service that sends the process's ended spans on to its JobRecord, with its services captured at
+ * build time. `flush` can fail with a ledger or sink error.
+ *
+ * @stability unstable
+ * @category services
+ */
 export class Recording extends Context.Service<
   Recording,
   { readonly flush: Effect.Effect<unknown, LedgerError | SinkError> }

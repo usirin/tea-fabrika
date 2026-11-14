@@ -74,7 +74,18 @@ const stored = <A>(f: () => A) =>
     catch: (error) => (error instanceof RepliesError ? error : new RepliesError({ reason: "storage", cause: error })),
   });
 
-/** Replies in the runtime's own recovery SQL, within its storage capacity. */
+/**
+ * Layer that provides `Replies` over the runtime's own recovery SQL, within `capacity` bytes.
+ *
+ * **Details**
+ *
+ * `reply` reads one row. `rememberReply` runs in one transaction, so a failed or full write keeps
+ * nothing; it fails with `storage` when the new row would pass `capacity`, and with `bad_row` when a
+ * stored row does not decode or disagrees with its key.
+ *
+ * @stability unstable
+ * @category layers
+ */
 export const layer = (sql: Sql, limits: { readonly capacity: number }): Layer.Layer<Replies> =>
   Layer.succeed(Replies, {
     reply: Effect.fn("replies.reply")(function* (name: string, id: string) {

@@ -81,7 +81,13 @@ const programFailure = (failure: typeof ExecutionFailure.Type) => {
   return new ProgramDown({ reason: failure.reason, error: failure.error, cause });
 };
 
-/** A checked reply failure crosses RPC as data; a rejected call remains an RPC failure. */
+/**
+ * Schema for a checked step reply: an `ok` value, or a `ProgramDown` failure. A checked reply
+ * failure crosses RPC as data; a rejected call remains an RPC failure.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const Reply = Schema.TaggedUnion({
   ok: { value: Schema.Json },
   ProgramDown: Failure,

@@ -6,7 +6,13 @@
 import { Context, type Effect, Schema } from "effect";
 import type { Update } from "./Entry.ts";
 
-/** A normal notify return is sent, not a browser acknowledgement. */
+/**
+ * Schema for a delivery's result: `sent` or `gone`. A normal notify return is sent, not a browser
+ * acknowledgement.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const Publication = Schema.TaggedUnion({ sent: {}, gone: {} });
 
 /**
@@ -38,7 +44,14 @@ export class WatcherManagerError extends Schema.TaggedError<WatcherManagerError>
   reason: Schema.Union([Gone, Unreachable]),
 }) {}
 
-/** Delivers a view to one client; only confirmed absence ends a watch. */
+/**
+ * Service that delivers a view update to one client. A failed delivery is a `WatcherManagerError`:
+ * its reason is `Gone` when the client is confirmed absent, which ends the watch, or `Unreachable`,
+ * which keeps it.
+ *
+ * @stability unstable
+ * @category services
+ */
 export class WatcherManager extends Context.Service<
   WatcherManager,
   {

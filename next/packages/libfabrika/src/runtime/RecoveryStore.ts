@@ -80,7 +80,20 @@ const TABLES = [
 
 const bytes = (text: string) => new TextEncoder().encode(text).length;
 
-/** One name's saved journal in `sql`, checked whole against its caller's schema on every load and save. */
+/**
+ * Makes the store for one name's saved journal in `sql`, checked whole against its caller's schema
+ * on every load and save.
+ *
+ * **Details**
+ *
+ * The journal row and its receipts live in separate rows; `load` merges them back, and `save`
+ * writes only the receipts that changed, in one transaction. A save that would grow the database
+ * past `capacity` fails with `storage` and keeps the old rows. A row that does not decode, or is
+ * stored under another name, fails with `bad_row`.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const recoveryStore = <S extends Kept>(
   sql: Sql,
   options: { readonly name: string; readonly capacity: number; readonly schema: Journal<S> },

@@ -1,7 +1,7 @@
 ---
 id: 0008
 title: Decision discovery is the AGENTS.md contract alone, with no committed index and no startup hook
-status: accepted
+status: amended-in-part by [0522](0522-no-folder-keeps-an-index-table.md)
 date: 2026-11-09
 tags: [decisions, discovery, agents-md, adr]
 ---
