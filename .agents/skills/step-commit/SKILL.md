@@ -1,6 +1,6 @@
 ---
 name: step-commit
-description: Commit and sign one pipeline step's work in tea-fabrika in one command. Use whenever the tests, build, mutation or lead step commits, instead of running git commit and pnpm commits sign apart.
+description: Commit and sign one pipeline step's work in one command. Use whenever the tests, build, mutation or lead step commits, instead of running git commit and pnpm commits sign apart.
 ---
 
 # Commit and sign a step
@@ -15,11 +15,8 @@ sh .agents/skills/step-commit/scripts/stepcommit.sh --commit-only <step> <ticket
 sh .agents/skills/step-commit/scripts/stepcommit.sh build 277 "T277 build: one refusal per request" next/apps/fabrika/src/door.ts
 ```
 
-Why one command: on 2026-11-08 about 21 of 126 step reports were signing problems. Three causes sat
-under them: the plan did not say who owns each file, signing was a second command, and history
-rewrites broke signed links. This script covers the last two, and refuses a build's exam path for
-the first ([code commits and signs each step](../../../docs/direction/code-commits-and-signs-each-step.md),
-field note 2026-11-08-20).
+Why one command:
+[code commits and signs each step](../../../docs/direction/code-commits-and-signs-each-step.md).
 
 ## The rules
 
