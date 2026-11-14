@@ -6,7 +6,7 @@
 // its `-wal` file only until the clean stop closes the database. Each race here is certain, not timed.
 import { DatabaseSync } from "node:sqlite"; // edge: a real WAL database, as the brain's span queue keeps one
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Path, Ref } from "effect";
+import { Cause, Effect, Exit, FileSystem, Path, PlatformError, Ref } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { stored } from "./stored.test-support.ts";
@@ -124,6 +124,146 @@ describe("stored", () => {
         ),
       ),
       { seed: SEED, numRuns: 10 },
+    );
+  });
+
+  it("[secrets] every file the running pass reads is an output L17 checks, the span queue's WAL with its deleted row included", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.record({
+          secret: fc.stringMatching(/^[A-Za-z0-9]{24,40}$/),
+          files: fc.uniqueArray(fc.constantFrom(...NAMES)),
+        }),
+        ({ secret, files }) =>
+          Effect.runPromise(
+            Effect.scoped(
+              Effect.gen(function* () {
+                const fs = yield* FileSystem.FileSystem,
+                  path = yield* Path.Path;
+                const dir = yield* fs.makeTempDirectoryScoped({ prefix: "stored." });
+                const sentinel = `span_${secret}`;
+                yield* fs.makeDirectory(path.join(dir, "records"));
+
+                for (const name of files) {
+                  yield* fs.writeFileString(path.join(dir, name), JSON.stringify(`${name}_${secret}`));
+                }
+
+                const db = yield* Effect.acquireRelease(
+                  Effect.sync(() => new DatabaseSync(path.join(dir, "brain.records.sqlite"))),
+                  (db) => Effect.sync(() => (db.isOpen ? db.close() : undefined)),
+                );
+                db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA secure_delete=0");
+                db.exec("CREATE TABLE spans (id INTEGER PRIMARY KEY, body TEXT NOT NULL)");
+                const insert = db.prepare("INSERT INTO spans (body) VALUES (?)");
+                insert.run(sentinel);
+                db.exec("DELETE FROM spans");
+
+                for (let n = 0; n < 20; n++) {
+                  insert.run("x".repeat(sentinel.length));
+                }
+
+                const disk = yield* stored({ dir, stop: Effect.sync(() => db.close()) }, new Map(), []);
+                const running = disk.raw.filter(([label]) => label.startsWith("home (running)"));
+                const labels = new Set(disk.outputs.map(([label]) => label));
+
+                expect(running.length).toBeGreaterThan(0);
+                expect(running.map(([label]) => label).filter((label) => !labels.has(label))).toEqual([]);
+                expect(
+                  disk.outputs.some(
+                    ([label, text]) => label === "home (running) /brain.records.sqlite-wal" && text.includes(sentinel),
+                  ),
+                  "the WAL's deleted row is an output",
+                ).toBe(true);
+              }),
+            ).pipe(Effect.provide(NodeServices.layer)),
+          ),
+      ),
+      { seed: SEED, numRuns: 10 },
+    );
+  });
+
+  it("[secrets] only a file gone in the running pass is passed over: any other failure, in either pass, fails the scan", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.uniqueArray(fc.constantFrom(...NAMES), { minLength: 1 }).chain((files) =>
+          fc.record({
+            files: fc.constant(files),
+            failing: fc.constantFrom(...files),
+            method: fc.constantFrom("stat" as const, "readFile" as const),
+            pass: fc.constantFrom("running" as const, "stopped" as const),
+            reason: fc.constantFrom("NotFound" as const, "PermissionDenied" as const, "Busy" as const),
+          }),
+        ),
+        ({ files, failing, method, pass, reason }) =>
+          Effect.runPromise(
+            Effect.scoped(
+              Effect.gen(function* () {
+                const real = yield* FileSystem.FileSystem,
+                  path = yield* Path.Path;
+                const dir = yield* real.makeTempDirectoryScoped({ prefix: "stored." });
+                const stopped = yield* Ref.make(false);
+                yield* real.makeDirectory(path.join(dir, "records"));
+
+                for (const name of files) {
+                  yield* real.writeFileString(path.join(dir, name), JSON.stringify(name));
+                }
+
+                const target = path.join(dir, failing);
+                // Fails `method` on the one generated file, and only in the generated pass.
+                const fault = (file: string, called: "stat" | "readFile") =>
+                  Effect.gen(function* () {
+                    const now = (yield* Ref.get(stopped)) ? "stopped" : "running";
+
+                    if (file === target && called === method && now === pass) {
+                      return yield* PlatformError.systemError({
+                        _tag: reason,
+                        module: "FileSystem",
+                        method,
+                        pathOrDescriptor: file,
+                      });
+                    }
+                  });
+                const fs: FileSystem.FileSystem = {
+                  ...real,
+                  stat: (file) => fault(file, "stat").pipe(Effect.andThen(real.stat(file))),
+                  readFile: (file) => fault(file, "readFile").pipe(Effect.andThen(real.readFile(file))),
+                };
+                const exit = yield* stored({ dir, stop: Ref.set(stopped, true) }, new Map(), []).pipe(
+                  Effect.provideService(FileSystem.FileSystem, fs),
+                  Effect.exit,
+                );
+                const all = files.map((name) => `/${name}`).toSorted();
+                // What the scan did: the files each pass read, or the error it failed with.
+                const seen = Exit.match(exit, {
+                  onSuccess: (disk) => ({
+                    running: [...disk.running].toSorted(),
+                    stopped: disk.raw
+                      .filter(([label]) => !label.startsWith("home (running)"))
+                      .map(([label]) => label.slice("home ".length))
+                      .toSorted(),
+                  }),
+                  onFailure: (cause) => {
+                    const error = Cause.squash(cause);
+                    return PlatformError.isPlatformError(error)
+                      ? {
+                          failed: error.reason._tag,
+                          method: error.reason.method,
+                          path: "pathOrDescriptor" in error.reason ? error.reason.pathOrDescriptor : undefined,
+                        }
+                      : { failed: String(error) };
+                  },
+                });
+
+                expect(seen, `${reason} on ${method} in the ${pass} pass`).toEqual(
+                  pass === "running" && reason === "NotFound"
+                    ? { running: all.filter((file) => file !== `/${failing}`), stopped: all }
+                    : { failed: reason, method, path: target },
+                );
+              }),
+            ).pipe(Effect.provide(NodeServices.layer)),
+          ),
+      ),
+      { seed: SEED, numRuns: 40 },
     );
   });
 });
