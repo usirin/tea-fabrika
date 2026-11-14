@@ -259,8 +259,7 @@ class Client {
   // Node's WebSocket fires `error` on a failed upgrade (the proxy's 502 while workerd
   // restarts) but can stay CONNECTING with no `close`, so `error` counts as closed.
   private closed = false;
-  // A caller waits on the socket's own events, never on a timer: a reply read on a 20 ms poll cost each
-  // of p11's 259 sends up to one poll, and more on a busy machine, where a late timer adds to it.
+  // A caller waits on the socket's own events (open, frame, error, close), never on a timer.
   private readonly waiting: Array<() => void> = [];
   private readonly ws: WebSocket;
   private readonly base: string;
