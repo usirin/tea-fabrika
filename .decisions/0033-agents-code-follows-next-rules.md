@@ -40,7 +40,7 @@ Agents read `.agents/` (the lead scripts, `drive.ts`, `chain.ts`) and copy its h
 they write. On 2026-11-09 the owner decided that lead tooling follows `next/`'s code conventions for
 that reason: tooling that breaks them teaches every agent that reads it to break them too.
 
-The fast track in [AGENTS.md](../AGENTS.md#two-versions-side-by-side) stays: lead tooling skips the
+The fast track in [AGENTS.md](../AGENTS.md#how-a-change-lands) stays: lead tooling skips the
 plan, tests, mutation and review steps. This decision is about how the code reads, not how it lands.
 It builds on [0023](0023-next-follows-effects-code-style.md) (next/ follows Effect's code style),
 [no Promises](../docs/direction/no-promises.md), and [0031](0031-lane-tooling-dogfoods-fabrikas-primitives.md),

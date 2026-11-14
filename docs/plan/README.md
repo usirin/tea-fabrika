@@ -372,7 +372,7 @@ much as `next/` work and run beside Tier 1, never held back for it (owner, 2026-
 |---|---|
 | Fix today's version | [AGENTS.md](../../AGENTS.md), the [package list](../../README.md#what-is-in-this-repository), then that part's own README |
 | Build in `next/` | [Tier 1](./tier-1.md), [its pull requests and waves](./tier-1.md#the-pull-requests-one-at-a-time) and [ticket 115's plan](./ticket-115.md), [the steps](../direction/next-is-a-pipeline-pre-run.md), the [Start here list](../direction/README.md#start-here). No builder starts before an approved plan and tests that exist |
-| Run a real ticket | [Run a ticket through the pipeline](../how-to/run-a-pipeline-ticket.md), [AGENTS.md's rules](../../AGENTS.md#running-the-machine-on-a-real-ticket), then [field/](../../field/README.md) for what past runs hit |
+| Run a real ticket | [Run a ticket through the pipeline](../how-to/run-a-pipeline-ticket.md), [its rules](../how-to/run-a-pipeline-ticket.md#the-rules-for-a-live-run), then [field/](../../field/README.md) for what past runs hit |
 | Write down a decision | A note in [docs/direction](../direction/README.md), the same day, plus its row. Mark it **proposed** until it is settled |
 | Log a run | [field/README.md](../../field/README.md) for the schema: one row per agent run, one note per thing that broke, cost too much, needed a person or worked well |
 
@@ -380,7 +380,7 @@ much as `next/` work and run beside Tier 1, never held back for it (owner, 2026-
 
 **Only the owner:**
 
-- Approves a plan that raises a new design call, in `next/` or today's, before any builder starts. A plan that only builds a decided note is approved by the lead agent (owner, 2026-11-03; [AGENTS.md](../../AGENTS.md#two-versions-side-by-side)).
+- Approves a plan that raises a new design call, in `next/` or today's, before any builder starts. A plan that only builds a decided note is approved by the lead agent (owner, 2026-11-03; [AGENTS.md](../../AGENTS.md#how-a-change-lands)).
 - Approves a pull request on GitHub, and answers a question the machine put to a person. No agent does either. A merge does not wait on that yes: see [how a change lands](#how-a-change-lands).
 - *Changed 2026-11-05:* how `next/` reaches the lane no longer needs an answer before Tier 1 starts ([why](./tier-1.md#still-open-how-next-reaches-the-lane)). *It said: answers it before PR A's plan step (lean 65%).*
 - Settles a **proposed** note.
