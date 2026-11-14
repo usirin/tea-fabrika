@@ -61,6 +61,8 @@ const SEED = 119120;
 
 /** fast-check's assertion rejected: a walk failed, and its counterexample is the cause. */
 class PropertyFailure extends Schema.TaggedError<PropertyFailure>()("PropertyFailure", { cause: Schema.Defect() }) {}
+
+const propertyFailure = (cause: unknown) => new PropertyFailure({ cause });
 /** P40: the counter's qualified name; its registered names stay `counter:N`. */
 const PROGRAM = "fabrika/counter";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -849,7 +851,7 @@ const law = (body: (g: fc.GeneratorValue) => Effect.Effect<void, unknown, never>
     // A walk of real runners is slow to shrink: report the first counterexample as found.
     const options = { seed: SEED, numRuns: runs, endOnFailure: true };
     // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check runs an async property as a Promise
-    yield* Effect.tryPromise({ try: () => fc.assert(property, options), catch: (cause) => new PropertyFailure({ cause }) });
+    yield* Effect.tryPromise({ try: () => fc.assert(property, options), catch: propertyFailure });
   });
 
 const inWorld = <A, E>(rig: Rig, specs: ReadonlyArray<Spec>, body: (w: World) => Effect.Effect<A, E, never>) =>

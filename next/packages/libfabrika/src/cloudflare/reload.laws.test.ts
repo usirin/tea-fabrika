@@ -608,7 +608,8 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
 });
 
 // edge: the control boundary answers with a platform Response.
-const json = (response: Response) => Effect.tryPromise({ try: (): Promise<unknown> => response.json(), catch: rejected });
+const json = (response: Response) =>
+  Effect.tryPromise({ try: (): Promise<unknown> => response.json(), catch: rejected });
 
 describe("P15 slice 1: the brain installs and selects code", () => {
   it.live(
