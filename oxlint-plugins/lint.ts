@@ -1,8 +1,8 @@
 // `pnpm lint`'s first step: oxlint, with one difference. Oxlint has two levels, warn and error, and
 // this repo needs a third: printed, and never failing. So oxlint reports everything as JSON here,
 // and this prints all of it and fails on all of it but advice. Advice is a fire of the five old
-// advice rules that a dirty folder's warn override grades a warning (advice.ts, 0523): each of the
-// five blocks in every folder at zero.
+// advice rules or the docs rule that a dirty folder's warn override grades a warning (advice.ts,
+// 0523): each of the six blocks in every folder at zero.
 //
 // Why one run and not two: an `oxlint-disable` that names a rule turned off counts as unused. A
 // second run for the advice rules would turn their own disable comments into failures of the first.

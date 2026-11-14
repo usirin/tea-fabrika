@@ -118,29 +118,36 @@ and each one is visible in the installed source:
 
 ## Where it applies
 
-Every public export of a library under `next/packages/` (today `libfabrika`), and its module
-files ([0023](../.decisions/0023-next-follows-effects-code-style.md),
+Every public export of a library under `next/packages/` (today `libfabrika` and `tuval`), and its
+module files ([0023](../.decisions/0023-next-follows-effects-code-style.md),
 [0120](../.decisions/0120-effect-code-guidelines.md)). `fabrika/jsdocs` is on at `error` for
-`next/packages/libfabrika/src/ci/**` and `codehost/**` (`.oxlintrc.json:1535-1536`). Each folder
-joins that list in the pull request that fills it, and the list ends as `next/packages/*/src/**`
-([Plan B, B2](../docs/plan/effect-rules-big.md#b2-the-docs-rule)). Until a folder is listed, the
-shape is asked of it by review alone.
+`next/packages/*/src/**` (`.oxlintrc.json:2028-2029`), so a new folder or package blocks from its
+first file. A folder not yet at zero has one line in the `warn` override right after it
+(`.oxlintrc.json:2036-2047`), where its fires print as advice and do not fail. The pull request that
+fills a folder deletes its line, and a whole `pnpm lint` fails until it does
+([0523](../.decisions/0523-advice-rules-block-where-clean.md), ticket 948,
+[Plan B, B2](../docs/plan/effect-rules-big.md#b2-the-docs-rule)). Until then, review holds the
+shape in that folder.
 
 It stops at what is not public: `internal/`, tests, test support (`*.test-support.ts`), shared
 suites (`*Test.ts`), fixtures and declaration files, where the rule is off
-(`.oxlintrc.json:1541-1550`). App code in `next/apps/` is not asked either. `@since` carries the
-library's own version, `0.0.0` while it is unpublished, so a block leaves the tag out until a first
-release, and the rule's `since: "absent"` fires on one
+(`.oxlintrc.json:2052-2061`). That override comes last, so a warn line never turns the rule on
+there. App code in `next/apps/` is not asked either. `@since` carries the library's own version,
+`0.0.0` while it is unpublished, so a block leaves the tag out until a first release, and the
+rule's `since: "absent"` fires on one
 ([0118](../.decisions/0118-no-since-tag-before-a-release.md), `oxlint-plugins/jsdocs.ts:114-115`).
 
 How far it is, counted by the rule on 2026-11-14 on main `c0aaf4a24`
 (`oxlint-plugins/README.md`, "The docs rule, E6"), beside the counts made before it:
 
-- **On:** `ci` 9 of 9 exports pass and `codehost` 12 of 12, with both module blocks: 0 fires, as
-  the plan's prototype found.
-- **Not on yet:** the other public files of `libfabrika`, 136 in all, fire 666 times: 346 exports
-  with no block, 232 with a block out of shape (most lack `@stability` and `@category`) and 88
-  files with no module block or a wrong one. The README has the count by module.
+- **At zero then:** `ci` 9 of 9 exports pass and `codehost` 12 of 12, with both module blocks: 0
+  fires, as the plan's prototype found.
+- **Not at zero then:** the other public files of `libfabrika`, 136 in all, fire 666 times: 346
+  exports with no block, 232 with a block out of shape (most lack `@stability` and `@category`)
+  and 88 files with no module block or a wrong one. The README has the count by module.
+- **On 2026-11-13, ticket 948, at `cf03efb9f`:** 316 fires, all in the 9 folders that still
+  advise. The other 14 `libfabrika` folders block. The README has the count by folder
+  (`oxlint-plugins/README.md`, "Where a rule still advises").
 - **The counts before the rule:** Effect's checker run by hand found 92 places (2026-11-09); the
   plan's grep found 333 exports with no block and 114 files with no module block. Neither read a
   name in an `export { a }` list or a block out of shape, which is why the rule finds more.

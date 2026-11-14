@@ -20,13 +20,21 @@ flowchart TB
   S2 --> S5["B1.5 processes, B1.6 telemetry"]
   S5 --> S7["B1.7 runtime"]
   S7 --> S8["B1.8 cloudflare, with the Alchemy port<br/>gate closed: next/**"]
-  D1 --> D2["B2.2, B2.3: the folders of pull requests<br/>1127 and 1128 join"]
-  DF --> D4["B2.4 to B2.7: each filled folder joins"]
+  D1 --> D2["B2.2, B2.3: the folders of pull requests<br/>1127 and 1128 reach zero"]
+  DF --> D4["B2.4 to B2.7: each filled folder<br/>deletes its warn line"]
   D2 --> D8["B2.8: top files and barrels<br/>gate closed: next/packages/*/src/**"]
   D4 --> D8
   I0 --> I1["B3.1 to B3.6: one group of modules each"]
   I1 --> I7["B3.7 runtime<br/>gate closed: next/packages/**"]
 ```
+
+**Since ticket 948, 2026-11-13, B2 runs the other way round.** The docs rule no longer turns on
+through a list of clean folders. It is `"error"` for all of `next/packages/*/src/**`, so a new
+folder blocks from its first file. Each folder not yet at zero has one line in a `"warn"` override,
+where its fires only advise. A fill deletes its folder's warn line in the same pull request, and a
+whole `pnpm lint` fails until it does. The B2 words below are kept as written: read "joins" as
+"deletes its warn line". The gate closes when the last warn line goes
+([`oxlint-plugins/README.md`](../../oxlint-plugins/README.md#where-a-rule-still-advises)).
 
 ## The answer first
 
@@ -344,8 +352,10 @@ out, and the review reads each description against the code, which no rule can d
 9. **Later, the plan-code rule,** with its own short plan, as the draft says. Most plan codes sit in
    the `//` file headers that the module blocks replace, so it is counted again after the fills.
 
-A fill that lands after B2.1 adds its own folder to the list in the same pull request, and the rule
-is then its judge. Slices 4 to 7 share no file and can run side by side.
+A fill that lands after B2.1 added its own folder to the list in the same pull request, and the
+rule was then its judge. Since ticket 948 (2026-11-13) a fill deletes its folder's warn line
+instead, and the stale check in `pnpm lint` makes it do so. Slices 4 to 7 share no file and can run
+side by side.
 
 - **Cost:** about 870 lines of tooling, 650 of them copied, and about 4,500 lines of comments in
   all, of which about 2,700 are in the two open pull requests. **How sure:** 75%. The doubt: how

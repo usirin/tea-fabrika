@@ -447,10 +447,37 @@ describe("law 8: on Effect 4.1.2's own source, with since required", () => {
   });
 });
 
-describe("law 9: the real config turns the rule on for the listed folders' public files only", async () => {
+// Ticket 948: the rule is on for every `next/packages/*/src/**` folder. A clean folder blocks and a
+// folder with fires left advises through its warn line (advice.test.ts L2 reads the severity); here
+// both fire, and no warn line turns the rule on for a file that is not public.
+describe("law 9: the real config turns the rule on for every next/packages folder's public files only", async () => {
   const SRC = "next/packages/libfabrika/src";
   const body = "export const planted = 1;\n";
-  const on = [`${SRC}/ci/Planted.ts`, `${SRC}/codehost/Planted.ts`];
+  // Each jsdocs warn line of the config today, read from oxlint's own `--print-config`, so a fill
+  // that deletes its line changes nothing here. A `/**` line covers its subfolders too.
+  const printed = spawnSync(
+    join(ROOT, "node_modules", ".bin", "oxlint"),
+    [`--config=${join(ROOT, ".oxlintrc.json")}`, "--print-config"],
+    { cwd: ROOT, encoding: "utf8", timeout: 60_000 },
+  );
+  const config = JSON.parse(printed.stdout) as {
+    readonly overrides: ReadonlyArray<{ readonly files: string[]; readonly rules: Record<string, unknown> }>;
+  };
+  const warn = config.overrides
+    .filter(({ rules }) => {
+      const setting = rules["fabrika/jsdocs"];
+      return (Array.isArray(setting) ? setting[0] : setting) === "warn";
+    })
+    .flatMap(({ files }) => files)
+    .map((glob) => ({ folder: glob.replace(/\/\*\*?$/, ""), deep: glob.endsWith("/**") }));
+  const on = [
+    `${SRC}/ci/Planted.ts`,
+    `${SRC}/codehost/Planted.ts`,
+    // A folder 1186's list left out, at zero now; each folder that still advises; and a new package.
+    `${SRC}/jobs/Planted.ts`,
+    ...warn.map(({ folder }) => `${folder}/Planted.ts`),
+    "next/packages/planted/src/Planted.ts",
+  ];
   const off = [
     // Five of the six kinds that are not public. The sixth, `fixtures/`, is also in the config's
     // `ignorePatterns`, which oxlint obeys even with `--no-ignore`, so no file there is ever linted.
@@ -461,20 +488,26 @@ describe("law 9: the real config turns the rule on for the listed folders' publi
     `${SRC}/ci/Planted.test-support.ts`,
     `${SRC}/codehost/PlantedTest.ts`,
     `${SRC}/codehost/Planted.d.ts`,
-    // A folder not yet on the list, and an app (case 4).
-    `${SRC}/jobs/Planted.ts`,
+    // The same kinds in each folder with a warn line: the off override comes after it.
+    ...warn.flatMap(({ folder, deep }) => [
+      ...(deep ? [`${folder}/internal/planted.ts`] : []),
+      `${folder}/Planted.test.ts`,
+      `${folder}/PlantedTest.ts`,
+      `${folder}/Planted.d.ts`,
+    ]),
+    // An app (case 4).
     "next/apps/fabrika/src/Planted.ts",
   ];
   const linted = await plant(Object.fromEntries([...on, ...off].map((path) => [path, body])));
 
-  // scenario: one real lint run over one planted file per kind, since only the real config holds the list.
-  it("fires in ci/ and codehost/, at the module block and the export", () => {
+  // scenario: one real lint run over one planted file per kind, since only the real config holds the scope.
+  it("fires in every next/packages folder, at the module block and the export", () => {
     for (const path of on) {
       expect(linted("fabrika(jsdocs)", path), path).toEqual([1, 1]);
     }
   });
 
-  it("is off for internal/, tests, test support, shared suites, fixtures, declaration files, unlisted folders and apps", () => {
+  it("is off for internal/, tests, test support, shared suites, fixtures, declaration files and apps, in each warn folder too", () => {
     for (const path of off) {
       expect(linted("fabrika(jsdocs)", path), path).toEqual([]);
     }

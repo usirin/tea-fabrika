@@ -33,6 +33,18 @@ Count on 2026-11-13, ticket 930, on `origin/main` at `7ae7cea0f` (the same as `5
 
 The per-folder counts are in the pull request for ticket 930, which made them block. A hand read of every fire in a folder with three or fewer found seven type laws, tests whose `@ts-expect-error` or `expectTypeOf` lines are the check, which `law-shape` cannot read as a property or an example: four take a disable line with that reason (`access/ClientManager.test.ts`, two in `settings/Setting.test.ts`, `checklist/src/program.laws.test.ts`), which brings three folders to zero, and three (`counter/src/window.types.test.ts` twice, `node/ErrorCause.types.test.ts`) wait for the fills that clear their folders. Whether a type law should get its own label is the owner's call.
 
+The docs rule, `jsdocs`, works the same way since ticket 948. It is `"error"` for `next/packages/*/src/**`, so a new folder or package blocks from its first file. Its warn override comes right after that block, and 1186's "off" override for files that are not public (`internal/`, tests, test support, shared suites, fixtures, declaration files) comes after both and stays last for `jsdocs`. So a warn line never turns the rule on for a test file. Count on 2026-11-13, ticket 948, at `cf03efb9f`: 316 fires, all in 9 folders that advise, and 0 disable lines.
+
+| Folder | Fires | Folder | Fires |
+|---|---|---|---|
+| libfabrika `src/*` | 95 | libfabrika `telemetry` | 1 |
+| libfabrika `cloudflare` | 93 | libfabrika `transport` | 28 |
+| libfabrika `coordination` | 73 | tuval `src/*` | 4 |
+| libfabrika `node` | 3 | tuval `browser` | 11 |
+| | | tuval `window` | 8 |
+
+The other 14 libfabrika folders block: `access`, `ci`, `codehost`, `desktop`, `gateway`, `jobs`, `ledger`, `packs`, `presence`, `processes`, `repositories`, `runtime`, `schedules` and `settings`. The 4 fires in `node` and `telemetry` were read: each is an export with no block or a block with no `@stability` and `@category`, not a false alarm.
+
 ## Isolate boundary
 
 | Rule | Checks | Cannot see |
@@ -343,7 +355,7 @@ Ticket 913, slice B2.1 of [Plan B](../docs/plan/effect-rules-big.md#b2-the-docs-
 
 Which tools were looked at, and why none could hold the shape here, is the draft plan's table (`docs/plan/ticket-900-docs-lint.md` on the branch of [pull request 1131](https://github.com/kamp-us/tea-fabrika/pull/1131)): Effect's checker (private, needs TypeScript's JS API below 7, asks `@since`), oxlint's `jsdoc` rules (no rule that asks for a block), `eslint-plugin-jsdoc` (2,770 false alarms on Effect's own source), and TypeDoc and API Extractor (a block's presence only).
 
-**On for the folders at zero, off for what is not public.** One `.oxlintrc.json` block turns it on at `error` for `ci/` and `codehost/` of libfabrika; each fill adds its folder in its own pull request, and the list ends as `next/packages/*/src/**` once the barrels become namespace re-exports (B2.8). A second block turns it off for `internal/`, tests, test support, shared suites (`*Test.ts`), fixtures and declaration files. A folder not yet listed has no ignore: the rule has not reached it ([0168](../.decisions/0168-old-lint-breaks-are-fixed.md)).
+**Blocks where clean, advises where not, off for what is not public.** One `.oxlintrc.json` block turns it on at `error` for `next/packages/*/src/**` (ticket 948, after [0523](../.decisions/0523-advice-rules-block-where-clean.md)). The next block sets it to `warn` for each folder that still has fires, listed in [Where a rule still advises](#where-a-rule-still-advises); a fill deletes its folder's line, and a whole `pnpm lint` fails until it does. A third block turns it off for `internal/`, tests, test support, shared suites (`*Test.ts`), fixtures and declaration files. That off block stays last, after the warn block, so a warn line never turns the rule on for a file that is not public. No list holds a fire back ([0168](../.decisions/0168-old-lint-breaks-are-fixed.md)): a warn folder's fires print as advice until its fill.
 
 Count on 2026-11-14, on main at `c0aaf4a24`: `ci` 9 of 9 exports pass and `codehost` 12 of 12, with both module blocks, so 0 fires, as the draft's prototype found. With every block stripped from the two files, it fired 23 times: the 21 exports and the 2 files. On Effect 4.1.2's own source, 432 files outside `internal/`, with `since` set to `required`, it fires 10 times: the 6 exports of `StandardSchema.ts`, the one file Effect's config leaves out, and the 4 files whose only block above their first statement is that statement's own, as Effect's checker reads it (`encoding/Ini.ts`, `encoding/Yaml.ts`, `http/HttpStatus.ts`, `index.ts`). So 0 false alarms against Effect's own verdict.
 

@@ -1,12 +1,14 @@
-// Where the five old advice rules still advise (0523, 0168). Each is "error" in its base scope, so it
-// blocks in every folder at zero. A dirty folder's override, placed last in `.oxlintrc.json`, sets it
-// to "warn", and only a fire oxlint grades a warning there is advice. A warn line goes the moment its
-// folder reaches zero: `stale` names it, and a whole `pnpm lint` run fails until it is deleted.
+// Where the five old advice rules and the docs rule still advise (0523, 0168). Each is "error" in its
+// base scope, so it blocks in every folder at zero. A dirty folder's override in `.oxlintrc.json`
+// sets it to "warn", and only a fire oxlint grades a warning there is advice. A warn line goes the
+// moment its folder reaches zero: `stale` names it, and a whole `pnpm lint` run fails until it is
+// deleted.
 import { matchesGlob } from "node:path";
 
-/** The five, as oxlint prints their codes. */
+/** The six, as oxlint prints their codes: the five old advice rules and the docs rule (ticket 948). */
 const ADVICE: ReadonlySet<string> = new Set([
   "eslint(no-restricted-properties)",
+  "fabrika(jsdocs)",
   "fabrika(law-shape)",
   "fabrika(no-effect-promise)",
   "fabrika(no-raw-try-catch)",
@@ -20,6 +22,7 @@ const ADVICE: ReadonlySet<string> = new Set([
 const CODES: ReadonlyMap<string, string> = new Map([
   ["no-restricted-properties", "eslint(no-restricted-properties)"],
   ["eslint/no-restricted-properties", "eslint(no-restricted-properties)"],
+  ["fabrika/jsdocs", "fabrika(jsdocs)"],
   ["fabrika/law-shape", "fabrika(law-shape)"],
   ["fabrika/no-effect-promise", "fabrika(no-effect-promise)"],
   ["fabrika/no-raw-try-catch", "fabrika(no-raw-try-catch)"],
@@ -41,10 +44,10 @@ export interface Fire {
   readonly filename?: string;
 }
 
-/** True only for one of the five, graded "warning" by a dirty folder's override. */
+/** True only for one of the six, graded "warning" by a dirty folder's override. */
 export const advises = (fire: Fire): boolean => ADVICE.has(fire.code ?? "") && fire.severity === "warning";
 
-/** One warn line of the config: one of the five, one folder glob. */
+/** One warn line of the config: one of the six, one folder glob. */
 export interface WarnLine {
   readonly rule: string;
   readonly glob: string;
@@ -59,7 +62,7 @@ const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
 /** A rule's level: the setting itself, or the first item of `[level, ...options]`. */
 const level = (setting: unknown): unknown => (Array.isArray(setting) ? setting[0] : setting);
 
-/** The warn lines for the five, read from `oxlint --print-config`, oxlint's own reading of the config. */
+/** The warn lines for the six, read from `oxlint --print-config`, oxlint's own reading of the config. */
 export const warnLines = (printed: unknown): ReadonlyArray<WarnLine> => {
   const overrides = isRecord(printed) && Array.isArray(printed.overrides) ? printed.overrides : [];
   return overrides.flatMap((override: unknown) => {
