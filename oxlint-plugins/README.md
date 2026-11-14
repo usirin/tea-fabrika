@@ -26,7 +26,7 @@ Count on 2026-11-13, ticket 930, on `origin/main` at `7ae7cea0f` (the same as `5
 | Rule | Fires | Folders that advise | Disable lines |
 |---|---|---|---|
 | `no-effect-promise` | 332 | 17 | 0 |
-| `no-raw-try-catch` | 36 | 8 | 0 |
+| `no-raw-try-catch` | 36, 29 after the 7 in `.agents/skills/lead/scripts/` were fixed | 7 | 0 |
 | `no-restricted-properties` (`JSON.parse`) | 103 | 14 | 0 |
 | `law-shape` | 323, 319 after the disable lines | 14 | 4 |
 | `prefer-schema-arbitrary` | 21 | 8 | 0 |
