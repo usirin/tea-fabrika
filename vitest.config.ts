@@ -51,6 +51,7 @@ export const testConfig = {
     exclude: [
       ...configDefaults.exclude,
       ".agents/skills/*/scripts/**/fixtures/**",
+      // It starts Chromium, so it runs with the end-to-end files, under vitest.e2e.config.ts.
       "next/packages/tuval/src/browser/key.laws.test.ts",
       "next/**/dist/**",
     ],
