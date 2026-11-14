@@ -151,8 +151,10 @@ const place = (location: string): string => {
 };
 
 /** Where a location may start: an eval origin, a scheme (`file:`, `http:`, `node:`, a drive such
- *  as `C:`), or a folder separator. */
-const START = /^(?:eval at |[a-z][a-z\d+.-]*:|[/\\])/is;
+ *  as `C:`), a folder separator, or a relative path: a run with no space and no parenthesis, then a
+ *  separator, as in `src/`, `./`, `../`, `~/` and `.\`. A name's own `(definition)`, `(<anonymous>)`
+ *  or `(index 3)` holds no separator before its ")", so it never starts one. */
+const START = /^(?:eval at |[a-z][a-z\d+.-]*:|[^\s()]*[/\\])/is;
 
 /** Where the location group opens in `body`: the leftmost " (" whose rest starts a location, else
  *  the last " (", or -1 if there is none. Parentheses are not counted, since a folder may hold one
