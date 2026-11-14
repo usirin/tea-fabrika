@@ -356,7 +356,7 @@ RunnerLive.layer(initial, options).pipe(
   by the rule's replay on 2026-11-14: 26 static members, 19 layers on 15 classes and 7
   `static make`, in 8 modules (top 1, `access` 1, `gateway` 1, `presence` 1, `processes` 3,
   `runtime` 7, `telemetry` 6, `cloudflare` 6). About 40 files and 600 lines, mostly moved.
-- **Today's example.** `Runner.ts` breaks it at `:335`, `:345`, `:364`, `:368` and `:1343` (read
+- **Today's example.** `Runner.ts` breaks it at `:335`, `:345`, `:364`, `:369` and `:1343` (read
   2026-11-14). It follows it by listing its requirements in the layer's type (`:338-342`).
 
 ### E6: a public export has a doc, and a comment says why

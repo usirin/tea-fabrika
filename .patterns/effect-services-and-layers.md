@@ -156,7 +156,7 @@ code follows this doc now.
 `Effect.provideContext` (ticket 442).
 
 A layer still provides inside its own body in `next/packages/libfabrika/src/runtime/Runner.ts:364`
-and `:368`: `Replies` and `Watchers` are built from `RepliesSql.layer(...)` and
+and `:369`: `Replies` and `Watchers` are built from `RepliesSql.layer(...)` and
 `WatchersSql.layer(...)` with `Effect.provide` in the body, so they are missing from the layer's
 requirements (`:338-342`). The same file finds `SessionManager` at run time with
 `Effect.serviceOption` (`:372`), then `Effect.die` (`:1338`) or `Option.getOrThrow` (`:1343`) when a
