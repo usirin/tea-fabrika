@@ -61,15 +61,13 @@ const forms = (secret: string): ReadonlyArray<string> => [
   secret.slice(0, 14),
 ];
 
-/** Fails when any output holds any form of any secret. */
+/** Fails when any output holds any form of any secret, and names each output that does. It scans
+ *  first and asserts once: one `expect` for each output and form took more than half of a walk
+ *  that looks after every move. */
 export const unleaked = (outputs: ReadonlyArray<string>, secrets: ReadonlyArray<string>) => {
-  for (const secret of secrets) {
-    for (const form of forms(secret)) {
-      for (const output of outputs) {
-        expect(output.includes(form), `input text leaked: ${output}`).toBe(false);
-      }
-    }
-  }
+  const leaks = secrets.flatMap(forms);
+  const leaked = outputs.filter((output) => leaks.some((form) => output.includes(form)));
+  expect(leaked, "input text leaked").toEqual([]);
 };
 
 /** Made-up input text with a quote, a space, a slash and a non-ASCII letter, so its three forms
