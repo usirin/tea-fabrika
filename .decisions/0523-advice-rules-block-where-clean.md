@@ -109,8 +109,9 @@ a reason (owner, 2026-11-13).**
 
 ## Amendments
 
-- 2026-11-13: the docs rule takes the five's shape, as the owner ruled for it when he chose
-  folder-by-folder blocking. `fabrika/jsdocs` is `"error"` for `next/packages/*/src/**`, so a new folder blocks from its first
-  file. A folder that is not at zero advises through one warn line until its fill deletes it, in
-  place of staying off. That replaces the docs rule bullet's "stays off". Tracker ticket 948 built
-  it in https://github.com/kamp-us/tea-fabrika/pull/1209.
+- 2026-11-13: the lead's reading, signed in the slice 2 plan. `fabrika/jsdocs` is `"error"` for
+  `next/packages/*/src/**`, so a new folder blocks from its first file. A dirty folder advises
+  through one warn line until its fill deletes it, in place of staying off. The set of folders
+  that pass with a missing doc block does not grow, so 0524's rule that no list grows holds. The
+  owner did not rule on this detail. Tracker ticket 948 built it in
+  https://github.com/kamp-us/tea-fabrika/pull/1209.
