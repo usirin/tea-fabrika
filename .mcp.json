@@ -1,0 +1,6 @@
+{
+  "mcpServers": {
+    "cfdocs": { "type": "http", "url": "https://docs.mcp.cloudflare.com/mcp" },
+    "mslearn": { "type": "http", "url": "https://learn.microsoft.com/api/mcp" }
+  }
+}
