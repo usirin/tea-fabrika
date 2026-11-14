@@ -1,4 +1,4 @@
-// The flow that lands a docs-only decision pull request (AGENTS.md: merged on
+// The flow that lands a docs-only decision pull request (AGENTS.md: added to the merge queue on
 // green CI with a clean leak grep, no plan, tests, review or field rows). Today's lead tooling
 // (0064). The lead writes a three-line flow file per decision and runs it:
 //
@@ -36,5 +36,5 @@ export const landDecision = (d: Decision): Flow.Flow =>
     Step.act("bot-push", { dir: d.dir, branch: d.branch }),
     Step.act("open-pr", { dir: d.dir, branch: d.branch, title: d.title, body: d.body }),
     Step.listen("ci", { dir: d.dir, branch: d.branch }),
-    Step.act("catchup", { dir: d.dir, branch: d.branch, ticket: d.ticket }, { lead: true }),
+    Step.act("queue", { dir: d.dir, branch: d.branch }, { lead: true }),
   ]);

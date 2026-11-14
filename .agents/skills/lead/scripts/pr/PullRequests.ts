@@ -1,5 +1,6 @@
 // PullRequests: what the lead tooling asks GitHub about pull requests, and the few writes it makes
-// (0134: a draft at a branch's first commit, marked ready when its steps passed). This file is the
+// (0134: a draft at a branch's first commit, marked ready when its steps passed; 0162: one pinned
+// squash that adds it to GitHub's merge queue). This file is the
 // contract only (0095): `PullRequestsGh.layer` asks GitHub through `gh`, `PullRequestsTest.layer`
 // answers from a list in memory. Today's lead tooling, run on our own laptop; it is not product.
 import { Context, Schema } from "effect";
@@ -21,6 +22,18 @@ export const PullRequest = Schema.Struct({
 });
 export type PullRequest = typeof PullRequest.Type;
 
+/** One pull request read alone, with the words a squash puts on main and where it merged. */
+export const Detail = Schema.Struct({
+  ...PullRequest.fields,
+  /** The branch it merges into. */
+  base: Schema.String,
+  title: Schema.String,
+  body: Schema.String,
+  /** The commit its base holds for it once merged; `null` until then. */
+  mergeCommit: Schema.NullOr(Schema.String),
+});
+export type Detail = typeof Detail.Type;
+
 /** What a new or edited pull request says: its title and its description. */
 export type Text = { readonly title: string; readonly body: string };
 
@@ -37,5 +50,12 @@ export class PullRequests extends Context.Service<
     readonly edit: (number: number, text: Text) => Effect.Effect<void, PullRequestsError>;
     /** Marks draft pull request `number` ready for review. */
     readonly ready: (number: number) => Effect.Effect<void, PullRequestsError>;
+    /** Pull request `number` as GitHub has it now, in any state. */
+    readonly view: (number: number) => Effect.Effect<Detail, PullRequestsError>;
+    /**
+     * Asks GitHub to squash-merge pull request `number`, pinned to the head `oid`. On a branch with
+     * a merge queue this adds it to the queue: GitHub tests it on newest main and merges it later.
+     */
+    readonly enqueue: (number: number, oid: string) => Effect.Effect<void, PullRequestsError>;
   }
 >()("lead/pr/PullRequests") {}
