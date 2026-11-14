@@ -1,3 +1,8 @@
+---
+state: "decided, names open; 2026-10-25: checks move to their own `Ci` service"
+summary: "Two services: `Ledger` for the record, `CodeHost` for pull requests, checks and the queue. GitHub is the first implementation of each."
+---
+
 # The ledger sits behind a service, and code hosting behind another
 
 Decided 2026-10-11. Both names are working names.

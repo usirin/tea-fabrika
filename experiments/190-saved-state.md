@@ -1,3 +1,8 @@
+---
+date: "2026-11-01"
+summary: "Reading, plus one probe. The makers record what code cannot work out again and replay the rest. `seen` is half decided already as A3's `saw`, which is the view's counter and on window Msgs only; one `seen` on every entry, decided 2026-11-01 at 85%. Today's lane passes the sync test: 300 lists at seed 190, 2,783 stops, 0 breaks in 88 ms; a planted field the schema drops broke 300 of 300. A version on saved state clashed with a decided note; the owner picked branch A, a number and a chain of named upgrades, at 60%. All six principles and the smaller calls decided 2026-11-01, each with its lean. No model, $0."
+---
+
 # Saved state, replay and what a writer saw: what do the makers do, and what holds for us?
 
 Read 2026-11-01, against `main` at `7896ef38` and `next/` at PR 223's head `7c1d0730`. Mostly

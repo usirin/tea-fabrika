@@ -1,3 +1,8 @@
+---
+date: "2026-10-22"
+summary: "Not fully. 132 planted mistakes our checkers catch (one machine and world, with the real breaks of 90, 91 and 115), each walked instead by a property test on the same real reducer, laws and world: random choices among the world's own moves, drawn and shrunk by Effect 4's own `Arbitrary` (fast-check not needed), the laws checked after every step, \"every lane ends\" checked as a dead state or a fair loop on the walk. Ours caught 132; the property test caught 127 on all 5 seeds within 1 s and 130 within 10 s. Missed: `deviationExcuses` (an `agree` law across runs, which one walk cannot see) and `forgetsTheLowest` (a narrow 14-step path through four rounds; swarm walks caught it on 2 of 5 seeds at 10 s). Slow: `stallOffByOne` (1 to 5.6 s) and `waitsForEver` (5 to 14 s). Every world plant caught on every seed, the safety ones (up to 28 steps) within 1 s. 59 shrank to our shortest run exactly, none shorter. Deep runs with no plants, up to 250 steps on 21 machines and 1,000 in 8 worlds: nothing new. Lines: ours 1,004, harness 325 (reusing every world and law). Recommendation as written: keep `explore.ts`, keep the world search for now, add property walks beside both. Replaced the same day after a review, since every plant was kept because our checker caught it: property tests are the default for new laws, our checkers stay but get nothing new until mutation testing shows a bug only they catch. $0, about 30 minutes. Confidence 75%."
+---
+
 # 118. Can property tests on the real code replace our checkers?
 
 The question: we wrote two model checkers of our own. `laws/explore.ts` (431

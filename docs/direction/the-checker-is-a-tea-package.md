@@ -1,3 +1,8 @@
+---
+state: "dropped 2026-10-23, for now: tea already has `@demlik/tea/pbt`; experiment 120 tests schema-made inputs; demlik#734 closed"
+summary: "The checker that walks a tea machine through many orders of messages becomes its own package in demlik, beside tea: laws, worlds and random walks, no every-order search. Each stage's laws and world stay in the pipeline; tests of a running host stay with the host."
+---
+
 # The checker is a tea package
 
 **Dropped 2026-10-23, for now.** No package. With no every-order search, we

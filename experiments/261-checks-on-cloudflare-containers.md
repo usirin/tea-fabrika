@@ -1,3 +1,9 @@
+---
+date: "2026-11-11"
+scripts: "none; reading only"
+summary: "Reading, not a measurement; `next/`'s `Ci` service and today's `check.yaml` jobs. Yes for 14 of 16 jobs with an image change; no for `e2e` (macOS). A job is a `standard-4` box (4 vCPU, 12 GiB) a Durable Object starts through Alchemy's Effect `exec`. At Cloudflare's list price (2026-10-05) a full run of about 4,900 job-seconds is about $0.39 to $0.55, so about $580 to $1,750 a month for one run per merge and about $3,400 if every pull request run moved; GitHub Actions is $0 for a public repo. GitHub Free runs 20 jobs at once; jobs waited up to 256 s to start in 8 runs. Lean, 70%: stay on GitHub, one $1 trial run. The owner chose the free route without the trial (0112). No box ran: speeds and dollars are list price times GitHub's seconds at a guessed 60% CPU share. Agent time only, $0."
+---
+
 # 261. Can our CI checks run on Cloudflare Containers instead of GitHub Actions?
 
 Read on 2026-11-11. **This is reading, not a measurement.** Nothing was deployed, no account was

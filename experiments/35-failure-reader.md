@@ -1,3 +1,9 @@
+---
+date: "2026-10-05"
+scripts: "none"
+summary: "On the 14 saved failures every builder mistake went back (6 of 6), 5 of 8 setup and test-file failures parked, and 3 came back unsure."
+---
+
 # 35. The lane reads a failed run before sending it back
 
 Built from experiment 34. When the tests fail, in the builder's folder or on a

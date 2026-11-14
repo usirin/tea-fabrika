@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-31, 70% sure"
+summary: "In the new version, \"peer\" is gone, and so is \"node\" for a machine. Hands, a window and an agent dial the brain. `client` means any of them, only when talking about the door's protocol. A `host` is a place hands can run: a Mac, a VM or a browser profile. What it can do is its capabilities, `has` on the wire. Hands and window are jobs, not places: hands take a job with a lease, windows mirror one view, and one tab may do both. The names are for reading; `has` is what keeps a job away from a tab. A tab that runs jobs is proposed, not decided."
+---
+
 # Brain, hands, window, agent
 
 **Decided 2026-10-31.** This note is about the new version: `next/` and

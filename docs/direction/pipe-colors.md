@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-01"
+summary: "Today's version, not built yet. A tile's title fills with step 2 of its color at rest and step 3 when focused, gray for a plain tile, with a letter as the second cue. The six are sky, pink, teal, violet, lime and plum, all clear of the state colors. A seventh pipe repeats a color and keeps its own letter."
+---
+
 # A pipe is marked by a title wash, one of six colors, and a letter
 
 Decided 2026-11-01 by the owner, not built yet. This is about today's version. It replaces the faint tint described in

@@ -1,3 +1,8 @@
+---
+date: "2026-10-10"
+summary: "A redesign. On run 2's diff the published-API check flagged 3 changes, allowed and listed 1, and missed the `ctx: undefined` widening."
+---
+
 # 44. The build loop on the draft-and-check child, and a published-API check
 
 Not an experiment, a redesign, with one offline measurement. Every step is

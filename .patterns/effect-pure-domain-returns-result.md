@@ -1,3 +1,8 @@
+---
+where: "next/ domain code"
+when: "Writing a rule, a fold or a tea `update` that can refuse"
+---
+
 # Pure domain code returns a Result; the Effect edge turns it into a failure
 
 ```mermaid

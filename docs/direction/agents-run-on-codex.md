@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-27; default model changed, recorded 2026-11-01; drivers and runners, 2026-11-08"
+summary: "Today's version: plan, test writer, build and review run through Codex on `gpt-6-astra`, effort high, the default in the code; opus stays for the main session a person talks to. Triage stays on opus until experiment 159 says the Codex model answers as well. Hand-run steps (owner, 2026-11-08): Codex runs step work, a Claude agent runs a step that needs Electron or a socket, and one Claude driver per ticket starts one agent per step and merges only after all five steps ran, review merge-ready, CI green and a clean leak grep. The doubt: how many Codex jobs one person can run at once."
+---
+
 # Stage agents run on GPT sol through Codex
 
 Decided 2026-10-27 by the owner. It replaces

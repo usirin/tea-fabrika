@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-22: one parent, stages as children; today's lane is an example, not the shape; open questions open"
+summary: "A new parent machine holds the pipeline. Stages are swapped from agent to machine one at a time."
+---
+
 # One parent, stages as slots
 
 Decided 2026-10-22: one parent, with the stages as its children. Proposed

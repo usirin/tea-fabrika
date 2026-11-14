@@ -1,3 +1,9 @@
+---
+date: "2026-10-17"
+scripts: "`src/program/program.ts`"
+summary: "Yes. The run handle keeps nothing a program sent: a `listen` hears from then on, and listeners given to `start` (typed from the outputs) hear from `main`'s first instant. Anything a late viewer needs lives in a machine's state. The starter alone can close an input, like stdin's end: `start` hands back `close` beside the run, and the run itself has no `close`, in its type or on the object. A `main` that reads the input to its end finishes what it holds and the run ends `ended`; a tell after the close answers `closed`. `pipe(from, output, to, input)` starts `from` already wired, tells `to` each value, fails `from` on any word but `queued`, and closes `to`'s input when `from` ends. A stand-in review program piped into the real ship program on fake services: five pull requests through, outcomes in order, and ship finished its last one and ended on its own when review did, three runs out of three. 10,000 values sent leave none alive. `launch.ts` stopped counting answers, and on experiment 63's 10 real pull requests, read only, old and new `run.ts` printed the same bytes. Not built: back pressure, two writers on one input, `stop` for the starter only, and a closed mark that survives a restart."
+---
+
 # 64. Outputs are events: no replay, listeners at start, closing an input, and `pipe`
 
 ```ts

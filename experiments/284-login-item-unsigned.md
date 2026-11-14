@@ -1,3 +1,8 @@
+---
+date: "2026-11-13"
+summary: "`next/`; $0. Yes, on GitHub's `macos-15` runner (macOS 15.8.2, arm64, Electron 45.2.1). `setLoginItemSettings({ openAtLogin: true })` took the status to `enabled` for the bare Electron binary, for a copied bundle not signed again, and for an ad-hoc signed bundle; a bundle with its signature removed stayed `not-found`, and the call did not throw. macOS files the item under the signature's identifier, so only the bundle signed again got its own record. It cannot say whether the app opens at the next login: a runner never logs in again."
+---
+
 # 284. Can a build with no real code signature register itself as a macOS login item?
 
 Run on 2026-11-13 (Pacific), on GitHub's hosted `macos-15` runner: macOS 15.8.2 (build 24H232),

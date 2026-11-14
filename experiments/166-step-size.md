@@ -1,3 +1,8 @@
+---
+date: "2026-10-28"
+summary: "A JSON Patch of the step before, and a whole state once the patches since the last one would outweigh it (Mercurial's revlog rule), at most 100 in a row. On the Miniflare twin through the door: a 100 KB tracker-shaped state keeps 200 steps in 235 KB (20 MB whole every step); a state that rewrites a fifth of itself each step never needs more than 38 KB read to rebuild a step, where a whole state every 100 steps needed 463 KB. Tally's 11-byte state is always kept whole: its patch would be bigger. The record's bytes equal the rule run in the script, to the byte. `seq --to 3 | tally` makes 55 calls to its record, about 8 per Msg (5 per save, 3 per step), 0.25 to 0.5 ms each here; across a network the round trips are the cost to cut next. Reading the tracker record answers 20 MB. Two of four workloads are made up. $0. Confidence 85%."
+---
+
 # 166: How a job's record keeps a machine's steps
 
 **Answer: as a JSON Patch of the step before, with a whole state once the

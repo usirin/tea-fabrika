@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-25: the goal, and no central service; access starts from an invitation; the first version rides out a wifi blip, long offline waits; one Worker per project, its name in the project's fabrika.toml, kept safe by Alchemy's retain and not by a check of our own (2026-10-25); a lease's fence stays good until someone newer claims, Kafka's rule, with the 30 s lease kept (2026-10-25); the rest proposed"
+summary: "Two people share one fabrika, and their agents talk across two machines. No central service: each ledger is one Durable Object, and its members are facts on it. The first version: connect, log in as a GitHub login, invite. Leans: the door stamps every writer; a person proves who they are by signing with an SSH key GitHub publishes; an agent holds a key its person signed and never writes an answer. Each desk stays on its laptop, the tail moves to the WebSocket, agents talk in threads both people can read, in A2A's words over the ledger (not tied to tickets, 2026-11-05), about $1 a month on top of the plan. One object per lane later. The Door is being built."
+---
+
 # The ledger goes to Cloudflare, for two people
 
 *Changed 2026-11-01, for `next/`, from [the tiers](../plan/tiers.md), proposed. This note

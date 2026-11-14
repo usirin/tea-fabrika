@@ -1,3 +1,9 @@
+---
+date: "2026-11-01"
+scripts: "none; reading only"
+summary: "Reading, not a measurement. Saves, lockstep, rollback, hot reload, ECS, game loops, game AI, crash reports, modding and remapping, from engine docs, GDC talks and dev blogs. Games solved our crash recovery the way P4 and P6 do: a checkpoint, a record of what code cannot recompute, and a replay; the comparison breaks because an agent step is neither cheap nor deterministic, so only code is re-run. Most decided notes agree. The hardest challenge: Minecraft, Unreal, Factorio and Erlang write a version into saved state and run a chain of named upgrades, where \"an old host is named, then restarted\" says \"no version number on each machine\" and H3 guesses the old shape. Five ideas ranked: a sync test law for every machine (GGPO, 85%), a version and upgrade chain (70%), `seen` on every ledger entry (75%), steps that declare their reads and writes (65 to 70%), a first-divergence report (Riot, Factorio, 75%). $0."
+---
+
 # What game architectures teach fabrika
 
 Read 2026-11-01, against `main` at `80d4a5b5`. A study by reading only: nothing was built or

@@ -1,3 +1,8 @@
+---
+date: "2026-11-01"
+summary: "Today's version. Hung tests (46%) and static mutants (53%) made PR 267's run slow, and the lane's end-to-end tests about 100 s a mutant. A fast arm (static off, 10 s per test, slow files out) lost no normal kill on 331 real mutants, only static ones (0% to 14% of a set), and cut mutant time by 17% to 95%. One per line missed 27% to 40% of live lines. Decided 2026-11-01: 5 minutes per pull request, lines first, advice only, and incremental reuse between rounds with `force` on the last, in today's version now, a `2` at 600 lines an agent hour (old guess, wrong: 3 to 5). The rest (about 87,000 mutants, about 48 worker hours for a first pass, a guess) goes to a mutation queue in `next/`, Tier 6, that files tickets; today's version gets no daily run. No Tier 1 pull request needs splitting. No model, $0."
+---
+
 # 181: A fast mutation check per pull request, and a mutation queue for the rest
 
 Done 2026-11-01. Today's version: the mutation step in

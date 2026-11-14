@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-07; rule off"
+summary: "`next/`. Every exported function that returns an Effect is `Effect.fn(\"<piece>.<verb>\")`, so each call gets a named span and a stack frame; internal helpers and hot loops use `Effect.fnUntraced`. Effect's `effectFnOpportunity` rule blocks once its false alarms are about 0%; the first count was 11 of 17, so it stays off."
+---
+
 # A function that returns an Effect is written with `Effect.fn`
 
 **Decided 2026-11-07 by the owner.** This is about `next/`. Today's code is not changed.

@@ -1,3 +1,8 @@
+---
+date: "2026-10-04"
+summary: "Triage got all 175 examples right on two harder toys, so there were no natural mistakes to catch."
+---
+
 # 21. Does triage make mistakes of its own?
 
 Experiment 20's wrong examples were planted by hand, on the ticket's own

@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-26; the Claude test is open"
+summary: "Every agent reads `AGENTS.md` and `CLAUDE.md` itself, subfolder files included, as the standard says. The reviewer is also handed main's copy, so a pull request cannot loosen its own rules. Claude moves over after a test of what its project loading brings in."
+---
+
 # Agents read a repository's rules the normal way
 
 Decided 2026-10-26 by the owner.

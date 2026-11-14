@@ -1,3 +1,9 @@
+---
+date: "2026-11-09"
+scripts: "none"
+summary: "`next/`, structure-sweep 0.3.9 and Jev, every verdict checked by hand, $0.012. Three real finds, now tickets 472 to 474: the pre-hello method rule decided twice and differently (`transport/gateway.ts`, `transport/answer.ts`), the execution call-to-reason map written twice, the brain's stopping guard three times. Pairwise verdicts 13 of 20 right, with the two highest scores wrong; anchor mode found none. Features 83 of 91 right. `move plan` would undo the five layers' folders, and `move apply` still strips `.ts` (ts-morph `move`), so it was not run."
+---
+
 # 244. What does structure-sweep find in `next/`?
 
 Run 2026-11-09 on origin/main at `972bfcdd`. **All claims are about `next/`.** The tool is

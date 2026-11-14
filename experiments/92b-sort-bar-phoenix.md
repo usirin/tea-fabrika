@@ -1,3 +1,9 @@
+---
+date: "2026-10-18"
+scripts: "`92b-sort-bar-phoenix.ts`, `lib/sort-bar.ts`, `lib/sort.ts`, `92b-truth.json`, `results/92b-sort-bar-phoenix.json`"
+summary: "No, not as text. 92's bar, unchanged, on 79 closed kamp-us/phoenix tickets: 35 triage closed under the value bar, 38 built by a merged PR, 6 duplicates. The drafted bar closed 0 of 70 \"no\" answers. With the written clauses, 18 of 70 (26%; demlik 8 of 16), but 8 of 76 answers on built tickets were \"no\" (demlik 0 of 132), and 70 of 79 tickets gave the same answer both runs. Unlike 92, only 2 of the 29 missed tickets needed the code: in 18 the filer says nothing failed or nothing changes and sort still called it a real bug or a real wrong doc; 9 sit on a churn-or-wrong-doc line the bar does not draw. Jev agreed with Claude's \"no\" 2 of 18 times, never said \"no\" at or above 0.8, and never said \"no\" to a built ticket. The bar's brief, Jev's questions and the scores moved into `lib/sort-bar.ts`; 88's and 92's tables are byte for byte the same. Confidence 75%. $12.37 Claude, about 5 cents Jev."
+---
+
 # 92b. The value bar on a repo it was not drafted from
 
 The question: experiment 92's bar for what is worth doing was drafted from

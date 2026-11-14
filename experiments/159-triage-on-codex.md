@@ -1,3 +1,9 @@
+---
+date: "2026-10-27"
+scripts: "`159-triage-on-codex.ts`, `lib/triage-135.ts` (135's cases, briefs and scoring, moved out unchanged), `results/159-triage-on-codex.json`"
+summary: "Yes on the \"no\", better than opus, with a stricter hand. 135's 87 tickets, two runs each, `gpt-6.1-sol` at medium effort through our Codex adapter on the ChatGPT plan; only model and harness changed. On the 29 phoenix no's sonnet missed it closed 54 of 58 answers (opus 32, sonnet 6), and all 12 easy no's. \"No\" to built phoenix work 12 of 20 (opus 8): the extra 4 are two agent-filed security audits opus kept (#2563, #8010), closed as \"hardening with no incident\", which fits the bar's words. Demlik: 0 \"no\" to good work, routes as opus, but 6 of 26 false folds on 133's controls (sonnet 1). Same answer both runs 80 of 87. Median 8.3 s a sort (opus 6.9), 17.5k in and 110 out tokens; no tool ran; on the plan, $5.21 for 186 sorts at OpenAI's list price. High effort gave the same 12 sample answers, slower. Lean: move triage to GPT sol after one bar line saying a security gap is not hardening. Confidence 80% on the \"no\", 65% on the move."
+---
+
 # 159. Does GPT sol through Codex triage as well as opus?
 
 The question: stage agents are to run on GPT sol through Codex, with opus kept

@@ -1,3 +1,9 @@
+---
+date: "2026-11-07"
+scripts: "none"
+summary: "About `next/`; reading only, an audit of 32 decisions against the case. 11 hold, 17 strain, 4 break as written. The owner narrowed it the same day: setup may need a Mac, only using fabrika needs only a browser, so row 1 is not a break and row 8 is decided as Tier 1's question 19. The rest was proposed then: a passkey as a person key, the approve row in any inbox, Cloudflare Containers as hands. No model, $0. Every row settled 2026-11-08: rows 9, 22, 16, 17, 27 and the small ones follow from decisions already made (table at the top)."
+---
+
 # 229. Can a few friends run fabrika from browsers and phones alone?
 
 Read 2026-11-07. This is reading, not a measurement: an audit of the repo on main (`e15cc0b1`)

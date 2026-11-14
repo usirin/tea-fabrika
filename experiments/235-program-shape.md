@@ -1,3 +1,9 @@
+---
+date: "2026-11-08"
+scripts: "`235-program-shape.ts`, `235-program-shape/` (three shape files, two libraries, `mistakes.ts`, `tsconfig.json`), `results/235-program-shape.json`"
+summary: "`next/`, reading, not a measurement. The real ticket program written three ways: today's `Program.make` (PR 522), values (Elm ports, Effect `Rpc.make`), and one record per input (`createSlice`, XState `setup`). All three type-check, and the merged `stepper` steps them the same: 8 of 8 steps, ports, fact policies and outputs match. Of the owner's named mistakes, today's shape compiles a plain input writing a person-only fact (the signer refuses it at run time) and a wrong saved version; both new shapes stop them at compile time, and the record shape compiles an input-name typo as a rename. Lean: the values shape, about 65%. Picked by the owner on 2026-11-08, with six changes (`Event`, `personOnly: true`, plain inputs, a write Cmd per event listed in `cmds`, two answers per event accepted, the event knows its stream); the probe shows a plain input's Msg into a person-only event's write fails tsc, cleanly, as do an update-key typo and an event write not in `cmds`. No model, $0."
+---
+
 # 235. Which shape should Program.make take, so a program reads at a glance and the wrong thing does not compile?
 
 **Answer.** Two new shapes beat today's on every property we judged, and both meet the rule "one

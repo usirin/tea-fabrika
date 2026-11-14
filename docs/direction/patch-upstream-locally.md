@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-07"
+summary: "Both versions. When our work needs a change in a package we do not own (tea, Manti, Effect), we `pnpm patch` it, file the upstream issue the same day, and keep building; the bump that takes the release deletes the patch. A patch goes through the pipeline's steps like any change."
+---
+
 # Patch upstream locally, and never wait for a release
 
 **Decided 2026-11-07 (owner).** Both versions. Amended in part by

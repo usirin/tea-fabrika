@@ -1,3 +1,8 @@
+---
+date: "2026-10-04"
+summary: "No. 3 of 9 slugify tests passed the judge before and after. Confidence reached 0.90 to 0.92 only with one claim, an example, and a test that asserts that example."
+---
+
 # 8. Does an example in the criterion fix the caution?
 
 Guess: the judge is unsure when the criterion is abstract, so add a worked

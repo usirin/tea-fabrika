@@ -1,3 +1,9 @@
+---
+date: "2026-11-10"
+scripts: "none"
+summary: "`next/`, spike S10 of ticket 502's plan, ticket 551, on Node and local workerd, no deploy, no model, $0. Yes: the slice (append, read, one transaction) ran on `effect/sql`'s `SqlClient` with `@effect/sql-sqlite-node` and `@effect/sql-sqlite-do` 4.1.2, 38 of 38 ported Node laws and 8 of 8 laws in a real object on each of six routes. No route let a call land inside a turn. But a turn whose body is an Effect inside the platform's Promise transaction hangs under load when the body waits on a timer (1 of 6 turns answered, 5 turns and 5 reads timed out at 8 s), on Effect's driver, with Alchemy's scheduler fix, and on Alchemy's wrapper; a quiet object passes. A `SqlClient` turn on `transactionSync` (a 45-line adapter) runs one append under `Effect.runSync` on both platforms and makes a wait die at once. One turn, median: 76 µs today, 97 on the adapter, 171 on the plan's route, 186 on the shipped driver. For PR 8 keep the step a plain function inside `state.storage.transaction(Effect.sync(step))` (about 80% sure); move `data/` to `effect/sql` later on the synchronous turn (about 65%). The `node:sqlite` edge comment in `data/sqlite.ts` is false on Node. Branch `fabrikalfa/t502-s10-spike`."
+---
+
 # 249. Can the ledger's storage run on Effect's SQL modules and keep its one-turn guarantee?
 
 Run 2026-11-10 on the spike branch of [experiment 248](./248-effect-object-spike.md) (main at

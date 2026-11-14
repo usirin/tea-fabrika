@@ -1,3 +1,9 @@
+---
+date: "2026-10-28"
+scripts: "`167-duplicate-hint.ts` (the labels and paraphrases, written before any call), `results/167-duplicate-hint.json` (titles and scores, no bodies); the code it measures is `packages/pipeline/src/tickets/duplicates.ts` and `jev-live.ts`"
+summary: "Yes, at the floor of 0.7. Every tracker ticket filed again against the tickets open at its filing, plus 24 hand-written paraphrases of open tickets: 1,638 pairs through the shipped filter, question and live Jev Layer. 24 of 25 true pairs got a hint, each ranked first (the one real duplicate, #64 against #6, at 0.78); 1 of 1,613 other pairs did (0.70); 0 of 17 related pairs (parts, sequels). At 0.8 no false alarm, but the real duplicate is missed. The filter kept every true pair's original in its 20. 1,638 calls, 1.17M input and 33K output tokens, $0.05. Doubt: one real duplicate; the paraphrases share words with their originals."
+---
+
 # 167. Does the duplicate hint work on our own tracker?
 
 The question: when a ticket is filed in this repo's tracker, can the shipped

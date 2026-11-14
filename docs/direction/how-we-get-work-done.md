@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-11"
+summary: "Step 1 to 3 of decision 0059's order, before `next/`'s pipeline is designed, redone on the teams where agents do most of the work (0059's ticket 645 amendment); today's version is the evidence. The loop in plain words (decide, shape, do, check, ship, learn), then in fabrika's words, then seven principles: a person's attention is the scarce budget (F1); a ticket with intent, run to one pull request with proof (F2); check in layers and place people by risk (F3); every miss becomes a check the same day, and stale rules leave (F4); the repo is the memory and the top file a map (F5); one writer per change (F6); code holds the edges, the agent the path inside a step (F7). The first draft's W1 to W6 are mapped onto them. Ticket 574 traced through it. From experiment 250."
+---
+
 # How we get work done
 
 **Decided 2026-11-11.** Redone on the teams where agents do most of the work, as 0059's amendment

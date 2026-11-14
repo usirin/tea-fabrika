@@ -1,3 +1,9 @@
+---
+date: "2026-11-08"
+scripts: "none"
+summary: "Today's version, ticket 276; reading plus four designs shot in today's app (84 states, dark), not a measurement. Zed and VS Code show a welcome page with Open Folder and Recent; Linear names the place top left as a switcher. The owner picked A's welcome page plus C's name button and box, with Cmd-O opening the box (the lead had leaned to the system sheet at 65%). $0."
+---
+
 # What should a project window show before and after a project is open?
 
 Read and shot 2026-11-08. **This is reading, not a measurement.** Four designs were built and shot

@@ -1,3 +1,8 @@
+---
+state: "decided, storage open"
+summary: "Every shape is data with a schema. Markdown is made from it for people, and never read back."
+---
+
 # Data first; markdown is a view
 
 Decided 2026-10-11. How the data and its markdown view live together on GitHub

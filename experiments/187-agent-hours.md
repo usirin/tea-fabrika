@@ -1,3 +1,9 @@
+---
+date: "2026-11-01"
+scripts: "`187-agent-hours.ts`, `results/187-agent-hours-prs.json` (the PRs read once from GitHub), `results/187-agent-hours.json`, `results/187-agent-hours-with-285.json`"
+summary: "An agent hour is one agent run's wall clock, summed over every run on the work, failed ones too, never a driver that waits on others. Joined to merged PRs only on a written link (named, dated, or GitHub's closing link): 71 of 250 PRs here and 48 units on demlik. Where every run was logged, one agent hour bought about 600 written lines (11 whole demlik lanes, median 602, middle half 279 to 740) and 707 on PR 267. A builder alone, about 1,500. Every past guess in our docs implied 35 to 160 lines an hour, 4 to 17 times too slow, and Tier 1's 150 has no source. Runs must record the ticket and the PR as two fields. 148 of 219 PRs since logging began have no logged run, so this repo's own rates are an upper bound. $0."
+---
+
 # What is an agent hour, and how many lines does one buy?
 
 Run 2026-11-01. **An agent hour is one hour of one agent run's wall clock, summed over every

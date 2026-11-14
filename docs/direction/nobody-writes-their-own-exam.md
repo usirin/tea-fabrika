@@ -1,3 +1,8 @@
+---
+state: "decided in pieces, see the note"
+summary: "An agent that writes code never changes what it is checked against: laws, criteria, the checker, CI. Changing them is the owner's call, in its own change."
+---
+
 # Nobody writes their own exam
 
 **Decided, in pieces:**

@@ -1,3 +1,7 @@
+---
+summary: "Today's version, and built. Three gray tiles with the app's gaps, the top one lit. No hue, since a color means a pipe. Holds the rules, the values and what small sizes need."
+---
+
 # The app's icon is three tiles that spell F
 
 **Decided by the owner on 2026-11-01. Today's version, and built.** The app's icon is Tile F: three

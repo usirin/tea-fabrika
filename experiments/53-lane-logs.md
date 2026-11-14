@@ -1,3 +1,8 @@
+---
+date: "2026-10-11"
+summary: "Replayed under the operator machine, 831 of 840 single-issue lanes on kamp-us/phoenix reached the end their log shows, and none hit a state with no route. Where a park names its cause the machine would ask a person 96 times in 128, and today's driver had cleared 49 of those itself. 78% of 961 shipper runs end \"merged\" or \"queued\". The first review passes 57% of the time."
+---
+
 # 53. 882 real lanes, read back from their logs
 
 The operator machine has driven three tickets. Today's fabrika has driven

@@ -1,3 +1,9 @@
+---
+date: "2026-11-10"
+scripts: "none"
+summary: "`next/`, ticket 502's spike for decision 0041, run on `@alchemy.run/cloudflare` 2.0.0-beta.84 in local workerd, no deploy, no model, $0. Yes, one object at a time: the stack stays `bundle: false`, and the built file exports Alchemy's bridge class for each Effect object while `Project`, `Process`, `Gateway`, `Control` and `fetch` stay plain. Four changes: `node:` external and Alchemy's runtime flag in our build, each chunk its own file (two files, 3.0 MB against 1.5 MB), a binding named after the class, and Alchemy's stub for callers not ported yet. 124 existing tests pass unchanged, the twin check has 0 findings, and the service and its Node laws did not change. `transactionSync` works through `state.raw`, an alarm fired once and retried after an abort, a hibernated socket kept its attachment and tags. A sibling object cannot be resolved inside a method (`Service not found`); the run first called that a bug and patched it, which was wrong. Corrected 2026-11-10: with no patch, on beta.84 and beta.85, `Sibling.from(Host)` in the Layer's init returned through both objects in 6 of 6 runs, Alchemy's documented way. `RpcCallError` is not in the stub's type. Code on `fabrikalfa/t502-spike`. Not run: a deploy, a type check of the `.from(Host)` shape, the mutation step, the real `Gateway`, `Process` and `Project`"
+---
+
 # 248. Does `RecordPart` run as an Alchemy Effect Durable Object, beside the plain classes?
 
 Run 2026-11-09 and 2026-11-10 on origin/main at `d7484976`. **All claims are about `next/`.** This

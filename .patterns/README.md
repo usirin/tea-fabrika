@@ -29,23 +29,24 @@ Add one only when all of these hold:
 Narrating obvious code, general framework advice, guessed conventions and rules from feel stay out.
 A doc that already covers the shape is extended, never doubled.
 
-## Index
+## Every doc
 
-Once the table passes about a dozen rows, split it into sections by area.
+This folder keeps no table of its docs
+([0522](../.decisions/0522-no-folder-keeps-an-index-table.md)). Each doc opens with a small top
+block above its `# ` heading: `where` is the code it covers, and `when` is the moment to read it.
+Each value is one line, in double quotes. The Mermaid diagram comes right after the heading.
 
-| Pattern | Where | Read when |
-|---|---|---|
-| [effect-errors-keep-their-cause.md](./effect-errors-keep-their-cause.md) | next/ | Writing an error class, a `catch:` or `mapError`, or a handler for a failure |
-| [effect-tests-run-in-it-effect.md](./effect-tests-run-in-it-effect.md) | next/ tests | Writing a test whose body runs an Effect, or a law that depends on time |
-| [effect-services-and-layers.md](./effect-services-and-layers.md) | next/ | Adding a service or its Layer, deciding which file a Layer or adapter goes in, or giving an object class its runtime |
-| [effect-state-and-time.md](./effect-state-and-time.md) | next/ host code | Keeping state that changes between calls, adding a limit, reading the time, or writing a retry or a loop that repeats |
-| [effect-swallowed-failures-leave-a-trace.md](./effect-swallowed-failures-leave-a-trace.md) | next/ | Reaching for `Effect.ignore`, a catch-all, or a finalizer |
-| [durable-objects-sleep.md](./durable-objects-sleep.md) | next/ Durable Objects | Adding work, a loop, a timer, a socket, telemetry or saved state to code that runs in a Durable Object |
-| [doc-comments.md](./doc-comments.md) | next/packages | Adding or changing a public export of a library, or its module file |
-| [effect-reach-for-what-ships.md](./effect-reach-for-what-ships.md) | next/ | About to write a helper, a guard, a parser, a retry, a loop or a wrapper |
-| [effect-long-body-is-a-shelf.md](./effect-long-body-is-a-shelf.md) | next/ | Writing or growing a long Effect body or a layer's `Effect.gen` |
-| [effect-platform-wrapped-once.md](./effect-platform-wrapped-once.md) | next/ platform edges | Calling a Promise, callback or throwing API from a platform or a library |
-| [effect-crypto-through-services.md](./effect-crypto-through-services.md) | next/ | Hashing, signing, an HMAC, random bytes or a random id |
-| [effect-pure-domain-returns-result.md](./effect-pure-domain-returns-result.md) | next/ domain code | Writing a rule, a fold or a tea `update` that can refuse |
-| [effect-differences-say-why.md](./effect-differences-say-why.md) | next/ | Doing something differently from Effect's own module or guide |
-| [settings.md](./settings.md) | next/ settings | Adding a setting, or reading or writing a settings file, a settings snapshot or the settings reference |
+```markdown
+---
+where: "next/ settings"
+when: "Adding a setting, or reading or writing a settings file"
+---
+
+# One settings declaration gives both encodings
+```
+
+The lead's command prints one line per doc as it is on `origin/main`:
+
+```sh
+node .agents/skills/lead/scripts/records.ts list .patterns
+```

@@ -1,3 +1,8 @@
+---
+state: "decided in pieces, see the note"
+summary: "A thing with a proper name in the industry keeps it; an obscure one gets a plain gloss; one word per idea. The naming sweep covers every new package."
+---
+
 # Use the industry's names
 
 **Decided, in pieces:**

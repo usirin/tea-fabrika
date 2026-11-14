@@ -1,3 +1,8 @@
+---
+date: "2026-10-10"
+summary: "kamp-us/demlik#623 parked for an owner's approval. The machine asked on the issue, heard nothing for 10 minutes, and ended parked with nothing held. A second run's recipe saw the approval and shipped it: 45 minutes, $3.51. The person's reply was never read; offline, Jev took it as `resume` at 1.00."
+---
+
 # 52. A lane parked on purpose, and the machine asks a person
 
 Sections 49 and 50 both ended on the same gap: nothing parked, so the machine

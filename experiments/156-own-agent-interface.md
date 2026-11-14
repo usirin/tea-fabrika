@@ -1,3 +1,9 @@
+---
+date: "2026-10-26"
+scripts: "`156-own-agent-interface.ts`, `packages/fabrika/src/agents/agent/` (the interface, the service, the fake, the laws), `claude/adapter.ts`, `codex/adapter.ts`, `acp/adapter.ts`, `results/156-own-agent-interface.json`"
+summary: "Yes, one interface holds four paths. The format-bytes job 5 of 5 right and typed on each: Claude by its SDK (median 47.1 s, $0.08 a run) and through ACP (19.7 s), Codex by `codex exec` (10.7 s) and through ACP (9.8 s). The service adds the typed answer, our session id (resume in a new process on all four), turn tokens (ACP's Codex still gives only the last request), limits and a stop: the command tree was gone in 0.2 to 1.1 s on every row, and the reaper had nothing left to kill. 10 laws as property tests, each with a planted mistake. Claude's dollar cap goes past its number. The Claude speed gap is not explained. A loop bug ran 37 extra Codex runs."
+---
+
 # 156: Our own agent interface, with Claude, Codex and ACP as adapters
 
 **Answer: yes, one interface holds all four paths.** The same format-bytes job

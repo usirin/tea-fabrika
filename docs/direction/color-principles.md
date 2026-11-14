@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-01, the waiting action 2026-11-08"
+summary: "Eight rules for any color on screen: quiet and accessible, one meaning per color (the accent marks your turn, including the one action waiting on you, at most one per view), never color alone, gray and tint on one ladder, Radix steps for their jobs, color replaces and does not add, few colors that may repeat, numbers check and eyes pick."
+---
+
 # Color principles
 
 Decided 2026-11-01 by the owner. Written for today's version, and `next/` reads them as lessons.

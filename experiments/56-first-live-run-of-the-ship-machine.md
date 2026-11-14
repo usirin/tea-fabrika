@@ -1,3 +1,9 @@
+---
+date: "2026-10-11"
+scripts: "none"
+summary: "kamp-us/demlik#561, a docs-only ticket, merged in 19.3 minutes for $1.73 with the ship machine in the ship stage and no shipper agent: one read, the gate's go, one enqueue, a Listen on the queue, $0. Fabrika took the `LANDED` line the driver wrote. A second lane, kamp-us/demlik#622, a code change of 11 files, merged the same way in 28.3 minutes for $3.95. Run twice, on one docs-only and one code pull request, both on the straight path. The second was picked in the hope of a failed review, and its review passed the first time. Each run's own row gave the ship stage 0 minutes, and each log printed nothing while the stage ran, 5.7 and 7.7 minutes."
+---
+
 # 56. The first live runs of the ship machine
 
 On every real lane so far the ship stage was an agent: today's fabrika's

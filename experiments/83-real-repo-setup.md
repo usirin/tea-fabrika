@@ -1,3 +1,9 @@
+---
+date: "2026-10-18"
+scripts: "`wip/src/tsh/config.ts`, `wip/src/tsh/fabrika.ts`, `wip/src/tsh/fabrika-main.ts`, `packages/tea-program/src/shape.ts`, `packages/tea-program/src/program.ts`, `packages/tsh/src/check.ts`, `packages/tsh/src/builtins.ts`, `wip/src/stages/ship/machine.ts`, `wip/src/code-host-github-writes.ts`, `wip/src/stages/build/`"
+summary: "Yes, scripted. The sandbox lock is gone: build, review, ship and operate take any GitHub repository's url, and each repository gets its own clone under `work`. One `tsh.toml` (smol-toml, read through Effect) replaces the `TSH_*` settings; a missing file is every default, an unknown key stops tsh with exit 2. A flag can have a default (tea-program), tsh's check stops asking for it and `--describe` shows it, so `operate ticket=<url>` checks with no flag and starts with the file's values. With no merge queue the enqueue answers `no_queue` and ship merges straight in (`ship_merge`, `expectedHeadOid`, first allowed method); a broken merge is `stuck:merge_failed`. Experiment 69's `stuck:enqueue_failed` was this. Left: `own` must be set or ship skips everything as `not_ours`, `rubrics` has no useful default, the base branch is still `main`, and the merge write has never met GitHub. $0. Confidence 75%."
+---
+
 # 83. Real repo setup: one tsh.toml, and operate ticket=<url> is a whole line
 
 Code and tests only: no agent, no Jev, no write to GitHub, $0.

@@ -1,3 +1,8 @@
+---
+date: "2026-10-17"
+summary: "Yes. `defineProgram` needs a `left` step for each machine: a function run for each kept run before `main` (Elm's `init` before `update`), or `{by}` naming who runs it again. Left out, it does not compile, and it throws. Storage already listed kept runs (`handle.left`), so nothing new there. `keep.run` never sends a first Msg to a finished run, and dies on two runs of one id at once. build and operate keep what they are told on a small kept queue, so a closed input no longer strands a ticket. ship and review moved their hand-written loops into `left`. tsh says why a job ended. A tsh test kills tsh twice over three tickets: each built once, the cut builders resumed on their conversation; all three new tests fail on the old build. Live on sandbox ticket 13: killed mid build, attached bare, pull 14 opened, `runs 2`; $1.16 across three tickets. A second kill in one round ends the build `stuck` under the misleading reason `over_budget`. `@demlik/tea` unchanged."
+---
+
 # 74. A program finds its own unfinished kept runs, every start
 
 ```sh

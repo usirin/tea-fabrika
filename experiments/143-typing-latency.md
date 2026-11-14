@@ -1,3 +1,9 @@
+---
+date: "2026-10-25"
+scripts: "`143-typing-latency.ts`, `143-typing-latency/` (`probes-main.patch`, `probes-pr90.patch`, `fix1` to `fix5`, `floor/`), `results/143-typing-latency.json`"
+summary: "44 ms at 60 Hz and 27 ms at 120 Hz in a fresh tile (p50; p95 63 and 36), from Chromium's key event to its \"on screen\" time, which on macOS is its own estimate. Copies of main and pull request 90 with probes patched in, 250 CDP keys a run, Chromium's trace for one clock and probes inside each process for the hops. The round trip to the line editor is 0.4 ms (141's \"mostly the round trip\" was wrong); pull request 90's host adds about 0.5 ms. About 23 ms (14 ms) is Chromium and macOS: an empty Electron page takes 26 ms (15 ms). Our big cost is the draw, 8.4 ms a key: the editor's redraw clears every row under the prompt (CSI J) and ghostty-web draws each one. Redrawing only the typed row cuts 44 to 32 ms (27 to 17 ms). Chromium's `DeferRendererTasksAfterInput` holds the echo a frame on about 1 key in 10 at 60 Hz; off, the p95 goes from 50 to 39 ms with the row fix in. Both: within 5 ms (2 ms) of the empty page. A viewport cache in ghostty-web, local echo, an idle text read-back and a desynchronized canvas add little or nothing. Busy4 (40-key smokes): 64 to 36 ms. Quiet launches match normal ones; App Nap is not a cause. Electron 45 is Chromium 156, not 140. No agent, no model, no Jev, no key, $0. Confidence 85% on where the time goes and the row fix, 75% on the switch."
+---
+
 # 143. How long does a key take to reach the screen?
 
 The question: in the fabrika app, a key typed in a tile goes from the page to tsh's line editor,

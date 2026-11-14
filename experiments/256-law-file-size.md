@@ -1,3 +1,8 @@
+---
+date: "2026-11-11"
+summary: "`next/`, PR 810 at `36e65343c`. Not for `machine.ts`'s faults. The old file is almost all properties already: 148 tests are 71 property laws, 60 plants, 6 reach checks, 9 labeled and 2 unlabeled examples (both check the test's own fixture). A new file of 1,365 lines with 6 properties and 1 `format:` vector, one generator that reads the state it folds, killed 118 of the same 150 Stryker mutants (seed 119120, 958 in the file) against 95, in 2.5 s against 49 s; its first version, written before any result, killed 99. The old file alone kills 10 (schema and Cmd declarations, by its `format:` vectors; 2 after one decode check was added); the new one alone 25, among them the press record, key routing (the old ctx has no keys), pings, knock dial, `dials`, the removed key and a failed `now`'s retry. With the repo's `ignoreStatic: true`, `await import()` inside each test made 21 module-level kills read as survivors. No lint rule or script checks the four labels; only the tests and review skills' prose does. Ran on the host, no Docker; tokens not visible, dollars not measured. About 75% sure; one sample and a writer who had read the old file."
+---
+
 # 256. Does the window machine's 4,243-line law file deserve its size, or do far fewer property tests catch the same faults?
 
 Measured on 2026-11-10 and 11, on the branch `fabrikalfa/p14` at `36e65343c` (open PR 810), in a

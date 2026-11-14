@@ -1,3 +1,8 @@
+---
+date: "2026-11-05"
+summary: "`next/`, Tier 1 row P3 (plan task T5); a spike. Yes in Chromium 156.0.8078.4 (Playwright 1.64.1, headless shell and full headless, temp profile): a key made with `generateKey({name: \"Ed25519\"}, false, [\"sign\", \"verify\"])` and kept in IndexedDB on `http://127.0.0.1:<port>` is the same key after a reload and after a browser restart on the same profile, signs after each, and `exportKey` (`pkcs8`, `jwk`, `raw`) and `wrapKey` all reject with `InvalidAccessError`. The key is per origin: a second port or `localhost` sees none, so the brain's URL must keep its port. `storage.persisted()` is false. Safari's seven-day cap on script-written storage is reading only (WebKit 2020, 2023): daily use resets it, a Home Screen web app has its own counter. Lean: keep T5 step 2 as written, 90% for desktop Chromium. Not tested: other browsers, eviction, a crash, time. No model, $0."
+---
+
 # A browser tab's key survives a reload and a restart in Chromium
 
 **Yes, in Chromium 156.** A non-extractable Ed25519 key, kept in IndexedDB by a page served from

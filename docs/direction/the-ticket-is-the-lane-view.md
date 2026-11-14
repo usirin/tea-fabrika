@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-24; machine state as facts proposed; what the view shows decided 2026-10-25; walked at Tier 6"
+summary: "A ticket ties every fact of a lane together; its state is their fold. Its timeline is the app's most important window and the agents' main context: people and agents read the same rows. Triage reads it whole."
+---
+
 # The ticket is the lane's one view
 
 Decided 2026-10-24. One part is still proposed, and it is marked. Walked when Tier 6 starts (owner, 2026-11-08): pipeline timelines and each step's brief.
