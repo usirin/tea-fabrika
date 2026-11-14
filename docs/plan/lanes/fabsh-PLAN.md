@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0275, 0276, 0170 and S1 of the summon guidelines, with its leans for the owner to read; body 4de4300e7490
+Approved by the lead agent, builds 0275, 0276, 0170 and S1 of the summon guidelines, with its leans for the owner to read; body 8b0da02aa98a
 Plancheck-Version: 3
 
 # fabsh in a tile: a regular program that takes a line, echoes each letter at once, and starts a program, in next/
@@ -76,6 +76,17 @@ These bind the steps. Where they and a line below differ, these win.
   start from fabsh's submitted step is checked against that letter's member, with no grant for
   fabsh, so L20, L21, L22, L23, L24 and L28 can be built on this branch now. Slice 2's tile half
   (L25, L26, L27: `show`, `keep` on `DOWN`) still waits for the desk lane's tile pieces, as A4 says.
+
+- **A6, slice 2 is cut in two, 2026-11-14.** Slice 2a lands now: a program word (`counter`,
+  `counter as <name>`, `pack/program`) starts it through `start_child` in the submitted step, the
+  answer (`started`, `already_started`, `already_present`, each refusal) shows in the scrollback in
+  words, the runner built-in Cmd `programs` gives fabsh the names it can start, and the built-in
+  `programs` lists them. Its laws are L20, L21, L22, L24, L28, and L23 without its `show` part:
+  every start answer reaches the scrollback once, and a resend adds nothing. Slice 2b waits for the
+  desk lane's tile pieces (a tile that shows a process chosen at run time, `show`, a monitor and
+  `keep`): the `show` letter to the desk and L23's `show` part, `exit`, L25, L26 and L27. Until 2b,
+  a started program runs and fabsh names it, but no tile shows it; the pull request says so.
+  2a's `says()` and reader never mention 2b's words, so no "not yet" line ships.
 
 ## The answer first
 
