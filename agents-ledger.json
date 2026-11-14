@@ -117,11 +117,6 @@
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "const note = JSON.parse(r.out) as { _tag?: string; step?: string; ticket?: string };"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/drive.ts",
 			"rule": "fabrika(no-node-filesystem)",
 			"code": "import {"
 		},

@@ -30,8 +30,8 @@
 //                      phase's time goes on the step's entry in state/<lane>.json as `phases`
 //   starting   Act     box.sh new, at the lane's head
 //   drafting   Sub     one turn of the agent in the box (`runTurn`), waited on; its typed answer
-//   reading    Gather  collect the tree and sign it, then the commits, their step notes, exam
-//                      paths, leaks and the report
+//   reading    Gather  collect the tree and sign it, then the commits, the commits check's held
+//                      rules, exam paths, leaks and the report
 //   (update)   Check   pure: what the step answered and what the reads found make one outcome
 //                      (a manifest the lockfile must follow, changed with the lockfile left alone,
 //                      is an ask: a box has no network, so the lead refreshes it outside)
@@ -183,7 +183,7 @@ type StuckReason = Extract<Outcome, { kind: "stuck" }>["why"];
 
 /**
  * Each stuck reason drive names, sorted once. A new reason fails the type check until it is sorted
- * here. A box, an agent harness, a fetch, a read, a push, a signature or a report without an answer
+ * here. A box, an agent harness, a fetch, a read, a push, a failed sign or a report without an answer
  * failing is the tooling. A review that changed files, a leak, a done with no commit, a commit that
  * breaks the commits check and a step that ran out of its minutes are the work. `unsigned` and
  * `step_said` read their reason too (`faultFrom`).
@@ -327,6 +327,7 @@ const Read = Schema.Struct({
   /** `null`: the fetch failed, with why in `problem`. */
   head: Schema.NullOr(Schema.String),
   commits: Schema.Number,
+  /** What the commits check held the step on (`heldBy`). A missing signature is never in it (0161). */
   unsigned: Schema.Array(Schema.String),
   exam: Schema.Array(Schema.String),
   /** `file:line` of each added line that leaks; never the text. */
@@ -906,37 +907,6 @@ const leaksIn = (diff: string, repo: string): string[] => {
   return hits;
 };
 
-const unsignedIn = (env: Env, ask: Ask, head: string): string[] => {
-  // stepcommit signs mutation as tests for now.
-  const expect = ask.step === "mutation" ? "tests" : ask.step;
-  const shas = sh("git", ["-C", env.MAIN, "rev-list", `${ask.base}..${head}`])
-    .out.split("\n")
-    .filter(Boolean);
-  return shas.flatMap((sha) => {
-    const r = sh("git", ["-C", env.MAIN, "notes", "--ref=fabrika", "show", sha]);
-
-    if (r.code !== 0) {
-      return [`${sha.slice(0, 8)} has no step note`];
-    }
-
-    const note = JSON.parse(r.out) as { _tag?: string; step?: string; ticket?: string };
-
-    if (note._tag !== "attested") {
-      return [`${sha.slice(0, 8)} note is not attested`];
-    }
-
-    if (note.step !== expect) {
-      return [`${sha.slice(0, 8)} signed ${note.step}, not ${expect}`];
-    }
-
-    if (String(note.ticket) !== ask.ticket) {
-      return [`${sha.slice(0, 8)} signed for ticket ${note.ticket}, not ${ask.ticket}`];
-    }
-
-    return [];
-  });
-};
-
 /** The steps signed on the lane's own commits, from where it left main. */
 const stepsIn = (env: Env, root: string, head: string): Set<string> =>
   new Set(
@@ -1196,6 +1166,11 @@ export const commitsSaid = (
     : `commits check exit ${check.code}: ${tail(check.out + check.err)}`;
 };
 
+/** What the commits check holds the step on: nothing, or one line that names each rule it held.
+ * Exit 1 holds unless every stuck answer it gave was waived. */
+export const heldBy = (check: { code: number; out: string; err: string }, laneSteps: ReadonlySet<string>): string[] =>
+  checkHolds(check.code, check.out, laneSteps) ? [commitsSaid(check, laneSteps)] : [];
+
 /**
  * What box.sh new's exit and stderr say: exit 3 with a `refused <check>: <why>` line is a start
  * check's no; any other failure, or a line naming no known check, is the box failing.
@@ -1366,7 +1341,8 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           return failed("git log -p", diff);
         }
 
-        // The repo's own commit check verifies the signatures; this step's name is checked here.
+        // The repo's own commit check. A commit with no signature never holds a step (0161); the
+        // rules it still gives for signed commits do (`laneStuck`).
         const check =
           commits === 0
             ? { code: 0, out: "", err: "" }
@@ -1380,14 +1356,10 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           return failed("commits check", check);
         }
 
-        // Exit 1 holds the step unless every stuck answer it gave was a waived stale link.
-        const laneSteps = stepsIn(env, ask.root, head);
-        const holds = checkHolds(check.code, check.out, laneSteps);
-        const unsigned = [...(holds ? [commitsSaid(check, laneSteps)] : []), ...unsignedIn(env, ask, head)];
         return {
           head,
           commits,
-          unsigned,
+          unsigned: heldBy(check, stepsIn(env, ask.root, head)),
           exam,
           leaks: leaksIn(diff.out, env.GH_REPO),
           left: empty.left,
