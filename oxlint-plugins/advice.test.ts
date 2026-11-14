@@ -320,39 +320,90 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
     }
   }, 120_000);
 
-  // scenario (ticket 948): the docs rule under the repo's own config. `jobs/` is at zero, so a missing
-  // doc block there blocks; `cloudflare/` still has fires, so its warn line makes the same export
-  // advice; and the warn line never turns the rule on for a test file, since the off override is last.
-  it("scenario: under the real config a missing doc block blocks in a clean folder, advises in a warn folder, and is off for a test file there", () => {
-    const SRC = "next/packages/libfabrika/src";
+  // scenario (ticket 948): the docs rule under the repo's own config, in its own order: the error
+  // block, the warn block, then the off block. A folder no config line names is at zero, so a
+  // missing doc block there blocks. Each folder the config's jsdocs warn lines name today makes the
+  // same export advice, and no warn line turns the rule on for a test file. The warn folders are read
+  // from the config, apart from `advice.ts`, so a fill that deletes its line changes nothing here.
+  it("scenario: under the real config a missing doc block blocks in a new folder, advises in each warn folder, and is off for a test file in any of them", () => {
     // No block at all: the rule fires twice, once for the export and once for the module block.
     const text = "export const planted = 1;\n";
     const config = readFileSync(join(ROOT, ".oxlintrc.json"), "utf8");
-    const { lint, done } = repo(config, {
-      [`${SRC}/jobs/Planted.ts`]: text,
-      [`${SRC}/cloudflare/Planted.ts`]: text,
-      [`${SRC}/cloudflare/Planted.test.ts`]: text,
-    });
+    const folders = jsdocsWarnFolders(repo(config, {}));
+    // A new package: no config line names it, and libfabrika's module rule does not reach it.
+    const clean = "next/packages/planted/src";
+    const { lint, done } = repo(
+      config,
+      Object.fromEntries(
+        [clean, ...folders].flatMap((folder) => [
+          [`${folder}/Planted.ts`, text],
+          [`${folder}/Planted.test.ts`, text],
+        ]),
+      ),
+    );
 
     try {
-      const clean = lint(`${SRC}/jobs/Planted.ts`);
-      expect(clean.out).toContain(`${SRC}/jobs/Planted.ts:1:1 fabrika(jsdocs) `);
-      expect(clean.out).toContain("oxlint: 2 blocking, 0 advice");
-      expect(clean.status, clean.out).toBe(1);
+      const blocked = lint(`${clean}/Planted.ts`);
+      expect(blocked.out).toContain(`${clean}/Planted.ts:1:1 fabrika(jsdocs) `);
+      expect(blocked.out).toContain("oxlint: 2 blocking, 0 advice");
+      expect(blocked.status, blocked.out).toBe(1);
 
-      const warn = lint(`${SRC}/cloudflare/Planted.ts`);
-      expect(warn.out).toContain("fabrika(jsdocs) advice, this folder is not at zero yet:");
-      expect(warn.out).toContain("oxlint: 0 blocking, 2 advice");
-      expect(warn.status, warn.out).toBe(0);
+      // Judged by its own lines: libfabrika's module rule also refuses a planted top file in `src/`,
+      // and lint.ts fails on a fire only when it blocks, so a jsdocs line that advises cannot fail it.
+      if (folders.length > 0) {
+        const warn = lint(...folders.map((folder) => `${folder}/Planted.ts`));
+        const lines = warn.out.split("\n").filter((line) => line.includes(" fabrika(jsdocs) "));
+        expect(lines, warn.out).toHaveLength(2 * folders.length);
 
-      const test = lint(`${SRC}/cloudflare/Planted.test.ts`);
-      expect(test.out).not.toContain("fabrika(jsdocs)");
-      expect(test.status, test.out).toBe(0);
+        for (const line of lines) {
+          expect(line).toContain("fabrika(jsdocs) advice, this folder is not at zero yet:");
+        }
+
+        for (const folder of folders) {
+          expect(
+            lines.filter((line) => line.startsWith(`${folder}/Planted.ts:`)),
+            folder,
+          ).toHaveLength(2);
+        }
+      }
+
+      const tests = lint(...[clean, ...folders].map((folder) => `${folder}/Planted.test.ts`));
+      expect(tests.out).not.toContain("fabrika(jsdocs)");
     } finally {
       done();
     }
   }, 120_000);
 });
+
+/**
+ * The folders the config's `fabrika/jsdocs` warn lines name, read from oxlint's own `--print-config`
+ * and written out apart from `advice.ts`: `<pkg>/src/<name>/**` gives `<pkg>/src/<name>`, and
+ * `<pkg>/src/*` gives `<pkg>/src`. It removes the repo it is given.
+ */
+const jsdocsWarnFolders = ({ at, done }: { readonly at: string; readonly done: () => void }): string[] => {
+  try {
+    const printed = spawnSync(OXLINT, [`--config=${join(at, ".oxlintrc.json")}`, "--print-config"], {
+      cwd: at,
+      encoding: "utf8",
+      timeout: 60_000,
+    });
+    expect(printed.status, printed.stderr).toBe(0);
+    const { overrides }: { readonly overrides: ReadonlyArray<{ files: string[]; rules: Record<string, unknown> }> } =
+      JSON.parse(printed.stdout);
+    return overrides
+      .filter(({ rules }) => {
+        const setting = rules["fabrika/jsdocs"];
+        return (Array.isArray(setting) ? setting[0] : setting) === "warn";
+      })
+      .flatMap(({ files }) => files)
+      .map((glob) => {
+        expect(glob, "a jsdocs warn line names one folder").toMatch(/^next\/packages\/[^/*]+\/src(\/[^/*]+)?\/\*\*?$/);
+        return glob.replace(/\/\*\*?$/, "");
+      });
+  } finally {
+    done();
+  }
+};
 
 describe("T930 L4 the warn lines are read from oxlint's own --print-config", () => {
   // pinned: oxlint 1.90.0's --print-config shape (pnpm-lock.yaml): a builtin's key loses its plugin,

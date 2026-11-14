@@ -453,12 +453,29 @@ describe("law 8: on Effect 4.1.2's own source, with since required", () => {
 describe("law 9: the real config turns the rule on for every next/packages folder's public files only", async () => {
   const SRC = "next/packages/libfabrika/src";
   const body = "export const planted = 1;\n";
+  // Each jsdocs warn line of the config today, read from oxlint's own `--print-config`, so a fill
+  // that deletes its line changes nothing here. A `/**` line covers its subfolders too.
+  const printed = spawnSync(
+    join(ROOT, "node_modules", ".bin", "oxlint"),
+    [`--config=${join(ROOT, ".oxlintrc.json")}`, "--print-config"],
+    { cwd: ROOT, encoding: "utf8", timeout: 60_000 },
+  );
+  const config = JSON.parse(printed.stdout) as {
+    readonly overrides: ReadonlyArray<{ readonly files: string[]; readonly rules: Record<string, unknown> }>;
+  };
+  const warn = config.overrides
+    .filter(({ rules }) => {
+      const setting = rules["fabrika/jsdocs"];
+      return (Array.isArray(setting) ? setting[0] : setting) === "warn";
+    })
+    .flatMap(({ files }) => files)
+    .map((glob) => ({ folder: glob.replace(/\/\*\*?$/, ""), deep: glob.endsWith("/**") }));
   const on = [
     `${SRC}/ci/Planted.ts`,
     `${SRC}/codehost/Planted.ts`,
-    // A folder 1186's list left out, at zero now; a folder that still advises; and a new package.
+    // A folder 1186's list left out, at zero now; each folder that still advises; and a new package.
     `${SRC}/jobs/Planted.ts`,
-    `${SRC}/cloudflare/Planted.ts`,
+    ...warn.map(({ folder }) => `${folder}/Planted.ts`),
     "next/packages/planted/src/Planted.ts",
   ];
   const off = [
@@ -471,11 +488,13 @@ describe("law 9: the real config turns the rule on for every next/packages folde
     `${SRC}/ci/Planted.test-support.ts`,
     `${SRC}/codehost/PlantedTest.ts`,
     `${SRC}/codehost/Planted.d.ts`,
-    // The same kinds in a folder with a warn line: the off override comes after it.
-    `${SRC}/cloudflare/internal/planted.ts`,
-    `${SRC}/cloudflare/Planted.test.ts`,
-    `${SRC}/cloudflare/PlantedTest.ts`,
-    `${SRC}/cloudflare/Planted.d.ts`,
+    // The same kinds in each folder with a warn line: the off override comes after it.
+    ...warn.flatMap(({ folder, deep }) => [
+      ...(deep ? [`${folder}/internal/planted.ts`] : []),
+      `${folder}/Planted.test.ts`,
+      `${folder}/PlantedTest.ts`,
+      `${folder}/Planted.d.ts`,
+    ]),
     // An app (case 4).
     "next/apps/fabrika/src/Planted.ts",
   ];
@@ -488,7 +507,7 @@ describe("law 9: the real config turns the rule on for every next/packages folde
     }
   });
 
-  it("is off for internal/, tests, test support, shared suites, fixtures, declaration files and apps, in a warn folder too", () => {
+  it("is off for internal/, tests, test support, shared suites, fixtures, declaration files and apps, in each warn folder too", () => {
     for (const path of off) {
       expect(linted("fabrika(jsdocs)", path), path).toEqual([]);
     }
