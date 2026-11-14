@@ -75,14 +75,18 @@ const script = fc
   )
   .map(([skill, name, ext]) => `.agents/skills/${skill}/scripts/${name}.${ext}`);
 
-const otherSkill = fc.oneof(
-  fc
-    .tuple(skillName, fc.array(skillName, { maxLength: 2 }), skillName, fc.constantFrom("json", "ts", "txt"))
-    .map(([skill, dirs, name, ext]) => [".agents/skills", skill, ...dirs, `${name}.${ext}`].join("/")),
-  fc
-    .tuple(skillName, skillName, fc.constantFrom("md", "json", "ts"))
-    .map(([skill, name, ext]) => `.claude/skills/${skill}/${name}.${ext}`),
-);
+// The two arms of a skill-tree path that is no script and no prose. The plan for CI paths
+// (slice 1, case 4) splits them: a file under .agents/skills/ no longer starts next, and one under
+// .claude/skills/<name>/ still runs everything.
+const agentsSkill = fc
+  .tuple(skillName, fc.array(skillName, { maxLength: 2 }), skillName, fc.constantFrom("json", "ts", "txt"))
+  .map(([skill, dirs, name, ext]) => [".agents/skills", skill, ...dirs, `${name}.${ext}`].join("/"));
+
+const claudeSkill = fc
+  .tuple(skillName, skillName, fc.constantFrom("md", "json", "ts"))
+  .map(([skill, name, ext]) => `.claude/skills/${skill}/${name}.${ext}`);
+
+const otherSkill = fc.oneof(agentsSkill, claudeSkill);
 
 const path = fc.oneof(
   safe,
@@ -205,10 +209,21 @@ it("skill scripts run check and test; other version flags follow their readers",
 });
 
 // 0175 narrowed this law: e2e is today's app, so a skill-tree path no longer starts it.
-it("other skill-tree paths still run check, typecheck, test and next, and none of today's checks", () => {
+// The plan for CI paths narrowed it again, with the owner's yes (its answered question 2): a file
+// under .agents/skills/ no longer starts next, since no next/ test reads one, so this law says
+// nothing of next for a list of those alone (the case 4 law below does). Next still starts when a
+// .claude/skills/<name>/ file is in the list.
+it("other skill-tree paths still run check, typecheck and test, next only for .claude/skills/, and none of today's checks", () => {
   fc.assert(
     fc.property(fc.array(otherSkill, { minLength: 1, maxLength: 12 }), (paths) => {
-      expect(ci.classify(paths, "pull_request")).toMatchObject({ ...heavy, e2e: false, today: false });
+      expect(ci.classify(paths, "pull_request")).toMatchObject({
+        check: true,
+        typecheck: true,
+        test: true,
+        ...(paths.some((p) => p.startsWith(".claude/skills/")) ? { next: true } : {}),
+        e2e: false,
+        today: false,
+      });
     }),
     options,
   );
@@ -641,4 +656,72 @@ it("scenario: a merge queue's group reads its paths from its base, as a push doe
   };
   expect(ci.readPaths("b".repeat(40), "c".repeat(40), "merge_group", run)).toEqual(["docs/a.md"]);
   expect(calls).toEqual([["diff", "--no-renames", "--name-only", "-z", "b".repeat(40), "c".repeat(40), "--"]]);
+});
+
+// The plan for CI paths, case 4: no next/ test reads a file under .agents/skills/. Today's only
+// such file, the lead's gc.plist, is read by the lead's tooling tests, so test stays on.
+it("property: a skill file under .agents/skills/ that is no script and no prose runs check, typecheck and test, and no next", () => {
+  fc.assert(
+    fc.property(
+      fc.array(agentsSkill, { minLength: 1, maxLength: 12 }),
+      claudeSkill,
+      scopedEvent,
+      (paths, claude, event) => {
+        expect(ci.jobs(paths, event, false)).toEqual({ ...heavy, next: false, field: false, ...off });
+        // A file under .claude/skills/<name>/ still runs everything, alone or beside them.
+        expect(ci.jobs([claude], event, false)).toEqual({ ...heavy, field: false, ...off });
+        expect(ci.jobs([...paths, claude], event, false)).toEqual({ ...heavy, field: false, ...off });
+      },
+    ),
+    {
+      ...options,
+      // pinned: .agents/skills/lead/gc.plist, the one such file today, read by gcloop.test.ts.
+      examples: [[[".agents/skills/lead/gc.plist"], ".claude/skills/guidelines/notes.md", "pull_request"]],
+    },
+  );
+});
+
+// The plan for CI paths, case 3: no next/ test and no tooling test reads a file under
+// experiments/, and CI does not type-check them, so only lint reads them. Markdown there is
+// already quiet. The same file under any other root is no experiments file.
+const experimentFile = fc
+  .tuple(
+    fc.array(fc.oneof(word, fc.constant("177-themes")), { maxLength: 3 }),
+    word,
+    fc.constantFrom("ts", "mjs", "json", "txt", "tsx"),
+  )
+  .map(([dirs, name, ext]) => ["experiments", ...dirs, `${name}.${ext}`].join("/"))
+  .filter((p) => !p.startsWith("experiments/177-themes/schemes/"));
+
+it("property: experiments files alone run check, and no typecheck, test or next", () => {
+  fc.assert(
+    fc.property(
+      fc.array(experimentFile, { minLength: 1, maxLength: 12 }),
+      fc.constantFrom("fixtures", "experimentsish", "docs/experiments", "next/experiments"),
+      scopedEvent,
+      (paths, root, event) => {
+        expect(ci.jobs(paths, event, false)).toEqual({
+          check: true,
+          typecheck: false,
+          test: false,
+          next: false,
+          field: false,
+          ...off,
+        });
+        // The same files under another root still type-check and start next.
+        const moved = paths.map((p) => p.replace(/^experiments\//, `${root}/`));
+        expect(ci.jobs(moved, event, false)).toMatchObject({ check: true, typecheck: true, next: true });
+      },
+    ),
+    options,
+  );
+});
+
+it("pinned: the one experiments folder a test reads runs as an unknown path does", () => {
+  // pinned: apps/fabrika/src/pipes.test.ts reads the color scheme file in this folder, so a
+  // change there keeps today's behavior and is not an experiments file.
+  const read = "experiments/177-themes/schemes/radix-colors-3.0.0.json";
+  const unknown = ci.classify(["unknown/a"], "pull_request");
+  expect(ci.classify([read], "pull_request")).toEqual(unknown);
+  expect(ci.classify([read, "experiments/177-themes/notes.ts"], "pull_request")).toEqual(unknown);
 });
