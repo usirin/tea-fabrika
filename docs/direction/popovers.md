@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-30"
+summary: "Popovers, menus, the palette, dialogs and tooltips use the program windows' own font (`--font`), size scale and colors; monospace only for typed things (a command, a path, a hash). The top bar and bottom line stay monospace, like tmux: they are the frame, what opens over it is the product. A popover is a raised box of rows (8px radius, 4px padding, 32px or 44px rows), one row per thing with an icon, a sentence-case title, one muted line and keycaps. It behaves like its standard: focus moves in, arrows move, Enter acts, Escape closes and puts focus back, one at a time. Inside a popover keys are Mac keycaps (`⌃B` `A`); the bars keep `C-b a`. Numbers from Linear's own stylesheet; behavior from WAI-ARIA, HTML popover and Apple's HIG."
+---
+
 # What opens over the desk: popovers, menus, the palette
 
 **Settled, owner 2026-10-30.** The owner saw the mockups and settled the whole

@@ -1,3 +1,8 @@
+---
+state: "decided; step 5's gate in CI (experiment 117); generated laws, four reason labels and K20, 2026-11-08"
+summary: "Pick the riskiest promise; test the real code first (TLA+ only for a design with no code, a proof only past a bound); show each check failing on a planted break; a failure stays a failure; record what each check covers, and CI goes red when that code changes unchecked. Every law uses generated inputs unless it has a reason labeled `vector:`, `format:`, `pinned:` or `scenario:`. Review checks that the property or label is present and fits. A shape check is a lint rule or a type. K20 uses existing Schemas or their Effect Arbitraries for new properties, with fast-check for unsupported cases and edges."
+---
+
 # Five steps for every check
 
 Decided 2026-10-22. Step 5's gate is built in experiment 117 and runs in CI

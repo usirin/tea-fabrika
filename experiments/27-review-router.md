@@ -1,3 +1,8 @@
+---
+date: "2026-10-04"
+summary: "30 of 36 answers right, 6 unsure, 0 wrong."
+---
+
 # 27. Jev as the review's router
 
 The lane's review now checks scope in code: a changed file no criterion names

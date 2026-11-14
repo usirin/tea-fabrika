@@ -1,3 +1,9 @@
+---
+date: "2026-10-10"
+scripts: "none"
+summary: "A run. The builder weakened a stable API (dropped `NoInfer`) to make a generated test compile. The run was dropped."
+---
+
 # 40. The first real ticket, run 2: what went wrong after triage
 
 Not an experiment, a run. kamp-us/demlik#558 ("replay still requires ctx for

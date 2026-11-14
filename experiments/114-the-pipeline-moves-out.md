@@ -1,3 +1,9 @@
+---
+date: "2026-10-22"
+scripts: "`packages/pipeline/` (`@kampus/pipeline`, a placeholder name), `packages/fabrika/src/{shell.ts,shell/index.ts,agents/}`, `boundary-rules.json`, `layer-rules.json`"
+summary: "Yes, with three things that did not move cleanly. The work pipeline left `@kampus/fabrika` for its own package with `git mv` (259 renames: all 254 old pipeline files and 3 rubrics), and uses only fabrika's public names. 7 agents files fabrika's own agents part already imported went to fabrika (Draft, env, guard, sandbox, spans); the builder's rules, the zod bridge, the pipeline's trace view and the scripted SDK stream stayed. An app hands tsh its programs as a service: `runTsh().pipe(Effect.provideService(Shell.Programs, list))`, `Shell` on the top level (no platform), `runTsh` on `/shell`. Tests 2170 = 2170, same names (8 moved into fabrika's shell); `tsh -c 'programs'` the same 16 and 19, one line differs (the rubrics path); fabrika imports nothing of the pipeline; browser bundle 0 platform modules (251 to 267 modules); both build and install from tarballs, the installed pipeline lists 16. New `lint:boundaries` (B12, B19) plus layers plus the exports map: 3 plants, each caught, two of them by one check alone. Not clean: two bins named `tsh` (npm links fabrika's, pnpm the pipeline's, no warning), settled the same day: fabrika's bin dropped, so only the pipeline installs `tsh` and fabrika's small shell is the dev script `packages/fabrika/bin/tsh-small`; pnpm needs an override until fabrika is published; the pipeline's `.d.ts` needed 3 unexported names (`KeptOptions`, `KeptFailed`, `StorageStale`); fabrika's host machine laws and 18 tests of its Draft and spans stay in the pipeline. $0. Confidence 85%."
+---
+
 # 114. The pipeline moves out
 
 The question: can the work pipeline leave `@kampus/fabrika` for a package of its own, using only

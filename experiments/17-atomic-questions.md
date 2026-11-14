@@ -1,3 +1,8 @@
+---
+date: "2026-10-04"
+summary: "Three narrow questions at 0.9 accepted 87 of 88 good tests and 4 of 93 bad ones. The broad question at 0.85 accepted 53 of 88 and 0 of 93."
+---
+
 # 17. One broad question, or several narrow ones
 
 `17-atomic-questions.ts`. Jev's guide says to split a broad judgment into atomic

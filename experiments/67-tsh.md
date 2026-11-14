@@ -1,3 +1,8 @@
+---
+date: "2026-10-17"
+summary: "Yes. tsh is `defineProgram` with inputs `line` and `signal`, outputs `printed` and `ready`, and one machine, its job table. It starts programs from a list by name and checks every flag, value and pipe against their schemas before anything runs, with a caret and a did-you-mean. One foreground program is the new `call` in tea-program; a pipe or `&` is `start` and `pipe` and becomes a job; `$( )`, `&&`, `||`, `--describe [name]`, and built-ins `jobs`, `ps`, `tell`, `close`, `stop`, `attach`. A launcher on Node's readline adds history, Tab completion from the schemas and a Ctrl-R it had to build. All 9 proofs pass, the terminal ones on a pty through `expect`: Ctrl-C stops the foreground job and tsh goes on, `tsh -c 'x' && echo ok` works in zsh, and a tsh killed with `kill -9` and opened again finds its job and attaches it by run id with its total kept. Real, read only: `review-scripted … | ship --mode read` on 597, 596 and 675, two reach ship and would be enqueued, the draft is skipped; write mode is refused at the flag. Findings: an input's close outlives the run, so tsh takes a fresh id each life; the fit hole lets `say | ship` wire and fail at run time; fabrika's programs need four flags a line, as flags have no defaults; printed values were JSON walls, now one short line with `--json` for scripts. Effect's CLI was not used. `@demlik/tea` unchanged."
+---
+
 # 67. tsh: a shell that is itself a tea program
 
 ```text

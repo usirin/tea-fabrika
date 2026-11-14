@@ -1,3 +1,9 @@
+---
+date: "2026-11-02"
+scripts: "`193-lane-holes.ts`, `results/193-lane-holes.json`"
+summary: "Today's version. The real lane reducer driven through every outcome each step can say: 153 (step, outcome) pairs, 17 questions with 38 picks, 14 other doors; 99 pairs stop the lane, 22 ask a person. Classed by hand: 33 need a person, 77 a step could fix, 10 dead ends, 21 cannot happen. Of the 87 holes, 7 a self-fix PR takes, 75 the jidoka table already names as later work, 5 are new; reading found 7 more. Worst: the merge step stops on every ship send, and a restart on `no_review` runs ship into the same answer; a retried step writes under its first try's run id, so the ledger keeps `run_failed` and drops the real end and its cost; 83 stops say only `step_stuck`, and none is written to the ticket. Every stop ticket 117 hit is a row. Classes and new holes 80 to 90% sure, the exam side tree hole 70%. No model, $0."
+---
+
 # Every way the lane stops, and which a step could fix
 
 Run 2026-11-02 on `main` at `b00a4837`. **Today's version only** (`packages/pipeline`), not

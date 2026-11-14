@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-01 (experiment 181)"
+summary: "A check that cannot finish inside the per-pull-request budget does not gate it: it runs on a schedule and files tickets. Checks that stop a wrong merge or lost work never move. Mutation: 5 minutes per pull request, lines first, incremental reuse between rounds with `force` on the last, a survivor advises and never blocks until its false alarms are measured; today's version gets only these speedups, a `2` in agent hours. In `next/`, Tier 6, a mutation queue shaped like a merge queue takes a pull request's leftovers and a daily sweep, drops repeats by a stable id, has hands run Stryker, and files at most 3 tickets a day."
+---
+
 # A fast check per pull request, a mutation queue for the rest
 
 **Changed 2026-11-10 by [0066](../../.decisions/0066-mutation-runs-on-a-schedule.md):** the check on each pull request is gone; mutation runs hourly against main. The rest of this note holds as the plan for the `next/` queue.

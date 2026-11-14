@@ -1,3 +1,8 @@
+---
+date: "2026-10-24"
+summary: "Both levers work and are cheap, but on this lane they catch nothing the repo's tests miss; the real find is that 116's spec was wrong in three places. Trace validation (Cirstea et al. 2024): the ledger's log in `pos` order is the trace, read as the spec's steps by `stepsOf`, with a last step that says nothing owed is still possible; 300 generated runs a lane on the real host (116's stand-in children), TLC 1.6.0 checks 300 in 1.0 to 1.4 s. Against 116's spec as written, 0 of 300 fixed runs pass: its rows had no kind, its N was the plan's length, and it owed an EXIT the host never sends after the lane exits; the spec was wrong each time. Fixed (`HostedLaneV2.tla`): the fixed lane 300 of 300, today's lane rejected in exactly the 123 runs that hang (115); only 65 distinct traces in 300. Tests from the spec's paths (MongoDB, VLDB 2020): 207 states, 17,353 paths, 322 child scripts, each child held at a gate (`driveCase`); the fixed lane passes all, today's stalls on 67; 125 took the path's exact order. Stryker 9.6.1, 150 of 757 mutants of `hosted/lane.ts` and `stages/lane/machine.ts` (seed 139), `tsc` refused 104; of 46: the repo's tests 22, 116's property test 8, trace 8, paths 7; the spec arms caught 0 the tests missed and 1 the property test missed (462), at 4 and 9 times the time a mutant. 15 of the tests' 22 came from the lane's laws on our own search engine's shapes, 5 from nothing else. Lean: `\"tla\"` only for a design with no code; a kept spec checked by trace validation in the drift job, advising; no spec arms in the mutation step. $0, no model, no key. Confidence 75%."
+---
+
 # 139. Tie the TLA+ spec of the hosted lane to the real code
 
 The question: today's rule says "TLA+, only for a design with no code yet"

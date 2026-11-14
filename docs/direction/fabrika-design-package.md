@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-02"
+summary: "Both versions. fabrika's design lives in `@kampus/fabrika-design`, modeled on phoenix's `@kampus/design`, and today's app and `next/` both import it. First slice: the colors (`themes.ts` and its tests), the Manti mapping (`theme.css`, now the package's `tokens.css`) and the six text styles typography decided (`textStyles`); later the lint that holds \"every size comes from a text style\", and a design-system page made from it. It is the one shared piece, because its contents come from settled notes, not today's shapes; moving means rethinking each file against them. Moved in P31 to `packages/fabrika-design`. Open: publishing. *Changed 2026-11-07 (P31): \"text roles, proposed\" became the text styles typography decided.*"
+---
+
 # One design package, shared by both versions
 
 **Decided 2026-11-02.** Both versions. fabrika's design lives in its own package,

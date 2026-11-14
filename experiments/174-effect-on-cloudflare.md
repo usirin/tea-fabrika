@@ -1,3 +1,9 @@
+---
+date: "2026-10-31"
+scripts: "`174-effect-on-cloudflare/` (a workspace package: `run.ts` runs one part, `harness.ts`, `door.ts` the hibernating Protocol, `alarm-engine.ts` the `WorkflowEngine`, and `s1` to `s5` with their entries), `results/174-effect-on-cloudflare/`"
+summary: "Mostly steal, build on two things, skip the cluster. In Miniflare, Effect's RPC server runs over hibernating sockets and a bare Chromium tab speaks it (woken call 6.4 to 14 ms, awake 2.3 to 4.8 ms at p50; pings wake nothing), but it saves no lines over the plan's door. A stream fiber dies silently when the object sleeps, so a waiting call must be data in the socket's attachment: parked chunks arrive after a wake in 6 to 29 ms. Cluster runs in one object but needs its polls (first call about 220 ms, tuned away it timed out at 20 s), 316 KB. Eventlog runs but has no author, a binary wire, and a client that retries refusals forever. Effect's `Workflow` on a 161-line alarm engine ran a durable turn through a clock, a kill and an approval. Effect 4.1.1 broke the cluster spike by dropping `effect/Crypto`; the rest ran unchanged. Miniflare does sleep objects, so a direction note is wrong, and locally timers do not hold an object as Cloudflare's docs say. Lean: keep the plan's door and put waits in the attachment, 85% (taken into Tier 1 on 2026-11-02); Workflow for Tier 5, 65% (overruled 2026-11-02 by [tea is the engine](../docs/direction/tea-is-the-engine.md)). $0, nothing deployed."
+---
+
 # 174. Can `next/` steal from or build on Effect's cluster and friends, on Cloudflare?
 
 Everything here is about `next/`. Nothing touches today's packages. All runs are local, in

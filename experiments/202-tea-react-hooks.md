@@ -1,3 +1,8 @@
+---
+date: "2026-11-02"
+summary: "Library probes for `next/`, tea 0.22.0 only. Each saved Chromium row ran 20 times: the Promise hook folds through Strict Mode and Activity; an Effect run through `useRuntime` draws but its click leaves an Effect unrun (TypeScript rejects it); compiled `Dropped` freezes at 0 while `Drawn` reaches 3, with both compiling successfully. A sketch Effect hook starts once and stops on unmount; a bare fork after stop hides `Stopped` unless its fiber is read. The unmerged send branch (demlik `10425bb`, on the engine fix in demlik PR 855) folds Effect clicks and reports a reducer throw and a late send to `onError` once each, counted call by call. No model, $0."
+---
+
 # tea's React hooks: Strict Mode, the Effect engine and the React Compiler
 
 **tea 0.22.0's Promise-engine hook keeps working through Strict Mode and an

@@ -1,3 +1,9 @@
+---
+date: "2026-10-18"
+scripts: "`87-scenarios.ts`, `87-scenarios/`, `results/87-scenarios.json`"
+summary: "Mostly yes for the words, no for the runner. On four closed demlik tickets (two bugs, two features; two in tea), scenarios written from the issue text alone ran 27 of 27 `@change` red at base and green at merge, and 8 of 8 guards green at both, after the base run caught one wrong label and one pass for the wrong reason. Every one of 81 steps is a move we have: Given acts on a scratch world or provides a fake (7, not a move), When acts or listens, Then is a Gather plus a Check; Draft and Judge never came up. The feature reds were shallow (a missing export, an unknown key). No step was shared between tickets, and for tea plain vitest reads better. Run $0, 38 s. Confidence 80% (mapping), 75% (runner)."
+---
+
 # 87. Given, When, Then: a language hidden in our moves?
 
 Gherkin writes a test as Given (the world), When (something happens), Then

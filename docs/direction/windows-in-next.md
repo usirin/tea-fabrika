@@ -1,3 +1,8 @@
+---
+state: "proposed 2026-11-01; walked at Tier 4"
+summary: "The brain and programs name no OS, so a tab on Windows should already work against the cloud brain. Windows hands are Tier 4 and WSL2 hands Tier 5. Capability words should name no OS before real facts are written. Nothing was run on Windows for `next/`."
+---
+
 # Windows in `next/`
 
 **Proposed 2026-11-01. Nothing here was run on Windows.** Walked when Tier 4 starts (owner, 2026-11-08): Windows hands and stopping their brain. This is about `next/`. The

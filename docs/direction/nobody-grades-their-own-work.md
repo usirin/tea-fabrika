@@ -1,3 +1,8 @@
+---
+state: "decided"
+summary: "Review is a different agent from build. The reviewer only finds; code checks each quote and works out pass or fail. No agent approves."
+---
+
 # Nobody grades their own work
 
 Decided 2026-10-04, the first night of the rebuild.

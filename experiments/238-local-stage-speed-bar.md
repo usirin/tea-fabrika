@@ -1,3 +1,8 @@
+---
+date: "2026-11-08"
+summary: "`next/`, P12 (ticket 270); the real `dev.ts` on Alchemy 2.0.0-beta.84 and workerd 1.20261012.1, at head `c2a38125`. Four initial and five head runs, medians initial then head: start to listener 3.25 s and 2.73 s (with the build; `brain.start` 0.45 s and 0.39 s), accepted send 23.0 and 19.5 ms, cross-client publication 14.4 and 11.3 ms, replacement after a killed workerd 0.52 and 0.47 s, reconnect 88 and 82 ms, workerd RSS 124 MB (98 MB after replacement). Member fold and process history read 0 ms because workerd's clock does not move during compute; sink flush, timed from outside since it has no span by design, on the real sink and record code under Node: median 2.4 ms with 5 records and 4.1 ms with 100 (one batch), 0.09 ms with none, at load 10.9. Compiler on 336 ms, off 243 ms on the build tests' `.tsx`. Load average 25 to 38 on 12 cores the whole time. No model, $0."
+---
+
 # 238. The local stage's first speed bar
 
 The raw samples (every reading and health row) are kept privately; every number below is in `results/238-local-stage-speed-bar-summary.json`, which the script makes from them.

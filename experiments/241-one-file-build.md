@@ -1,3 +1,9 @@
+---
+date: "2026-11-09"
+scripts: "`238-local-stage-speed-bar.ts` (branch `fabrikalfa/exp241-script`), `results/241-one-file-build.json`"
+summary: "`next/`, P16 (ticket 282); 238's bar rerun on main after P12 (`a1327577`) and on P16's one built file (`6c6b24c3`), four base and five head runs in one sitting. Medians, base then head: accepted send 13.2 and 11.8 ms, publication 8.9 and 7.3 ms, lost link noticed 4.5 and 4.5 ms (new reading: one client kept open across the workerd kill), replacement 412 and 402 ms, reconnect 236 and 67 ms, workerd RSS 136 and 129 MB, start 4.79 and 1.80 s. Every head median is under its cap. The caps are a guess: ticket-115's rule on the base runs (3 times for the small readings, 1.3 times for the fixed waits). The first two base runs at load 12 to 14 make the start and reconnect caps loose. Brain 1,503,580 to 1,504,648 bytes, programs 467,455, window 0 (no program exports one yet). No model, $0."
+---
+
 # 241. The local bar on one built file
 
 The raw samples (every reading of every run) are kept privately. Every number below is in

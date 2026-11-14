@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-03"
+summary: "Both versions, today's app first. Six named layers in one order the frame owns, low to high: desk, sheet, float, popover, palette, tooltip; no program picks a z-index (L1). Every layer has an owner and goes when it goes: a sheet is one tile's, the rest are desk-wide, and a float is a whole tile lifted, only by the person's choice (L2). The status bar names the layer that takes the keys; the prefix and F6 always work (L3). One modal at a time on the smallest owner, inert under it; Esc peels the top (L4). Nothing covers what you work on (L5). A look unfolds in place beside the list, not Linear's float, and a peek keeps focus on the list, an exception to program guidelines G4 R2 (L6). Built in today's app as D1's fixes, then D3's sheet, then D4's unfold; the desk inert under the palette is tracker ticket 203. Open: what the ledger records, and program guidelines' call 8, a side panel. From experiment 207."
+---
+
 # Layers: what sits on top, who owns it, and who takes the keys
 
 Its decided rules are in: [0264](../../.decisions/0264-the-frame-owns-named-layers.md), [0265](../../.decisions/0265-one-modal-esc-peels-the-top.md), [0266](../../.decisions/0266-a-look-unfolds-in-place.md).

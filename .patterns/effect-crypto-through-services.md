@@ -1,3 +1,8 @@
+---
+where: "next/"
+when: "Hashing, signing, an HMAC, random bytes or a random id"
+---
+
 # Hashing, HMAC and random bytes go through Effect's crypto services
 
 ```mermaid

@@ -1,3 +1,9 @@
+---
+date: "2026-10-25"
+scripts: "`142-web-terminals.ts`, `142-web-terminals/`, `results/142-web-terminals.json`"
+summary: "Keep ghostty-web 0.4.0 with a small patch we own. One sandboxed Electron page, N tiles of 300 by 190, under the app's page policy plus inline styles and `connect-src`; ghostty-web published and patched, wterm 0.5.5 (libghostty core), xterm.js 6 (DOM, WebGL, screen reader mode), restty 0.3.0. Idle at 16 tiles, percent of one core, renderer + GPU: ghostty-web 9.8 + 22.8 (it draws 60 times a second per tile), patched 1.5 + 2.3, wterm 2.5 + 0.9, xterm 2.2 + 0.9, xterm-webgl 0.4 + 0.7. Busy, every tile scrolling 200 lines a second: 25 + 31, 22 + 20, 81 + 30, 46 + 5, 6 + 12. The render patch is 11 lines out, 17 in, JS only; a second one, 2 out and 11 in, gives a hollow unfocused cursor with no WebAssembly rebuilt. Under the app's policy unchanged, only ghostty-web keeps its colors; wterm needs `connect-src` and inline styles, xterm inline styles, restty crashes. Ctrl-B caught and no Node for every library. The real app, driven here, idles at 11.8 + 24.3 with 16 tiles; the 70% seen in daily use was not reproduced, and neither a bigger window nor blink off explains it (both guesses wrong). Second choice xterm.js 6 with WebGL. No agent, no model, $0. Confidence 75%."
+---
+
 # 142. Which web terminal library should the app draw its tiles with?
 
 The question: the fabrika app draws every tile with ghostty-web 0.4.0. Sitting idle, its

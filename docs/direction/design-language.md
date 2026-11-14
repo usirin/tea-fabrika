@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-07, the token file's keys included"
+summary: "Both versions. Five levels (principles, foundations, tokens, components, patterns and guides), with a program's note off the map as product; every note sorted (28 keep, 9 merge, 5 split, 2 retire); a guideline page made from doc tags on the part; two token tiers plus the tile's, from one data file with contrast pairs; one focus ring; ARIA snapshots that advise first. Nine calls for the owner."
+---
+
 # Design language: the levels, the page shape, and where each note sits
 
 **Proposed 2026-11-04; most calls decided 2026-11-07.** A draft read on main at `ffa7056f`. The

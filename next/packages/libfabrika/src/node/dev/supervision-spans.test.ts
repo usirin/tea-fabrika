@@ -189,8 +189,22 @@ const recoverySpans = (w: ReturnType<typeof world>, process: string) =>
     }).pipe(Effect.provide(w.layer()));
   });
 
+/** An error thrown in code that `eval` ran, which lint refuses here: its stack gains the frames V8
+ *  writes for it, one origin and one nested origin, each naming its caller and a made-up folder. */
+const evaluated = (error: Error, id: string) =>
+  Object.assign(error, {
+    stack: [
+      error.stack,
+      `    at eval (eval at caller (file:///made-up-${id}/origin.ts:3:7), <anonymous>:1:5)`,
+      `    at eval (eval at outer (eval at inner (/made-up-${id}/deep.ts:9:2), <anonymous>:2:1), <anonymous>:4:8)`,
+    ].join("\n"),
+  });
+
 const failure = fc
-  .tuple(fc.constantFrom("Error", "TypeError", "RangeError", "SyntaxError", "custom", "string", "object"), fc.uuid())
+  .tuple(
+    fc.constantFrom("Error", "TypeError", "RangeError", "SyntaxError", "custom", "eval", "string", "object"),
+    fc.uuid(),
+  )
   .map(([kind, id]) => {
     const message = `private-message-${id}`;
     class ProgramError extends Error {}
@@ -203,13 +217,61 @@ const failure = fc
             ? new SyntaxError(message)
             : kind === "custom"
               ? new ProgramError(message)
-              : kind === "Error"
-                ? new Error(message)
-                : kind === "object"
-                  ? { message }
-                  : message;
-    return { value, private: [message, ...(value instanceof Error ? [value.stack!] : [])] };
+              : kind === "eval"
+                ? evaluated(new Error(message), id)
+                : kind === "Error"
+                  ? new Error(message)
+                  : kind === "object"
+                    ? { message }
+                    : message;
+    return { value, message, private: [message, ...(value instanceof Error ? [value.stack!] : [])] };
   });
+
+// One V8 stack line, "at name (location)" or "at location", read here without the sink's own code,
+// as laws S1 and S2 in telemetry/Sink.test.ts read theirs. `file` is the last path segment with its
+// line and column; a `node:` location is a module name, not a folder on a machine, and stays whole.
+// An eval origin, "eval at <name> (<location>), <location>", keeps its name and is read inside, at
+// every depth, so the caller's name and the origin's file count as parts of the frame.
+const located = (location: string): { file: string; folder: boolean } => {
+  const origin = /^eval at (.+?) \((.*)\), (.*)$/.exec(location);
+
+  if (origin !== null) {
+    const inner = located(origin[2] ?? ""),
+      outer = located(origin[3] ?? "");
+    return { file: `eval at ${origin[1]} (${inner.file}), ${outer.file}`, folder: inner.folder || outer.folder };
+  }
+
+  const folder = !location.startsWith("node:") && /[/\\]/.test(location);
+  return {
+    file: folder ? location.slice(Math.max(location.lastIndexOf("/"), location.lastIndexOf("\\")) + 1) : location,
+    folder,
+  };
+};
+
+const frames = (text: string) =>
+  text.split("\n").flatMap((line) => {
+    const frame = /^\s*at (?:(.+?) \((.*)\)|(.*?))(?: \{)?$/.exec(line);
+
+    if (frame === null) {
+      return [];
+    }
+
+    const { file, folder } = located(frame[2] ?? frame[3] ?? "");
+    return [{ frame: frame[1] === undefined ? file : `${frame[1]} (${file})`, folder }];
+  });
+
+/** The wanted frames from the first one that `stored` does not hold in order; empty when all are there. */
+const lostFrames = (stored: ReadonlyArray<string>, wanted: ReadonlyArray<string>) => {
+  let found = 0;
+
+  for (const one of stored) {
+    if (one === wanted[found]) {
+      found += 1;
+    }
+  }
+
+  return wanted.slice(found);
+};
 
 const generatedThrow = fc.oneof(
   failure,
@@ -221,7 +283,7 @@ const generatedThrow = fc.oneof(
       fc.constant(Symbol("made-up-throw")),
       fc.func(fc.jsonValue()),
     )
-    .map((value) => ({ value, private: [] as string[] })),
+    .map((value) => ({ value, message: null, private: [] as string[] })),
 );
 
 for (const adapter of ["node", "worker"] as const) {
@@ -244,11 +306,22 @@ for (const adapter of ["node", "worker"] as const) {
               const kept = contents.flatMap((c) => (Option.isSome(c) && c.value._tag === "kept" ? [c.value] : []));
               expect(kept.length).toBeGreaterThan(0);
 
-              for (const text of sample.private) {
-                expect(
-                  kept.some((c) => c.message.includes(text)),
-                  "original message and stack must reach P37",
-                ).toBe(true);
+              // A-Sink stores each frame with its folders cut, so the law asks for the frames, not the raw stack.
+              const thrown = sample.value instanceof Error ? frames(sample.value.stack ?? "") : [];
+              const lost = kept.map((c) => [
+                ...(sample.message === null || c.message.includes(sample.message) ? [] : [sample.message]),
+                ...lostFrames(
+                  frames(c.message).map((stored) => stored.frame),
+                  thrown.map((raw) => raw.frame),
+                ),
+              ]);
+              expect(
+                lost.some((none) => none.length === 0),
+                `original message and every stack frame (name, file, line, column) must reach P37; lost: ${JSON.stringify(lost)}`,
+              ).toBe(true);
+
+              for (const stored of kept.flatMap((c) => frames(c.message))) {
+                expect(stored.folder, `a stored frame names a folder: ${stored.frame}`).toBe(false);
               }
 
               const receipt = yield* RecoveryStore.use((s) => s.receipt(w.input.id)).pipe(

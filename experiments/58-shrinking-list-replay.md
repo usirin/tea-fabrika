@@ -1,3 +1,8 @@
+---
+date: "2026-10-11"
+summary: "The rule \"the first review writes the list, later rounds only answer for it, stop when it is not shorter\", walked over 525 review loops on kamp-us/phoenix. The lists do shrink: of 682 steps from a failed round, 488 pass and 88 get shorter. The rule would lock out 89 of 459 later-round findings by their quotes, about a quarter with the hand samples, and all 30 read from the ones the record acted on were real defects. It passes 21 to 61 of 152 loops early, about $53 to $224 saved, and stops 33 to 60 for a person against the cap's 33; in two stops of three the record passed on the next round, because a list of one gets one repair try. Code alone can check about 15% of findings again. A check on the quoted line gives no signal and Jev, for $0.02, did worse than always saying \"fixed\", because verdicts quote proof and not the faulty line. So: works with an extra way in and a looser stop, about 70% sure."
+---
+
 # 58. A review list that can only shrink, replayed over 525 recorded loops
 
 The review stage is the next one to be rebuilt as a state machine.

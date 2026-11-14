@@ -1,3 +1,9 @@
+---
+date: "2026-10-10"
+scripts: "none"
+summary: "On 5 replay issues: type right 1 of 5, priority 1 of 5, vetting passed 4 of 5. Claude cost $3.58 in all."
+---
+
 # 47. Scoring triage on the replay set: the first 5
 
 Triage was judged by eye, one ticket at a time. Now a run of triage on a

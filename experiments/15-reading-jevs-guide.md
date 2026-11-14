@@ -1,3 +1,9 @@
+---
+date: "2026-10-04"
+scripts: "none"
+summary: "By the guide's measure we were using Jev the hard way: one broad question per call, where it says to ask many narrow ones."
+---
+
 # 15. Reading Jev's own guide
 
 After fourteen experiments we read the docs properly

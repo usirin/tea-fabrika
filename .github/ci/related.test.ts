@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createVitest, type Vitest, type TestSpecification } from "vitest/node";
 import { parse } from "yaml";
 import { measured } from "../../vitest.shards.ts";
+import { vitestLegs } from "./workflow-lint.ts";
 
 // Today's CI for both versions. Vitest 5.0.5's public node API, read in
 // dist/chunks/plugin.d.C8mmycim.d.ts and cli-api.De07GUeT.js: `related` takes absolute
@@ -106,9 +107,13 @@ it("real skill Markdown subsets select no test", async () => {
 });
 
 // Today's CI serves both versions. The baseline deliberately has no next/ CLI filter.
+// The matrix also holds leg `e2e`, which runs no vitest, so the law reads the numbered legs only,
+// as the workflow lint does. Plant, run once on check.yaml and restored: drop leg "5" from the next
+// matrix, so file indices 5 of 5 land on no leg (red, the sorted legs are not 1 to 5).
 describe("next workflow coverage", () => {
-  const nextWorkflow = parse(readFileSync(join(root, ".github/workflows/check.yaml"), "utf8")).jobs.next;
-  const indices: number[] = nextWorkflow.strategy.matrix.shard;
+  const workflow = readFileSync(join(root, ".github/workflows/check.yaml"), "utf8");
+  const nextWorkflow = parse(workflow).jobs.next;
+  const indices = vitestLegs(workflow);
   const expression: string = nextWorkflow.steps.find((step: { env?: { SHARD?: string } }) => step.env?.SHARD)?.env
     .SHARD;
   const denominator = Number(/\/([1-9]\d*)$/.exec(expression)?.[1]);
@@ -154,7 +159,9 @@ describe("next workflow coverage", () => {
   it("scenario: workflow shards partition every config-discovered next file exactly once", async () => {
     // Real config discovery and each configured sequencer run without executing a test.
     expect(Number.isInteger(denominator)).toBe(true);
-    expect(indices.toSorted((a, b) => a - b)).toEqual(Array.from({ length: denominator }, (_, i) => i + 1));
+    expect(indices.toSorted((a, b) => Number(a) - Number(b))).toEqual(
+      Array.from({ length: denominator }, (_, i) => String(i + 1)),
+    );
     const universe = nextSpecs.map(repoPath);
     expect(universe.length).toBeGreaterThan(0);
     expect(new Set(universe).size).toBe(universe.length);

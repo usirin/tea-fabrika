@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-07"
+summary: "`next/`, Tier 2, with today's palette as the example. `pick` is one program: Cmd-K runs it over the desk's index in the palette layer, with no dim; `/` on the tracker, or typing `pick`, runs it in a tile as `tracker | pick | ticket`, rows in and one row out (Q9). A program writes only its sources: `index(model)`, a `prefix` and its `commands` (Q1). One box, Commands first, 5 per group with an \"All N\" row, Recent when empty (Q2); an exact id such as `#193` goes on top (Q3); `t ` and a space narrow, `?` lists the prefixes (Q4); `@` lists people and summoned agents, and the plain Ask row asks your default agent only on a press (Q5); fabsh is a source, and `>` makes the box a fabsh line whose rows you then find in (Q6); the selected row never moves (Q7); Enter acts, Cmd-K in the box shows the row's actions, Esc pops one (Q8); the APG combobox with a spoken count as the floor (Q10). Rooms and DMs are the summon note's. Built from experiment 219 and a prototype the owner pressed."
+---
+
 # Pickers: Cmd-K is a picker, and search is one source of many
 
 **Decided 2026-11-07.** The owner approved the ten principles, the shape and the smaller calls below

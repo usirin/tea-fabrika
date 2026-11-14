@@ -1,3 +1,9 @@
+---
+date: "2026-10-17"
+scripts: "`src/stages/review/program.ts`, `65-review-old-vs-new.ts`"
+summary: "Yes. Review is a tea machine (idle, gathering, waiting, reviewing, judging, over) and a program told pull requests that sends a `verdict`, a `passed` url in ship's own input type, and each `note`. The agent's run is a Subscription, not a Cmd: it says things while it runs. Its tools are Read, Grep, Glob and one opened input, `file_note`, whose call reaches the machine as a Msg through a door made inside the Sub's stream (no late-bound dispatch), and the machine files it with an Act. The form still comes back once, at the end, decoded in the stream: a bad one is the declared `misfit`. Each criterion is met or open; a problem no criterion covers is a new open criterion. upstream | review | ship on fakes: four pull requests, only the two that passed reached ship, in order, the note in state and verdict, the pipe ended on its own, three runs out of three. Old and new on 8 real pull requests and 2 scripted forms: 16 of 16 the same. Live, read only: #687 pass, #650 fail on the same fault as today, #596 pass with a real note filed; $1.51 in all. Not built: scouts (they need a supervisor), posting notes, a brief id in place of the brief in the Sub's deps."
+---
+
 # 65. The review stage as a program, with the agent inside a machine
 
 ```ts

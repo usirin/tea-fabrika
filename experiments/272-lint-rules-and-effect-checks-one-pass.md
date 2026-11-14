@@ -1,3 +1,8 @@
+---
+date: "2026-11-09"
+summary: "Both versions, main at `40b36a47`; oxlint 1.90.0, `@effect/tsgo` 0.63.0. 511 oxlint rules ran as warn in one 3.4 s pass over 1,237 files (the 61 type-aware rules did not run). All 135 Effect checks ran over 23 projects in about 25 s. Up to 10 hits were read per rule. 98 named oxlint rules plus a React set, and 35 Effect checks, fired 0 times; they landed in PR 665. 13 oxlint rules (among them `import/no-cycle` with two real cycles in libfabrika, `no-import-type-side-effects` and `no-empty`) and 7 Effect checks had 0 false alarms in the sample and could block after a small fix. `throw-new-error`, `import/export`, `no-useless-concat` and the vitest expect rules were wrong 6/6 to 11/11. An agent's editor shows no type errors: the TS 5 language server cannot start on TypeScript 7 native. `tsc --lsp --stdio` would work, 85%, untested. 0114 later made 16 more Effect checks block in `next/` (PR 958), and 262 reread them. The counts are from 11-09, not rechecked. No model, $0."
+---
+
 # 272. Which of oxlint's rules and Effect's checks that are off could block, and how often is each one wrong?
 
 Counted on 2026-11-09, on main at `40b36a47`, in a throwaway worktree; moved here on 2026-11-11.

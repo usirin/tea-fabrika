@@ -1,3 +1,8 @@
+---
+date: "2026-11-11"
+summary: "Draft, nothing measured yet; `next/`; $0. Only the `print` step ran: it wrote two files to a temp folder and changed nothing on the Mac. The plan: a `HandsService` resource writes a LaunchAgents plist and boots it with `launchctl`, so launchd restarts the hands and Alchemy does not have to. A plain deploy after a kill should then be right to say \"no change\". Follows 264, where a deploy said \"no change\" over a dead pid."
+---
+
 # 277. If a hands resource installs a launchd entry, does the Mac keep the hands alive, and does a deploy still say "no change" when it should?
 
 2026-11-11. **Draft. Nothing has run yet.** It is about `next/`, against `alchemy` 2.0.0-beta.85

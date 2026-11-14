@@ -1,3 +1,9 @@
+---
+date: "2026-10-30"
+scripts: "`172-hands-restart-time.ts` (the driver), `172-hands-restart-time/` (`hands-miniflare.ts`, `hands-daemon.ts`: two stand-in hands with a brain), `lib/host-link.ts` (the app's end of the link, by hand), `results/172-hands-restart-time.json`"
+summary: "Under a second. The app's host, killed with a window attached, is back and caught up in 0.40 s median (p95 0.59) with 10 asks on the ledger, 0.55 s with 1,000, 0.79 s with 10,000 (Node; Electron 0.45, 0.56, 0.80). About half is the app's own reconnect jitter (0 to 500 ms); the rest is a 0.15 to 0.19 s cold start and the host reading its ledger before it answers the hello. The app restarts the host by itself today. The socket hop costs 0.02 to 0.04 ms a message. The surprise: Miniflare run inside the hands' own process leaves workerd running and answering after a SIGKILL, 20 of 20, still there at 30 s, and new hands then cannot start a brain on that port (`ERR_ADDRESS_IN_USE`, 20 of 20). Today's daemon, with its ppid guard, dies with the hands in 0.26 s and restarts in about 0.46 s. Lean for L3: keep the window behind its own hands, with the brain's life tied to them on purpose; confidence 85% (a heavy desk untested). No model, $0."
+---
+
 # 172. When the hands die, how long until the window is back?
 
 **Answer.** Well under a second. The app's host stands in for the hands. When it

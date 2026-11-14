@@ -249,6 +249,10 @@ const world = async (
 // Test-only subclasses expose storage inspection and platform abort on the private control
 // socket. The production Connection, runner, Project and transport behavior stays in the base.
 // No HTTP route or extra target is installed in a product build.
+// T502 S1: the Connection part holds for a plain class and for Alchemy's bridge class alike. It
+// keeps nothing on the instance and calls nothing on `super`: a bridge class answers from a Proxy
+// its constructor returns, and has no product method on its prototype. An activation is told
+// apart by the state the platform gives it, which is new each time the object wakes.
 const instrumentBrain = async (brain: string, home: string) => {
   const entry = join(home, "exam-entry.mjs");
   writeFileSync(
@@ -259,8 +263,8 @@ export default Brain.default;
 export const RecordPart = Brain.RecordPart;
 export const IsolateTail = Brain.IsolateTail;
 export class Connection extends Brain.Connection {
-  incarnation = crypto.randomUUID();
-  testState() { return {incarnation:this.incarnation, sockets:this.ctx.getWebSockets().map(ws=>({attachment:ws.deserializeAttachment(),tags:this.ctx.getTags(ws)}))}; }
+  static incarnations = new WeakMap();
+  testState() { if (!Connection.incarnations.has(this.ctx)) Connection.incarnations.set(this.ctx, crypto.randomUUID()); return {incarnation:Connection.incarnations.get(this.ctx), sockets:this.ctx.getWebSockets().map(ws=>({attachment:ws.deserializeAttachment(),tags:this.ctx.getTags(ws)}))}; }
   testAbort() { this.ctx.abort("exam abort"); }
 }
 export class Process extends Brain.Process {
@@ -595,6 +599,36 @@ describe("P12 real object adapters", () => {
         retry?.socket.close();
       }
     }, true);
+  });
+  // T502 S1, law 2. scenario: only workerd delivers a socket's close event to the object, and only
+  // the object's close slot tells the Project the session left. No other wire scenario watches
+  // that. The probe before the close is the Project calling the real Connection object.
+  // Plant: drop the `webSocketClose` slot from the object's Layer.
+  it("scenario: a socket the client closes leaves presence; until then its session answers a real probe", async () => {
+    await world(async (instance, key) => {
+      const p = instance.project("p12-records"),
+        c = await wire(instance, key, "close-leaves");
+      // A session is kept under the key its hello was admitted with: the raw key or its fingerprint.
+      const sessions = async () => [
+        ...(await p.gateways.online(key.fingerprint)),
+        ...(await p.gateways.online(key.raw)),
+      ];
+
+      try {
+        const joined = await sessions();
+        expect(joined).toHaveLength(1);
+        expect(joined[0]).toMatchObject({ gateway: c.name, state: "online" });
+        c.socket.close(1000);
+
+        while ((await sessions()).length > 0) {
+          await pause();
+        }
+
+        expect(await sessions()).toEqual([]);
+      } finally {
+        c.socket.close();
+      }
+    });
   });
   it("scenario: p79 plant: an old close cannot remove the newer session; failed real probes give unknown", async () => {
     await world(async (instance, key) => {

@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-01"
+summary: "`next/`, Tier 1's editing first, the desk's in Tier 2. A program gets one new field, `commands` (each a Msg, its keys, optional `global` and `mode`), and one `mode(state)`, read from the tile's own machine, so a mode is per window. No mode is `null`. Six principles: no mode first; a mode is state; you always see it in words, told to a screen reader; Escape always leaves; one mode per program, never a stack; a mode stays where it lives. Today's info mode (`C-b i`) is the test: it shows its name in words, and breaks on Escape, hidden bars, screen readers and keyboard focus. The ledger records nothing new."
+---
+
 # Modes
 
 **Decided 2026-11-01.** The owner approved the six principles, the shape and the smaller

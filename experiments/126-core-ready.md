@@ -1,3 +1,8 @@
+---
+date: "2026-10-24"
+summary: "Ready after a short list of fixes. Part 1, a consumer-driven contract: the old pipeline imports 150 names from `@kampus/fabrika` in 98 files over 13 subpaths, all public; 36 values named in no core test (`createDraft` 7 files, `noSpend` 13); the core has the inner loop (programs, host, ledger, Draft, sandbox, tsh) and no tool for GitHub, asks, checks, commands, working copies or settings. Part 2: 150 of the core's 16,669 mutants (seed 126); the repo's own `tsc` refuses 79 (TypeScript 7 has no compiler API, so Stryker's checker cannot run); Stryker 10.1.1's vitest runner, the core's 249 tests, the sample alone by mutate ranges, an ignorer and a primed incremental file; of 71: 35 killed (49%), 23 survived, 13 run by no test, 0 timeouts. Stryker alone would count 42 refused mutants as living. 11 run where no mutant can be on (the ledger's SQL in worker threads and workerd, the fake agent); without them 33 of 60 (55%). The old pipeline's tests kill 4 more of the 36. Hand check of 11 survivors: 7 real (the host's fast takeover paths, a pipe whose writer never started, fit's cleaning, a hold repeating a charge, law T's order check). Part 3: all 7 named bugs hold; bites a ticket in the app: told values lost at reattach, a background window takes over, ledgers that cannot start from the bundle; also no default agent turn limit and a 1 s lease. A hung test's Effect keeps running (probe: finalizer never ran; with vitest's `signal`, it ran). Must fix: those five, about 1 to 2 days. $0, Stryker 20 minutes. Confidence 70%."
+---
+
 # 126. Is the core ready to build on?
 
 The question: the plan is to rebuild the pipeline small, on today's core (`packages/fabrika`),

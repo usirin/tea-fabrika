@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-01"
+summary: "`next/`, Tier 1. Saving a program's file swaps its code in the running app with no restart. Each process of that program takes the new code at its next step, through its own mailbox, and keeps its model when the new state schema decodes it, after an optional upcast (Erlang's `code_change`). If it cannot, that one process is refused and keeps its old code, with Restart on its tile. A bad save never runs. A core change restarts workerd, which loses nothing. A window swaps the view by hash from the brain. Every record names the build that wrote it."
+---
+
 # Hot reload
 
 **Decided 2026-11-01 by the owner:** `next/` has hot reload from day one. Saving a program's file

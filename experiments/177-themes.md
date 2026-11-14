@@ -1,3 +1,9 @@
+---
+date: "2026-10-31"
+scripts: "`177-themes.ts`, `177-themes/` (`import.ts` Base16, Base24 and Ghostty readers, `radix.ts` Radix picks, `schemes/` the files, `spike.patch`, `shots/`), `results/177-themes.json`"
+summary: "Yes, on today's version, on a spike that does not land. Real shared themes swap live on the built app, terminal included: 11 to 19 ms in a task, about 5 frames at worst with four full terminals, no flash on start. Programs hold 0 raw colors, yet six things broke: colors the host writes into terminal bytes, the code highlighter, ghostty-web's lack of a live palette, tokens misused as text, shadows, and the tracker's note box. Lean: store a theme as full values, per person, and make a Radix pick (gray + accent) the default way to make one, since a pick can always be written out and a shared theme can never be said as a pick. Map Radix's steps as its own Themes package does, one step darker, or the look is lost. Confidence 85%, 70% on the look. Also a clickable page, `apps/fabrika/docs/themes/mockup.html`. No model, $0."
+---
+
 # 177: Can people bring their own themes?
 
 ## Since this was written (2026-11-01)

@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-01"
+summary: "Today's version. The pipeline asks a person only for a judgment only a person can make; everything else it fixes, retries within limits, or makes impossible, and it stops itself, with the reason, on what it cannot fix (Toyota's jidoka and andon, Shingo's poka-yoke). A stuck or crashed lane restarts from the step that broke and keeps the finished ones; every stop and every pick says where the lane goes on, and every retry has a number. A person's `stop` is a saved pause, a person may steer by a plain ticket comment, red goes back by default, and the lane records wide. Every place today's lane stops or asks, 69 in all, is classed: 21 judgment, 38 machine-fixable, 10 preventable. From ticket 117's first run."
+---
+
 # Jidoka and andon: the lane fixes what code can, and asks a person only to judge
 
 **Decided 2026-11-01**, the rules in [what was decided](#what-was-decided). The details

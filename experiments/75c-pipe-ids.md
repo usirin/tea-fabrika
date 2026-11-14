@@ -1,3 +1,9 @@
+---
+date: "2026-10-18"
+scripts: "`src/stages/ship/program.ts`, `src/stages/review/program.ts`, `src/program/shape.ts`, `src/program/mortal.ts`, their tests, `docs/direction/tea-program.md`"
+summary: "Yes, scripted. The repeat is real but needs two disks or a stalled write, or the same pull request told again: before, #14 went into the merge queue twice in both tests, 3 of 3 runs, with GitHub never saying merged. A plain kill -9 in one process cannot hit it: review's save that its work ended is queued on the one write lock before ship's first save. Fixed with an idempotency key, as Stripe, Temporal and Restate do: `passed` is `{pr, head}` (a type that cannot exist without its head), and ship keeps that run under `pr/<url>/commits/<head>` until a `forget`, the transactional inbox. Now once. `fit` takes a member of a union input. The other side is a loss (review's save lands before ship has the value; a kill between loses it); it is pinned in a test and was 75b's flake. Only an ack on the pipe closes it. Confidence 85% for the fix, 70% for the ack."
+---
+
 # 75c. Ids on the pipe: ship catches a repeat of review's `passed` by its head
 
 Scripted runs only: fake GitHub, a scripted reviewer, no agent, $0.

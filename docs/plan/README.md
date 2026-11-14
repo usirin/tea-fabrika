@@ -67,8 +67,9 @@ not written yet.*
 *2026-11-13, later:* the Alchemy port ([0041](../../.decisions/0041-object-classes-are-effect-objects.md),
 ticket 502) is part of this plan and keeps a slot beside the four primitives
 ([0181](../../.decisions/0181-the-alchemy-port-keeps-a-slot.md)). One of its objects, `RecordPart`,
-landed on 2026-11-11; `Project`, `Process`, `Connection` and `Control` are still plain classes. The
-plan for what is left is being written.
+landed on 2026-11-11, and `Connection` follows in slice S1 of
+[its plan](./ticket-502-alchemy-port.md); `Project`, `Process` and `Control` are still plain
+classes. *It said: the plan for what is left is being written.*
 
 *2026-11-13, approved by the owner:* in that section, 30 of Tier 1's 44 rows are marked needed, 2
 help and 12 wait. The build order is the merge line, the window, a person starting a program and
@@ -102,6 +103,10 @@ between 0279 and 0274 before the desk is built, then S1 of the
 before `fabsh` is built, and S2 to S7 before `summon`; say yes after reading `alchemy plan` before
 the first cloud deploy. The other open calls are listed in
 [the section](./tier-1.md#the-owners-walks-and-decisions-by-step), each tied to its step.
+
+*2026-11-13:* ticket 921, the layering debt, slice 1 is in review in `next/`
+([PR 1189](https://github.com/kamp-us/tea-fabrika/pull/1189)): the session manager, the recovery
+store and the gateway each fail with their own error and a tagged reason, in place of the ledger's.
 
 *2026-11-12:* P19 slice 1, tracker ticket 881, is built on its branch in `next/`, awaiting
 review: the brain-service contracts, lifecycle machine and launchd adapter. The box checks only controlled services;
@@ -391,7 +396,7 @@ much as `next/` work and run beside Tier 1, never held back for it (owner, 2026-
 | Fix today's version | [AGENTS.md](../../AGENTS.md), the [package list](../../README.md#what-is-in-this-repository), then that part's own README |
 | Build in `next/` | [Tier 1](./tier-1.md), [its pull requests and waves](./tier-1.md#the-pull-requests-one-at-a-time) and [ticket 115's plan](./ticket-115.md), [the steps](../direction/next-is-a-pipeline-pre-run.md), the [Start here list](../direction/README.md#start-here). No builder starts before an approved plan and tests that exist |
 | Run a real ticket | [Run a ticket through the pipeline](../how-to/run-a-pipeline-ticket.md), [its rules](../how-to/run-a-pipeline-ticket.md#the-rules-for-a-live-run), then [field/](../../field/README.md) for what past runs hit |
-| Write down a decision | A note in [docs/direction](../direction/README.md), the same day, plus its row. Mark it **proposed** until it is settled |
+| Write down a decision | A note in [docs/direction](../direction/README.md), the same day, with its own frontmatter (no index row, 0522). Mark it **proposed** until it is settled |
 | Log a run | [field/README.md](../../field/README.md) for the schema: one row per agent run, one note per thing that broke, cost too much, needed a person or worked well |
 
 ## Who decides what

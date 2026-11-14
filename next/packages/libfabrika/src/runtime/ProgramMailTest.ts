@@ -91,6 +91,29 @@ const completion = <A, E>(fiber: Fiber.Fiber<A, E>, label: string) =>
     }),
   );
 
+/** Where a walk's wall time starts: 2026-11-11T01:00:00Z, the time its letters say they were sent. */
+const WALK_START = 1794358800000;
+
+/**
+ * A walk's clock. Wall time starts at `WALK_START` and moves 1 ms on each read, so alarm times
+ * follow the walk's own steps and one seed takes one path on any machine, however loaded. Sleeps
+ * and monotonic time stay `live`: the walk's deadlines, such as a call's 20 s answer limit, are
+ * real time, so a call that never answers still fails at its limit instead of hanging.
+ */
+const walkClock = (live: Clock.Clock): Clock.Clock => {
+  let now = WALK_START;
+  const tick = () => now++;
+  return {
+    currentTimeMillisUnsafe: tick,
+    currentTimeMillis: Effect.sync(tick),
+    currentTimeNanosUnsafe: () => BigInt(tick()) * 1_000_000n,
+    currentTimeNanos: Effect.sync(() => BigInt(tick()) * 1_000_000n),
+    monotonicTimeNanosUnsafe: () => live.monotonicTimeNanosUnsafe(),
+    monotonicTimeNanos: live.monotonicTimeNanos,
+    sleep: (duration) => live.sleep(duration),
+  };
+};
+
 const BUILD = "p41-build-a";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -1378,6 +1401,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             const done = new Set<Move>();
             let sends = 0;
             const once = Effect.fnUntraced(function* (tape: ReadonlyArray<Cell>, seed: number) {
+              const clock = walkClock(yield* Clock.Clock);
               const secrets = yield* Arbitrary.sampleEffect(RepliesTest.sentinel, { seed, count: 2 });
               const observed = records(secrets, trace);
               const run = walk(
@@ -1399,14 +1423,22 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                 done,
                 observed,
               );
-              yield* Effect.scoped(run(tape)).pipe(Effect.withTracer(observed.tracer), Effect.provide(observed.logger));
+              yield* Effect.scoped(run(tape)).pipe(
+                Effect.withTracer(observed.tracer),
+                Effect.provide(observed.logger),
+                Effect.provideService(Clock.Clock, clock),
+              );
               observed.check();
               sends += observed.spans.filter((s) => s.name === "mail_delivery.send").length;
             });
             // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits the state-aware tape
             const property = fc.asyncProperty(Tape, fc.nat(), (tape, seed) => Effect.runPromise(once(tape, seed)));
+            // Each run walks two real runners. Shrinking a failure runs hundreds more of them, so one
+            // failed run became a 150 s timeout that hid its failing check (merge-group run
+            // 43600068403). The first failing tape is reported as found.
+            const options = { seed: SEED, numRuns: 100, includeErrorInReport: true, endOnFailure: true };
             // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check reports its property result
-            yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns: 100, includeErrorInReport: true }));
+            yield* Effect.promise(() => fc.assert(property, options));
             expect(sends).toBeGreaterThan(0);
             expect([...done]).toEqual(
               expect.arrayContaining([

@@ -1,3 +1,9 @@
+---
+date: "2026-10-21"
+scripts: "`packages/fabrika/src/pipeline/{settings.ts,setup.ts,settings-source.ts,local-checks.ts,code-host-github.ts,code-host-github-writes.ts}`, `stages/{build,operate,plan,ship}/`, `tsh/`, `packages/fabrika/rubrics/`, `107-a-repo-that-is-not-demlik.ts`, `results/107-a-repo-that-is-not-demlik.json`"
+summary: "It did assume demlik, in 27 places; now each is a named default or a named refusal, printed one line per pick at start with where it came from. `fabrika.toml` gained `[agents.<step>]` (model, effort, usd), `[build]` (go, label, install, checks), `[review]` (rubrics, governed, ui), `[checks]` (github, `[[checks.run]]`, run by fabrika at each head), `[ship] approval`, `[ledger] at`, all Effect Schema; picks that say nothing are refused. The build gate is the approved plan on the ledger by default (`unknown` is stuck, never a go); a label only when the file says so. A fresh private npm sandbox repo (no CI, queue, rulesets, CODEOWNERS, `.fabrika.jsonc`, labels or CLAUDE.md), real haiku: plan, approve on the desk, operate, merged in 49 s; operate before approval `skip:not_ready` with 0 agent runs. With no queue the merge is now pinned to the tested main (a merge commit made by hand, main moved with `force: false`): a commit landed between the door and the write answered `behind`, build took main in by merge (no rebase, no force-push), round 2 merged; a commit landed before the door, the same. Merge queue refused by GitHub (403, free plan, private repo): not run. Bugs: GitHub's REST rules read is 403 on free private repos (now GraphQL); a rubrics folder taken as the repo's pick. Holes: criteria still from the ticket, not the plan; protected branches with no queue unpinned; merged branches and working copies left behind. About $0.27 at most. Confidence 80%."
+---
+
 # 107. A repo that is not demlik
 
 The question: does the pipeline assume demlik's setup (step S9)?

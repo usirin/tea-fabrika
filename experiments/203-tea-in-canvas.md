@@ -1,3 +1,9 @@
+---
+date: "2026-11-03"
+scripts: "none; the spike and its bundle stayed outside the repo"
+summary: "Today's version. `programs/counter`'s real `init`, `update`, view and schema ran on tea 0.22.0's Effect engine in one canvas tile, read through one `useSyncExternalStore` hook, keys through `onKeyDown` on the tile; the owner clicked it in Claude Design and it works. A happy-dom smoke test on React 18.3.1 and 19.3.1: 3, then 5, `x` ignored, 6, ended at 6. The bundle grows 903 KB to 1,546 KB (+643 KB; 253 to 459 KB gzipped), Effect 485 KB of it. The canvas's React 18 is the only React: the build maps `react` to `window.React`. In the outline round's canvas the keys were dead (no page-wide keydown) until each tile ran the `commands` table, `refuse` and `update` itself; the owner checked every key and both themes. Manti's `TreeView` has no controlled rows and string labels only, so the status word sits in an icon slot hidden from screen readers. Lean: real program code for the logic, canvas HTML for the looks, programs with no outside data first, 70%. Load time at 20 artboards, Safari, screen readers and real Cmds are untested. $0."
+---
+
 # Claude Design canvases run tea and real program code
 
 **A Design canvas can run a real tea program.** The counter program's own `init`, `update`, view

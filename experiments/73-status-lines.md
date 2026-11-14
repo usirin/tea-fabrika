@@ -1,3 +1,8 @@
+---
+date: "2026-10-17"
+summary: "Yes. `defineProgram` takes `status: {<machine>: (state) => string}`, required for every machine as Elm requires `view`; left out, it does not compile, and it throws. Each run of a machine under an id is a copy with its own line, so a stuck copy is never hidden by a newer one. Hosts read `run.machines.<name>.copies()` and `.lines`, a stream sent only on change. tsh's `jobs` prints the lines under each job, tagged by program or machine when there are several; ended copies stay until the job ends, the newest 5 per machine, older ones folded into a count. `--describe` names the machines with a line; spans carry it as `tea.status`. review, ship, build, operate's loop and the kept queue have real lines. In tsh on recorded GitHub, three pull requests read `stuck: read failed`, `skipped (draft)`, `waiting on checks`, then `done, passed`; after `kill -9` and attach, the build's line comes back from kept state as `builder at work, run 2`. Found: a line lags its state by one Cmd, as tea tells listeners only after a Msg's Cmds answer; a failing Listen freezes a copy with no error. `@demlik/tea` unchanged."
+---
+
 # 73. Status lines: one line per running copy of a machine
 
 ```sh

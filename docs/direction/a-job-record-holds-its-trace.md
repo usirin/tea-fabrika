@@ -1,3 +1,8 @@
+---
+state: "decided in pieces, see the note"
+summary: "Jaeger goes. A job (a root run and every run it starts, like a process group) is the host's, not tsh's: a tsh line, a lane, `hello world`. One Durable Object per job, `JobRecord`, in the project's ledger Worker, keyed by the job's trace id, for every program. It is its runs' `Storage` and holds the job's spans from every host, its beats, a summary when it ends, and pointers to agent logs in `Blobs`. A child run gets its parent's job. Spans come in as OTLP through the same door as facts. Nothing is ever deleted. The app's trace tile reads it through a `Traces` service."
+---
+
 # A JobRecord holds each host job: its runs' storage and its trace
 
 **Decided, in pieces:**

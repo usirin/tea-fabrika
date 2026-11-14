@@ -1,3 +1,9 @@
+---
+date: "2026-10-24"
+scripts: "`136-planner-folds.ts`, `133-truth.json`, `results/136-planner-folds.json`"
+summary: "No: 133's lean (move fold to the planner) does not hold. The plan stage's planner options (`packages/pipeline/src/stages/plan/planner.ts`), opus at effort medium, Read, Grep and Glob on demlik's code at main before filing, asked only whether the ticket as first filed joins one of the tickets open then and sent to plan; no plan written. On 133's 13 folds: the right ticket or a sibling in the same PR 6 of 26 answers (133's triage, scored the same way, 4), a neighbour 5, own 15; false folds on 13 controls 6 of 26 (triage 1). Its 4 right answers were #21 and #494, which triage called duplicates. Its \"own\" reasons are true code facts: most real folds shipped one study's findings in one PR, not one change. 10 of its 11 wrong names were a ticket whose PR was already open (merging 11 to 85 minutes later); arm `unbuilt` cuts those from the list in code: false folds 1 of 26, right still 6, the 3 later reports turned \"own\". Part B: the planner of a batch's first ticket, two minutes after filing, asked what its PR should also carry: 0 of 20 (10 tickets that shared its PR, 2 runs each). The cheap shape (the question alone) costs $0.069 a median answer, 3 turns, 1 code read; brief `may` read no code at all, so `must` asks it to. Recommendation: keep \"triage does not fold, for now\" and no fold step in the planner (80%); wherever a fold question lives, cut tickets already being built from its list first (75%). $5.87 for 99 answers."
+---
+
 # 136. Can the planner fold?
 
 Experiment 133 found that triage cannot fold: on 13 real demlik folds it named

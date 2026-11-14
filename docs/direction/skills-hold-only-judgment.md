@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-08"
+summary: "Today's hand-run tooling removes mechanical instructions only when their checks land. Slice 1b adds shared leak checks, machine limits and advice on Effect test data in `next/`; K6's replay refused 0 of 20 merged hand-run PRs."
+---
+
 # Skills keep judgment; code checks the steps
 
 **Decided 2026-11-08.** Today's hand-run tooling, used for work in either version.

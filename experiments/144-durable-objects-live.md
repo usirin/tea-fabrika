@@ -1,3 +1,9 @@
+---
+date: "2026-10-25"
+scripts: "`144-durable-objects-live.ts`, `144-durable-objects-live/` (`worker.ts`, `alchemy.run.ts`, its own `package.json`), `results/144-durable-objects-live.json`"
+summary: "Yes, as it is. The repo's `durable-object.ts`, unchanged, deployed with alchemy 2.0.0-beta.84's async Worker form behind a door that wants a per-run key; five runs, each destroyed and listed empty. From a laptop at SJC: read p50 28 ms, p99 55; append p50 56, p95 74, p99 426 (the tail is inside Cloudflare, over tea-host's 50 ms bar; reads have none). An object restarts after 10 s with no call (hibernation), waking costs 0.1 to 0.3 s, a new object's first call 0.4 to 1.4 s. Two objects in one call: side by side costs the slower one. Doorbell: B hears A's write at p50 59 ms, 0 of 310 missed. Two writers, 10 minutes, a redeploy in the middle, twice: 5,670 and 5,342 facts, 0 lost, 0 doubled. The Worker takes new code within 1 s; a busy object keeps the old code until about 10 s of quiet (5 minutes in one run), so Worker-to-object calls must work both ways. `locationHint` places a new object (LAX with none) and never moves one. GitHub's unsigned keys list from a Worker: 18 of 50 refused, shared addresses. The law suite: 24 of 27 the first time; the three that failed wait on the laptop's clock, and a busy object's `Date.now()` reads up to about 0.1 s old (the guess of a laptop clock ahead was wrong); alone they pass 9 of 9. Phoenix's patches on beta.84: 1 upstream, 1 partly, 2 still needed. About 22,000 to 27,000 requests, $0 more on the bill (about $0.02 if nothing were included), no agent, no model. Confidence 80%."
+---
+
 # 144. The ledger's real Durable Object on real Cloudflare, measured from a laptop
 
 The question: the ledger is going to Cloudflare
