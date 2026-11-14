@@ -6,12 +6,12 @@
     },
     {
       "name": "next-node",
-      "layer": 9,
+      "layer": 10,
       "paths": ["next/packages/libfabrika/src/node"]
     },
     {
       "name": "next-workers",
-      "layer": 8,
+      "layer": 9,
       "paths": ["next/packages/libfabrika/src/cloudflare"]
     },
     {
@@ -40,7 +40,7 @@
     },
     {
       "name": "next-libfabrika-entry",
-      "layer": 7,
+      "layer": 8,
       "paths": ["next/packages/libfabrika/src/index.ts"]
     },
     {
@@ -49,22 +49,22 @@
     },
     {
       "name": "next-desktop-core",
-      "layer": 6,
+      "layer": 7,
       "paths": ["next/packages/libfabrika/src/desktop"]
     },
     {
       "name": "next-schedules",
-      "layer": 6,
+      "layer": 7,
       "paths": ["next/packages/libfabrika/src/schedules"]
     },
     {
       "name": "next-door",
-      "layer": 6,
+      "layer": 7,
       "paths": ["next/packages/libfabrika/src/gateway"]
     },
     {
       "name": "next-runtime",
-      "layer": 5,
+      "layer": 6,
       "paths": [
         "next/packages/libfabrika/src/runtime",
         "next/packages/libfabrika/src/Testing.ts",
@@ -73,28 +73,33 @@
     },
     {
       "name": "next-access",
-      "layer": 4,
+      "layer": 5,
       "paths": ["next/packages/libfabrika/src/access"]
     },
     {
       "name": "next-processes",
-      "layer": 3,
+      "layer": 4,
       "paths": ["next/packages/libfabrika/src/processes"]
     },
     {
       "name": "next-presence",
-      "layer": 3,
+      "layer": 4,
       "paths": ["next/packages/libfabrika/src/presence"]
     },
     {
       "name": "next-jobs",
-      "layer": 3,
+      "layer": 4,
       "paths": ["next/packages/libfabrika/src/jobs"]
     },
     {
       "name": "next-packs",
-      "layer": 3,
+      "layer": 4,
       "paths": ["next/packages/libfabrika/src/packs"]
+    },
+    {
+      "name": "next-permissions",
+      "layer": 3,
+      "paths": ["next/packages/libfabrika/src/permissions"]
     },
     {
       "name": "next-ledger",

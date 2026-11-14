@@ -263,6 +263,8 @@ const rowParts: Readonly<Record<string, string>> = {
   "next-codehost": "data",
   "next-repositories": "data",
   "next-settings": "data", // T664: layer 2 beside the ledger, and node/settings/ imports it
+  // T953: the permission core is coordination, on its own layer 3 between the ledger and the processes.
+  "next-permissions": "coordination",
   "next-processes": "coordination",
   "next-presence": "coordination",
   // P39: the jobs module is coordination, so it may import data and id and nothing above them.
@@ -1226,12 +1228,12 @@ describe("layers", () => {
   );
 
   // scenario: the plan's plant for "no module imports another module on its own layer". `next-access` is
-  // put on layer 5 beside `next-runtime`: an import from the runtime to access, which went down,
-  // must now fail, and no other pair changes.
+  // put on layer 6 beside `next-runtime` (T953 moved both up one): an import from the runtime to
+  // access, which went down, must now fail, and no other pair changes.
   it.effect("scenario: a module put beside the runtime refuses an import from the runtime", () =>
     Effect.gen(function* () {
       const realTree = yield* plantedReal;
-      const beside = REAL.map((row) => (row.name === "next-access" ? { ...row, layer: 5 } : row));
+      const beside = REAL.map((row) => (row.name === "next-access" ? { ...row, layer: 6 } : row));
       const before = runTool(realTree, REAL).edges;
       const after = runTool(realTree, beside);
       expect(after.edges).toEqual(expectedEdges(beside));
@@ -1245,20 +1247,22 @@ describe("layers", () => {
 
   // pinned: the plan's layer table (ticket 477, 0043), since the rows are written by hand and this
   // is the one place that says which module is on which layer.
+  // T953 put `next-permissions` on layer 3 and moved every row from layer 3 up by one.
   it("pinned: the modules are on the layers the plan gives them", () => {
     expect(Object.fromEntries(layersByName(REAL))).toEqual({
-      "next-node": 9,
-      "next-workers": 8,
-      "next-libfabrika-entry": 7,
-      "next-door": 6,
-      "next-desktop-core": 6,
-      "next-schedules": 6,
-      "next-runtime": 5,
-      "next-access": 4,
-      "next-processes": 3,
-      "next-presence": 3,
-      "next-jobs": 3,
-      "next-packs": 3,
+      "next-node": 10,
+      "next-workers": 9,
+      "next-libfabrika-entry": 8,
+      "next-door": 7,
+      "next-desktop-core": 7,
+      "next-schedules": 7,
+      "next-runtime": 6,
+      "next-access": 5,
+      "next-processes": 4,
+      "next-presence": 4,
+      "next-jobs": 4,
+      "next-packs": 4,
+      "next-permissions": 3,
       "next-ci": 2,
       "next-codehost": 2,
       "next-repositories": 2,
@@ -1268,6 +1272,51 @@ describe("layers", () => {
       "next-telemetry": 1,
       "next-shared": 0,
     });
+  });
+
+  // T953, L19. pinned: main's layer table at 85cb7c224, before the permission core took layer 3. A
+  // renumber changes numbers only: for each two rows that had a layer there, one is below the other
+  // now exactly when it was below it then, and two that shared a layer still share one.
+  // Plant: put `next-access` on layer 4, beside `next-processes`; the pair that was above is now beside.
+  const MAIN_AT_85CB7C224: Readonly<Record<string, number>> = {
+    "next-node": 9,
+    "next-workers": 8,
+    "next-libfabrika-entry": 7,
+    "next-door": 6,
+    "next-desktop-core": 6,
+    "next-schedules": 6,
+    "next-runtime": 5,
+    "next-access": 4,
+    "next-processes": 3,
+    "next-presence": 3,
+    "next-jobs": 3,
+    "next-packs": 3,
+    "next-ci": 2,
+    "next-codehost": 2,
+    "next-repositories": 2,
+    "next-ledger": 2,
+    "next-transport": 2,
+    "next-settings": 2,
+    "next-telemetry": 1,
+    "next-shared": 0,
+  };
+  /** Each ordered pair of main's rows whose order differs on `rows`, as `a b: before -> after`. */
+  const reordered = (rows: ReadonlyArray<Row>): ReadonlyArray<string> => {
+    const now = layersByName(rows);
+    const names = Object.keys(MAIN_AT_85CB7C224);
+    return names.flatMap((a) =>
+      names.flatMap((b) => {
+        const [was, is] = [
+          Math.sign((MAIN_AT_85CB7C224[a] ?? 0) - (MAIN_AT_85CB7C224[b] ?? 0)),
+          Math.sign((now.get(a) ?? Number.NaN) - (now.get(b) ?? Number.NaN)),
+        ];
+        return a === b || was === is ? [] : [`${a} ${b}: ${was} -> ${is}`];
+      }),
+    );
+  };
+  it("pinned: T953 L19 the renumbered layers keep the order of every pair main had", () => {
+    expect(Object.keys(MAIN_AT_85CB7C224).filter((name) => !layersByName(REAL).has(name))).toEqual([]);
+    expect(reordered(REAL)).toEqual([]);
   });
 
   // Plant: derive a row's rank from its place in the list, not from its `layer`. Then changing
