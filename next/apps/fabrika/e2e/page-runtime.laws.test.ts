@@ -16,7 +16,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { type Browser, type BrowserContext, chromium, type LaunchOptions, type Page } from "playwright";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -36,6 +36,32 @@ const QUIET = 250;
 /** How long a page restored from the back/forward cache may take to dial again, in ms: the window's
  *  own redial backoff after Chromium closed its socket in the cache (the plan, L3). */
 const REDIAL_WITHIN = 10_000;
+
+/** A Playwright call the law awaited failed: which call, and the cause. */
+class PlaywrightError extends Schema.TaggedError<PlaywrightError>()("PlaywrightError", {
+  op: Schema.String,
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
+
+/** A property's own run failed, a counterexample or a setup error, with fast-check's report as its message. */
+class PropertyFailed extends Schema.TaggedError<PropertyFailed>()("PropertyFailed", {
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
+
+const text = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
+
+/** Every Playwright call goes through here, so a rejection is a typed failure, never a defect. */
+const playwright = <A>(op: string, run: () => Promise<A>) =>
+  Effect.tryPromise({
+    try: run,
+    catch: (cause) => new PlaywrightError({ op, message: `${op}: ${text(cause)}`, cause }),
+  });
+
+/** Runs a fast-check property, its failure kept as fast-check reports it. */
+const property = (run: () => Promise<void>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new PropertyFailed({ message: text(cause), cause }) });
 
 type Assets = { readonly page: string; readonly script: string };
 let assets: Assets;
@@ -57,8 +83,8 @@ beforeAll(async () => {
 
 const browser = (options: LaunchOptions = {}) =>
   Effect.acquireRelease(
-    Effect.promise(() => chromium.launch({ headless: true, ...options })),
-    (b) => Effect.promise(() => b.close()),
+    playwright("launch", () => chromium.launch({ headless: true, ...options })),
+    (b) => playwright("browser.close", () => b.close()).pipe(Effect.orDie),
   );
 
 /** One socket the page dialed: `closed` turns true when the page closes it. */
@@ -72,11 +98,11 @@ type Seen = { readonly dials: Array<Dial>; readonly lines: Array<string> };
 const profile = (b: Browser, init?: { readonly script: (arg: string) => void; readonly arg: string }) =>
   Effect.gen(function* () {
     const context = yield* Effect.acquireRelease(
-      Effect.promise(() => b.newContext()),
-      (c) => Effect.promise(() => c.close()),
+      playwright("newContext", () => b.newContext()),
+      (c) => playwright("context.close", () => c.close()).pipe(Effect.orDie),
     );
     const seen: Seen = { dials: [], lines: [] };
-    yield* Effect.promise(() =>
+    yield* playwright("route", () =>
       context.route(`${ORIGIN}/**`, (route) => {
         const path = new URL(route.request().url()).pathname;
 
@@ -91,7 +117,7 @@ const profile = (b: Browser, init?: { readonly script: (arg: string) => void; re
         return route.fulfill({ contentType: "text/html; charset=utf-8", body: assets.page });
       }),
     );
-    yield* Effect.promise(() =>
+    yield* playwright("routeWebSocket", () =>
       context.routeWebSocket(/^ws:\/\/127\.0\.0\.1\//, (ws) => {
         const dial: Dial = { at: Date.now(), from: ws.url(), closed: false };
         seen.dials.push(dial);
@@ -102,7 +128,7 @@ const profile = (b: Browser, init?: { readonly script: (arg: string) => void; re
     );
 
     if (init !== undefined) {
-      yield* Effect.promise(() => context.addInitScript(init.script, init.arg));
+      yield* playwright("addInitScript", () => context.addInitScript(init.script, init.arg));
     }
 
     return { context, seen };
@@ -110,8 +136,8 @@ const profile = (b: Browser, init?: { readonly script: (arg: string) => void; re
 
 const tab = (context: BrowserContext, seen: Seen) =>
   Effect.acquireRelease(
-    Effect.promise(() => context.newPage()),
-    (page) => Effect.promise(() => page.close()),
+    playwright("newPage", () => context.newPage()),
+    (page) => playwright("page.close", () => page.close()).pipe(Effect.orDie),
   ).pipe(
     Effect.tap((page) =>
       Effect.sync(() =>
@@ -123,12 +149,12 @@ const tab = (context: BrowserContext, seen: Seen) =>
   );
 
 const children = (page: Page) =>
-  Effect.promise(() => page.evaluate(() => document.getElementById("root")?.childElementCount ?? -1));
+  playwright("children", () => page.evaluate(() => document.getElementById("root")?.childElementCount ?? -1));
 
 const open = (seen: Seen) => seen.dials.filter((d) => !d.closed).length;
 
 /** Waits until `check` holds or `within` ms pass, and answers whether it held. */
-const until = (check: Effect.Effect<boolean>, within: number) =>
+const until = <E>(check: Effect.Effect<boolean, E>, within: number) =>
   Effect.gen(function* () {
     const end = Date.now() + within;
 
@@ -154,13 +180,13 @@ const isStopped = (page: Page, seen: Seen) =>
 const up = (context: BrowserContext, seen: Seen) =>
   Effect.gen(function* () {
     const page = yield* tab(context, seen);
-    yield* Effect.promise(() => page.goto(`${ORIGIN}/`));
+    yield* playwright("goto /", () => page.goto(`${ORIGIN}/`));
     expect(yield* until(isUp(page, seen), 30_000), `the tab came up: ${JSON.stringify(seen)}`).toBe(true);
     return page;
   });
 
 const pagehide = (page: Page, persisted: boolean) =>
-  Effect.promise(() =>
+  playwright("pagehide", () =>
     page.evaluate((p) => {
       globalThis.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: p }));
     }, persisted),
@@ -191,7 +217,7 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
       Effect.scoped(
         Effect.gen(function* () {
           const b = yield* browser();
-          yield* Effect.promise(() =>
+          yield* property(() =>
             fc.assert(
               fc.asyncProperty(fc.array(fc.boolean(), { minLength: 1, maxLength: 4 }), (flags) =>
                 Effect.runPromise(
@@ -258,11 +284,11 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
           const { context, seen } = yield* profile(b, { script: recordShows, arg: "" });
           const page = yield* up(context, seen);
           const before = seen.dials.length;
-          yield* Effect.promise(() => page.goto(`${ORIGIN}/away`));
+          yield* playwright("goto /away", () => page.goto(`${ORIGIN}/away`));
           // A page restored from the cache fires no `load`, so Back waits only for the commit, and
           // the law then waits for the `pageshow` the init script records.
-          yield* Effect.promise(() => page.goBack({ waitUntil: "commit" }));
-          const shows = Effect.promise((): Promise<ReadonlyArray<boolean>> =>
+          yield* playwright("goBack", () => page.goBack({ waitUntil: "commit" }));
+          const shows = playwright("shows", (): Promise<ReadonlyArray<boolean>> =>
             page.evaluate(() => Reflect.get(globalThis, "__shows") ?? []).catch(() => []),
           );
           yield* until(
@@ -289,7 +315,7 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
       Effect.scoped(
         Effect.gen(function* () {
           const b = yield* browser();
-          yield* Effect.promise(() =>
+          yield* property(() =>
             fc.assert(
               fc.asyncProperty(fc.stringMatching(/^[a-z]{6,16}$/), (word) =>
                 Effect.runPromise(
@@ -297,7 +323,7 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
                     Effect.gen(function* () {
                       const { context, seen } = yield* profile(b, { script: failQuery, arg: word });
                       const page = yield* tab(context, seen);
-                      yield* Effect.promise(() => page.goto(`${ORIGIN}/`));
+                      yield* playwright("goto /", () => page.goto(`${ORIGIN}/`));
                       expect(
                         yield* until(
                           Effect.sync(() => reported(seen).some((line) => line.includes(word))),
