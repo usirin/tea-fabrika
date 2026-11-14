@@ -12,7 +12,8 @@
 //   `knock {dial, id}` (send `gateway.knock`), error `closed`.
 // - An answer whose id is not the state's own, or whose dial is another, does nothing. A challenge or
 //   a grant emits `hello` with its own nonce. The answer to `initializing` admits, decoded as the
-//   door's admission {version, ping, identity}, or on `not_granted` emits `knock`. The answer to
+//   door's admission {version, ping, identity}, or on `not_granted` emits `knock`, or on any other
+//   reason is `refused {dial, reason}`, the reason kept when it is a word and `other` if not. The answer to
 //   `knocking`, or a waiting notice, reaches `waiting`. `hello_err` with `key` is `failed`. `ms` is
 //   a measurement and never negative, whatever the clock said.
 //
@@ -45,6 +46,8 @@ const Pick = Schema.Struct({
   nonce: Schema.String,
   code: Schema.String,
   until: Schema.Number.check(Schema.isFinite()),
+  // The door's reason on an error answer: one of its words, or any text a door could send.
+  reason: Schema.Union([Schema.String.check(Schema.isPattern(/^[a-z_]{1,40}$/)), Schema.String]),
 });
 type Pick = typeof Pick.Type;
 const Picks = Schema.Array(Pick).check(Schema.isMinLength(10), Schema.isMaxLength(120));
@@ -89,6 +92,7 @@ const moves = (w: World, c: Pick): ReadonlyArray<() => Msg> => {
         () => ({ type: "answer", dial: s.dial, id, result: ADMITTED, at }),
         () => ({ type: "answer", dial: s.dial, id, result: null, reason: "not_granted", at }),
         () => ({ type: "answer", dial: s.dial, id, result: { code: c.code, until: c.until }, at }),
+        () => ({ type: "answer", dial: s.dial, id, result: null, reason: c.reason, at }),
       );
     }
 
@@ -105,6 +109,7 @@ const moves = (w: World, c: Pick): ReadonlyArray<() => Msg> => {
     out.push(
       () => ({ type: "answer", dial: s.dial, id: old.id, result: ADMITTED, at }),
       () => ({ type: "answer", dial: s.dial, id: old.id, result: null, reason: "not_granted", at }),
+      () => ({ type: "answer", dial: s.dial, id: old.id, result: null, reason: c.reason, at }),
       () => ({ type: "answer", dial: old.dial, id: old.id, result: ADMITTED, at }),
     );
   }
@@ -229,6 +234,22 @@ describe("P18 L2: the handshake answers only its own request", () => {
           expect(cmds.filter((c) => c.type === "knock")).toHaveLength(1);
         }
 
+        // Any other reason ends the dial's exchange as refused, keeping the door's word when it is
+        // one and `other` when it is not, and sends nothing.
+        const refusal = m["reason"];
+        const refusedNow = matched && prev._tag === "initializing" && typeof refusal === "string";
+
+        if (refusedNow && refusal !== "not_granted") {
+          expect([next, cmds], `${label}: the door refused for ${refusal}`).toMatchObject([
+            { _tag: "refused", dial: prev.dial, reason: /^[a-z_]{1,40}$/.test(refusal) ? refusal : "other" },
+            [],
+          ]);
+        }
+
+        if (next._tag === "refused" && prev._tag !== "refused") {
+          expect(refusedNow && refusal !== "not_granted", `${label} refused`).toBe(true);
+        }
+
         for (const field of ["ms", "since"]) {
           const n = next[field];
           expect(n === undefined || (typeof n === "number" && n >= 0), `${field} ${String(n)}`).toBe(true);
@@ -240,10 +261,10 @@ describe("P18 L2: the handshake answers only its own request", () => {
   );
 
   it.prop(
-    "over twenty walks the handshake admits, waits, fails and refuses a stale answer",
+    "over twenty walks the handshake admits, waits, fails, is refused and refuses a stale answer",
     { lists: Arbitrary.array(Arbitrary.schema(Picks), { minLength: 20, maxLength: 20 }) },
     ({ lists }) => {
-      const seen: Record<string, number> = { admitted: 0, waiting: 0, failed: 0, stale: 0 };
+      const seen: Record<string, number> = { admitted: 0, waiting: 0, failed: 0, refused: 0, stale: 0 };
 
       for (const list of lists) {
         fold(list, ({ prev, m, next }) => {

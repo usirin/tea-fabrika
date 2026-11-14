@@ -1220,8 +1220,16 @@ const handshakeIn = (s: WindowModel): { readonly _tag: string; readonly dial?: n
 const frame = (w: FrameWorld, dial: number, text: string, ms?: number): WindowMsg =>
   ({ type: "frame", dial, text, at: w.at, ...(ms === undefined ? {} : { ms }) }) as WindowMsg;
 
-/** A good answer for a flight's call, and the Msg the call's own handler takes for it. */
-const goodAnswer = (f: Flight, c: Pick): { readonly result: unknown; readonly owner: WindowMsg | null } => {
+/**
+ * A good answer for a flight's call, and the Msg the call's own handler takes for it. A renewed
+ * knock's code is the Link's only while the handshake still waits on that dial; at any other time
+ * the answer is stale, and only the knock's own handler takes it.
+ */
+const goodAnswer = (
+  f: Flight,
+  c: Pick,
+  hs: ReturnType<typeof handshakeIn>,
+): { readonly result: unknown; readonly owner: WindowMsg | null } => {
   const on = { id: f.id, dial: f.dial };
 
   if (f.call._tag === "read") {
@@ -1243,7 +1251,10 @@ const goodAnswer = (f: Flight, c: Pick): { readonly result: unknown; readonly ow
     return { result: value, owner: { type: "send_ok", ...on, value, ms: c.ms } };
   }
 
-  return { result: { code: c.word, until: c.ms }, owner: null };
+  const result = { code: c.word, until: c.ms };
+  return hs._tag === "waiting" && hs.dial === f.dial
+    ? { result, owner: null }
+    : { result, owner: { type: "knock_ok", ...on, value: null, ms: c.ms } };
 };
 
 /** Every move the world allows now, each with what its frame should do. */
@@ -1283,6 +1294,11 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
   if (timer !== null && s.link._tag === "retrying") {
     const retry = (): readonly [WindowMsg, Expect] => [timer.msg, none];
     out.push(retry, retry, retry);
+  } else if (timer !== null && s.link._tag === "waiting_grant" && !s.flight.some((f) => f.call._tag === "knock")) {
+    // A grant wait renews before its grant now and then, so a renewed knock is out when the grant
+    // comes and its answer can land after it.
+    const renew = (): readonly [WindowMsg, Expect] => [timer.msg, none];
+    out.push(renew, renew, renew, renew);
   } else if (timer !== null && c.aux % 4 === 0) {
     out.push(() => [timer.msg, none]);
   }
@@ -1318,14 +1334,14 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
     }
 
     // Favor the door's next move for the handshake's own state, so walks go online: a challenge to
-    // a dial not challenged yet, an admission of the live hello, a code for the live knock, and a
-    // grant to a waiting dial.
+    // a dial not challenged yet, an admission of the live hello (or now and then `not_granted`, so
+    // walks also wait for a grant), a code for the live knock, and a grant to a waiting dial.
     if (hs.dial === d) {
       const next =
         hs._tag === "opened"
           ? rpc({ method: "challenge", params: { nonce } })
           : hs._tag === "initializing"
-            ? rpc({ id: hs.id, result: ADMITTED })
+            ? rpc(c.aux % 3 === 0 ? { id: hs.id, error: NOT_GRANTED } : { id: hs.id, result: ADMITTED })
             : hs._tag === "knocking"
               ? rpc({ id: hs.id, result: { code: c.word, until: c.ms } })
               : hs._tag === "waiting"
@@ -1363,7 +1379,7 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
     // Answers to the flights the window has, on their own id and dial.
     if (s.flight.length > 0) {
       const f = s.flight[c.pick % s.flight.length]!;
-      const good = goodAnswer(f, c);
+      const good = goodAnswer(f, c, hs);
       const reason = ERROR_REASONS[c.aux % ERROR_REASONS.length]!;
       const error: WindowMsg = {
         type: `${f.call._tag}_err`,
@@ -1388,6 +1404,19 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
         // The flight's id as a string is the handshake's kind of id: it never settles the flight.
         () => [frame(w, f.dial, rpc({ id: String(f.id), result: good.result }), c.ms), { _tag: "handshake" }],
       );
+    }
+
+    // A renewed knock still out once the handshake has moved past waiting, as after a grant: its
+    // late answer is favored, so walks reach it.
+    const late = s.flight.find((f) => f.call._tag === "knock" && !(hs._tag === "waiting" && hs.dial === f.dial));
+
+    if (late !== undefined) {
+      const good = goodAnswer(late, c, hs);
+      const move = (): readonly [WindowMsg, Expect] => [
+        frame(w, late.dial, rpc({ id: late.id, result: good.result }), c.ms),
+        good.owner === null ? { _tag: "settles", id: late.id, dial: late.dial } : { _tag: "owner", owner: good.owner },
+      ];
+      out.push(move, move, move, move);
     }
 
     out.push(() => [
@@ -1422,13 +1451,13 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
 
     if (late.length > 0) {
       const f = late[c.aux % late.length]!;
-      out.push(() => [frame(w, f.dial, rpc({ id: f.id, result: goodAnswer(f, c).result }), c.ms), nothing]);
+      out.push(() => [frame(w, f.dial, rpc({ id: f.id, result: goodAnswer(f, c, hs).result }), c.ms), nothing]);
     }
 
     // A live flight's own id and a good answer, on a past dial: the id alone never settles it.
     if (s.flight.length > 0) {
       const f = s.flight[c.aux % s.flight.length]!;
-      out.push(() => [frame(w, d, rpc({ id: f.id, result: goodAnswer(f, c).result }), c.ms), nothing]);
+      out.push(() => [frame(w, d, rpc({ id: f.id, result: goodAnswer(f, c, hs).result }), c.ms), nothing]);
     }
   }
 
@@ -1543,11 +1572,12 @@ describe("P18 L3: each frame reaches exactly one owner", () => {
 
   it.prop(
     "over all walks every route is taken",
-    { list: Arbitrary.array(Arbitrary.schema(Picks), { minLength: 20, maxLength: 20 }) },
+    { list: Arbitrary.array(Arbitrary.schema(Picks), { minLength: 40, maxLength: 40 }) },
     ({ list }) => {
       // A knock's answer settles only once a grant wait renews, which few walks reach: not counted.
-      // `stolen` is a live flight's id on a past dial, the frame only the dial check stops.
-      const seen: Record<Expect["_tag"] | "old" | "online" | "stolen", number> = {
+      // `stolen` is a live flight's id on a past dial, the frame only the dial check stops. `late`
+      // is a renewed knock's answer that lands after the handshake left waiting, as after a grant.
+      const seen: Record<Expect["_tag"] | "old" | "online" | "stolen" | "late", number> = {
         owner: 0,
         nothing: 0,
         handshake: 0,
@@ -1556,6 +1586,7 @@ describe("P18 L3: each frame reaches exactly one owner", () => {
         online: 0,
         old: 0,
         stolen: 0,
+        late: 0,
       };
 
       for (const walk of list) {
@@ -1566,6 +1597,13 @@ describe("P18 L3: each frame reaches exactly one owner", () => {
             seen[route] += 1;
             const named = Option.getOrUndefined(answerId(m.text))?.id;
             seen.stolen += route === "old" && prev.flight.some((f) => f.id === named) ? 1 : 0;
+            const hs = handshakeIn(prev);
+            seen.late +=
+              route !== "old" &&
+              hs._tag !== "waiting" &&
+              prev.flight.some((f) => f.id === named && f.dial === dial && f.call._tag === "knock")
+                ? 1
+                : 0;
           }
 
           seen.online += prev.link._tag !== "online" && next.link._tag === "online" ? 1 : 0;
@@ -1573,7 +1611,7 @@ describe("P18 L3: each frame reaches exactly one owner", () => {
       }
 
       expect(
-        (["owner", "nothing", "handshake", "online", "old", "stolen"] as const).every((k) => seen[k] > 0),
+        (["owner", "nothing", "handshake", "online", "old", "stolen", "late"] as const).every((k) => seen[k] > 0),
         JSON.stringify(seen),
       ).toBe(true);
       return true;
@@ -1676,6 +1714,10 @@ const Wire = {
   ]),
   whole: Schema.Struct({ rev: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)), view: ListView }),
   patch: Schema.Struct({ base: Schema.Int, rev: Schema.Int }),
+  // An error answer's data: one of the door's words, or any text a door could send.
+  refusal: Schema.Struct({
+    reason: Schema.Union([Schema.String.check(Schema.isPattern(/^[a-z_]{1,40}$/)), Schema.String]),
+  }),
 };
 
 /** The window a few frames into a dial, each state reached through the door's frames alone. */
@@ -1783,6 +1825,28 @@ const FAMILIES: Readonly<Record<string, Family>> = {
     good: (_p, [next], v) => expect(next.link).toMatchObject({ _tag: "online", dial: 1, ping: v.ping }),
     drop: ["version", "ping", "identity"],
     wrong: { version: "one", ping: "5s", identity: "me" },
+  },
+  // The door's error answer to the live `initialize`: `not_granted` knocks, any other reason ends the
+  // hello as refused, with one connect row that keeps the reason when it is a word. The Link keeps
+  // its own stall and backoff path.
+  refusal: {
+    schema: Wire.refusal,
+    from: door.initializing,
+    text: (s, data) => [rpc({ id: handshakeIn(s).id, error: { code: -32000, message: "no", data } })],
+    good: (p, [next, cmds], v) => {
+      const word = /^[a-z_]{1,40}$/.test(v.reason) ? v.reason : "other";
+      const knocks = v.reason === "not_granted";
+      expect(handshakeIn(next), `the hello's outcome for ${v.reason}`).toMatchObject(
+        knocks ? { _tag: "knocking", dial: 1 } : { _tag: "refused", dial: 1, reason: word },
+      );
+      expect(
+        cmds.map(recordIn).filter((r) => r?._tag === "connect"),
+        `the connect rows for ${v.reason}`,
+      ).toEqual(knocks ? [] : [{ _tag: "connect", dial: 1, result: "refused", reason: word, ms: 0 }]);
+      expect(next.link, "the link keeps its own path").toEqual(p.link);
+    },
+    drop: ["reason"],
+    wrong: { reason: 7 },
   },
   WaitingCode: {
     schema: Wire.code,
