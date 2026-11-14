@@ -54,11 +54,19 @@ export const noNumericDuration: CreateRule = {
   configs and outside ignore files. So `lint.ts` and `format.ts` pin the one config and turn those
   off, and `lint.ts` fails when a `.gitignore` hides a tracked file. Each case has a plant. Running
   `oxlint` or `oxfmt` by hand skips this, and only `pnpm lint` counts.
-- **A warning still fails `pnpm lint`.** Oxlint has only `warn` and `error`, and two rules only
-  advise. So `oxlint-plugins/lint.ts` runs oxlint once and decides:
+- **A warning still fails `pnpm lint`.** Oxlint has only `warn` and `error`. The five rules that
+  only advised now block in every folder at zero
+  ([0523](../../.decisions/0523-advice-rules-block-where-clean.md), building
+  [0168](../../.decisions/0168-old-lint-breaks-are-fixed.md)). A folder that still has fires keeps a
+  warn line in `.oxlintrc.json`, so the rule only advises there until a fill brings it to zero. So
+  `oxlint-plugins/lint.ts` runs oxlint once and decides:
   - it prints every fire;
-  - it fails on any fire but `no-effect-promise` and `no-raw-try-catch`;
+  - it fails on any fire but one that a warn line makes advice;
+  - it fails on a warn line whose folder reached zero, and says which line to delete;
   - it fails too if oxlint crashed, or looked at no file.
+
+  Which folders still advise, and how today's frozen version is handled, is in
+  [where a rule still advises](../../oxlint-plugins/README.md#where-a-rule-still-advises).
 
   Why one run and not two: a disable comment for a rule that is off counts as unused, and unused ones
   fail. A second run for the advice rules would fail the first on their own comments.

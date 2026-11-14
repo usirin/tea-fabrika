@@ -304,7 +304,8 @@ agents. This table adds no rule, and `pnpm format` comes first in every row.
   every law.
 - **A check that can block needs its false alarms measured first:** about 0% to block, up to 10% to
   only advise (Google, CACM 2018). Every number in a rule needs a source or our own data. A tool's
-  default is not a source.
+  default is not a source. [0523](./.decisions/0523-advice-rules-block-where-clean.md) sets the
+  five old advice rules aside from this: they block in every folder at zero.
 - **A flaky test is fixed the day it is seen**
   ([0036](./.decisions/0036-a-flaky-test-is-fixed.md)).
 - **Money.** A real Jev call needs `TYPESAFE_API_KEY` in the environment. Run everything else with

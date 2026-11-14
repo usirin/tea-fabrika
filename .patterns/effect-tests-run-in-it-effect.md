@@ -86,8 +86,10 @@ exactly that, [build on Effect](../docs/direction/build-on-effect.md), "The cloc
 
 - Lint, partly: `fabrika/no-effect-run-outside-edge` blocks `Effect.run*` in `next/` product code,
   but is off for tests (`.oxlintrc.json:375`). Turning it on for tests, after counting its false
-  alarms, would hold the first rule. `fabrika/prefer-schema-arbitrary` advises on hand-built
-  fast-check data (`.oxlintrc.json:373`).
+  alarms, would hold the first rule. `fabrika/prefer-schema-arbitrary` blocks hand-built
+  fast-check data in every folder at zero, and advises only where a folder's warn line says so
+  ([0523](../.decisions/0523-advice-rules-block-where-clean.md),
+  [where a rule still advises](../oxlint-plugins/README.md#where-a-rule-still-advises)).
 - vitest's own rules (`no-standalone-expect`, `valid-expect`, `expect-expect`) do not know
   `it.effect` and fire about 10 in 10 times falsely (lint audit, 2026-11-09), so they stay off.
 - Waiting on events, not durations: judgment only.
