@@ -3377,7 +3377,7 @@ describe("P11 monitoring, content and storage failures", () => {
               await Effect.runPromise(
                 Effect.gen(function* () {
                   const r: Runner = yield* w.ProgramRunner;
-                  // The process store's own error keeps the Sql throw beneath it.
+                  // The recovery store's own error keeps the Sql throw beneath it.
                   expect(yield* failure(r.msg(w.input(1, { type: "work", n: value })))).toMatchObject(
                     piece === "sink"
                       ? { reason: "storage" }
