@@ -41,7 +41,12 @@ const isSteps = (u: unknown): u is Steps =>
 
 const Schemas = Schema.declare(isDeclared, { expected: "a schema" });
 
-/** A program's refusal: reason, and the numbers that explain it. */
+/**
+ * Schema for a program's refusal: a `reason`, and the numbers that explain it.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const Refusal = Schema.Struct({
   reason: Schema.String,
   now: Schema.optionalKey(Schema.Number),
@@ -163,8 +168,13 @@ export const Input = Schema.make<InputConstructors>(InputSchema.ast, {
   cases: { read: readCase, write: writeCase },
 });
 
-/** An event a program may write: its schema, and whether only a person's input may cause it. This is
- *  the trusted policy the door checks. Elm outputs never authorize a ledger write. */
+/**
+ * Schema for an event a program may write: its schema, and whether only a person's input may cause
+ * it. This is the trusted policy the door checks. Elm outputs never authorize a ledger write.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const EventPolicy = Schema.Struct({ schema: Schemas, personOnly: Schema.Boolean });
 /**
  * One row of a program's `writes`, as `EventPolicy` decodes it.
@@ -279,7 +289,14 @@ type FilledPorts<T extends ProgramMachine, I> = {
   readonly [K in keyof I]: FilledPort<T, I[K]>;
 };
 
-/** Concrete types stay with authored programs. The loader uses the checked, erased declaration. */
+/**
+ * The type of an authored program: its machine, its saved-state and view shape, its input and
+ * output ports, its audit selector and refusal check, and the events it may write. Concrete types
+ * stay with authored programs. The loader uses the checked, erased declaration.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Program<
   T extends ProgramMachine = ProgramMachine,
   V extends Schema.Json = Schema.Json,
@@ -429,7 +446,13 @@ export const Program = { schema: Declaration, make, makeEffect };
 /** A JSON object: an event as it travels inside a write. Its declared schema gives its `_tag`. */
 const Event = Schema.Record(Schema.String, Schema.Json);
 
-/** What a program asks to write: caused by an earlier input it names, or explicitly its own. */
+/**
+ * Schema for what a program asks to write: caused by an earlier input it names, or explicitly its
+ * own.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const Write = Schema.TaggedUnion({
   caused: { parent: ParentText, event: Event },
   own: { event: Event },
@@ -442,7 +465,13 @@ export const Write = Schema.TaggedUnion({
  */
 export type Write = typeof Write.Type;
 
-/** One pure step's answer: the next model, view and Cmds as JSON, or a refusal. */
+/**
+ * Schema for one pure step's answer: `stepped`, with the next model, view and Cmds as JSON and the
+ * wake time, or `refused`.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const Step = Schema.TaggedUnion({
   stepped: {
     model: Schema.Json,
@@ -460,14 +489,45 @@ export const Step = Schema.TaggedUnion({
  */
 export type Step = typeof Step.Type;
 
-/** A fresh check decides admission without preparing a model or running update. */
+/**
+ * Schema for the answer of a fresh check: `admitted`, `invalid` (the Msg does not check or names no
+ * input), or `refused` with the program's refusal. A fresh check decides admission without
+ * preparing a model or running update.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const Admission = Schema.TaggedUnion({ admitted: {}, invalid: {}, refused: Refusal.fields });
+/**
+ * An admission answer, as `Admission` decodes it.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Admission = typeof Admission.Type;
-/** An update's checked model, view, Cmds and wake time. */
+
+/**
+ * An update's checked model, view, Cmds and wake time.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Prepared = typeof Step.cases.stepped.Type;
 
-/** The program cannot run: it did not load, a fresh step threw or returned bad data, or saved
- *  state or a saved letter does not fold. Never a refusal: nothing was decided. */
+/**
+ * The program cannot run: it did not load, a fresh step threw or returned bad data, or saved state
+ * or a saved letter does not fold. Never a refusal: nothing was decided.
+ *
+ * **Details**
+ *
+ * `reason` is one of `load`, `no_program`, `step`, `saved_state` and `saved_letter`. `source` is
+ * `rpc` or `decode` when an RPC or reply decode failure caused it; that decided nothing about the
+ * input, so it must be retried. `errorClass` names the thrown class, or the `error` text when one was
+ * kept.
+ *
+ * @stability unstable
+ * @category errors
+ */
 export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown", {
   reason: Schema.Literals(["load", "no_program", "step", "saved_state", "saved_letter"]),
   /** An RPC or reply decode failure decided nothing about the input. It must be retried. */

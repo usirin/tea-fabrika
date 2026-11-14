@@ -14,8 +14,13 @@ import { Activity } from "../processes/Process.ts";
 import { Rev } from "../Rev.ts";
 import { type Sql } from "../Sql.ts";
 
-/** What a process saves: its model as the runner keeps it, the turn it was in, and its Cmds. The
- *  runner gives `turn` and `cmds` their shapes; the store keeps them as JSON. */
+/**
+ * Schema for what a process saves: its model as the runner keeps it, the turn it was in, and its
+ * Cmds. The runner gives `turn` and `cmds` their shapes; the store keeps them as JSON.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const Checkpoint = Schema.Struct({
   saved: Schema.Struct({
     v: Schema.Int,
@@ -34,7 +39,12 @@ export const Checkpoint = Schema.Struct({
  */
 export type Checkpoint = typeof Checkpoint.Type;
 
-/** Where an accepted letter sits in its inbox, kept so a resend finds its first placing. */
+/**
+ * Schema for where an accepted letter sits in its inbox, kept so a resend finds its first placing.
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const Placed = Schema.Struct({ id: Schema.String, rev: Rev, pos: Rev });
 /**
  * Where an accepted letter sits in its inbox, as `Placed` decodes it.

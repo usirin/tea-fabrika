@@ -88,9 +88,34 @@ import type { WatchersError } from "./Watchers.ts";
 import { Watchers } from "./Watchers.ts";
 import * as WatchersSql from "./WatchersSql.ts";
 
-export { defaultPolicy, Supervision } from "./internal/supervisor.ts";
+export {
+  /**
+   * The restart policy a new recovery journal gets when neither the program's declaration nor the
+   * runner's wiring gives one, and the delivery limit when the wiring's policy leaves it out: 3
+   * deliveries of one letter, a restart intensity of 5 over a 5000 ms period, and a backoff from 100
+   * ms to 800 ms that resets after 5000 ms.
+   *
+   * @stability unstable
+   * @category models
+   */
+  defaultPolicy,
+  /**
+   * Schema for the saved supervision state the runner keeps for one process: its name, restart
+   * policy, build, recent restarts and the journal of the one unfinished recovery job.
+   *
+   * @stability unstable
+   * @category schemas
+   */
+  Supervision,
+} from "./internal/supervisor.ts";
 
-/** What `msg` answers: the input's placing in the inbox, or why it was not taken. */
+/**
+ * Schema for what `msg` answers: the input's placing in the inbox (`accepted`), or why it was not
+ * taken (`refused`).
+ *
+ * @stability unstable
+ * @category schemas
+ */
 export const Sent = Schema.TaggedUnion({
   accepted: { rev: Schema.Int, pos: Schema.Int },
   refused: Refusal.fields,
@@ -103,11 +128,21 @@ export const Sent = Schema.TaggedUnion({
  */
 export type Sent = typeof Sent.Type;
 
-/** What `open` answers: the inbox position the view was made at, and the view. */
+/**
+ * What `open` answers: the inbox position the view was made at, and the view.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Opened = { readonly rev: number; readonly view: View };
 
-/** The process a runner steps: its id, its registered name (its inbox), its program, the build of
- *  the code stepping it, and its checked owner, the writer of its own writes. */
+/**
+ * The process a runner steps: its id, its registered name (its inbox), its program, the build of
+ * the code stepping it, and its checked owner, the writer of its own writes.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type Descriptor = {
   readonly id: string;
   readonly name: string;
