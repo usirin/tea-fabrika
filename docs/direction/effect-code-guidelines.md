@@ -385,11 +385,24 @@ export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError"
 - **A good one of ours,** `Runner.ts:1181`: "A refusal is the Cmd's answer; a storage failure is
   not, so the Cmd stays dispatched." A why, at the line it guards.
 - **Elm or OTP.** OTP 27's `-doc` attributes and Elm's documented packages (both secondary).
-- **What holds it.** A copy of Effect's docs lint rule, without `@since` (0118): 0023 ran it with 0
-  false alarms on Effect's 144 modules. Ours, new: a plan-code rule on comments (`P\d+`,
-  `law p\d+`, `flag \d+`), once its false alarms are counted.
-- **Cost.** About 240 exports with no doc block (an upper bound) and about 28 plan codes. About 60
-  files and 2,000 lines of comments.
+- **What holds it.** The lint rule `fabrika/jsdocs` (`oxlint-plugins/jsdocs.ts`, ticket 913),
+  which judges each block with Effect's own block grammar, copied from Effect's checker at
+  `effect@4.1.2` into `oxlint-plugins/effect-jsdocs.ts`, and asks for no `@since` (0118). It is on
+  for `ci/` and `codehost/` of `libfabrika`, and each folder joins as it is filled
+  ([Plan B, B2](../plan/effect-rules-big.md#b2-the-docs-rule)). The guess was a copy of Effect's
+  rule with 0 false alarms, as 0023 ran it on Effect's 144 modules; measured on 2026-11-14 on
+  Effect 4.1.2's 432 public files, it fires only where Effect's own checker reports, so 0 false
+  alarms. Still to come: a plan-code rule on comments (`P\d+`, `law p\d+`, `flag \d+`), once its
+  false alarms are counted.
+- **One difference from Effect.** A type directly under its same-name schema shares the schema's
+  block (the owner, 2026-11-13), and the rule reads the pair as one; a kept difference in
+  [0023](../../.decisions/0023-next-follows-effects-code-style.md#amendments).
+- **Cost.** The guess: about 240 exports with no doc block (an upper bound) and about 28 plan codes,
+  about 60 files and 2,000 lines of comments. Measured by the rule on 2026-11-14 on main
+  `c0aaf4a24`, across `libfabrika`'s 136 public files: 346 exports with no block, 232 with a block
+  out of shape and 88 files with no module block or a wrong one, so the upper bound was wrong. `ci`
+  (9 of 9 exports) and `codehost` (12 of 12) were already at zero (`oxlint-plugins/README.md`, "The
+  docs rule, E6").
 - **Today's example.** Half: a fine why at `:1181`, a plan code at `:1`, a stale doc at `:1737`.
 
 ### E7: imports and service ids read like Effect's
