@@ -5,14 +5,16 @@
  *
  * @stability unstable
  */
-import { Context, Effect, Layer, Result, Schema } from "effect";
+import { Context, Effect, Layer, Option, Result, Schema } from "effect";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { lineFor } from "../ledger/Log.ts";
 import { INPUT_BYTES } from "../processes/Children.ts";
 import { type From } from "../processes/Mailbox.ts";
 import { Activity } from "../processes/Process.ts";
+import { Quotas, QuotasError, type Accounting } from "../processes/Quotas.ts";
 import { Rev } from "../Rev.ts";
 import { type Sql } from "../Sql.ts";
+import { recovering } from "./RecoveryStore.ts";
 
 /** What a process saves: its model as the runner keeps it, the turn it was in, and its Cmds. The
  *  runner gives `turn` and `cmds` their shapes; the store keeps them as JSON. */
@@ -92,7 +94,7 @@ type ProcessStorage = {
   /** The saved activity marker, or undefined when none was written. */
   readonly readActivity: Effect.Effect<typeof Activity.Type | undefined, LedgerError>;
   /** Makes the activity marker durable before the runner starts or finishes a step. */
-  readonly activity: (value: typeof Activity.Type) => Effect.Effect<void, LedgerError>;
+  readonly activity: (value: typeof Activity.Type) => Effect.Effect<void, LedgerError | QuotasError>;
   /** The saved checkpoint, or null before the first save. */
   readonly load: Effect.Effect<Checkpoint | null, LedgerError>;
   /** Replaces the checkpoint and adds `placed` to the letter index, in one transaction. */
@@ -103,7 +105,7 @@ type ProcessStorage = {
       readonly cmds: ReadonlyArray<unknown>;
     },
     placed?: ReadonlyArray<Placed>,
-  ) => Effect.Effect<void, LedgerError>;
+  ) => Effect.Effect<void, LedgerError | QuotasError>;
   /** An accepted letter's first placing, or null when this process never accepted it. */
   readonly placed: (id: string) => Effect.Effect<Placed | null, LedgerError>;
   /**
@@ -137,11 +139,12 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
     sql: Sql,
     options: {
       readonly process: string;
+      readonly accounting?: Accounting;
       /** The object's storage calls, wrapped in Effect by its platform edge. Node uses SQL. */
       readonly storage?:
         | {
-            readonly put: (key: string, value: unknown) => Effect.Effect<void, LedgerError>;
-            readonly sync: () => Effect.Effect<void, LedgerError>;
+            readonly put: (key: string, value: unknown) => Effect.Effect<void, LedgerError | QuotasError>;
+            readonly sync: () => Effect.Effect<void, LedgerError | QuotasError>;
             readonly get?: (key: string) => Effect.Effect<unknown, LedgerError>;
           }
         | undefined;
@@ -151,35 +154,58 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
       ProcessStore,
       Effect.gen(function* () {
         const ledger = yield* Ledger;
+        const quotas = Option.getOrUndefined(yield* Effect.serviceOption(Quotas));
         let ready = false;
-        const stored = Effect.fnUntraced(function* <A>(step: () => A) {
-          return yield* Effect.try({
-            try: () => {
-              if (!ready) {
-                for (const query of TABLES) {
-                  sql.exec(query);
-                }
-              }
+        const tables = () => {
+          if (!ready) {
+            for (const query of TABLES) {
+              sql.exec(query);
+            }
+          }
 
-              ready = true;
-              return step();
-            },
-            catch: (error) =>
-              new LedgerError({
+          ready = true;
+        };
+        const failed = (error: unknown) =>
+          error instanceof LedgerError
+            ? error
+            : new LedgerError({
                 reason: Schema.isSchemaError(error) ? "bad_row" : "storage",
                 cause: error,
-              }),
+              });
+        // A read changes no row, so it is charged nothing and fails only as the ledger does.
+        const read = Effect.fnUntraced(function* <A>(step: () => A) {
+          return yield* Effect.try({
+            try: () => {
+              tables();
+              return step();
+            },
+            catch: failed,
           });
         });
+        const stored = Effect.fnUntraced(function* <A>(step: (at: number) => A) {
+          return yield* Effect.clockWith((clock) =>
+            Effect.try({
+              try: () => {
+                tables();
+                return options.accounting === undefined
+                  ? step(clock.currentTimeMillisUnsafe())
+                  : options.accounting.protect(() => step(clock.currentTimeMillisUnsafe()));
+              },
+              catch: (error) => (error instanceof QuotasError ? error : failed(error)),
+            }),
+          );
+        });
+        const bytes = (text: string) => new TextEncoder().encode(text).length;
         return {
           select: Effect.fn("process.select")(function* (process: string) {
-            return yield* ProcessStore.pipe(
+            const selected = ProcessStore.pipe(
               Effect.provide(ProcessStore.layer(sql, { ...options, process })),
               Effect.provideService(Ledger, ledger),
             );
+            return yield* quotas === undefined ? selected : selected.pipe(Effect.provideService(Quotas, quotas));
           }),
           readActivity:
-            options.storage?.get !== undefined
+            options.accounting === undefined && options.storage?.get !== undefined
               ? options.storage.get("activity").pipe(
                   Effect.flatMap((raw) =>
                     raw === undefined
@@ -190,28 +216,48 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
                         }),
                   ),
                 )
-              : stored(() => {
+              : read(() => {
                   const [row] = sql.exec("SELECT activity FROM process_activity WHERE process=?", options.process);
                   return row === undefined
                     ? undefined
                     : Schema.decodeUnknownSync(Schema.fromJsonString(Activity))(row.activity);
                 }),
           activity: Effect.fn("process.activity")(function* (value: typeof Activity.Type) {
-            if (options.storage !== undefined) {
+            if (options.storage !== undefined && options.accounting === undefined) {
               yield* options.storage.put("activity", value);
-              yield* options.storage.sync();
             } else {
-              // Node's synchronous SQLite commit needs no separate flush.
-              yield* stored(() => {
-                sql.exec(
-                  "INSERT INTO process_activity (process, activity) VALUES (?, ?) ON CONFLICT (process) DO UPDATE SET activity = excluded.activity",
-                  options.process,
-                  encodeActivity(value),
-                );
-              });
+              yield* stored((at) =>
+                sql.transaction(() => {
+                  const text = encodeActivity(value);
+                  const [old] = sql.exec("SELECT activity FROM process_activity WHERE process=?", options.process);
+
+                  if (old?.activity === text) {
+                    return;
+                  }
+
+                  options.accounting?.change(
+                    "activity",
+                    1,
+                    bytes(text) -
+                      (old === undefined ? 0 : bytes(String(old.activity))) +
+                      (old === undefined ? bytes(options.process) : 0),
+                    at,
+                    recovering(sql),
+                  );
+                  sql.exec(
+                    "INSERT INTO process_activity (process,activity) VALUES (?,?) ON CONFLICT(process) DO UPDATE SET activity=excluded.activity",
+                    options.process,
+                    text,
+                  );
+                }),
+              );
+            }
+
+            if (options.storage !== undefined) {
+              yield* options.storage.sync();
             }
           }),
-          load: stored(() => {
+          load: read(() => {
             const [row] = sql.exec("SELECT checkpoint FROM process_state WHERE process=?", options.process);
 
             if (row === undefined) {
@@ -232,7 +278,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
             return decodeCheckpoint(text);
           }),
           save: (value, placed = []) =>
-            stored(() => {
+            stored((at) => {
               const text = encodeCheckpoint(value);
               // UTF-8 takes at most three bytes per UTF-16 unit. Leave room for the row's keys,
               // and keep surrogate pairs together when a checkpoint crosses a row boundary.
@@ -251,6 +297,30 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
               }
 
               sql.transaction(() => {
+                const [old] = sql.exec("SELECT checkpoint FROM process_state WHERE process=?", options.process);
+                // A split checkpoint keeps an empty head; charge its whole saved text.
+                const oldText =
+                  old === undefined
+                    ? undefined
+                    : old.checkpoint === ""
+                      ? sql
+                          .exec(
+                            "SELECT checkpoint FROM process_checkpoint_parts WHERE process=? ORDER BY part",
+                            options.process,
+                          )
+                          .map((part) => part.checkpoint)
+                          .join("")
+                      : String(old.checkpoint);
+                const isRecovery = recovering(sql);
+                options.accounting?.change(
+                  "checkpoint",
+                  oldText === text ? 0 : 1,
+                  bytes(text) -
+                    (oldText === undefined ? 0 : bytes(oldText)) +
+                    (old === undefined ? bytes(options.process) : 0),
+                  at,
+                  isRecovery,
+                );
                 sql.exec("DELETE FROM process_checkpoint_parts WHERE process=?", options.process);
                 sql.exec(
                   "INSERT INTO process_state (process, checkpoint) VALUES (?, ?) ON CONFLICT (process) DO UPDATE SET checkpoint = excluded.checkpoint",
@@ -270,6 +340,22 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
                 }
 
                 for (const { id, rev, pos } of placed) {
+                  const [known] = sql.exec(
+                    "SELECT id FROM process_letters WHERE process=? AND id=?",
+                    options.process,
+                    id,
+                  );
+
+                  if (known === undefined) {
+                    options.accounting?.change(
+                      "checkpoint",
+                      1,
+                      bytes(JSON.stringify({ process: options.process, id, rev, pos })),
+                      at,
+                      isRecovery,
+                    );
+                  }
+
                   sql.exec(
                     "INSERT OR IGNORE INTO process_letters (process, id, rev, pos) VALUES (?, ?, ?, ?)",
                     options.process,
@@ -281,7 +367,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
               });
             }),
           placed: (id) =>
-            stored(() => {
+            read(() => {
               const [row] = sql.exec(
                 "SELECT id, rev, pos FROM process_letters WHERE process=? AND id=?",
                 options.process,
@@ -290,7 +376,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
               return row === undefined ? null : decodePlaced(row);
             }),
           placedByAny: (id) =>
-            stored(() => {
+            read(() => {
               const [row] = sql.exec("SELECT id, rev, pos FROM process_letters WHERE id=? ORDER BY rev LIMIT 1", id);
               return row === undefined ? null : decodePlaced(row);
             }),
@@ -301,7 +387,8 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
               return yield* new LedgerError({ reason: "refused" });
             }
 
-            const answer = yield* ledger.append(options.process, id, lineFor(from, encodeRecord(decoded.success)));
+            const append = ledger.append(options.process, id, lineFor(from, encodeRecord(decoded.success)));
+            const answer = yield* quotas === undefined ? append : quotas.runtime(options.process, append);
 
             if (answer._tag === "refused") {
               return yield* new LedgerError({ reason: "refused", message: answer.reason });

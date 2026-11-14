@@ -15,6 +15,7 @@ import { LedgerError } from "../Ledger.ts";
 import type { LedgerTurn } from "../LedgerTransaction.ts";
 import { Appended, Entry, Line, PAGE, Row, ROW_BYTES, Waited } from "../Log.ts";
 import type { Referee } from "../Referee.ts";
+import { QuotaRefused, type WritePolicy } from "../WritePolicy.ts";
 import { STREAM, tag } from "./ledgerTrace.ts";
 
 const TABLES = [
@@ -152,6 +153,7 @@ const errorCode = (error: unknown): Option.Option<string | number> => {
 export const ledgerStore = (
   sql: Sql,
   doorbell: (typeof Doorbell)["Service"],
+  policy?: WritePolicy["Service"],
 ): (typeof Referee)["Service"] & {
   readonly transact: <A>(step: (turn: LedgerTurn) => A) => Effect.Effect<A, LedgerError>;
 } => {
@@ -233,6 +235,12 @@ export const ledgerStore = (
       decodeLast(Option.getOrThrow(one(`SELECT coalesce(max(pos), 0) AS pos FROM entries WHERE stream = ?`, stream)))
         .pos + 1;
     const arrivedAt = Math.max(now(), Option.match(last, { onNone: () => 0, onSome: (row) => row.arrivedAt }));
+    const admitted = policy?.admit(Entry.make({ id, stream, rev, pos, arrivedAt, ...line }));
+
+    if (admitted !== undefined && Result.isFailure(admitted)) {
+      return Placing.cases.refused.make({ reason: admitted.failure });
+    }
+
     sql.exec(
       `INSERT INTO entries (rev, stream, pos, id, "arrivedAt", "by", "for", "sentAt", seen, parent,
 				"traceId", build, "_tag", body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -411,7 +419,10 @@ export const ledgerStore = (
         const placing = place(stream, id, checked.success, now);
 
         if (placing._tag === "refused") {
-          throw new LedgerError({ reason: "refused" });
+          throw new LedgerError({
+            reason: "refused",
+            ...(placing.reason === "quota" ? { cause: new QuotaRefused({}) } : {}),
+          });
         }
 
         if (placing._tag === "placed") {
@@ -444,4 +455,23 @@ export const ledgerStore = (
   });
 
   return { append, read, wait, transact };
+};
+
+/**
+ * Committed entries past `after`, oldest first: every stream's, or one `stream`'s. None before the
+ * ledger's table exists.
+ *
+ * @internal
+ */
+export const committedEntries = (sql: Sql, scope: { readonly stream?: string; readonly after?: number } = {}) => {
+  if (sql.exec("SELECT name FROM sqlite_master WHERE name='entries'").length === 0) {
+    return [];
+  }
+
+  const after = scope.after ?? 0;
+  const rows =
+    scope.stream === undefined
+      ? sql.exec("SELECT * FROM entries WHERE rev > ? ORDER BY rev", after)
+      : sql.exec("SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev", scope.stream, after);
+  return rows.map((row) => decodeRow(row));
 };

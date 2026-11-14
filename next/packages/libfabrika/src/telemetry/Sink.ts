@@ -325,12 +325,12 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     return done;
   };
 
-  const countRefusal = (span: SinkSpan, at: number): boolean => {
-    if (!span.attributes.has(REFUSED)) {
+  const countRefusal = (span: SinkSpan, at: number, inherited?: unknown): boolean => {
+    if (!span.attributes.has(REFUSED) && inherited === undefined) {
       return false;
     }
 
-    const value = span.attributes.get(REFUSED);
+    const value = span.attributes.get(REFUSED) ?? inherited;
     const refused = value === "reserved" || value === "rate_limited" ? value : "other";
     const hour = hourStart(at);
     const key = JSON.stringify([span.name, hour, refused]);
@@ -355,13 +355,11 @@ const make = (sql: Sql, options: { readonly object: string }) => {
 
   const batch = <A, E, R>(work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     Effect.suspend(() => {
-      const rows: Array<Ended> = [];
+      const spans: Array<{ span: SinkSpan; time: bigint; exit: Exit.Exit<unknown, unknown> }> = [];
       const collecting = Tracer.make({
         span: (init) =>
           new SinkSpan(init, (span, time, exit) => {
-            if (!countRefusal(span, Number(time / 1_000_000n))) {
-              rows.push(ended(span, time, exit, options.object));
-            }
+            spans.push({ span, time, exit });
           }),
       });
       return work.pipe(
@@ -370,6 +368,22 @@ const make = (sql: Sql, options: { readonly object: string }) => {
           Effect.gen(function* () {
             const now = yield* Clock.currentTimeMillis;
             yield* Effect.sync(() => {
+              const rows: Array<Ended> = [];
+
+              for (const { span, time, exit } of spans) {
+                let ancestor: Tracer.AnySpan | undefined = span;
+
+                while (ancestor?._tag === "Span" && !ancestor.attributes.has(REFUSED)) {
+                  ancestor = Option.getOrUndefined(ancestor.parent);
+                }
+
+                const refused = ancestor?._tag === "Span" ? ancestor.attributes.get(REFUSED) : undefined;
+
+                if (!countRefusal(span, Number(time / 1_000_000n), refused)) {
+                  rows.push(ended(span, time, exit, options.object));
+                }
+              }
+
               if (rows.length > 0 || counts.size > 0) {
                 commit(rows, now, true);
               }

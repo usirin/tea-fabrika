@@ -346,6 +346,15 @@ describe("P16 stack and sealed loader", () => {
             window: null,
             build: built.build,
             rateLimit: { limit: 100_000, window: 60_000 },
+            limits: {
+              recordBytes: 1_000_000_000,
+              writes: 13_760,
+              storage: "1000000000 B",
+              recovery: {
+                project: { writes: 160, bytes: "74080 B", letter: { writes: 10, bytes: "5469 B" } },
+                process: { writes: 290, bytes: "207410 B", letter: { writes: 50, bytes: "18790 B" } },
+              },
+            },
           };
           const result = await Effect.runPromise(Effect.result(stack(built, settings)));
           const expectedBytes = Buffer.byteLength(JSON.stringify(settings));
@@ -662,6 +671,15 @@ describe("P16 copied-file real instance, serial", () => {
                           window: key.raw,
                           port: brainPort,
                           rateLimit: { limit: 100_000, window: 60_000 },
+                          limits: {
+                            recordBytes: 1_000_000_000,
+                            writes: 13_760,
+                            storage: "1000000000 B",
+                            recovery: {
+                              project: { writes: 160, bytes: "74080 B", letter: { writes: 10, bytes: "5469 B" } },
+                              process: { writes: 290, bytes: "207410 B", letter: { writes: 50, bytes: "18790 B" } },
+                            },
+                          },
                         },
                       );
                       yield* Effect.tryPromise({
@@ -750,6 +768,15 @@ describe("P16 copied-file real instance, serial", () => {
             window: key.raw,
             port,
             rateLimit: { limit: 100_000, window: 60_000 },
+            limits: {
+              recordBytes: 1_000_000_000,
+              writes: 13_760,
+              storage: "1000000000 B",
+              recovery: {
+                project: { writes: 160, bytes: "74080 B", letter: { writes: 10, bytes: "5469 B" } },
+                process: { writes: 290, bytes: "207410 B", letter: { writes: 50, bytes: "18790 B" } },
+              },
+            },
           });
           const copied = { ...built, brain: join(alone, "brain.mjs") };
           let pid = "",

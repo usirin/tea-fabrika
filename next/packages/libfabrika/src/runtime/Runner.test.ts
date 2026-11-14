@@ -36,6 +36,7 @@ import { Appended, type Entry, InputId, lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { letterLine, Mailbox, type From } from "../processes/Mailbox.ts";
 import { Activity, Down, Owner, Recipient, recoverActivity, signalId, Start } from "../processes/Process.ts";
+import type { QuotasError } from "../processes/Quotas.ts";
 import type { Sql } from "../Sql.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
@@ -239,7 +240,7 @@ type Incoming = {
   readonly span: { readonly traceId: string; readonly spanId: string };
 };
 
-type Failure = { readonly _tag: string; readonly reason: string } | NotGranted | WatchersError;
+type Failure = { readonly _tag: string; readonly reason: string } | NotGranted | QuotasError | WatchersError;
 
 type Sent =
   | { readonly _tag: "accepted"; readonly rev: number; readonly pos: number }

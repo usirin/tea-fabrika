@@ -14,7 +14,14 @@ import type { State } from "./Process.ts";
 export type Grants = Readonly<Record<string, ReadonlyArray<string>>>;
 
 /** Why a delivery is refused for good. Other clients decode these by name. */
-export const MailRefusal = Schema.Literals(["no_name", "forbidden", "stale_sender", "bad_message", "id_reused"]);
+export const MailRefusal = Schema.Literals([
+  "no_name",
+  "forbidden",
+  "stale_sender",
+  "bad_message",
+  "id_reused",
+  "quota",
+]);
 
 /**
  * Error for a letter between programs that was refused or could not be saved.

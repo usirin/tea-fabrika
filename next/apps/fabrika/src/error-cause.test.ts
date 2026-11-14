@@ -36,6 +36,15 @@ const valid = {
   window: null,
   port: 8787,
   rateLimit: { limit: 100_000, window: 60_000 },
+  limits: {
+    recordBytes: 1_000_000_000,
+    writes: 13_760,
+    storage: "1000000000 B",
+    recovery: {
+      project: { writes: 160, bytes: "74080 B", letter: { writes: 10, bytes: "5469 B" } },
+      process: { writes: 290, bytes: "207410 B", letter: { writes: 50, bytes: "18790 B" } },
+    },
+  },
   build: "b-1",
 };
 

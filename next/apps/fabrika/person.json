@@ -35,6 +35,127 @@
         }
       },
       "additionalProperties": false
+    },
+    "limits": {
+      "type": "object",
+      "properties": {
+        "recovery": {
+          "type": "object",
+          "properties": {
+            "project": {
+              "type": "object",
+              "properties": {
+                "writes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "bytes": {
+                  "type": "string"
+                },
+                "letter": {
+                  "type": "object",
+                  "properties": {
+                    "writes": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "bytes": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "writes",
+                    "bytes"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "writes",
+                "bytes",
+                "letter"
+              ],
+              "additionalProperties": false
+            },
+            "process": {
+              "type": "object",
+              "properties": {
+                "writes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "bytes": {
+                  "type": "string"
+                },
+                "letter": {
+                  "type": "object",
+                  "properties": {
+                    "writes": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "bytes": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "writes",
+                    "bytes"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "writes",
+                "bytes",
+                "letter"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "project",
+            "process"
+          ],
+          "additionalProperties": false,
+          "description": "Recovery writes and bytes per rolling minute, plus each accepted letter's replay room.",
+          "default": {
+            "project": {
+              "writes": 160,
+              "bytes": "74080 bytes",
+              "letter": {
+                "writes": 10,
+                "bytes": "5469 bytes"
+              }
+            },
+            "process": {
+              "writes": 290,
+              "bytes": "207410 bytes",
+              "letter": {
+                "writes": 50,
+                "bytes": "18790 bytes"
+              }
+            }
+          }
+        },
+        "storage": {
+          "type": "string",
+          "description": "The most encoded ledger bytes one program may keep, at most decimal one GB.",
+          "default": "1000000000 bytes"
+        },
+        "writes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 13760,
+          "description": "The most ledger writes one program may commit per rolling minute, including admitted steps.",
+          "default": 13760
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false,
