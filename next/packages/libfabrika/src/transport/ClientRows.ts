@@ -31,8 +31,12 @@ export const ClientRecord = Schema.TaggedUnion({
   key: { result: Schema.Literals(["created", "reused", "replaced"]) },
   connect: {
     dial: Count,
-    result: Schema.Literals(["online", "waiting", "closed", "stalled", "removed"]),
+    result: Schema.Literals(["online", "waiting", "closed", "stalled", "removed", "refused"]),
     ms: Ms,
+    /** On a `closed` or `removed` row only: the close code the socket saw. */
+    code: Schema.optionalKey(Count),
+    /** On a `refused` row only: the door's reason for refusing the hello, or `other`. */
+    reason: Schema.optionalKey(Schema.String.check(Schema.isPattern(/^[a-z_]{1,40}$/))),
   },
   press: {
     command: Schema.String,

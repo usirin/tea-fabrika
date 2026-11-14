@@ -348,6 +348,7 @@ const FRONTS: ReadonlyArray<string> = [
   "ledger/Log",
   "ledger/Referee",
   "transport/Answer",
+  "transport/Handshake",
   "transport/Hello",
   "transport/Sshsig",
   "transport/Webauthn",
@@ -371,6 +372,10 @@ const FRONTS: ReadonlyArray<string> = [
   "desktop/BrainControl",
   "desktop/BrainProbe",
   "desktop/BrainSpec",
+  // P18 L8: the one window client bundles for a browser with no Node or DOM shim.
+  "client/WindowMachine",
+  "client/WindowStart",
+  "client/Headless",
 ];
 
 /** The detail's list, the top level of the library, of tuval and of notes, plus the library's front
@@ -712,6 +717,7 @@ describe("a module's front files and its internal/ in the exports map", () => {
     "runtime",
     "gateway",
     "desktop",
+    "client",
   ] as const;
   const module = fc.constantFrom(...MODULES);
   const name = fc.stringMatching(/^[A-Za-z][A-Za-z0-9]{0,8}$/);

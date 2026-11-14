@@ -1,6 +1,6 @@
 import type { checklist } from "@kampus/checklist";
 import { checklistWindow } from "@kampus/checklist/window";
-import { windowMachineFor } from "@kampus/tuval";
+import { windowMachineFor } from "@kampus/libfabrika/client/WindowMachine";
 import { Schema } from "effect";
 
 export const tiles = [{ id: "tile_1", name: "checklist:1" }];

@@ -1,2 +1,1 @@
-export { startWindow, mount } from "./window/main.tsx";
-export { windowMachineFor } from "./window/machine.ts";
+export { mount } from "./window/main.tsx";

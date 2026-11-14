@@ -108,6 +108,13 @@ the first cloud deploy. The other open calls are listed in
 ([PR 1189](https://github.com/kamp-us/tea-fabrika/pull/1189)): the session manager, the recovery
 store and the gateway each fail with their own error and a tagged reason, in place of the ledger's.
 
+*2026-11-13:* P18's slice 1 (tracker ticket 290) is built in `next/` as
+[PR 1208](https://github.com/kamp-us/tea-fabrika/pull/1208): one window client in the library,
+`@kampus/libfabrika/client/*`, with the hello exchange as its own tea machine. A program with no
+DOM and a browser tab dial, wait, are granted and work through the same machine and start, on
+Effect's socket; CI's end-to-end job runs one round trip against both. This finishes no Tier 1 row:
+P18 has three slices left.
+
 *2026-11-12:* P19 slice 1, tracker ticket 881, is built on its branch in `next/`, awaiting
 review: the brain-service contracts, lifecycle machine and launchd adapter. The box checks only controlled services;
 the real launchd and Electron restart and cleanup check remains with the host lead.

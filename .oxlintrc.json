@@ -1062,7 +1062,8 @@
               "access",
               "runtime",
               "gateway",
-              "schedules"
+              "schedules",
+              "client"
             ],
             "folders": ["node", "cloudflare", "coordination"],
             "files": ["index", "Id", "Testing", "ProcessId", "Sql", "Rev", "SpanTag"],
@@ -1486,6 +1487,32 @@
           }
         ],
         "fabrika/service-id": ["error", { "package": "@kampus/libfabrika", "src": "next/packages/libfabrika/src" }]
+      }
+    },
+    {
+      // P18 L4: a window client's reconnects are the Link machine's (`transport/Link.ts`, `backoff`), so
+      // nothing in the client retries a dial itself. After next/**, since an override replaces
+      // options: the JSON.parse entry is repeated, and it blocks here, where the folder starts at zero.
+      "files": ["next/packages/libfabrika/src/client/**"],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "error",
+          {
+            "object": "JSON",
+            "property": "parse",
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          },
+          {
+            "object": "Effect",
+            "property": "retry",
+            "message": "P18: a client never retries a dial itself. The Link machine's retrying state and backoff own reconnects; the start dials once per dialing."
+          },
+          {
+            "object": "Stream",
+            "property": "retry",
+            "message": "P18: a client never retries a dial itself. The Link machine's retrying state and backoff own reconnects; the start dials once per dialing."
+          }
+        ]
       }
     },
     {
@@ -1948,7 +1975,11 @@
       // its file a module block (`oxlint-plugins/jsdocs.ts`). On for the folders at zero; each fill
       // adds its folder here when it lands, and the list ends as `next/packages/*/src/**` (Plan B,
       // B2). `since` stays `absent` until libfabrika's first release (0118).
-      "files": ["next/packages/libfabrika/src/ci/**", "next/packages/libfabrika/src/codehost/**"],
+      "files": [
+        "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/codehost/**"
+      ],
       "rules": { "fabrika/jsdocs": ["error", { "since": "absent" }] }
     },
     {

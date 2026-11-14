@@ -217,10 +217,14 @@ const DESIGN = "@kampus/fabrika-design";
 // slice 2's three contracts and the Link machine among them: the same reach, file by file.
 const TRANSPORT = [
   `${LIBRARY}/transport`,
-  ...["Answer", "ClientKey", "ClientRows", "ClientSocket", "Hello", "Link", "Sshsig", "Webauthn", "Wire"].map(
+  ...["Answer", "ClientKey", "ClientRows", "Hello", "Link", "Sshsig", "Webauthn", "Wire"].map(
     (front) => `${LIBRARY}/transport/${front}`,
   ),
 ];
+
+// P18 L8: the one window client's front files, one subpath each (the exports map's `./client/*`).
+// Tuval's window reaches the parent and the start through these and nothing deeper.
+const CLIENT = ["WindowMachine", "WindowStart", "Headless"].map((front) => `${LIBRARY}/client/${front}`);
 
 /** What each part may import beyond itself: the detail's table, as it stands. */
 const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
@@ -236,8 +240,9 @@ const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
   workers: ["app", "coordination", "data", "transport", "id"],
   door: ["app", "coordination", "data", "transport", "id"], // P17a: the library's door composes all four
   mcp: ["app", "transport", "id"], // the named exception: the bridge is a client, as a window is
+  client: ["app", "transport", "id"], // P18: the window client, the bridge's reach, beside the door
   desktop: [LIBRARY], // the app layer's names, nothing lower
-  window: ["desktop", LIBRARY, ...TRANSPORT, DESIGN, `${DESIGN}/tokens.css`], // a window is a client (the note's T3); P14: and it takes the design's public names
+  window: ["desktop", LIBRARY, ...TRANSPORT, ...CLIENT, DESIGN, `${DESIGN}/tokens.css`], // a window is a client (the note's T3); P14: and it takes the design's public names
   dom: ["desktop"],
   browser: ["dom", "desktop", ...TRANSPORT], // its key signs transport's helloText; P14: its layers meet transport's contracts
   electron: ["dom", "desktop", ...TRANSPORT, `${LIBRARY}/coordination`], // the menu bar signs what the door takes
@@ -271,6 +276,7 @@ const rowParts: Readonly<Record<string, string>> = {
   "next-access": "coordination",
   "next-runtime": "app",
   "next-mcp": "mcp",
+  "next-client": "client",
   "next-door": "door",
   "next-desktop-core": "desktop-core",
   "next-schedules": "door", // T762: layer 6 beside the door; it imports only tea and effect today
@@ -510,6 +516,36 @@ describe("planted breaks", () => {
           .sort(),
       );
     }),
+  );
+  // scenario: P18 L8, two fixed imports probe the client's row: the library imports nothing above it,
+  // and no module below the client imports it.
+  it.effect(
+    "P18 L8: the client takes runtime, transport and Id, may not import tuval, and transport may not import it",
+    () =>
+      Effect.gen(function* () {
+        const { plant } = yield* planter;
+        const tree = plant({
+          "packages/libfabrika/package.json": manifest(LIBRARY),
+          "packages/libfabrika/src/client/WindowStart.ts": lines(
+            'import {Client} from "../runtime/Client.ts";',
+            'import {Link} from "../transport/Link.ts";',
+            'import {Generator} from "../Id.ts";',
+            'import {mount} from "@kampus/tuval";',
+          ),
+          "packages/libfabrika/src/transport/Dial.ts": lines('import {start} from "../client/WindowStart.ts";'),
+          "packages/libfabrika/src/runtime/Client.ts": lines("export const Client = 1;"),
+          "packages/libfabrika/src/transport/Link.ts": lines("export const Link = 1;"),
+          "packages/tuval/package.json": manifest(TUVAL),
+          "packages/tuval/src/index.ts": lines("export const mount = 1;"),
+        });
+        expect([...faults(tree)].sort()).toEqual(
+          [
+            'packages/libfabrika/src/client/WindowStart.ts imports "@kampus/tuval": the library imports nothing above it',
+            'packages/libfabrika/src/client/WindowStart.ts imports "@kampus/tuval": client may not import it',
+            'packages/libfabrika/src/transport/Dial.ts imports "../client/WindowStart.ts": transport may not import client',
+          ].sort(),
+        );
+      }),
   );
   const lib = (extra: object = {}) =>
     manifest(LIBRARY, {
@@ -1250,6 +1286,7 @@ describe("layers", () => {
       "next-node": 9,
       "next-workers": 8,
       "next-libfabrika-entry": 7,
+      "next-client": 6, // P18: the window client, beside the door
       "next-door": 6,
       "next-desktop-core": 6,
       "next-schedules": 6,

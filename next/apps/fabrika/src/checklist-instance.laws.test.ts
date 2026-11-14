@@ -21,6 +21,7 @@ import { checklistWindow } from "@kampus/checklist/window";
 import { counter } from "@kampus/counter";
 import type { Descriptor } from "@kampus/libfabrika";
 import { programBox } from "@kampus/libfabrika/box";
+import { windowMachineFor } from "@kampus/libfabrika/client/WindowMachine";
 import { fcExitReason } from "@kampus/libfabrika/processes/Process.test-support";
 import * as SettingsStart from "@kampus/libfabrika/settings/Start";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
@@ -33,7 +34,6 @@ import {
   signingReply,
   commitReply,
 } from "@kampus/libfabrika/workers/runtime";
-import { windowMachineFor } from "@kampus/tuval";
 import { Cause, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { programs as built } from "virtual:fabrika-built";

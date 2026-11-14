@@ -75,8 +75,9 @@ it("scenario: L6 the five measured heaviest next files occupy the five vitest ma
 //   C: run 43556494864, a push to main at 48460bdaa.
 // A sample is the sum of the file's test times as the verbose reporter printed them in that
 // run's job log, to one decimal. The job ids are kept because GitHub drops job logs after 90 days.
-// Of the 257 files, 225 have three samples, 7 have two and 25 have one: a file a run did not
-// hold has no sample from it.
+// Of the 255 files, 225 have three samples, 7 have two and 23 have one: a file a run did not
+// hold has no sample from it. Two one-sample rows left with pull request 1208, which moved
+// tuval/src/window/machine.model.laws.test.ts into libfabrika and removed main.laws.test.ts.
 // This fixed snapshot copies the observations, never the measured table's computed weights.
 const nextSamples = {
   // A job 132292933169, B job 132315559486, C job 132330501025.
@@ -556,10 +557,6 @@ const nextSamples = {
   "next/packages/libfabrika/src/transport/internal/binaryCryptoFailure.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933270, B job 132315559534, C job 132330501025.
   "next/packages/libfabrika/src/transport/internal/connection.test.ts": [1.8, 1.8, 2.8],
-  // C job 132330500993.
-  "next/packages/tuval/src/window/machine.model.laws.test.ts": [18.7],
-  // C job 132330501014.
-  "next/packages/tuval/src/window/main.laws.test.ts": [11.5],
   // A job 132292933169, B job 132315559497, C job 132330500983.
   "next/programs/chaos/src/program.laws.test.ts": [1.3, 1.5, 1.6],
   // C job 132330501001.
@@ -625,7 +622,7 @@ const e2eSamples = {
   overhead: [76.5, 69.8, 70.2],
 } as const;
 
-it("vector: L5 all 265 next rows, vitest and end-to-end, are the median of three samples, or the larger of one or two", () => {
+it("vector: L5 all 263 next rows, vitest and end-to-end, are the median of three samples, or the larger of one or two", () => {
   // The medians of runs 43544589151, 43551626086 and 43556494864 for the vitest files, and of
   // 43601966383, 43601964962 and 43605298688 for the end-to-end files, from the samples above.
   // Preserve exact file-set coverage as well as the weights, including measured zeroes: a row

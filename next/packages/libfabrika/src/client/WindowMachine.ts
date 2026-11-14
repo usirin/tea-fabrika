@@ -1,20 +1,23 @@
-// next/: the window parent steps Link, Client and the tiles by sending each its own Msgs.
+/**
+ * A window client's parent machine: one tea machine factory for every client, a browser tab, a
+ * headless program or Electron's page alike. It steps the Link, the hello exchange, the program
+ * client and each tile's own machine by sending each its own Msgs, and it decodes every frame the
+ * door sends. It reads no socket and no clock: the start turns socket events into Msgs and its Cmds
+ * into writes.
+ *
+ * @stability unstable
+ */
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import {
-  type AnyTile,
-  clientMachineFor,
-  ClientRecord,
-  type Program,
-  ProgramClient as C,
-  Sent,
-  type WindowData,
-  type WindowMsg as ProgramMsg,
-} from "@kampus/libfabrika";
-import { ClientKeyError } from "@kampus/libfabrika/transport/ClientKey";
-import { ClientRowsError, ErrorClass } from "@kampus/libfabrika/transport/ClientRows";
-import { Link, linkMachine, LinkMsg, ping, socketDial, timerDeps } from "@kampus/libfabrika/transport/Link";
-import { Predicate, Result, Schema } from "effect";
+import { Option, Predicate, Result, Schema } from "effect";
+import * as C from "../runtime/Client.ts";
+import type { Program } from "../runtime/Program.ts";
+import { Sent } from "../runtime/Runner.ts";
+import type { AnyTile, WindowData, WindowMsg as ProgramMsg } from "../runtime/Window.ts";
+import { ClientKeyError } from "../transport/ClientKey.ts";
+import { ClientRecord, ClientRowsError, ErrorClass } from "../transport/ClientRows.ts";
+import { Handshake, handshakeMachine, hello, knock } from "../transport/Handshake.ts";
+import { Link, linkMachine, LinkMsg, ping, socketDial, timerDeps } from "../transport/Link.ts";
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
@@ -55,6 +58,18 @@ const CallError = Schema.TaggedUnion({
 const OnWrite = { id: Schema.Int, dial: Schema.Int };
 const Via = Schema.Literals(["button", "key"]);
 
+/**
+ * Schema for a window's whole state, which a client may save and load again.
+ *
+ * **Details**
+ *
+ * `link` is where the connection is, `handshake` the hello exchange of its dial, and `fingerprint`
+ * the key the window dials with, once the key store has answered. `flight` holds each written call
+ * by its id and dial until its answer comes. `client` holds the program client's letters and views.
+ *
+ * @stability unstable
+ * @category models
+ */
 export const WindowModel = Schema.Struct({
   tiles: Schema.Array(
     Schema.Struct({
@@ -68,6 +83,8 @@ export const WindowModel = Schema.Struct({
     }),
   ),
   link: Link,
+  handshake: Handshake,
+  fingerprint: Schema.NullOr(Schema.String),
   dials: Schema.Int,
   tries: Count,
   client: C.Client,
@@ -83,9 +100,27 @@ export const WindowModel = Schema.Struct({
   from: Schema.Record(Schema.String, Schema.Struct({ tile: Schema.String, via: Via })),
   redate: Schema.Array(Schema.Int),
 });
+
+/**
+ * The type of a window's whole state.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type WindowModel = typeof WindowModel.Type;
 
 const Own = Schema.Union([
+  // What one dial's socket saw, raw: it opened, the door sent a text frame, or it closed with a code.
+  // `ms` on a frame is how long ago the call it answers was written, when it answers one.
+  Schema.Struct({ type: Schema.Literal("socket_opened"), dial: Schema.Int, at: Ms }),
+  Schema.Struct({
+    type: Schema.Literal("frame"),
+    dial: Schema.Int,
+    text: Schema.String,
+    at: Ms,
+    ms: Schema.optionalKey(Ms),
+  }),
+  Schema.Struct({ type: Schema.Literal("socket_closed"), dial: Schema.Int, code: Schema.Int, at: Ms }),
   Schema.Struct({
     type: Schema.Literal("socket_failure"),
     dial: Schema.Int,
@@ -114,8 +149,16 @@ const Own = Schema.Union([
 
 const key = Cmd.make("key", {
   input: Schema.Struct({ rejected: Schema.NullOr(Schema.String) }),
-  ok: Schema.Struct({ found: Schema.Literals(["created", "reused", "replaced"]) }),
+  ok: Schema.Struct({ found: Schema.Literals(["created", "reused", "replaced"]), fingerprint: Schema.String }),
   err: ["ClientKeyError"],
+});
+
+// The hello exchange's knock, as the window sends it on. Its own name keeps its answers apart from
+// the answers of a knock the window writes as a call when the Link renews a grant wait.
+const enroll = Cmd.make("enroll", {
+  input: Schema.Struct({ dial: Schema.Int, id: Schema.String }),
+  ok: Schema.Null,
+  err: ["closed"],
 });
 
 const platformFailure = (error: unknown) => {
@@ -129,6 +172,17 @@ const now = Cmd.make("now", {
   err: ["clock", "entropy"],
 });
 
+/**
+ * Cmd that writes one JSON-RPC call to the brain on the dial's socket, with `id` as its request id.
+ *
+ * **Details**
+ *
+ * It settles when the frame is handed to the socket, never when the brain answers: the answer
+ * arrives later as a frame. It fails `unreachable` at once when the dial has no open socket.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const write = Cmd.make("write", {
   input: Schema.Struct({ call: Call, ...OnWrite }),
   ok: Schema.Null,
@@ -154,7 +208,31 @@ type Out = ReadonlyArray<
   | ReturnType<typeof persist>
   | ReturnType<typeof record>
   | ReturnType<typeof ping>
+  | ReturnType<typeof hello>
+  | ReturnType<typeof enroll>
 >;
+
+// --- The door's frames ----------------------------------------------------------------------------
+
+const RpcAnswer = Schema.Struct({
+  id: Schema.Union([Schema.String, Schema.Number]),
+  result: Schema.optionalKey(Schema.Unknown),
+  error: Schema.optionalKey(
+    Schema.Struct({ data: Schema.optionalKey(Schema.Struct({ reason: Schema.optionalKey(Schema.String) })) }),
+  ),
+});
+
+const Notice = Schema.Struct({ method: Schema.String, params: Schema.optionalKey(Schema.Unknown) });
+const decodeFrame = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Union([RpcAnswer, Notice])));
+
+const Nonce = Schema.Struct({ nonce: Schema.String });
+const WaitingCode = Schema.Struct({ code: Schema.String, until: Schema.Number });
+const Opened = Schema.Struct({ rev: Schema.Int, view: Schema.Json });
+const Entries = Schema.Struct({ entries: Schema.Array(Schema.Unknown) });
+const ViewNotice = Schema.Struct({ pid: Schema.String, type: Schema.Literals(["whole", "patch"]) });
+
+/** The door's error reasons after which the same call may be tried again. */
+const AGAIN: ReadonlySet<string> = new Set(["unreachable", "not_granted", "no_hello", "storage"]);
 
 type Step = readonly [WindowModel, Out];
 type ClientStep = (client: C.Client, msg: C.ClientMsg) => readonly [C.Client, ReadonlyArray<string>];
@@ -366,6 +444,11 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
   let next: WindowModel = {
     ...s,
     link,
+    // A new dial starts its own hello exchange.
+    handshake:
+      open !== null && open > s.handshake.dial
+        ? applyCell(handshakeMachine, s.handshake, { type: "opened", dial: open })[0]
+        : s.handshake,
     dials: Math.max(s.dials, open ?? 0),
     tries: link._tag === "dialing" && open !== socketDial(s.link) ? (link.tries ?? 0) : s.tries,
     persist: granted ? "due" : s.persist,
@@ -391,7 +474,16 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
             : null;
 
   if (result !== null && "ms" in m) {
-    out.push(record({ record: ClientRecord.cases.connect.make({ dial: m.dial, result, ms: m.ms }) }));
+    out.push(
+      record({
+        record: ClientRecord.cases.connect.make({
+          dial: m.dial,
+          result,
+          ms: m.ms,
+          ...(m.type === "closed" ? { code: m.code } : {}),
+        }),
+      }),
+    );
   }
 
   if (s.link._tag === "removed" && m.type === "ask_again" && link._tag === "dialing") {
@@ -458,17 +550,237 @@ const linkUpdate = Object.fromEntries(
   ].map((type) => [type, linked]),
 ) as { readonly [K in LinkMsg["type"]]: (s: WindowModel, m: Extract<LinkMsg, { readonly type: K }>) => Step };
 
-/** One parent per run. Decoder functions and child machines stay outside saved data. */
+type HandshakeIn =
+  typeof handshakeMachine extends Machine<Handshake, infer M, infer _C, infer _U, infer _X> ? M : never;
+
+/** The Link Msg a change of the hello exchange means, if any. */
+const outcome = (was: Handshake, now: Handshake, fingerprint: string): LinkMsg | null => {
+  if (now._tag === "admitted" && was._tag !== "admitted") {
+    return { type: "admitted", dial: now.dial, ping: now.ping, ms: now.ms };
+  }
+
+  if (now._tag === "waiting" && (was._tag !== "waiting" || was.code !== now.code || was.until !== now.until)) {
+    return { type: "not_granted", dial: now.dial, fingerprint, code: now.code, until: now.until, ms: now.ms };
+  }
+
+  return was._tag === "waiting" && now._tag === "initializing" ? { type: "granted", dial: now.dial } : null;
+};
+
+/** Steps the hello exchange by hand, sends its Cmds on and tells the Link what changed. */
+const shook = (s: WindowModel, m: HandshakeIn): Step => {
+  const [handshake, cmds] = applyCell<Handshake, HandshakeIn, ReturnType<typeof hello> | ReturnType<typeof knock>>(
+    handshakeMachine,
+    s.handshake,
+    m,
+  );
+
+  if (handshake === s.handshake && cmds.length === 0) {
+    return [s, []];
+  }
+
+  const next: WindowModel = { ...s, handshake };
+  const sent: Out = cmds.map((c) => (c.type === "knock" ? enroll({ dial: c.dial, id: c.id }) : c));
+
+  if (handshake._tag === "failed" && s.handshake._tag !== "failed") {
+    const [blocked, out] = linked(next, { type: "blocked", reason: handshake.error });
+    return [
+      blocked,
+      [...sent, ...out, record({ record: ClientRecord.cases.failure.make({ op: "key", error: handshake.error }) })],
+    ];
+  }
+
+  // The door's reason exists only in its answer, so the refusal is written the moment it comes. The
+  // Link keeps its own stall and backoff path, so a passing refusal heals on its own.
+  if (handshake._tag === "refused" && s.handshake._tag !== "refused") {
+    const { dial, reason, ms } = handshake;
+    return [
+      next,
+      [...sent, record({ record: ClientRecord.cases.connect.make({ dial, result: "refused", reason, ms }) })],
+    ];
+  }
+
+  const told = outcome(s.handshake, handshake, s.fingerprint ?? "");
+
+  if (told === null) {
+    return [next, sent];
+  }
+
+  const [after, out] = linked(next, told);
+  return [after, [...sent, ...out]];
+};
+
+/** A dial's socket closed: the Link's `closed`, timed from when the dial opened. */
+const closedIn = (s: WindowModel, m: { readonly dial: number; readonly code: number; readonly at: number }): Step => {
+  if (socketDial(s.link) !== m.dial) {
+    return [s, []];
+  }
+
+  const h = s.handshake;
+  const ms = h.dial === m.dial && "since" in h && h.since !== undefined ? Math.max(0, m.at - h.since) : 0;
+  return linked(s, { type: "closed", dial: m.dial, code: m.code, fingerprint: s.fingerprint ?? "", ms });
+};
+
+type OwnerMsg = LinkMsg | typeof Own.Type;
+type Frame = Extract<typeof Own.Type, { readonly type: "frame" }>;
+
+/** The Msg the call's own handler takes for an answer to it, or nothing for a malformed result. */
+const answerTo = (
+  call: Call["_tag"],
+  on: { readonly id: number; readonly dial: number },
+  result: unknown,
+  ms: number,
+  fingerprint: string,
+  handshake: Handshake,
+): ReadonlyArray<OwnerMsg> => {
+  switch (call) {
+    case "read":
+      return Option.match(Schema.decodeUnknownOption(Entries)(result), {
+        onNone: () => [],
+        onSome: (read) => [{ type: "read_ok", ...on, value: read.entries, ms }],
+      });
+    case "open":
+      return Option.match(Schema.decodeUnknownOption(Opened)(result), {
+        onNone: () => [],
+        onSome: (value) => [{ type: "open_ok", ...on, value, ms }],
+      });
+    case "send":
+      return Option.match(Schema.decodeUnknownOption(Sent)(result), {
+        onNone: () => [],
+        onSome: (value) => [{ type: "send_ok", ...on, value, ms }],
+      });
+    case "knock":
+      // A renewed knock keeps or renews the code the Link shows, but only while the handshake still
+      // waits on its dial: the handshake decides whether the reply is current. After a grant it is
+      // stale, and only its flight settles.
+      return Option.match(Schema.decodeUnknownOption(WaitingCode)(result), {
+        onNone: () => [],
+        onSome: (w) => [
+          ...(handshake._tag === "waiting" && handshake.dial === on.dial
+            ? [{ type: "not_granted" as const, dial: on.dial, fingerprint, ...w, ms }]
+            : []),
+          { type: "knock_ok", ...on, value: null, ms },
+        ],
+      });
+  }
+};
+
+/**
+ * Decodes one frame of the link's dial and hands it to its one owner: a number id to its flight's
+ * call, a string id or a hello notice to the hello exchange, `pong` to the Link and a view notice
+ * to its pid. Anything else changes nothing.
+ */
+const frameIn = (s: WindowModel, m: Frame, own: (s: WindowModel, msg: OwnerMsg) => Step): Step => {
+  if (m.dial !== socketDial(s.link)) {
+    return [s, []];
+  }
+
+  if (m.text === "pong") {
+    return own(s, { type: "pong", dial: m.dial });
+  }
+
+  const decoded = decodeFrame(m.text);
+
+  if (Option.isNone(decoded)) {
+    return [s, []];
+  }
+
+  const frame = decoded.value;
+
+  if ("id" in frame) {
+    const reason = frame.error?.data?.reason;
+
+    if (Predicate.isString(frame.id)) {
+      return shook(s, {
+        type: "answer",
+        dial: m.dial,
+        id: frame.id,
+        result: frame.result ?? null,
+        ...(reason === undefined ? {} : { reason }),
+        at: m.at,
+      });
+    }
+
+    const id = frame.id;
+    const flight = s.flight.find((f) => f.id === id && f.dial === m.dial);
+
+    if (flight === undefined) {
+      return [s, []];
+    }
+
+    const on = { id, dial: m.dial };
+    const tag = flight.call._tag;
+    const msgs: ReadonlyArray<OwnerMsg> =
+      frame.error === undefined
+        ? answerTo(tag, on, frame.result, m.ms ?? 0, s.fingerprint ?? "", s.handshake)
+        : [
+            {
+              type: `${tag}_err`,
+              ...on,
+              error:
+                reason !== undefined && AGAIN.has(reason)
+                  ? CallError.cases.unreachable.make({})
+                  : CallError.cases.unknown.make({}),
+            },
+          ];
+    return msgs.reduce<Step>(
+      ([acc, cmds], msg) => {
+        const [next, more] = own(acc, msg);
+        return [next, [...cmds, ...more]];
+      },
+      [s, []],
+    );
+  }
+
+  const params = frame.params;
+
+  if (frame.method === "challenge" || frame.method === "client.granted") {
+    return Option.match(Schema.decodeUnknownOption(Nonce)(params), {
+      onNone: (): Step => [s, []],
+      onSome: ({ nonce }) =>
+        shook(s, { type: frame.method === "challenge" ? "challenge" : "granted", dial: m.dial, nonce, at: m.at }),
+    });
+  }
+
+  if (frame.method === "gateway.waiting") {
+    return Option.match(Schema.decodeUnknownOption(WaitingCode)(params), {
+      onNone: (): Step => [s, []],
+      onSome: (w) => shook(s, { type: "waiting", dial: m.dial, ...w, at: m.at }),
+    });
+  }
+
+  if (frame.method === "view.whole" || frame.method === "view.patch") {
+    return Option.match(Schema.decodeUnknownOption(ViewNotice)(params), {
+      onNone: (): Step => [s, []],
+      onSome: (notice) => own(s, { type: "view", pid: notice.pid, note: params }),
+    });
+  }
+
+  return [s, []];
+};
+
+/**
+ * Makes the window parent for one client, from the checks of the programs its tiles show.
+ *
+ * **Details**
+ *
+ * `decode(pid)` is that pid's own view decoder and `tile(name)` the tile machine of the window
+ * registered for a tile's name. Decoder functions and child machines stay outside the saved
+ * Model. The machine's `socket` Sub asks for one socket per dial the Link has; its `ctx` names the
+ * tiles.
+ *
+ * @stability unstable
+ * @category constructors
+ */
 export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: WindowChecks<P>) => {
-  const client = clientMachineFor(checks);
+  const client = C.clientMachineFor(checks);
   const step: ClientStep = (s, m) => {
     const [next, cmds] = applyCell<C.Client, C.ClientMsg, ReturnType<typeof client.init>[1][number]>(client, s, m);
     return [next, cmds.map((c) => c.pid)];
   };
-  return Machine.make({
+  const machine = Machine.make({
     model: WindowModel,
     msg: Schema.Union([LinkMsg, Own]),
-    cmds: [key, now, write, persist, record, ping],
+    cmds: [key, now, write, persist, record, ping, hello, enroll],
     types: { ctx: {} as WindowCtx, sub: {} as SocketSub },
     init: (loaded, ctx) => [
       loaded ??
@@ -482,6 +794,9 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
             last: null,
           })),
           link: linkMachine.init(null, {})[0],
+          // Dial 1's exchange waits for its challenge; its socket opening times it.
+          handshake: applyCell(handshakeMachine, handshakeMachine.init(null, {})[0], { type: "opened", dial: 1 })[0],
+          fingerprint: null,
           dials: 1,
           tries: 0,
           client: client.init(null, {})[0],
@@ -539,7 +854,10 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
 
         return [next, out];
       },
-      key_ok: (s, m): Step => [s, [record({ record: ClientRecord.cases.key.make({ result: m.value.found }) })]],
+      key_ok: (s, m): Step => [
+        { ...s, fingerprint: m.value.fingerprint },
+        [record({ record: ClientRecord.cases.key.make({ result: m.value.found }) })],
+      ],
       key_err: (s, m): Step => {
         const error = platformFailure(m.error);
         const [next, cmds] = linked(s, { type: "blocked", reason: error });
@@ -551,6 +869,14 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           ? [record({ record: ClientRecord.cases.failure.make({ op: m.op, error: m.error }) })]
           : [],
       ],
+      socket_opened: (s, m): Step =>
+        socketDial(s.link) === m.dial ? shook(s, { type: "opened", dial: m.dial, at: m.at }) : [s, []],
+      frame: (s, m): Step => frameIn(s, m, (at, msg) => applyCell(machine, at, msg)),
+      socket_closed: (s, m): Step => closedIn(s, m),
+      hello_ok: (s, m): Step => shook(s, m),
+      hello_err: (s, m): Step => shook(s, m),
+      enroll_ok: (s, m): Step => shook(s, { type: "knock_ok", cmd: knock(m.cmd), value: null, at: m.at }),
+      enroll_err: (s, m): Step => shook(s, { type: "knock_err", cmd: knock(m.cmd), error: m.error, at: m.at }),
       now_ok: (s, m): Step => dated(s, step, m.cmd.n, m.value),
       now_err: (s, m): Step => [{ ...s, redate: [...new Set([...s.redate, m.cmd.n])] }, []],
       write_ok: (s): Step => [s, []],
@@ -813,7 +1139,15 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
       },
     ],
   });
+  // The machine's `model` is `WindowModel` itself; its own type lets a caller save and load it.
+  return Object.assign(machine, { model: WindowModel });
 };
 
+/**
+ * The type of every Msg a window parent takes.
+ *
+ * @stability unstable
+ * @category models
+ */
 export type WindowMsg =
   ReturnType<typeof windowMachineFor> extends Machine<WindowModel, infer M, infer _C, infer _U, infer _X> ? M : never;

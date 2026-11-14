@@ -1,8 +1,10 @@
 import { applyCell } from "@demlik/tea";
-// P14 slice 2, next/ (ticket 828): the window parent, laws L8 (connection) and L9 (records) of the
-// approved plan. Written before `window/machine.ts`.
+// P18 slice 1, next/ (ticket 290): the window parent, moved from Tuval into the library with its
+// laws. P14 slice 2's laws (ticket 828: L8 connection, L9 records) keep every assertion (P18 L1); P18
+// adds L3 (each frame reaches one owner), L6 (a cut Model continues the same), L10 (the wire's
+// frame families) and L11 (a closed dial's connect row keeps its code), at the end of this file.
 //
-// The shape these laws hold `machine.ts` to, from the plan (the build may add more):
+// The shape the P14 laws hold `client/WindowMachine.ts` to, from P14's plan (the build may add more):
 // - `windowMachineFor({ decode, tile })`: one tea machine factory, whose ctx is `{ tiles: [{id, name}] }`.
 //   `decode(pid)` is that pid's own view decoder (it returns the checked view or throws), passed to
 //   libfabrika's client machine, which captures it. `tile(name)` is the tile machine of the window
@@ -42,11 +44,12 @@ import { applyCell } from "@demlik/tea";
 // tile is stepped through its registration in the checklist's laws (L22, L24).
 import { Cmd as TeaCmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { ClientRecord, diff } from "@kampus/libfabrika";
-import { linkTimer } from "@kampus/libfabrika/transport/Link";
-import { Schema } from "effect";
+import { Arbitrary, Option, Schema } from "effect";
 import * as fc from "fast-check";
-import { type WindowModel, type WindowMsg, windowMachineFor } from "./machine.ts";
+import { diff } from "../runtime/Patch.ts";
+import { ClientRecord } from "../transport/ClientRows.ts";
+import { linkTimer } from "../transport/Link.ts";
+import { type WindowModel, type WindowMsg, windowMachineFor } from "./WindowMachine.ts";
 
 const SEED = 119120;
 const opts = { seed: SEED, numRuns: 300 };
@@ -376,7 +379,10 @@ const moves = (w: World, c: Choice): ReadonlyArray<() => WindowMsg> => {
     if (cmd.type === "key") {
       out.push(
         answer(
-          { found: cmd["rejected"] === null ? (c.aux % 2 === 0 ? "created" : "reused") : "replaced" },
+          {
+            found: cmd["rejected"] === null ? (c.aux % 2 === 0 ? "created" : "reused") : "replaced",
+            fingerprint: `SHA256:${c.word}`,
+          },
           { _tag: "ClientKeyError", op: "open", error: "QuotaExceededError" },
         ),
       );
@@ -483,7 +489,7 @@ const fold = (list: ReadonlyArray<Choice>, each: (e: Event) => void): World => {
 const writes = (cmds: ReadonlyArray<Cmd>, tag: string) => cmds.filter(isWrite).filter((c) => c.call._tag === tag);
 
 describe("L8: the window parent's connection", () => {
-  it("going online reads each tile's processes/<name> once on that dial, and opens each resolved pid once per dial", () => {
+  it("L8 scenario: going online reads each tile's processes/<name> once on that dial, and opens each resolved pid once per dial", () => {
     const seen = { online: 0, opened: 0, missing: 0 };
     fc.assert(
       fc.property(walks, (list) => {
@@ -542,7 +548,7 @@ describe("L8: the window parent's connection", () => {
     expect(seen.missing).toBeGreaterThan(0);
   });
 
-  it("leaving a dial drops its flights and every tile's reach, and keeps every letter", () => {
+  it("L8 scenario: leaving a dial drops its flights and every tile's reach, and keeps every letter", () => {
     let left = 0;
     fc.assert(
       fc.property(walks, (list) => {
@@ -567,7 +573,7 @@ describe("L8: the window parent's connection", () => {
     expect(left).toBeGreaterThan(0);
   });
 
-  it("Ask again dials past every old dial and asks the key store to replace only the removed key", () => {
+  it("L8 scenario: Ask again dials past every old dial and asks the key store to replace only the removed key", () => {
     let asked = 0;
     fc.assert(
       fc.property(walks, (list) => {
@@ -589,7 +595,7 @@ describe("L8: the window parent's connection", () => {
     expect(asked).toBeGreaterThan(0);
   });
 
-  it("persistence is asked once, at the first online after a fresh grant", () => {
+  it("L8 scenario: persistence is asked once, at the first online after a fresh grant", () => {
     let grants = 0;
     fc.assert(
       fc.property(walks, (list) => {
@@ -611,7 +617,7 @@ describe("L8: the window parent's connection", () => {
     expect(grants).toBeGreaterThan(0);
   });
 
-  it("a write settles at hand-off: write_ok changes nothing, write_err frees its flight, and no step waits on an answer", () => {
+  it("L8 scenario: a write settles at hand-off: write_ok changes nothing, write_err frees its flight, and no step waits on an answer", () => {
     const seen = { ok: 0, err: 0 };
     fc.assert(
       fc.property(walks, (list) => {
@@ -631,7 +637,7 @@ describe("L8: the window parent's connection", () => {
     expect(seen.err).toBeGreaterThan(0);
   });
 
-  it("an answer that matches no flight's id and dial does nothing", () => {
+  it("L8 scenario: an answer that matches no flight's id and dial does nothing", () => {
     let stale = 0;
     fc.assert(
       fc.property(walks, (list) => {
@@ -656,7 +662,7 @@ describe("L8: the window parent's connection", () => {
     expect(stale).toBeGreaterThan(0);
   });
 
-  it("invalid recovery-open answers keep the last checked view and ask once until a valid whole arrives", () => {
+  it("L8 scenario: invalid recovery-open answers keep the last checked view and ask once until a valid whole arrives", () => {
     let recovered = 0;
     fc.assert(
       fc.property(walks, fc.array(choice, { minLength: 2, maxLength: 8 }), (list, failures) => {
@@ -718,7 +724,7 @@ describe("L8: the window parent's connection", () => {
     expect(recovered, "the walks reached checked views before the recovery failures").toBeGreaterThan(0);
   });
 
-  it("A14: a notice that installs a pid's view ends that pid's open, so its late answer is stale", () => {
+  it("L8 scenario: A14: a notice that installs a pid's view ends that pid's open, so its late answer is stale", () => {
     let raced = 0;
     fc.assert(
       fc.property(walks, (list) => {
@@ -748,7 +754,7 @@ describe("L8: the window parent's connection", () => {
     expect(raced).toBeGreaterThan(0);
   });
 
-  it("a press on a tile that is not open makes no letter; an open tile's press keeps its pid", () => {
+  it("L8 scenario: a press on a tile that is not open makes no letter; an open tile's press keeps its pid", () => {
     const seen = { open: 0, closed: 0 };
     fc.assert(
       fc.property(walks, (list) => {
@@ -778,7 +784,7 @@ describe("L8: the window parent's connection", () => {
     expect(seen.closed).toBeGreaterThan(0);
   });
 
-  it("a tile's own Msg steps only that tile's machine, and its press Cmd becomes exactly one Client press for that tile's pid", () => {
+  it("L8 scenario: a tile's own Msg steps only that tile's machine, and its press Cmd becomes exactly one Client press for that tile's pid", () => {
     const seen = { stepped: 0, pressed: 0, closed: 0 };
     fc.assert(
       fc.property(walks, (list) => {
@@ -839,7 +845,7 @@ describe("L8: the window parent's connection", () => {
     expect(seen.closed, "some tile presses came while the tile was not open").toBeGreaterThan(0);
   });
 
-  it("a tile's refusal is set only by a refused reply to its own letter, and cleared by its next press", () => {
+  it("L8 scenario: a tile's refusal is set only by a refused reply to its own letter, and cleared by its next press", () => {
     const seen = { set: 0, cleared: 0, others: 0 };
     fc.assert(
       fc.property(walks, (list) => {
@@ -894,7 +900,7 @@ describe("L8: the window parent's connection", () => {
     expect(seen.others, "a refusal for one tile left the other tiles alone").toBeGreaterThan(0);
   });
 
-  it("the tile's own Model never leaves the tab: no record holds a draft, and no write holds one never submitted", () => {
+  it("L8 scenario: the tile's own Model never leaves the tab: no record holds a draft, and no write holds one never submitted", () => {
     let typed = 0;
     fc.assert(
       fc.property(walks, (list) => {
@@ -919,7 +925,7 @@ describe("L8: the window parent's connection", () => {
 });
 
 describe("L9: the records the window emits", () => {
-  it("a failed record attempts one failure row and keeps the window working without retrying a failed failure row", () => {
+  it("L9 scenario: a failed record attempts one failure row and keeps the window working without retrying a failed failure row", () => {
     let failed = 0;
     fc.assert(
       fc.property(walks, (list) => {
@@ -942,7 +948,7 @@ describe("L9: the records the window emits", () => {
     expect(failed, "the walks failed record writes").toBeGreaterThan(0);
   });
 
-  it("each record Cmd carries one checked ClientRecord and nothing else", () => {
+  it("L9 scenario: each record Cmd carries one checked ClientRecord and nothing else", () => {
     fc.assert(
       fc.property(walks, (list) => {
         fold(list, ({ cmds }) => {
@@ -956,7 +962,7 @@ describe("L9: the records the window emits", () => {
     );
   });
 
-  it("one key row per key read, one connect row per link outcome with its ms, one persist row per answer", () => {
+  it("L9 scenario: one key row per key read, one connect row per link outcome with its ms, one persist row per answer", () => {
     const seen = { key: 0, connect: 0, persist: 0 };
     fc.assert(
       fc.property(walks, (list) => {
@@ -985,7 +991,18 @@ describe("L9: the records the window emits", () => {
           const connected = outcome !== null && "ms" in m && "dial" in m ? { dial: m.dial, ms: m.ms } : null;
           seen.connect += connected === null ? 0 : 1;
           expect(connects, `${m.type}'s connect rows`).toEqual(
-            connected === null ? [] : [{ _tag: "connect", dial: connected.dial, result: outcome, ms: connected.ms }],
+            connected === null
+              ? []
+              : [
+                  {
+                    _tag: "connect",
+                    dial: connected.dial,
+                    result: outcome,
+                    ms: connected.ms,
+                    // P18 L11: a closed dial's row also keeps the close code it saw.
+                    ...(m.type === "closed" ? { code: m.code } : {}),
+                  },
+                ],
           );
           const answered = m.type === "persist_ok" || m.type === "persist_err";
           seen.persist += answered ? 1 : 0;
@@ -999,7 +1016,7 @@ describe("L9: the records the window emits", () => {
     expect(seen.persist).toBeGreaterThan(0);
   });
 
-  it("a press row comes before its letter's first write, and one reply row at settlement counts every send", () => {
+  it("L9 scenario: a press row comes before its letter's first write, and one reply row at settlement counts every send", () => {
     const seen = { press: 0, reply: 0, resent: 0, free: 0 };
     fc.assert(
       fc.property(walks, (list) => {
@@ -1071,7 +1088,7 @@ describe("L9: the records the window emits", () => {
     expect(seen.free, "some refusals had free-text reasons").toBeGreaterThan(0);
   });
 
-  it("a whole row per whole installed, an asked row per ask, and one patch row per ended run with its count", () => {
+  it("L9 scenario: a whole row per whole installed, an asked row per ask, and one patch row per ended run with its count", () => {
     const seen = { whole: 0, asked: 0, run: 0 };
     fc.assert(
       fc.property(walks, (list) => {
@@ -1121,4 +1138,801 @@ describe("L9: the records the window emits", () => {
     expect(seen.asked).toBeGreaterThan(0);
     expect(seen.run).toBeGreaterThan(0);
   });
+});
+
+// --- P18 slice 1: frames, cuts and close codes -----------------------------------------------------
+//
+// What these laws hold `client/WindowMachine.ts` to, from P18's approved plan (the build may add more):
+// - Two new Msgs carry what the socket saw, raw: `frame {dial, text, at, ms?}` and
+//   `socket_closed {dial, code, at}`. `update` decodes every frame; the start decodes nothing.
+// - A frame of a dial that is not the link's socket dial does nothing. Text `pong` is the link's
+//   `pong`. A JSON-RPC answer with a number id goes to the flight with that id and dial and becomes
+//   the `*_ok` or `*_err` Msg its call already had, with the frame's `ms`. A string id goes to the
+//   handshake. `challenge`, `client.granted` and `gateway.waiting` go to the handshake, and
+//   `view.whole` and `view.patch` become the `view` Msg. Anything else does nothing.
+// - The model gains `handshake` (the `Handshake` of `transport/Handshake.ts`, whose live request id
+//   is its `id`) and `fingerprint` (from `key_ok`, whose ok gains `fingerprint`). The handshake's
+//   `hello` Cmd carries `{dial, id, nonce}`.
+// - `socket_closed` is the link's `closed`, and a `connect` row of a closed or removed dial keeps
+//   the close `code`.
+//
+// The walk starts at the real init and reaches the door's states only through frames: a challenge
+// makes a hello, the door answers the handshake's live id, and the window goes online. Each step
+// picks one move possible in the state it folded, stale ones on purpose.
+
+/** The door's frame for one JSON-RPC answer or notice, as text. */
+const rpc = (body: object) => JSON.stringify({ jsonrpc: "2.0", ...body });
+const ADMITTED = { version: 1, ping: 5_000, identity: { key: "SHA256:k", person: "person_x", as: "window" } };
+const NOT_GRANTED = { code: -32000, message: "no", data: { reason: "not_granted" } };
+/** Error reasons the door sends; the first four are the ones a client may try again after. */
+const ERROR_REASONS = ["unreachable", "not_granted", "no_hello", "storage", "nope", "rate_limited"] as const;
+const AGAIN = new Set<string>(["unreachable", "not_granted", "no_hello", "storage"]);
+/** Texts that are no frame the window reads. `ping` is the client's own word, never the door's. */
+const JUNK = ["{ not json", "[1,2]", rpc({ id: true, result: 1 }), "ping", "", "PONG", rpc({ method: "nope" })];
+
+/** A blind draw the fold reads in the state it reached: which move, which target, and its values. */
+const Pick = Schema.Struct({
+  move: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 })),
+  pick: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 })),
+  aux: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 })),
+  ms: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 20_000 })),
+  word: Schema.Literals(["milk", "bread", "eggs", "n0nce1", "k7q2"]),
+  // Close codes as a door or a network sends them: the common ones, the removal, and any private one.
+  code: Schema.Union([
+    Schema.Literals([1000, 1001, 1006, 1011, 4003]),
+    Schema.Int.check(Schema.isBetween({ minimum: 3000, maximum: 4999 })),
+  ]),
+});
+type Pick = typeof Pick.Type;
+const Picks = Schema.Array(Pick).check(Schema.isMinLength(40), Schema.isMaxLength(200));
+
+/** What the step's frame should do, known when the move was made. */
+type Expect =
+  | { readonly _tag: "owner"; readonly owner: WindowMsg } // the same as the Msg its owner already had
+  | { readonly _tag: "nothing" } // changes nothing and asks for nothing
+  | { readonly _tag: "handshake" } // a string id or a handshake notice: no flight moves
+  | { readonly _tag: "settles"; readonly id: number; readonly dial: number } // only that flight leaves
+  | { readonly _tag: "none" }; // not a frame
+
+type Flight = WindowModel["flight"][number];
+
+type FrameWorld = {
+  s: WindowModel;
+  waiting: Array<Cmd>;
+  at: number;
+  ids: Set<string>; // every handshake id the walk has seen
+  old: Array<Flight>; // flights that left the model
+  dials: Set<number>; // every socket dial the walk has seen
+};
+
+type FrameEvent = {
+  readonly prev: WindowModel;
+  readonly m: WindowMsg;
+  readonly next: WindowModel;
+  readonly cmds: ReadonlyArray<Cmd>;
+  readonly expect: Expect;
+};
+
+/** The model's handshake: its state, its dial and its live request id. */
+const handshakeIn = (s: WindowModel): { readonly _tag: string; readonly dial?: number; readonly id?: string } =>
+  Reflect.get(s, "handshake") ?? { _tag: "none" };
+
+const frame = (w: FrameWorld, dial: number, text: string, ms?: number): WindowMsg =>
+  ({ type: "frame", dial, text, at: w.at, ...(ms === undefined ? {} : { ms }) }) as WindowMsg;
+
+/**
+ * A good answer for a flight's call, and the Msg the call's own handler takes for it. A renewed
+ * knock's code is the Link's only while the handshake still waits on that dial; at any other time
+ * the answer is stale, and only the knock's own handler takes it.
+ */
+const goodAnswer = (
+  f: Flight,
+  c: Pick,
+  hs: ReturnType<typeof handshakeIn>,
+): { readonly result: unknown; readonly owner: WindowMsg | null } => {
+  const on = { id: f.id, dial: f.dial };
+
+  if (f.call._tag === "read") {
+    const name = f.call.stream.replace(/^processes\//, "");
+    const entries = [{ _tag: "started", by: "brain", body: { process: `process_${name}_${c.word}`, name }, rev: 1 }];
+    return { result: { entries }, owner: { type: "read_ok", ...on, value: entries, ms: c.ms } };
+  }
+
+  if (f.call._tag === "open") {
+    const value = { rev: c.aux % 5, view: listEdit(EMPTY, c.aux, c.word) };
+    return { result: value, owner: { type: "open_ok", ...on, value, ms: c.ms } };
+  }
+
+  if (f.call._tag === "send") {
+    const value =
+      c.aux % 2 === 0
+        ? { _tag: "accepted" as const, rev: c.ms, pos: c.aux }
+        : { _tag: "refused" as const, reason: REASONS[c.ms % REASONS.length]! };
+    return { result: value, owner: { type: "send_ok", ...on, value, ms: c.ms } };
+  }
+
+  const result = { code: c.word, until: c.ms };
+  return hs._tag === "waiting" && hs.dial === f.dial
+    ? { result, owner: null }
+    : { result, owner: { type: "knock_ok", ...on, value: null, ms: c.ms } };
+};
+
+/** Every move the world allows now, each with what its frame should do. */
+const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [WindowMsg, Expect]> => {
+  const s = w.s;
+  const out: Array<() => readonly [WindowMsg, Expect]> = [];
+  const none: Expect = { _tag: "none" };
+  const nothing: Expect = { _tag: "nothing" };
+  const dial = socketDial(s);
+  const past = [...w.dials].filter((d) => d !== dial);
+  const timer = linkTimer(s.link);
+  const hs = handshakeIn(s);
+
+  // tea's answers to the Cmds handed out and not answered yet.
+  if (w.waiting.length > 0) {
+    const due = w.waiting.filter((cmd) => ["key", "now"].includes(cmd.type));
+    const from = c.aux % 3 !== 0 && due.length > 0 ? due : w.waiting;
+    const cmd = from[c.pick % from.length]!;
+    const ok = (value: unknown) => (): readonly [WindowMsg, Expect] => [
+      { type: `${cmd.type}_ok`, cmd, value } as WindowMsg,
+      none,
+    ];
+    out.push(
+      cmd.type === "key"
+        ? ok({ found: cmd["rejected"] === null ? "created" : "replaced", fingerprint: `SHA256:${c.word}` })
+        : cmd.type === "now"
+          ? ok({ letter: `letter_${c.word}_${c.ms}`, sentAt: "2026-11-13T00:00:00.000Z" })
+          : cmd.type === "persist"
+            ? ok(c.aux % 2 === 0)
+            : ok(null),
+    );
+  }
+
+  // A live link's timer is offered now and then, so dials live long enough to go online. A retrying
+  // link waits on nothing but its retry, so the retry is always offered, and favored, like the
+  // door's next move below: no walk sits in `retrying` for good.
+  if (timer !== null && s.link._tag === "retrying") {
+    const retry = (): readonly [WindowMsg, Expect] => [timer.msg, none];
+    out.push(retry, retry, retry);
+  } else if (timer !== null && s.link._tag === "waiting_grant" && !s.flight.some((f) => f.call._tag === "knock")) {
+    // A grant wait renews before its grant now and then, so a renewed knock is out when the grant
+    // comes and its answer can land after it.
+    const renew = (): readonly [WindowMsg, Expect] => [timer.msg, none];
+    out.push(renew, renew, renew, renew);
+  } else if (timer !== null && c.aux % 4 === 0) {
+    out.push(() => [timer.msg, none]);
+  }
+
+  if (s.link._tag === "removed") {
+    out.push(() => [{ type: "ask_again", dial: Math.max(...w.dials, 0) + 1 }, none]);
+  }
+
+  const open = s.tiles.filter((t) => t.reach._tag === "open");
+
+  if (open.length > 0) {
+    const t = open[c.pick % open.length]!;
+    out.push(() => [{ type: "press", tile: t.id, m: { type: "add", name: c.word } }, none]);
+  }
+
+  if (dial !== null) {
+    const d = dial;
+    const nonce = `nonce_${c.word}_${c.ms}`;
+    out.push(
+      () => [frame(w, d, rpc({ method: "challenge", params: { nonce } })), { _tag: "handshake" }],
+      () => [frame(w, d, rpc({ method: "client.granted", params: { nonce } })), { _tag: "handshake" }],
+      () => [
+        frame(w, d, rpc({ method: "gateway.waiting", params: { code: c.word, until: c.ms } })),
+        { _tag: "handshake" },
+      ],
+      () => [frame(w, d, "pong"), { _tag: "owner", owner: { type: "pong", dial: d } }],
+      () => [frame(w, d, JUNK[c.aux % JUNK.length]!), nothing],
+    );
+
+    // The live socket closes now and then, like its timer, so a dial lives long enough to go online.
+    if (c.aux % 4 === 0) {
+      out.push(() => [{ type: "socket_closed", dial: d, code: c.code, at: w.at } as WindowMsg, none]);
+    }
+
+    // Favor the door's next move for the handshake's own state, so walks go online: a challenge to
+    // a dial not challenged yet, an admission of the live hello (or now and then `not_granted`, so
+    // walks also wait for a grant), a code for the live knock, and a grant to a waiting dial.
+    if (hs.dial === d) {
+      const next =
+        hs._tag === "opened"
+          ? rpc({ method: "challenge", params: { nonce } })
+          : hs._tag === "initializing"
+            ? rpc(c.aux % 3 === 0 ? { id: hs.id, error: NOT_GRANTED } : { id: hs.id, result: ADMITTED })
+            : hs._tag === "knocking"
+              ? rpc({ id: hs.id, result: { code: c.word, until: c.ms } })
+              : hs._tag === "waiting"
+                ? rpc({ method: "client.granted", params: { nonce } })
+                : null;
+
+      if (next !== null) {
+        const move = (): readonly [WindowMsg, Expect] => [frame(w, d, next), { _tag: "handshake" }];
+        out.push(move, move, move);
+      }
+    }
+
+    if (hs.id !== undefined && hs.dial === d) {
+      const id = hs.id;
+      const answers = [
+        rpc({ id, result: ADMITTED }),
+        rpc({ id, result: ADMITTED }),
+        rpc({ id, result: ADMITTED }),
+        rpc({ id, error: NOT_GRANTED }),
+        rpc({ id, result: { code: c.word, until: c.ms } }),
+      ];
+
+      for (const text of answers) {
+        out.push(() => [frame(w, d, text), { _tag: "handshake" }]);
+      }
+    }
+
+    const stale = [...w.ids].filter((id) => id !== hs.id);
+
+    if (stale.length > 0) {
+      const id = stale[c.pick % stale.length]!;
+      out.push(() => [frame(w, d, rpc({ id, result: ADMITTED })), nothing]);
+    }
+
+    // Answers to the flights the window has, on their own id and dial.
+    if (s.flight.length > 0) {
+      const f = s.flight[c.pick % s.flight.length]!;
+      const good = goodAnswer(f, c, hs);
+      const reason = ERROR_REASONS[c.aux % ERROR_REASONS.length]!;
+      const error: WindowMsg = {
+        type: `${f.call._tag}_err`,
+        id: f.id,
+        dial: f.dial,
+        error: { _tag: AGAIN.has(reason) ? "unreachable" : "unknown" },
+      } as WindowMsg;
+      out.push(
+        () => [
+          frame(w, f.dial, rpc({ id: f.id, result: good.result }), c.ms),
+          good.owner === null ? { _tag: "settles", id: f.id, dial: f.dial } : { _tag: "owner", owner: good.owner },
+        ],
+        () => [
+          frame(w, f.dial, rpc({ id: f.id, result: good.result }), c.ms),
+          good.owner === null ? { _tag: "settles", id: f.id, dial: f.dial } : { _tag: "owner", owner: good.owner },
+        ],
+        () => [
+          frame(w, f.dial, rpc({ id: f.id, error: { code: -32000, message: "no", data: { reason } } }), c.ms),
+          { _tag: "owner", owner: error },
+        ],
+        () => [frame(w, f.dial, rpc({ id: f.id, result: { rev: "bad", entries: 7, _tag: 1 } }), c.ms), nothing],
+        // The flight's id as a string is the handshake's kind of id: it never settles the flight.
+        () => [frame(w, f.dial, rpc({ id: String(f.id), result: good.result }), c.ms), { _tag: "handshake" }],
+      );
+    }
+
+    // A renewed knock still out once the handshake has moved past waiting, as after a grant: its
+    // late answer is favored, so walks reach it.
+    const late = s.flight.find((f) => f.call._tag === "knock" && !(hs._tag === "waiting" && hs.dial === f.dial));
+
+    if (late !== undefined) {
+      const good = goodAnswer(late, c, hs);
+      const move = (): readonly [WindowMsg, Expect] => [
+        frame(w, late.dial, rpc({ id: late.id, result: good.result }), c.ms),
+        good.owner === null ? { _tag: "settles", id: late.id, dial: late.dial } : { _tag: "owner", owner: good.owner },
+      ];
+      out.push(move, move, move, move);
+    }
+
+    out.push(() => [
+      frame(w, d, rpc({ id: Math.max(0, ...s.flight.map((f) => f.id), s.serial) + 1 + c.aux, result: {} }), c.ms),
+      nothing,
+    ]);
+
+    const pids = s.tiles.flatMap((t) => ("pid" in t.reach ? [t.reach.pid] : []));
+
+    if (pids.length > 0) {
+      const pid = pids[c.pick % pids.length]!;
+      const params = { pid, type: "whole", rev: c.aux % 7, view: listEdit(EMPTY, c.aux, c.word) };
+      out.push(
+        () => [
+          frame(w, d, rpc({ method: "view.whole", params })),
+          { _tag: "owner", owner: { type: "view", pid, note: params } },
+        ],
+        () => [frame(w, d, rpc({ method: "view.whole", params: { ...params, pid: undefined } })), nothing],
+      );
+    }
+  }
+
+  // A frame, a close or a late answer of a dial that is not the socket's any more.
+  if (past.length > 0) {
+    const d = past[c.pick % past.length]!;
+    const late = w.old.filter((f) => f.dial === d);
+    out.push(
+      () => [frame(w, d, "pong"), nothing],
+      () => [frame(w, d, rpc({ method: "challenge", params: { nonce: `old_${c.word}` } })), nothing],
+      () => [{ type: "socket_closed", dial: d, code: c.code, at: w.at } as WindowMsg, none],
+    );
+
+    if (late.length > 0) {
+      const f = late[c.aux % late.length]!;
+      out.push(() => [frame(w, f.dial, rpc({ id: f.id, result: goodAnswer(f, c, hs).result }), c.ms), nothing]);
+    }
+
+    // A live flight's own id and a good answer, on a past dial: the id alone never settles it.
+    if (s.flight.length > 0) {
+      const f = s.flight[c.aux % s.flight.length]!;
+      out.push(() => [frame(w, d, rpc({ id: f.id, result: goodAnswer(f, c, hs).result }), c.ms), nothing]);
+    }
+  }
+
+  return out;
+};
+
+/** Folds a frame walk from the real init, handing each step to `each`, and returns every step. */
+const foldFrames = (list: ReadonlyArray<Pick>, each: (e: FrameEvent) => void = () => {}): Array<FrameEvent> => {
+  const [s0, cmds0] = machine.init(null, ctx);
+  const w: FrameWorld = { s: s0, waiting: [...cmds0], at: 0, ids: new Set(), old: [], dials: new Set([1]) };
+  const events: Array<FrameEvent> = [];
+
+  for (const c of list) {
+    const options = frameMoves(w, c);
+    const [m, expect] = options[c.move % options.length]!();
+    const prev = w.s;
+    const [next, cmds] = step(prev, m);
+    w.waiting = [
+      ...w.waiting.filter((cmd) => !("cmd" in m) || m.cmd !== cmd),
+      ...cmds.filter((c) => c.type !== "record"),
+    ];
+    w.old.push(...prev.flight.filter((f) => !next.flight.some((n) => n.id === f.id && n.dial === f.dial)));
+    const id = handshakeIn(next).id;
+
+    if (id !== undefined) {
+      w.ids.add(id);
+    }
+
+    const open = socketDial(next);
+
+    if (open !== null) {
+      w.dials.add(open);
+    }
+
+    w.at += c.ms % 700;
+    w.s = next;
+    const event = { prev, m, next, cmds, expect };
+    events.push(event);
+    each(event);
+  }
+
+  return events;
+};
+
+const frameRuns = { arbitrary: { seed: SEED, runs: 300, size: 200 } };
+
+/** The id of a JSON-RPC answer, read as the door wrote it. */
+const answerId = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ id: Schema.Union([Schema.String, Schema.Number]) })),
+);
+
+/** What a frame on `prev` did, beside what its owner says it must do, with a label for a failure. */
+const verdict = (
+  prev: WindowModel,
+  m: Extract<WindowMsg, { readonly type: "frame" }>,
+  after: readonly [WindowModel, ReadonlyArray<Cmd>],
+  e: Expect,
+): readonly [string, unknown, unknown] => {
+  const unmoved = [prev, []];
+
+  if (m.dial !== socketDial(prev)) {
+    return [`a frame of old dial ${m.dial} moved the window`, after, unmoved];
+  }
+
+  if (e._tag === "owner") {
+    return [`${m.text} did not reach its owner ${e.owner.type}`, after, step(prev, e.owner)];
+  }
+
+  if (e._tag === "settles") {
+    return [
+      "an answer settled another flight",
+      after[0].flight,
+      prev.flight.filter((x) => x.id !== e.id || x.dial !== e.dial),
+    ];
+  }
+
+  const named = Option.getOrUndefined(answerId(m.text))?.id;
+
+  if (e._tag === "handshake" && !(typeof named === "string" && named !== handshakeIn(prev).id)) {
+    return [
+      `${m.text}: a handshake frame settled a flight`,
+      after[0].flight.filter((x) => prev.flight.includes(x)),
+      prev.flight,
+    ];
+  }
+
+  // Malformed text, an unknown id, or a string id that is not the handshake's own.
+  return [`${m.text} moved the window`, after, unmoved];
+};
+
+describe("P18 L3: each frame reaches exactly one owner", () => {
+  it.prop(
+    "a number id settles only its own flight on its dial, a string id only the handshake, pong only the link, a view notice its pid, and an old dial's frame or a malformed text nothing",
+    { list: Arbitrary.schema(Picks) },
+    ({ list }) => {
+      const seen = { online: 0 };
+      foldFrames(list, ({ prev, m, next, cmds, expect: e }) => {
+        seen.online += prev.link._tag !== "online" && next.link._tag === "online" ? 1 : 0;
+
+        if (m.type !== "frame") {
+          return;
+        }
+
+        const [label, got, wanted] = verdict(prev, m, [next, cmds], e);
+        expect(got, label).toEqual(wanted);
+      });
+      expect(seen.online, "walks went online through frames alone").toBeGreaterThan(0);
+      return true;
+    },
+    frameRuns,
+  );
+
+  it.prop(
+    "over all walks every route is taken",
+    { list: Arbitrary.array(Arbitrary.schema(Picks), { minLength: 40, maxLength: 40 }) },
+    ({ list }) => {
+      // A knock's answer settles only once a grant wait renews, which few walks reach: not counted.
+      // `stolen` is a live flight's id on a past dial, the frame only the dial check stops. `late`
+      // is a renewed knock's answer that lands after the handshake left waiting, as after a grant.
+      const seen: Record<Expect["_tag"] | "old" | "online" | "stolen" | "late", number> = {
+        owner: 0,
+        nothing: 0,
+        handshake: 0,
+        settles: 0,
+        none: 0,
+        online: 0,
+        old: 0,
+        stolen: 0,
+        late: 0,
+      };
+
+      for (const walk of list) {
+        foldFrames(walk, ({ prev, m, next, expect: e }) => {
+          if (m.type === "frame") {
+            const dial = m.dial;
+            const route = dial === socketDial(prev) ? e._tag : "old";
+            seen[route] += 1;
+            const named = Option.getOrUndefined(answerId(m.text))?.id;
+            seen.stolen += route === "old" && prev.flight.some((f) => f.id === named) ? 1 : 0;
+            const hs = handshakeIn(prev);
+            seen.late +=
+              route !== "old" &&
+              hs._tag !== "waiting" &&
+              prev.flight.some((f) => f.id === named && f.dial === dial && f.call._tag === "knock")
+                ? 1
+                : 0;
+          }
+
+          seen.online += prev.link._tag !== "online" && next.link._tag === "online" ? 1 : 0;
+        });
+      }
+
+      expect(
+        (["owner", "nothing", "handshake", "online", "old", "stolen", "late"] as const).every((k) => seen[k] > 0),
+        JSON.stringify(seen),
+      ).toBe(true);
+      return true;
+    },
+    { arbitrary: { seed: SEED, runs: 3, size: 200 } },
+  );
+});
+
+describe("P18 L6: a cut Model continues as the uncut run", () => {
+  it.prop(
+    "a WindowModel saved at a reached state and loaded again takes the same Msgs to the same Models and Cmds, the handshake's live id included",
+    { list: Arbitrary.schema(Picks), cut: Arbitrary.schema(Pick.fields.pick) },
+    ({ list, cut }) => {
+      const events = foldFrames(list);
+      const live = events.flatMap((e, i) => (handshakeIn(e.next).id === undefined ? [] : [i]));
+      const pool = live.length > 0 && cut % 2 === 0 ? live : events.map((_, i) => i);
+      const k = pool[cut % pool.length]!;
+      const saved = Schema.encodeSync(Schema.fromJsonString(machine.model))(events[k]!.next);
+      const loaded = Schema.decodeUnknownSync(Schema.fromJsonString(machine.model))(saved);
+      let [s] = machine.init(loaded, ctx);
+      expect(s, "the saved Model did not load back as it was").toEqual(events[k]!.next);
+
+      for (const e of events.slice(k + 1)) {
+        const [next, cmds] = step(s, e.m);
+        expect([next, cmds], `${e.m.type} after the cut`).toEqual([e.next, e.cmds]);
+        s = next;
+      }
+
+      return true;
+    },
+    { arbitrary: { seed: SEED, runs: 100, size: 200 } },
+  );
+
+  it.prop(
+    "some walks reach a state whose handshake has a live id, so a cut can fall there",
+    { list: Arbitrary.array(Arbitrary.schema(Picks), { minLength: 20, maxLength: 20 }) },
+    ({ list }) => {
+      expect(list.some((walk) => foldFrames(walk).some((e) => handshakeIn(e.next).id !== undefined))).toBe(true);
+      return true;
+    },
+    { arbitrary: { seed: SEED, runs: 3, size: 200 } },
+  );
+});
+
+describe("P18 L11: the connect row of a closed dial keeps its close code", () => {
+  it.prop(
+    "a socket_closed on the link's dial writes one closed or removed connect row with the code it saw, removed only for 4003, and no other connect row carries a code",
+    { list: Arbitrary.schema(Picks) },
+    ({ list }) => {
+      foldFrames(list, ({ prev, m, next, cmds }) => {
+        const rows = cmds.map(recordIn).filter((r): r is Row => r?._tag === "connect");
+        const closed = m.type === "socket_closed" && m.dial === socketDial(prev) ? m : null;
+        const label =
+          closed === null ? `connect rows after ${m.type}` : `a close ${closed.code} on dial ${closed.dial}`;
+        expect(
+          rows.map((r) => [r["result"], r["code"]]),
+          label,
+        ).toEqual(
+          closed === null
+            ? rows.map((r) => [r["result"], undefined])
+            : [[closed.code === 4003 ? "removed" : "closed", closed.code]],
+        );
+        expect(closed === null || (next.link._tag === "removed") === (closed.code === 4003), "only 4003 removes").toBe(
+          true,
+        );
+      });
+      return true;
+    },
+    { arbitrary: { seed: SEED, runs: 100, size: 200 } },
+  );
+});
+
+// --- L10: the wire's frame families ----------------------------------------------------------------
+
+/** The door's wire vocabulary, as the door writes it (P12 as built): what the window must read. */
+const Finite = Schema.Number.check(Schema.isFinite());
+
+const Wire = {
+  nonce: Schema.Struct({ nonce: Schema.String }),
+  code: Schema.Struct({ code: Schema.String, until: Finite }),
+  admitted: Schema.Struct({
+    version: Schema.Int,
+    ping: Finite.check(Schema.isGreaterThanOrEqualTo(0)),
+    identity: Schema.Struct({ key: Schema.String, person: Schema.String, as: Schema.Literals(["window"]) }),
+  }),
+  entries: Schema.Struct({
+    entries: Schema.Array(
+      Schema.Struct({
+        _tag: Schema.Literal("started"),
+        by: Schema.Literal("brain"),
+        body: Schema.Struct({ process: Schema.String, name: Schema.Literal("checklist:1") }),
+        rev: Schema.Int,
+      }),
+    ),
+  }),
+  opened: Schema.Struct({ rev: Schema.Int, view: ListView }),
+  sent: Schema.Union([
+    Schema.Struct({ _tag: Schema.Literal("accepted"), rev: Schema.Int, pos: Schema.Int }),
+    Schema.Struct({ _tag: Schema.Literal("refused"), reason: Schema.String }),
+  ]),
+  whole: Schema.Struct({ rev: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)), view: ListView }),
+  patch: Schema.Struct({ base: Schema.Int, rev: Schema.Int }),
+  // An error answer's data: one of the door's words, or any text a door could send.
+  refusal: Schema.Struct({
+    reason: Schema.Union([Schema.String.check(Schema.isPattern(/^[a-z_]{1,40}$/)), Schema.String]),
+  }),
+};
+
+/** The window a few frames into a dial, each state reached through the door's frames alone. */
+const door = {
+  /** Booted, with its key: the link is dialing on dial 1. */
+  boot: (): WindowModel => {
+    const [s, cmds] = machine.init(null, ctx);
+    const key = cmds.find((c) => c.type === "key");
+    return step(s, { type: "key_ok", cmd: key, value: { found: "created", fingerprint: "SHA256:fp" } } as WindowMsg)[0];
+  },
+  frame: (s: WindowModel, text: string, ms?: number) =>
+    step(s, { type: "frame", dial: 1, text, at: 1_000, ...(ms === undefined ? {} : { ms }) } as WindowMsg),
+  /** After a challenge: `initialize` is out with the handshake's live id. */
+  initializing: (): WindowModel => door.frame(door.boot(), rpc({ method: "challenge", params: { nonce: "n1" } }))[0],
+  /** After `not_granted`: the handshake's knock is out. */
+  knocking: (): WindowModel => {
+    const s = door.initializing();
+    return door.frame(s, rpc({ id: handshakeIn(s).id, error: NOT_GRANTED }))[0];
+  },
+  /** Showing a code: the link waits for a grant. */
+  waiting: (): WindowModel => {
+    const s = door.knocking();
+    return door.frame(s, rpc({ id: handshakeIn(s).id, result: { code: "K7Q2", until: 9_000 } }))[0];
+  },
+  online: (): WindowModel => {
+    const s = door.initializing();
+    return door.frame(s, rpc({ id: handshakeIn(s).id, result: ADMITTED }))[0];
+  },
+  /** Online with its tile's view open in flight. */
+  opening: (): WindowModel => {
+    const s = door.online();
+    const read = s.flight.find((f) => f.call._tag === "read")!;
+    const entries = [{ _tag: "started", by: "brain", body: { process: PID_A, name: "checklist:1" }, rev: 1 }];
+    return door.frame(s, rpc({ id: read.id, result: { entries } }), 1)[0];
+  },
+  /** Online with one letter in flight. */
+  sending: (): WindowModel => {
+    const s = door.opening();
+    const open = s.flight.find((f) => f.call._tag === "open")!;
+    const [shown] = door.frame(s, rpc({ id: open.id, result: { rev: 1, view: EMPTY } }), 1);
+    const [pressed, cmds] = step(shown, { type: "press", tile: "tile_1", m: { type: "add", name: "milk" } });
+    const now = cmds.find((c) => c.type === "now");
+    return step(pressed, {
+      type: "now_ok",
+      cmd: now,
+      value: { letter: "letter_a", sentAt: "2026-11-13T00:00:00.000Z" },
+    } as WindowMsg)[0];
+  },
+};
+
+const PID_A = "process_01m6v5270hf3c8x2q7w9z4k5mn";
+
+type Family = {
+  readonly schema: Schema.Top;
+  readonly from: () => WindowModel;
+  /** The frame for a result or params object, and the frame's `ms` for an answer to a flight. */
+  readonly text: (s: WindowModel, sent: Record<string, unknown>) => readonly [string, number?];
+  /** The object the frame carries for a generated value: the value itself, unless a notice adds its pid. */
+  readonly sent?: (value: Record<string, unknown>) => Record<string, unknown>;
+  readonly good: (prev: WindowModel, after: readonly [WindowModel, ReadonlyArray<Cmd>], value: any) => void;
+  readonly drop: ReadonlyArray<string>;
+  readonly wrong: Readonly<Record<string, unknown>>;
+};
+
+const flightFor = (s: WindowModel, tag: string) => s.flight.find((f) => f.call._tag === tag)!;
+
+const sameAs = (prev: WindowModel, after: readonly [WindowModel, ReadonlyArray<Cmd>], owner: WindowMsg) =>
+  expect(after, `not the same as ${owner.type}`).toEqual(step(prev, owner));
+
+const helloWith = (after: readonly [WindowModel, ReadonlyArray<Cmd>], nonce: string) =>
+  expect(
+    after[1].filter((c) => c.type === "hello").map((c) => c["nonce"]),
+    "the hello carries its nonce",
+  ).toEqual([nonce]);
+
+const FAMILIES: Readonly<Record<string, Family>> = {
+  challenge: {
+    schema: Wire.nonce,
+    from: door.boot,
+    text: (_s, params) => [rpc({ method: "challenge", params })],
+    good: (_p, after, v) => helloWith(after, v.nonce),
+    drop: ["nonce"],
+    wrong: { nonce: 7 },
+  },
+  "client.granted": {
+    schema: Wire.nonce,
+    from: door.waiting,
+    text: (_s, params) => [rpc({ method: "client.granted", params })],
+    good: (_p, after, v) => helloWith(after, v.nonce),
+    drop: ["nonce"],
+    wrong: { nonce: 7 },
+  },
+  "gateway.waiting": {
+    schema: Wire.code,
+    from: door.knocking,
+    text: (_s, params) => [rpc({ method: "gateway.waiting", params })],
+    good: (_p, [next], v) => expect(next.link).toMatchObject({ _tag: "waiting_grant", code: v.code, until: v.until }),
+    drop: ["code", "until"],
+    wrong: { code: 7, until: "soon" },
+  },
+  Admitted: {
+    schema: Wire.admitted,
+    from: door.initializing,
+    text: (s, result) => [rpc({ id: handshakeIn(s).id, result })],
+    good: (_p, [next], v) => expect(next.link).toMatchObject({ _tag: "online", dial: 1, ping: v.ping }),
+    drop: ["version", "ping", "identity"],
+    wrong: { version: "one", ping: "5s", identity: "me" },
+  },
+  // The door's error answer to the live `initialize`: `not_granted` knocks, any other reason ends the
+  // hello as refused, with one connect row that keeps the reason when it is a word. The Link keeps
+  // its own stall and backoff path.
+  refusal: {
+    schema: Wire.refusal,
+    from: door.initializing,
+    text: (s, data) => [rpc({ id: handshakeIn(s).id, error: { code: -32000, message: "no", data } })],
+    good: (p, [next, cmds], v) => {
+      const word = /^[a-z_]{1,40}$/.test(v.reason) ? v.reason : "other";
+      const knocks = v.reason === "not_granted";
+      expect(handshakeIn(next), `the hello's outcome for ${v.reason}`).toMatchObject(
+        knocks ? { _tag: "knocking", dial: 1 } : { _tag: "refused", dial: 1, reason: word },
+      );
+      expect(
+        cmds.map(recordIn).filter((r) => r?._tag === "connect"),
+        `the connect rows for ${v.reason}`,
+      ).toEqual(knocks ? [] : [{ _tag: "connect", dial: 1, result: "refused", reason: word, ms: 0 }]);
+      expect(next.link, "the link keeps its own path").toEqual(p.link);
+    },
+    drop: ["reason"],
+    wrong: { reason: 7 },
+  },
+  WaitingCode: {
+    schema: Wire.code,
+    from: door.knocking,
+    text: (s, result) => [rpc({ id: handshakeIn(s).id, result })],
+    good: (_p, [next], v) => expect(next.link).toMatchObject({ _tag: "waiting_grant", code: v.code, until: v.until }),
+    drop: ["code", "until"],
+    wrong: { code: 7, until: "soon" },
+  },
+  Entries: {
+    schema: Wire.entries,
+    from: door.online,
+    text: (s, result) => [rpc({ id: flightFor(s, "read").id, result }), 3],
+    good: (p, after, v) =>
+      sameAs(p, after, { type: "read_ok", id: flightFor(p, "read").id, dial: 1, value: v.entries, ms: 3 }),
+    drop: ["entries"],
+    wrong: { entries: "all" },
+  },
+  Opened: {
+    schema: Wire.opened,
+    from: door.opening,
+    text: (s, result) => [rpc({ id: flightFor(s, "open").id, result }), 3],
+    good: (p, after, v) => sameAs(p, after, { type: "open_ok", id: flightFor(p, "open").id, dial: 1, value: v, ms: 3 }),
+    drop: ["rev", "view"],
+    wrong: { rev: "one" },
+  },
+  Sent: {
+    schema: Wire.sent,
+    from: door.sending,
+    text: (s, result) => [rpc({ id: flightFor(s, "send").id, result }), 3],
+    good: (p, after, v) => sameAs(p, after, { type: "send_ok", id: flightFor(p, "send").id, dial: 1, value: v, ms: 3 }),
+    drop: ["_tag"],
+    wrong: { _tag: 7 },
+  },
+  "view.whole": {
+    schema: Wire.whole,
+    from: door.opening,
+    sent: (v) => ({ pid: PID_A, type: "whole", ...v }),
+    text: (_s, params) => [rpc({ method: "view.whole", params })],
+    good: (p, after, v) => sameAs(p, after, { type: "view", pid: PID_A, note: { pid: PID_A, type: "whole", ...v } }),
+    drop: ["pid", "type"],
+    wrong: { pid: 7, type: "other" },
+  },
+  "view.patch": {
+    schema: Wire.patch,
+    from: door.opening,
+    sent: (v) => ({ pid: PID_A, type: "patch", patch: [], ...v }),
+    text: (_s, params) => [rpc({ method: "view.patch", params })],
+    good: (p, after, v) =>
+      sameAs(p, after, { type: "view", pid: PID_A, note: { pid: PID_A, type: "patch", patch: [], ...v } }),
+    drop: ["pid", "type"],
+    wrong: { pid: 7, type: "other" },
+  },
+};
+
+/** The params of a notice, or the result of an answer, with one field dropped or of the wrong type. */
+const mutations = (family: Family, sent: Record<string, unknown>) => [
+  ...family.drop.map((k) => Object.fromEntries(Object.entries(sent).filter(([key]) => key !== k))),
+  ...Object.entries(family.wrong).map(([k, v]) => ({ ...sent, [k]: v })),
+];
+
+/** JSON text, the only form a frame's value takes on the wire. */
+const Json = Schema.fromJsonString(Schema.Unknown);
+
+describe("P18 L10: every frame family the parent reads decodes or reaches its typed failure", () => {
+  for (const [name, family] of Object.entries(FAMILIES)) {
+    it.prop(
+      `format: ${name}, from its schema, reaches its handler, and with one field dropped or mistyped changes nothing`,
+      { generated: Arbitrary.schema(family.schema) },
+      ({ generated }) => {
+        // The value as the window reads it after the wire: JSON cannot carry what a schema's
+        // Arbitrary may make, such as `-0`, so the owner's Msg is built from the value JSON carries.
+        const value = Schema.decodeSync(Json)(Schema.encodeSync(Json)(generated));
+        const prev = family.from();
+        const sent = (family.sent ?? ((v) => v))(value as Record<string, unknown>);
+        const [text, ms] = family.text(prev, sent);
+        family.good(prev, door.frame(prev, text, ms), value);
+
+        for (const bad of mutations(family, sent)) {
+          const [badText, badMs] = family.text(prev, bad);
+          expect(door.frame(prev, badText, badMs), `${name} took ${badText}`).toEqual([prev, []]);
+        }
+
+        return true;
+      },
+      { arbitrary: { seed: SEED, runs: 50 } },
+    );
+  }
 });

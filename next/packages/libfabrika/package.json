@@ -10,6 +10,8 @@
     "./Sql": "./src/Sql.ts",
     "./transport/*": "./src/transport/*.ts",
     "./transport/internal/*": null,
+    "./client/*": "./src/client/*.ts",
+    "./client/internal/*": null,
     "./telemetry/*": "./src/telemetry/*.ts",
     "./telemetry/internal/*": null,
     "./ledger/*": "./src/ledger/*.ts",
