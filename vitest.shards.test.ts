@@ -3,9 +3,11 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { configDefaults } from "vitest/config";
 import { BaseSequencer, createVitest } from "vitest/node";
-import { nextFiles } from "./.github/ci/shard-rows.ts";
-import { inLaneStep, vitestLegs } from "./.github/ci/workflow-lint.ts";
+import { e2eFiles, nextFiles } from "./.github/ci/shard-rows.ts";
+import { e2eLegs, inLaneStep, nextMinutes, vitestLegs } from "./.github/ci/workflow-lint.ts";
+import e2eDefault, { e2eConfig } from "./vitest.e2e.config.ts";
 import { assign, measured, median, Shards, wall, WORKERS, restLoads } from "./vitest.shards.ts";
 
 /** A file's row, or undefined when the table has none, as `Shards` reads it. */
@@ -594,12 +596,60 @@ const nextSamples = {
   "next/programs/pipeline/src/node/runner.laws.test.ts": [22.7, 21.8, 10.8],
 } as const;
 
-it("vector: L5 all 257 next rows are the median of three samples, or the larger of one or two", () => {
-  // The medians of runs 43544589151, 43551626086 and 43556494864, from the samples above.
+// T967, today's CI, next/'s end-to-end files. Each file's samples in run order A, B, C, attempt 1
+// of each, all `next (e2e)` jobs from after PR 1104, when that one leg ran each file in its own
+// Vitest:
+//   A: run 43601966383, a push to main at 5bec9eca5, job 132468657925.
+//   B: run 43601964962, a push to main at ba96004e4, job 132468687674.
+//   C: run 43605298688, a green pull request run, job 132478645693.
+// A sample is Vitest's printed `Duration` for that file's own run, to one decimal: the runner wrote
+// no JSON report then. The job ids are kept because GitHub drops job logs after 90 days. The rows
+// from before PR 1104 (runs 43597657318, 43594434801 and 43590628228) were 15 to 45% faster for
+// first-window and resources.laws, with e2e after vitest on leg 1; they are not used.
+// This fixed snapshot copies the observations, never the measured table's computed weights.
+const E2E = "next/apps/fabrika/e2e";
+
+const e2eSamples = {
+  jobs: { A: 132468657925, B: 132468687674, C: 132478645693 },
+  files: {
+    [`${E2E}/chaos-revoke.test.ts`]: [46.5, 50.0, 46.7],
+    [`${E2E}/electron-launchd.test.ts`]: [1.5, 1.1, 1.5],
+    [`${E2E}/first-window.test.ts`]: [222.2, 206.3, 225.4],
+    [`${E2E}/instance.test.ts`]: [23.7, 22.4, 23.9],
+    [`${E2E}/one-file.test.ts`]: [14.3, 14.7, 14.6],
+    [`${E2E}/resources.laws.test.ts`]: [366.6, 348.9, 373.3],
+    [`${E2E}/stored.test.ts`]: [1.2, 1.1, 1.3],
+    "next/packages/tuval/src/browser/key.laws.test.ts": [7.1, 5.8, 7.5],
+  },
+  // What a leg costs beside its files: the job's time minus the end-to-end step's, in A, B and C.
+  overhead: [76.5, 69.8, 70.2],
+} as const;
+
+it("vector: L5 all 265 next rows, vitest and end-to-end, are the median of three samples, or the larger of one or two", () => {
+  // The medians of runs 43544589151, 43551626086 and 43556494864 for the vitest files, and of
+  // 43601966383, 43601964962 and 43605298688 for the end-to-end files, from the samples above.
   // Preserve exact file-set coverage as well as the weights, including measured zeroes: a row
   // with no samples here, or samples with no row, fails too.
-  const expected = Object.fromEntries(Object.entries(nextSamples).map(([path, samples]) => [path, row(samples)]));
+  // T967 (E5) widens it to the end-to-end rows. Plants, each run once with the 8 rows filled from
+  // e2eSamples, and restored: drop the resources.laws row (red, here and in E5); set first-window to
+  // 1.0 (red, here and in E5).
+  const expected = Object.fromEntries(
+    [...Object.entries(nextSamples), ...Object.entries(e2eSamples.files)].map(([path, samples]) => [
+      path,
+      row(samples),
+    ]),
+  );
   expect(Object.fromEntries(Object.entries(measured).filter(([path]) => path.startsWith("next/")))).toEqual(expected);
+});
+
+it("vector: E5 each end-to-end row is the median of its three samples", () => {
+  // T967, today's CI: the 8 end-to-end rows, from e2eSamples' runs A, B and C above.
+  expect(Object.values(e2eSamples.jobs)).toHaveLength(3);
+
+  for (const [path, samples] of Object.entries(e2eSamples.files)) {
+    expect(samples, path).toHaveLength(3);
+    expect.soft(rowOf(path), path).toBe(row(samples));
+  }
 });
 
 // T342, today's sharding. Covers assign and the measured table. Plants: drop a file,
@@ -1072,4 +1122,115 @@ it("vector: L12 stale non-lane rows hold the three T554 run medians", () => {
   for (const [path, seconds] of Object.entries(expected)) {
     expect.soft(measured[path], path).toBe(seconds);
   }
+});
+
+// T967, today's CI, about next/'s end-to-end files: they run through `node next/apps/fabrika/e2e.ts`
+// with vitest.e2e.config.ts, split over the next job's legs `e2e-1` to `e2e-N` by `Shards`.
+describe("the end-to-end legs", () => {
+  const E2E_CONFIG = join(ROOT, "vitest.e2e.config.ts");
+  const workflow = readFileSync(join(ROOT, ".github/workflows/check.yaml"), "utf8");
+
+  /** The longest of `count` legs in seconds, as `assign` splits `files`; no row counts the median. */
+  const longest = (files: readonly { path: string; seconds: number | undefined }[], count: number) => {
+    const placed = assign(files, count);
+    return Math.max(
+      ...Array.from({ length: count }, (_, leg) =>
+        files.reduce((sum, file, i) => sum + (placed[i] === leg ? (file.seconds ?? noRow) : 0), 0),
+      ),
+    );
+  };
+
+  it("scenario: E4 the workflow runs the fewest e2e legs whose longest leg fits in half the job's limit", async () => {
+    // The real table with its fallback, the real end-to-end selection and check.yaml, since the law
+    // is about today's legs. A leg's job is its longest `assign` share plus the overhead, the median
+    // of e2eSamples' three; it must fit in half of the next job's `timeout-minutes`, the 2x room that
+    // limit's own comment sizes. Fewest legs wins over the fastest split: the free plan's 20 jobs at
+    // once is what kept the queue waiting. The worst run seen, job 132468626169 (PR 1208's queue
+    // group), was canceled at 17 min with resources.laws still running after 622 s; alone on its
+    // leg it would have ended near 11.5 min.
+    // Plants, each run once with the 8 rows filled from e2eSamples, and restored: legs e2e-3 and
+    // `/3` in check.yaml (red: the fewest that fit is 2; workflow-lint stayed green); chaos-revoke's
+    // row at 300 (red: the fewest is 3); resources.laws's row at 500 (red, naming that file).
+    // Without the rows every file counts the median, so 1 leg fits (red).
+    const limit = nextMinutes(workflow) * 60;
+    expect(limit).toBeGreaterThan(0);
+    const budget = limit / 2 - median(e2eSamples.overhead);
+    const files = (await e2eFiles(ROOT)).map((path) => ({ path, seconds: rowOf(path) }));
+    expect(files.length).toBeGreaterThan(0);
+    const heaviest = files.toSorted((x, y) => (y.seconds ?? noRow) - (x.seconds ?? noRow))[0]!;
+    // No count of legs makes a leg shorter than its heaviest file: that file must be split.
+    expect(
+      heaviest.seconds ?? noRow,
+      `${heaviest.path} alone takes over the ${budget} s a leg has; split the file, as its own ticket`,
+    ).toBeLessThanOrEqual(budget);
+    const fewest = Array.from({ length: files.length }, (_, i) => i + 1).find(
+      (count) => longest(files, count) <= budget,
+    );
+    expect(e2eLegs(workflow), `the fewest e2e legs that fit is ${fewest}`).toHaveLength(fewest!);
+  });
+
+  it("scenario: E6 each e2e leg keeps exactly assign's files for it, and every end-to-end file runs once", async () => {
+    // The real end-to-end config, as `vitest run --config vitest.e2e.config.ts --shard k/N` reads it,
+    // with N the workflow's count of e2e legs; nothing runs. As the two-new-files Shards scenario.
+    // Plant, run once on vitest.e2e.config.ts and restored: drop `sequence.sequencer`, so Vitest's
+    // own split by count keeps other files on each leg (red, with the rows and without them).
+    const count = e2eLegs(workflow).length;
+    const files = await e2eFiles(ROOT);
+    const placed = assign(
+      files.map((path) => ({ path, seconds: rowOf(path) })),
+      count,
+    );
+    const kept: string[][] = [];
+
+    for (let index = 1; index <= count; index++) {
+      const vitest = await createVitest("test", { config: E2E_CONFIG, watch: false, shard: `${index}/${count}` });
+
+      try {
+        const specs = await vitest.globTestSpecifications();
+        const Sequencer = vitest.config.sequence.sequencer;
+        const mine = await new Sequencer(vitest).shard(specs);
+        kept.push(mine.map((spec) => relative(ROOT, spec.moduleId)).toSorted());
+      } finally {
+        await vitest.close();
+      }
+    }
+
+    expect(kept).toEqual(Array.from({ length: count }, (_, leg) => files.filter((_, i) => placed[i] === leg)));
+    expect(kept.flat().toSorted()).toEqual(files);
+  });
+
+  it("scenario: E7 the end-to-end config, resolved through real Vitest, runs one file at a time from the repo root, with 120 s limits", async () => {
+    // vitest.e2e.config.ts's values, the plan's for ticket 967: the two globs, one worker, no file
+    // parallelism, the runner's old 120 s test and hook limits, `Shards`, no setup file and no
+    // `passWithNoTests`, so a leg with no file fails. Plants, each run once on the config and
+    // restored: `testTimeout` 60_000 (red); the include `next/apps/fabrika/e2e/**/*.test.ts` (red).
+    expect(e2eDefault).toBe(e2eConfig);
+    expect(e2eConfig.test).toEqual({
+      root: ROOT,
+      include: ["next/apps/fabrika/e2e/*.test.ts", "next/packages/tuval/src/browser/key.laws.test.ts"],
+      exclude: [...configDefaults.exclude],
+      maxWorkers: 1,
+      fileParallelism: false,
+      testTimeout: 120_000,
+      hookTimeout: 120_000,
+      sequence: { sequencer: Shards },
+    });
+    // As Vitest resolves the file, so nothing it adds by default sets up or passes an empty leg.
+    const vitest = await createVitest("test", { config: E2E_CONFIG, watch: false });
+
+    try {
+      expect(vitest.config.root).toBe(ROOT);
+      expect(vitest.config.include).toEqual(e2eConfig.test.include);
+      expect(vitest.config.setupFiles).toEqual([]);
+      // Unset is Vitest's own default, which fails a run with no file.
+      expect(vitest.config.passWithNoTests ?? false).toBe(false);
+      expect(vitest.config.fileParallelism).toBe(false);
+      expect(vitest.config.maxWorkers).toBe(1);
+      expect([vitest.config.testTimeout, vitest.config.hookTimeout]).toEqual([120_000, 120_000]);
+      expect(Object.getPrototypeOf(vitest.config.sequence.sequencer.prototype)).toBe(BaseSequencer.prototype);
+      expect(vitest.config.sequence.sequencer.name).toBe(Shards.name);
+    } finally {
+      await vitest.close();
+    }
+  });
 });
